@@ -46,4 +46,13 @@ describe('wallet and Stripe money action boundaries', () => {
     expect(planSource).toContain('if (subscriptionsError || familyError || !fam)');
     expect(planSource).toContain("throw new Error('Family subscription state is unavailable.')");
   });
+
+  it('fails closed in shared ledger helpers when money reads or hold release fail', () => {
+    const serverSource = readFileSync('lib/wallet/server.ts', 'utf8');
+    expect(walletMoneyActions).toContain('error: balanceError');
+    expect(serverSource).toContain("error: 'The wallet is not fully provisioned.'");
+    expect(serverSource).toContain("Could not release the card authorization hold.");
+    expect(serverSource).toContain("if (dupeError) return { ok: false");
+    expect(serverSource).toContain("if (!bucket?.id) return { ok: false, error: 'The wallet Spend bucket is unavailable.' }");
+  });
 });

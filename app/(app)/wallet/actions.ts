@@ -673,7 +673,8 @@ export async function requestSpendAction(input: {
   if (!cw) return { ok: false, error: 'That wallet was not found.' };
 
   // Can't request more than is available in Spend.
-  const { available } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
+  const { available, error: balanceError } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
+  if (balanceError) return { ok: false, error: balanceError };
   if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
 
   const threshold = rule?.require_approval_over_cents ?? 5000;

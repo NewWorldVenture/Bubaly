@@ -114,16 +114,18 @@ export type CreditResult = { ok: boolean; error?: string; credited: number };
  * is checked against in real time. Returns 0 when the bucket/wallet is unknown.
  */
 export async function childSpendableCents(supabase: DB, familyId: string, childWalletId: string): Promise<number> {
-  const { data: bucket } = await supabase
+  const { data: bucket, error: bucketError } = await supabase
     .from('wallet_buckets').select('id')
     .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'spend').maybeSingle();
+  if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
   if (!bucket) return 0;
 
-  const { data: txns } = await supabase
+  const { data: txns, error: transactionError } = await supabase
     .from('wallet_transactions')
     .select('direction, amount_cents, status')
     .eq('family_id', familyId).eq('bucket_id', bucket.id)
     .in('status', ['completed', 'processing']);
+  if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
 
   return (txns ?? []).reduce((sum, t) => {
     if (t.status !== 'completed' && t.status !== 'processing') return sum;
@@ -161,12 +163,13 @@ export async function reserveCardAuth(supabase: DB, params: {
  * authorization reversal/expiry. Idempotent: only `processing` holds are touched.
  */
 export async function releaseCardHold(supabase: DB, authId: string): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('wallet_transactions')
     .update({ status: 'cancelled' })
     .eq('stripe_ref', authId)
     .eq('type', 'card_spend')
     .eq('status', 'processing');
+  if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
 }
 
 /**
@@ -181,18 +184,21 @@ export async function debitCardSpend(supabase: DB, params: {
   if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
   // Idempotency: skip if this Stripe authorization already produced a debit.
-  const { data: dupe } = await supabase
+  const { data: dupe, error: dupeError } = await supabase
     .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').maybeSingle();
+  if (dupeError) return { ok: false, error: walletFailure(dupeError, 'Could not verify that card spend.') };
   if (dupe) return { ok: true, txnId: dupe.id };
 
-  const { data: bucket } = await supabase
+  const { data: bucket, error: bucketError } = await supabase
     .from('wallet_buckets').select('id')
     .eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', 'spend').maybeSingle();
+  if (bucketError) return { ok: false, error: walletFailure(bucketError, 'Could not load the wallet Spend bucket.') };
+  if (!bucket?.id) return { ok: false, error: 'The wallet Spend bucket is unavailable.' };
 
   const { data: row, error } = await supabase
     .from('wallet_transactions')
     .insert({
-      family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucket?.id ?? null,
+      family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucket.id,
       type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: amount,
       description: params.description, stripe_ref: params.stripeRef, metadata: { source: 'issuing' },
     })
@@ -223,14 +229,19 @@ export async function creditChildWallet(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0', credited: 0 };
 
-  const [{ data: rule }, { data: buckets }] = await Promise.all([
+  const [{ data: rule, error: ruleError }, { data: buckets, error: bucketsError }] = await Promise.all([
     supabase.from('wallet_rules').select('split').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId),
   ]);
+  if (ruleError) return { ok: false, error: walletFailure(ruleError, 'Could not load the wallet allocation rule.'), credited: 0 };
+  if (bucketsError) return { ok: false, error: walletFailure(bucketsError, 'Could not load the wallet buckets.'), credited: 0 };
 
   const split = normalizeSplit(params.splitOverride ?? (rule?.split as Partial<Split> | null));
   const parts = allocate(amount, split);
   const bucketByKind = new Map((buckets ?? []).map((b) => [b.kind, b.id]));
+  const missingBucket = (['spend', 'save', 'give', 'invest'] as const)
+    .some((kind) => parts[kind] > 0 && !bucketByKind.get(kind));
+  if (missingBucket) return { ok: false, error: 'The wallet is not fully provisioned.', credited: 0 };
 
   const rows = (['spend', 'save', 'give', 'invest'] as const)
     .filter((k) => parts[k] > 0)
@@ -271,12 +282,14 @@ export async function creditChildWallet(supabase: DB, params: {
  */
 export async function bucketBalanceCents(supabase: DB, params: {
   familyId: string; childWalletId: string; kind: 'spend' | 'save' | 'give' | 'invest';
-}): Promise<{ bucketId: string | null; available: number }> {
-  const { data: bucket } = await supabase.from('wallet_buckets')
+}): Promise<{ bucketId: string | null; available: number; error?: string }> {
+  const { data: bucket, error: bucketError } = await supabase.from('wallet_buckets')
     .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
-  if (!bucket?.id) return { bucketId: null, available: 0 };
-  const { data: txns } = await supabase.from('wallet_transactions')
+  if (bucketError) return { bucketId: null, available: 0, error: walletFailure(bucketError, 'Could not load the wallet bucket.') };
+  if (!bucket?.id) return { bucketId: null, available: 0, error: 'The wallet bucket is unavailable.' };
+  const { data: txns, error: transactionError } = await supabase.from('wallet_transactions')
     .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
   const available = (txns ?? []).reduce(
     (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,
   );
@@ -300,7 +313,8 @@ export async function debitSpendBucket(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
-  const { bucketId, available } = await bucketBalanceCents(supabase, { familyId: params.familyId, childWalletId: params.childWalletId, kind: 'spend' });
+  const { bucketId, available, error: balanceError } = await bucketBalanceCents(supabase, { familyId: params.familyId, childWalletId: params.childWalletId, kind: 'spend' });
+  if (balanceError) return { ok: false, error: balanceError };
   if (!params.requiresApproval && amount > available) {
     return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
   }

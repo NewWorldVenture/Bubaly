@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0332 - Shared wallet ledger helpers hid money-state read and release failures
+
+- Timestamp: 2026-07-15 16:30 America/New_York
+- Service: Shared Family Wallet ledger and Stripe Issuing card holds
+- Route: `lib/wallet/server.ts`, Stripe issuing webhook handlers
+- Affected files: `lib/wallet/server.ts`, `app/(app)/wallet/actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Role: household member, family manager, or Stripe webhook processor
+- Scenario: bucket/balance reads could become zero/default state, credits could use missing buckets, captured card spends could write without a Spend bucket, and hold-release update failures could be acknowledged
+- Severity: P0
+- Launch impact: financial state could diverge from actual wallet availability or a captured authorization hold could remain active after capture
+- Root cause: shared money primitives discarded required Supabase read/update errors
+- Resolution: balance, allocation, duplicate, bucket, and hold-release failures now fail closed; card capture requires a real Spend bucket and release failure propagates for retry
+- Supabase impact: no schema change; existing ledger family scoping, RLS, and Stripe event processing boundaries remain in force
+- Tests run: `tests/wallet-money-action-boundaries.test.ts` (7 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Validation evidence: latest full gate passed with 455 test files, 3,197 tests, 0 production dependency vulnerabilities, and a 250-route build
+- Commit: pending publication
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated authorization, capture, reversal, duplicate-delivery, reconciliation, RLS, concurrency, and browser drills against deployed Supabase/Stripe
+
 ### PLA-0331 - Wallet actions and entitlement reads hid Supabase failures
 
 - Timestamp: 2026-07-15 16:00 America/New_York

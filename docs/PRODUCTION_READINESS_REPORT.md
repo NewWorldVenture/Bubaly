@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 16:00 America/New_York
+Audit snapshot: 2026-07-15 16:30 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 455 Vitest files and 3,196 tests pass in the latest full local gate.
+- 455 Vitest files and 3,197 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -19,6 +19,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Wallet money actions now fail closed on required wallet, ledger, gift, goal, Pay-ID, approval, and
   transfer reads. Family entitlement resolution now throws on subscription/family read failure instead
   of silently downgrading a household to Free. Live subscription, RLS, concurrency, and browser evidence remains open.
+- Shared wallet ledger helpers now fail closed on bucket/balance/allocation reads; captured card spends
+  require a real Spend bucket, and authorization-hold release failures throw for webhook retry instead of
+  acknowledging incomplete ledger state. Live Stripe replay and ledger reconciliation remain open.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.

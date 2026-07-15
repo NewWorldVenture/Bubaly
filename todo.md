@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:00:00 -04:00
+- Last updated: 2026-07-15 16:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes wallet action read boundaries and fail-closed entitlement resolution; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes fail-closed shared ledger and card-hold helpers; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0332 - Shared wallet ledger helpers hid money-state read and release failures
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Wallet ledger / Stripe Issuing / financial state integrity
+- Feature: Shared wallet balance, credit, card capture, and authorization-hold helpers
+- Route: `lib/wallet/server.ts`, Stripe issuing webhook handlers
+- File or files: `lib/wallet/server.ts`, `app/(app)/wallet/actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Database objects: `wallet_buckets`, `wallet_transactions`, `wallet_rules`, `wallet_audit_logs`
+- Affected roles: household members, family managers, and Stripe webhook processing
+- Scenario: bucket/balance reads could become zero or default state, credits could be inserted without valid buckets, captured card spends could use a missing bucket, and hold release failures could be acknowledged
+- Launch impact: money could be approved or recorded against incomplete ledger state, or a captured authorization hold could continue reducing spendable balance
+- Root cause: helper-level Supabase read/update errors were discarded in shared financial primitives
+- Resolution: balance, allocation, duplicate, bucket, and hold-release failures now fail closed; card capture requires a real Spend bucket and release errors propagate for webhook retry
+- Tests performed: `tests/wallet-money-action-boundaries.test.ts` (7 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Evidence: latest full gate passed with 455 files/3,197 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run live Stripe authorization/capture/reversal replay, wallet reconciliation, concurrency, RLS, and browser drills
 
 #### TODO-0331 - Wallet actions and entitlement reads hid Supabase failures
 

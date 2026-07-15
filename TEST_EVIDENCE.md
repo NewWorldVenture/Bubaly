@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Shared Wallet Ledger and Card Hold Boundaries
+
+- Focused wallet money boundary suite: 1 file, 7 tests passed.
+- Full `npm.cmd test`: 455 test files, 3,197 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required probes passed.
+- `git diff --check`: passed.
+- Shared ledger reads now fail closed, incomplete bucket provisioning cannot create null-bucket credits, captured card spends require a Spend bucket, and failed authorization-hold release propagates for webhook retry.
+- Live Stripe replay, wallet reconciliation, RLS, role, concurrency, and browser evidence remain open.
+
 ## Latest Local Evidence - Wallet Action and Entitlement Read Boundaries
 
 - Focused wallet money boundary suite: 1 file, 6 tests passed.
