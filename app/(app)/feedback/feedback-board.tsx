@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useRef, useState, useTransition } from 'react';
-import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug } from 'lucide-react';
+import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
   STATUS_META, FILTERABLE_STATUSES, CATEGORY_META, CATEGORY_ORDER, IMPACT_META, IMPACT_ORDER,
-  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, toggleVote,
+  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, searchIdeas, toggleVote,
   isFeedbackStatus, type IdeaRow, type FeedbackSort, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
@@ -314,6 +314,7 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [kindFilter, setKindFilter] = useState<FeedbackKind | 'all'>('all');
+  const [search, setSearch] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => {
@@ -321,8 +322,8 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
       (statusFilter === 'all' || i.status === statusFilter) &&
       (categoryFilter === 'all' || i.category === categoryFilter) &&
       (kindFilter === 'all' || (i.kind ?? 'idea') === kindFilter));
-    return sortIdeas(filtered, sort);
-  }, [ideas, sort, statusFilter, categoryFilter, kindFilter]);
+    return sortIdeas(searchIdeas(filtered, search), sort);
+  }, [ideas, sort, statusFilter, categoryFilter, kindFilter, search]);
 
   function handleVote(ideaId: string) {
     const { next, voted: nowVoted } = toggleVote(voted, ideaId);
@@ -356,9 +357,26 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
         <ShareIdeaForm userId={userId} onCreated={handleCreated} />
       </section>
 
-      <div className="mt-8 flex items-center gap-2">
+      <div className="mt-8 flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-bold sm:text-xl">Popular ideas</h2>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-xs font-semibold text-muted tabular-nums">{ideas.length}</span>
+        <div className="relative ml-auto w-full sm:w-64">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search ideas…"
+            aria-label="Search ideas"
+            className="h-9 w-full rounded-lg border border-border bg-bg pl-9 pr-8 text-sm outline-none transition focus:border-brand"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch('')} aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Sort + filters */}
@@ -396,7 +414,7 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
             <p className="text-sm font-semibold">No ideas match these filters</p>
             <p className="mt-1 text-xs text-muted">Try clearing a filter, or add a new idea above.</p>
             <button
-              onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); setKindFilter('all'); }}
+              onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); setKindFilter('all'); setSearch(''); }}
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated">
               Clear filters
             </button>

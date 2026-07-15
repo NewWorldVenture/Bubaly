@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   statusMeta, isFeedbackStatus, categoryMeta, impactMeta, LEGEND_STATUSES,
-  normalizeIdea, sortIdeas, toggleVote, trendingScore, ageInDays, statusTally, kindTally,
+  normalizeIdea, sortIdeas, toggleVote, trendingScore, ageInDays, statusTally, kindTally, searchIdeas,
   TITLE_MAX, type IdeaRow,
 } from '@/lib/feedback/board';
 
 function idea(over: Partial<IdeaRow>): IdeaRow {
   return {
-    id: over.id ?? 'x', title: over.title ?? 'Idea', problem: null, body: null,
+    id: over.id ?? 'x', title: over.title ?? 'Idea', problem: over.problem ?? null, body: over.body ?? null,
     category: over.category ?? 'other', impact: over.impact ?? 'helpful', audience: 'me',
     status: over.status ?? 'under_review', admin_note: null, image_url: null,
     author_name: 'Test', vote_count: over.vote_count ?? 0, comment_count: over.comment_count ?? 0,
@@ -122,6 +122,26 @@ describe('statusTally', () => {
     expect(t.shipped).toBe(2);
     expect(t.planned).toBe(1);
     expect(t.under_review).toBe(0);
+  });
+});
+
+describe('searchIdeas', () => {
+  it('returns everything unchanged for a blank query', () => {
+    const list = [idea({ title: 'Alpha' }), idea({ title: 'Beta' })];
+    expect(searchIdeas(list, '')).toHaveLength(2);
+    expect(searchIdeas(list, '   ')).toHaveLength(2);
+  });
+  it('matches title, body, or problem case-insensitively', () => {
+    const list = [
+      idea({ id: 'a', title: 'Dark mode please' }),
+      idea({ id: 'b', title: 'Other', body: 'Would love a DARK theme' }),
+      idea({ id: 'c', title: 'Other', problem: 'the dark is scary' }),
+      idea({ id: 'd', title: 'Unrelated' }),
+    ];
+    expect(searchIdeas(list, 'dark').map((i) => i.id)).toEqual(['a', 'b', 'c']);
+  });
+  it('returns an empty list when nothing matches', () => {
+    expect(searchIdeas([idea({ title: 'Alpha' })], 'zzz')).toEqual([]);
   });
 });
 
