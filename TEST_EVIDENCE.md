@@ -8,7 +8,7 @@ Audit date: 2026-07-15
   2 files, 5 tests passed.
 - `npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run db:audit:migrations`: passed. The migration
   audit reports 224 numbered SQL files with next version `0209`.
-- `npm.cmd exec vitest run`: 403 files, 3,024 tests passed. Clean `npm.cmd run build` generated all 250
+- `npm.cmd exec vitest run`: 405 files, 3,030 tests passed. Clean `npm.cmd run build` generated all 250
   static pages; dependency audit reported 0 vulnerabilities.
 - `npm.cmd run db:audit:schema`: all 11 required live schema checks passed. The 600-record production seed
   invariant passed.

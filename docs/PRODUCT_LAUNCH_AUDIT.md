@@ -141,6 +141,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Open Launch Findings
 
+### AUDIT-AUTH-001 - Privileged admin action guard coverage was implicit
+
+- Timestamp: 2026-07-15 07:59 America/New_York
+- Service: Authentication and tenant isolation
+- Route: `/admin/*`, `middleware.ts`
+- Affected files: `tests/admin-auth-boundary.test.ts`, `app/(app)/admin/layout.tsx`, `middleware.ts`, `lib/marketing/admin.ts`
+- Role: Super Admin, standard authenticated user, anonymous visitor
+- Scenario: a future admin server action accidentally creates a service-role client without rechecking privilege
+- Severity: P2
+- Launch impact: regression risk could expose cross-family or site-wide data through a privileged action
+- Root cause: guard convention existed in code but had no repository-wide drift test
+- Resolution: static regression test now scans all service-role admin action files and asserts explicit privileged guards plus page/session gates
+- Supabase impact: protects service-role access to cross-family tables; it does not replace live RLS verification
+- Tests run: `tests/admin-auth-boundary.test.ts`, full 405-file/3,030-test suite, typecheck, lint, dependency audit
+- Validation evidence: all 38 service-role admin action files passed the guard scan
+- Commit: pending publication
+- Status: Resolved in code; auth unit remains in progress
+- Remaining dependencies: live Auth Admin health, cross-tenant RLS probes, authenticated E2E roles
+
 ### PLA-B001 - Auth Admin health is unverified
 
 - Timestamp: 2026-07-15

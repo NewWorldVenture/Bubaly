@@ -18,9 +18,9 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 
 | ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
 | --- | --- | ---: | --- | --- | --- |
-| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 403 Vitest files, 3,024 tests; clean 250-route build; lint/typecheck/audit | Keep green after every repair |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 405 Vitest files, 3,030 tests; clean 250-route build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 224 migration audit; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
-| A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Existing auth/RLS tests and schema probes | Test every role, family boundary, session edge and live RLS path |
+| A-03 | Authentication, tenant isolation and RLS | 7 | In progress | `tests/admin-auth-boundary.test.ts`; middleware/admin gates; live Auth Admin and cross-tenant probes still open | Test every role, family boundary, session edge and live RLS path |
 | A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Existing focused tests and route inventory | Page/workflow/role matrix plus live invite and tier tests |
 | A-05 | Home and dashboard command surfaces | 3 | In progress | Existing route and component tests | Verify every dashboard action, empty state, mobile state and error |
 | A-06 | Calendar, planning, routines and sync | 5 | In progress | Supabase feature notes and focused unit coverage | Verify CRUD, recurrence, provider sync, conflicts and permissions |
