@@ -1433,3 +1433,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - Marketing content/campaign, asset preview/messaging, customer/lead/CRM, SEO/AEO/control-plane, experiment/publishing, affiliate/loyalty/proposal/survey pages now surface Supabase/storage read failures instead of rendering empty or zero-valued operational state.
 - Source checkpoint before final docs refresh: `00f07856` (merged concurrent main changes); docs and source are published on `origin/codex/world-class-production` at `1f4fe78d`.
+
+## Latest Local Evidence - Auth and Public API Boundaries
+
+- Focused auth context, OAuth callback, admin shell, middleware public API, and cron authorization contracts passed (13 tests across 5 suites).
+- `npm.cmd test`: 439 files, 3,137 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime compatibility warning remains.
+- `git diff --check`: passed.
+- Shared auth now logs provider/allowlist failures and treats authenticated context failures as unavailable; OAuth callback membership failures no longer route into onboarding; the admin shell exposes profile/invite/notification read warnings; middleware reaches intended public and machine-authenticated route guards.
+- Source commit: `2a409b13`; audit evidence is published at the current branch tip.

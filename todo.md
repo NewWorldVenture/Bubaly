@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:00:00 -04:00
+- Last updated: 2026-07-15 12:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `1f4fe78d` (audit evidence published; merged source checkpoint `00f07856`)
+- Commit: source repair `2a409b13`; audit evidence is published at the current branch tip
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0308 - Auth and middleware boundaries silently misrouted failures and public callbacks
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / authentication / routing
+- Feature: Shared auth, OAuth callback, admin shell, public and machine-authenticated API routing
+- Route: `middleware.ts`, `/auth/callback`, `/admin`, `/api/contact`, `/api/blog`, `/api/mkt`, `/api/cron`, `/api/guardian`, `/api/webhooks`, and related endpoints
+- File or files: `lib/supabase/auth.ts`, `app/auth/callback/route.ts`, `app/(app)/admin/layout.tsx`, `components/admin/admin-shell.tsx`, `middleware.ts`
+- Database objects: Supabase Auth, `family_members`, `profiles`, `invites`, and `admin_notifications`
+- Affected roles: signed-out visitors, authenticated members, Super Admins, scheduled jobs, internal callbacks, and provider webhooks
+- Scenario: auth-provider or admin-shell reads failed silently, OAuth membership failure could look like a new account, and public or machine-authenticated routes were intercepted by the session middleware before their own guards ran
+- Launch impact: public forms and engagement could redirect to login; cron/provider callbacks could be skipped; operators could see misleading admin defaults; authenticated users could be sent into onboarding during a data outage
+- Root cause: ignored Supabase auth/read errors and an incomplete middleware public-route inventory
+- Resolution: log and fail closed on shared auth errors, preserve admin-shell data warnings, fail closed on callback membership errors, and add all intentionally public/internal route roots to the middleware bypass list
+- Tests performed: auth context, auth callback, admin shell, middleware public API, and cron authorization contracts; full 439-file/3,137-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit `2a409b13`; live Auth Admin, browser, callback, and deployment evidence remain open
+- Remaining dependencies: verify public callback behavior and authenticated role/device paths in deployed preview/production with isolated provider credentials
 
 #### TODO-0307 - Marketing admin list, detail, publishing, and rewards reads silently downgraded on failure
 

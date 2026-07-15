@@ -691,3 +691,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `0a4d4533`
 - Status: Resolved in code; live marketing permissions, storage, provider callbacks, write failures, and browser evidence remain open
 - Remaining dependencies: complete remaining marketing pages and run isolated read/write/provider/browser drills
+
+### PLA-0308 - Auth and middleware boundaries silently misrouted failures and public callbacks
+
+- Timestamp: 2026-07-15 12:30 America/New_York
+- Service: Shared authentication, admin shell, and public/internal API routing
+- Routes: `middleware.ts`, `/auth/callback`, `/admin`, `/api/contact`, `/api/blog`, `/api/mkt`, `/api/cron`, `/api/guardian`, `/api/webhooks`, and related endpoints
+- Affected files: `lib/supabase/auth.ts`, `app/auth/callback/route.ts`, `app/(app)/admin/layout.tsx`, `components/admin/admin-shell.tsx`, `middleware.ts`, and focused auth/middleware contracts
+- Role: signed-out visitor, authenticated member, Super Admin, scheduled job, internal callback, provider webhook
+- Scenario: ignored auth/read errors or missing middleware public exceptions could redirect valid public/callback traffic to login, route an authenticated user into onboarding during a membership outage, or render misleading admin defaults
+- Severity: P1
+- Launch impact: public lead capture, blog engagement, scheduled jobs, provider callbacks, and admin observability could be unavailable or misleading before their route-level authorization checks executed
+- Root cause: shared auth and shell queries discarded errors, and the middleware public inventory did not include all intentionally anonymous or machine-authenticated routes
+- Resolution: shared auth now logs and fails closed on provider errors, context treats auth reads as unavailable, OAuth callback membership errors redirect to retry, admin shell read failures are visible, and middleware reaches route-level rate-limit/token/secret/signature checks for intended public/internal endpoints
+- Supabase impact: no schema change; auth and route-read failures are explicit and non-destructive
+- Tests run: `tests/auth-context-error-contract.test.ts`, `tests/auth-callback-boundary.test.ts`, `tests/admin-shell-read-boundary.test.ts`, `tests/middleware-public-api-boundary.test.ts`, `tests/cron-auth.test.ts`; full 439-file/3,137-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `2a409b13`; build generated 250 routes; live Auth Admin, deployed callback, browser, and provider smoke evidence remain open
+- Status: Resolved in code; live deployment and provider evidence remain open
+- Remaining dependencies: execute isolated deployed public/callback and authenticated role/device drills
