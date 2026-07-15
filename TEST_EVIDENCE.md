@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-15
 
+## Latest Live Evidence Snapshot - 14:48 Supabase Refresh
+
+- `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID `019f6718-176b-7afb-b940-546891799a83`.
+- `npm.cmd run db:audit:migrations`: 230 numbered SQL files through `0214`; next available version `0215`; audit passed.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `supabase status`: unavailable because the Docker Desktop Linux engine is not running.
+- Remote migration-ledger reconciliation, authenticated cross-tenant RLS probes, and live account/role workflows remain unverified.
+
 ## Latest Local Evidence - Scheduled Integration Persistence Boundaries
 
 - Focused scheduled-recovery suites: 5 files, 17 tests passed.

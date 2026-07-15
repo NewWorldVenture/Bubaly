@@ -8,7 +8,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - 454 Vitest files and 3,188 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
-- Migration filename audit passes for 229 numbered migrations; next version is `0214`.
+- Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
@@ -26,7 +26,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   use a per-user advisory lock around the membership check and initial household writes. Remote application
   and an authenticated two-request first-login drill remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f669f-9f42-7c56-b92c-dd6180f3eeac`); local Docker/Supabase status is unavailable.
+  `019f6718-176b-7afb-b940-546891799a83`); local Docker/Supabase status is unavailable.
 - Shared auth now logs provider and super-admin lookup failures, authenticated context treats auth reads as unavailable,
   OAuth callback membership failures fail closed, and the admin shell shows non-blocking warnings for profile, invite,
   and notification read failures instead of silently substituting defaults.
