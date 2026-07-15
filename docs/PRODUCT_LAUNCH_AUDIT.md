@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
+
+- Timestamp: 2026-07-15 17:17 America/New_York
+- Service: Vacation shared CRUD sections and Trip Budget
+- Route: `/dashboard/vacations/[id]/budget` plus shared lodging, travel, activity, document, family, and emergency sections
+- Affected files: `components/vacations/shared.tsx`, `components/vacations/trip-budget.tsx`, `tests/vacation-crud-read-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: shared CRUD list reads or budget/expense reads could fail while sections rendered empty lists or zero financial totals.
+- Severity: P1
+- Launch impact: families could miss trip records or make budget decisions from incomplete data.
+- Root cause: `TripCrudSection` ignored read errors, and Trip Budget did not track loading or errors for its summary queries.
+- Resolution: shared vacation CRUD sections now show sanitized retry states, while Trip Budget waits for both required reads and retries them together.
+- Supabase impact: no schema change; existing family-scoped child-table and budget reads now have explicit failure handling.
+- Tests run: `tests/vacation-crud-read-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 467 test files, 3,218 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `3adef7e6`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed vacation CRUD verification
+
 ### PLA-0348 - Trip itinerary hid failed day and item reads as an empty schedule
 
 - Timestamp: 2026-07-15 17:11 America/New_York
@@ -207,28 +226,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1
 - Launch impact: operators could miss unconfirmed, banned, or newly created accounts and audit activity during an authentication or database outage.
 - Root cause: parallel results and actor lookup results were destructured without preserving error state.
-- Resolution: required reads now fail visibly with sanitized retryable ErrorState responses; server logs retain diagnostics without exposing them to the UI.
-- Supabase impact: no schema change; Auth Admin and service-role audit reads now have explicit failure contracts.
-- Tests run: `tests/admin-security-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 458 test files, 3,204 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `f13af1c2`
-- Status: Resolved in code; live Auth Admin, role, browser, RLS, and outage evidence remains open
-- Remaining dependencies: restore healthy Auth Admin users endpoint and execute authenticated security-operation drills
-
-### PLA-0337 - Admin wallet overview hid required read failures as zero metrics
-
-- Timestamp: 2026-07-15 15:50 America/New_York
-- Service: Super Admin wallet overview and financial operations
-- Route: `/admin/wallet`
-- Affected files: `app/(app)/admin/wallet/page.tsx`, `tests/admin-wallet-read-boundary.test.ts`
-- Role: Super Admin and financial operator
-- Scenario: any of seven parallel wallet, approval, ledger, feature-flag, or audit reads could fail while the page rendered zero-valued metrics and controls.
-- Severity: P1
-- Launch impact: operators could misread wallet exposure, pending work, feature availability, or audit activity during a partial outage.
-- Root cause: Promise results were destructured without retaining or checking errors.
-- Resolution: all seven result errors are checked before deriving metrics; server diagnostics remain private and the UI renders a retryable ErrorState.
-- Supabase impact: no schema change; existing service-role read path is now fail-visible.
-- Tests run: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-…21862 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Resolution: required reads now fail visibly with sanitized retryable ErrorState responses; server logs retain diagnostics without exposing them to the U…22304 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
