@@ -7,7 +7,7 @@
 // circle actions and revalidate.
 import { useMemo, useState, useTransition } from 'react';
 import {
-  Users, Plus, LogOut, Copy, Loader2, Share2, X, HandHeart, Sparkles,
+  Users, Plus, LogOut, Copy, Loader2, Share2, X, HandHeart, Sparkles, AlertTriangle,
 } from 'lucide-react';
 import {
   buildCircleFeed, circleStats, formatJoinCode, shareableListings,
@@ -22,7 +22,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
 export function CommunityModule({
-  migrated, familyId, circles, members, shares, sharedListings, myListings,
+  migrated, familyId, circles, members, shares, sharedListings, myListings, readWarnings = [],
 }: {
   migrated: boolean;
   familyId: string;
@@ -31,6 +31,7 @@ export function CommunityModule({
   shares: ShareLite[];
   sharedListings: SharedListingLite[];
   myListings: SharedListingLite[];
+  readWarnings?: string[];
 }) {
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<string | null>(circles[0]?.id ?? null);
@@ -71,6 +72,18 @@ export function CommunityModule({
           Only what a family chooses to share is visible, and only inside that circle.
         </p>
       </header>
+
+      {readWarnings.length > 0 && (
+        <div
+          role="status"
+          aria-label="Community data health"
+          className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+        >
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some circle data is temporarily unavailable.</p>
+          <p className="mt-1 text-xs">The page is still usable, but affected circles or listings may be incomplete. Refresh after the connection is restored.</p>
+          <p className="mt-1 text-xs">Unavailable: {readWarnings.join(', ')}.</p>
+        </div>
+      )}
 
       {!migrated && (
         <p className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/[0.06] p-4 text-xs text-amber-300">
