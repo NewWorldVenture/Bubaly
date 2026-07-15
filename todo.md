@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 15:50:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source increment adds admin wallet reconciliation and wallet overview read safety; live provider and deployment evidence remains open
+- Commit: `93f3594b` adds admin wallet overview read safety; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -43,7 +43,7 @@
 - Test plan: focused admin wallet read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
 - Tests performed: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-wallet-reconciliation-boundary.test.ts` (2 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Evidence: latest full gate passed with 457 files/3,203 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally; commit and push verification pending.
+- Resolution: source repair validated locally in commit `93f3594b`; push and post-push ref verification pending.
 - Remaining dependencies: live Super Admin role/browser outage drill and deployed Supabase evidence.
 
 #### TODO-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
