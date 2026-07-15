@@ -18,6 +18,7 @@ import {
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
 import { DEFAULT_TILES, resolveTiles, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
+import { recipeImage, mealImage, AMBIENT_FALLBACK_PHOTOS } from '@/lib/display/imagery';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 import { KitchenTimers } from './kitchen-timers';
@@ -90,13 +91,21 @@ function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName
     return () => clearInterval(t);
   }, [list.length]);
   const fr = list[i] ?? null;
+  // Always photographic: each recipe gets its own photo or a curated dish photo
+  // matched by name/category; the empty welcome state gets a warm home scene.
+  const photos = list.length
+    ? list.map((item) => recipeImage(item.name, item.category, item.imageUrl))
+    : [AMBIENT_FALLBACK_PHOTOS[0]];
+  const active = fr ? i % photos.length : 0;
   return (
-    <div
-      className="relative -m-5 flex h-[calc(100%+2.5rem)] flex-col justify-end overflow-hidden rounded-[2rem] p-6 transition-[background-image] duration-1000"
-      style={fr?.imageUrl
-        ? { backgroundImage: `url(${fr.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { background: 'linear-gradient(135deg,#7c3aed55,#2563eb44)' }}
-    >
+    <div className="relative -m-5 flex h-[calc(100%+2.5rem)] flex-col justify-end overflow-hidden rounded-[2rem] p-6">
+      {/* Stacked crossfade so rotating recipes blend instead of snapping */}
+      {photos.map((url, idx) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={idx} src={url} alt="" aria-hidden
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-1000"
+          style={{ opacity: idx === active ? 1 : 0 }} />
+      ))}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
       <div className="relative">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{fr ? 'Featured Recipe' : 'Welcome home'}</p>
@@ -180,12 +189,16 @@ function WidgetBody({ widget, data, memberById, now }: {
 
     case 'meals':
       return data.meals.length ? (
-        <ul className="space-y-2.5">
+        <ul className="space-y-2">
           {data.meals.map((m) => (
             <li key={m.type} className="flex items-center gap-2.5">
-              <span className="text-2xl">{MEAL_EMOJIS[m.type] ?? '🍽️'}</span>
-              <span className="capitalize text-white/50">{m.type}</span>
-              <span className="truncate font-semibold text-white">{m.name}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mealImage(m.name, m.type)} alt="" aria-hidden
+                className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/15" />
+              <div className="min-w-0">
+                <p className="text-[11px] capitalize leading-tight text-white/50">{MEAL_EMOJIS[m.type] ?? '🍽️'} {m.type}</p>
+                <p className="truncate font-semibold leading-tight text-white">{m.name}</p>
+              </div>
             </li>
           ))}
         </ul>
@@ -454,7 +467,10 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 
   const theme = ambientTheme(settings.theme, now);
   const part = dayPart(now);
-  const photoBg = settings.background === 'photos' && data.photos.length > 0;
+  // Photo surfaces never come up empty: real family photos win, the curated
+  // ambient set stands in until the family uploads some.
+  const ambientPhotos = data.photos.length ? data.photos : [...AMBIENT_FALLBACK_PHOTOS];
+  const photoBg = settings.background === 'photos';
 
   // Echo-style bottom hints, recomputed as the clock ticks.
   const { next: nextEv } = nowAndNext(data.events, now);
@@ -500,7 +516,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       <style>{DRIFT_CSS}</style>
       {/* Background — Echo-Show photo ambience, or the time-of-day gradient wash */}
       {photoBg ? (
-        <PhotoBackdrop photos={data.photos} />
+        <PhotoBackdrop photos={ambientPhotos} />
       ) : (
         <>
           <div className="fixed inset-0 -z-10 bg-[#0b1020]" style={settings.ambient ? { backgroundImage: theme.gradient } : undefined} />
@@ -514,11 +530,17 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       )}
 
       <div
-        className="min-h-dvh p-4 text-white sm:p-6 lg:p-8"
+        className={cn(
+          'flex min-h-dvh flex-col p-4 text-white sm:p-6 lg:p-6',
+          // Kiosk fit: on large screens the display is exactly one viewport tall
+          // and the tile grid divides whatever height is left — no page scroll.
+          // (Edit mode restores normal flow so the settings panel can scroll.)
+          !editing && 'lg:h-dvh lg:overflow-hidden',
+        )}
         style={settings.screensaver && !editing ? { animation: 'displayDrift 100s ease-in-out infinite' } : undefined}
       >
         {/* Header chrome */}
-        <header className="flex flex-wrap items-start justify-between gap-4">
+        <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/50">
               <DayIcon className="h-3.5 w-3.5" /> Bubaly Kitchen
@@ -546,7 +568,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
         </header>
 
         {/* Now & Next */}
-        <div className="mt-5">
+        <div className="mt-4 shrink-0">
           <WidgetBoundary label="now-next">
             <NowNextStrip events={data.events} memberById={memberById} now={now} />
           </WidgetBoundary>
@@ -565,8 +587,16 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           </div>
         )}
 
-        {/* Tile grid */}
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:auto-rows-[152px] lg:grid-cols-6">
+        {/* Tile grid — on large screens rows are viewport fractions
+            (minmax(0,1fr) inside the flex-1 slot), so the default layout fills
+            the screen edge-to-edge and adding tiles makes rows proportionally
+            shorter instead of pushing content below the fold. */}
+        <div className={cn(
+          'mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6 lg:gap-4',
+          editing
+            ? 'lg:auto-rows-[152px]'
+            : 'min-h-0 flex-1 overflow-y-auto lg:auto-rows-[minmax(88px,1fr)]',
+        )}>
           {tiles.map((tile) => (
             <section key={tile.id} className={cn(
               'relative min-h-[172px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:min-h-0',
@@ -612,8 +642,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           ))}
         </div>
 
-        {/* Footer band (padded clear of the hints ticker) */}
-        <p className="mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40">
+        {/* Footer band (padded clear of the hints ticker; hidden on the kiosk
+            fit so the grid gets the full viewport — the pencil still edits) */}
+        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40', !editing && 'lg:hidden')}>
           <Sparkles className="h-3.5 w-3.5" /> {data.familyName} · Bubaly Kitchen Display
           {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">Customize <ArrowRight className="h-3 w-3" /></button>}
         </p>
@@ -626,7 +657,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       {!editing && (
         <WidgetBoundary label="photo-frame">
           <PhotoFrame
-            photos={data.photos}
+            photos={ambientPhotos}
             idleMinutes={settings.idleMinutes}
             clock24={settings.clock24}
             nextLine={frameNextLine}
