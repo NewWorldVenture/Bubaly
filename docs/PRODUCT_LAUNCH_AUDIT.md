@@ -501,3 +501,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `5c4bad4d`
 - Status: Resolved in code; live content outage and Super Admin browser evidence remain open
 - Remaining dependencies: run an isolated content-read failure drill and verify the refresh path preserves the operator context
+
+### PLA-0298 - Admin reports hid analytics read failures as zero metrics
+
+- Timestamp: 2026-07-15 10:40 America/New_York
+- Service: Super Admin reports and analytics
+- Route: `/admin/reports`
+- Affected files: `app/(app)/admin/reports/page.tsx`, `tests/admin-reports-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: any count, trend, subscription, document, or audit-log query failed while the page substituted empty arrays or zero counts
+- Severity: P1
+- Launch impact: operators could make decisions from fabricated zero-valued growth, revenue, activity, or storage metrics during a data outage
+- Root cause: all eight Supabase result errors were discarded during destructuring
+- Resolution: the page now preserves each result error, logs the boundary, and renders a refreshable error state before deriving metrics
+- Supabase impact: no schema change; analytics failures are explicit and non-destructive
+- Tests run: `tests/admin-reports-read-boundary.test.ts`, `tests/admin-content-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (5 tests), full 421-file/3,084-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract verifies the count and activity error paths plus the visible error state
+- Commit: `5353c8ce`
+- Status: Resolved in code; live analytics outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated count/trend read-failure drills and verify no zero-valued report is presented as authoritative

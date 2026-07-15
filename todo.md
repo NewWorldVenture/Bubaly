@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:34:00 -04:00
+- Last updated: 2026-07-15 10:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ed2ca56d` (published main; source repair `5c4bad4d`)
+- Commit: pending (admin reports read failure-contract increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0298 - Admin reports hid analytics read failures as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin reports and analytics
+- Route: `/admin/reports`
+- File or files: `app/(app)/admin/reports/page.tsx`, `tests/admin-reports-read-boundary.test.ts`
+- Database objects: `families`, `profiles`, `subscriptions`, `documents`, `audit_logs`
+- Affected roles: Super Admin
+- Scenario: a count, trend, subscription, document, or audit-log query fails
+- Launch impact: the reports page can otherwise present zero families, users, revenue, activity, or storage as real metrics
+- Root cause: eight Supabase result errors were discarded during destructuring
+- Resolution: preserve each result error, log the read boundary, and render a refreshable error state before computing metrics
+- Tests performed: `tests/admin-reports-read-boundary.test.ts`, `tests/admin-content-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (5 tests); full 421-file/3,084-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contract covers count and activity failures and the visible error state
+- Remaining dependencies: publish docs and run isolated analytics read-failure/browser drills
 
 #### TODO-0297 - Admin content page hid Supabase read failures as empty content
 
