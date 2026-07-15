@@ -1457,3 +1457,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/marketplace` now surfaces labeled read failures for all independent discovery, activity, creator, and collection sources rather than rendering an empty healthy board.
 - Source commit: `b32e7a0f`; docs refresh and publication are in progress.
+
+## Latest Local Evidence - Marketplace Listing Detail Read Failure
+
+- Focused Marketplace home, item, reports, and community suites: 4 files, 20 tests passed.
+- `npm.cmd test`: 441 files, 3,145 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime compatibility warning remains.
+- `git diff --check`: passed.
+- Marketplace listing detail now distinguishes failed reads from missing rows and surfaces dependent bid, trust, offer, order, store, price-history, comparable, and negotiation failures.
+- Source commit: `d6685cd9`; docs refresh and publication are in progress.

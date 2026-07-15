@@ -727,3 +727,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: source commit `b32e7a0f`; build generated 250 routes; live RLS, role, browser, and marketplace workflow evidence remain open
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated listing/order/auction/dispute and cross-family RLS drills across buyer, seller, and manager roles
+
+### PLA-0310 - Marketplace listing detail hid database failures as not-found or incomplete detail
+
+- Timestamp: 2026-07-15 12:46 America/New_York
+- Service: Marketplace listing detail and transaction context
+- Route: `/marketplace/item/[id]`
+- Affected files: `app/(app)/marketplace/item/[id]/page.tsx`, `tests/marketplace-item-read-boundary.test.ts`
+- Role: authenticated buyer, seller, and Super Admin marketplace operator
+- Scenario: a failed primary listing read rendered `notFound()`, or dependent seller, offer, bid, history, comparable, or negotiation reads failed while the page looked authoritative
+- Severity: P1
+- Launch impact: users could be told a real listing was missing or act on incomplete trust, pricing, or transaction state
+- Root cause: the detail page discarded query errors and treated the primary `maybeSingle()` result as absence without checking its error
+- Resolution: primary listing errors now render a retryable ErrorState; all dependent read errors are logged and surfaced in a visible, accessible data-health warning
+- Supabase impact: no schema change; the listing and dependent reads remain scoped to the active family and listing permissions
+- Tests run: `tests/marketplace-item-read-boundary.test.ts` plus Marketplace home/reports/community suites (20 focused tests); full 441-file/3,145-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `d6685cd9`; build generated 250 routes; live RLS, role, browser, and marketplace transaction evidence remain open
+- Status: Resolved in code; live deployment and workflow evidence remain open
+- Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase

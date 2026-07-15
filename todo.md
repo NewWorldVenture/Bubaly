@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:40:00 -04:00
+- Last updated: 2026-07-15 12:46:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
+- Commit: latest source repair `d6685cd9`; overview repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0310 - Marketplace listing detail hid database failures as not-found or incomplete detail
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace
+- Feature: Marketplace listing detail, trust, offers, auctions, price history, and negotiation
+- Route: `/marketplace/item/[id]`
+- File or files: `app/(app)/marketplace/item/[id]/page.tsx`, `tests/marketplace-item-read-boundary.test.ts`
+- Database objects: `marketplace_listings`, `marketplace_bids`, `family_members`, `marketplace_reviews`, `marketplace_saves`, `marketplace_offers`, `marketplace_orders`, `marketplace_stores`, `marketplace_price_history`, `marketplace_negotiations`, and `marketplace_negotiation_rounds`
+- Affected roles: authenticated buyers, sellers, and Super Admin marketplace operators
+- Scenario: a failed primary listing query rendered `notFound()`, or dependent trust, offer, auction, history, comparable, or negotiation reads failed while the remaining detail looked authoritative
+- Launch impact: users could be told a real listing does not exist or make a purchase/offer decision from incomplete seller and transaction context
+- Root cause: query errors were discarded and the primary listing query did not distinguish a read failure from an absent row
+- Resolution: primary read failures now render a retryable error state; dependent failures are logged and listed in an accessible data-health warning while the listing remains usable
+- Tests performed: `tests/marketplace-item-read-boundary.test.ts` plus Marketplace home/reports/community suites (20 focused tests); full 441-file/3,145-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit `d6685cd9`; live RLS, role, browser, and marketplace transaction evidence remain open
+- Remaining dependencies: run isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
 #### TODO-0309 - Marketplace overview hid database read failures as an empty board
 
