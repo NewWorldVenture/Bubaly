@@ -1432,4 +1432,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Marketing content/campaign, asset preview/messaging, customer/lead/CRM, SEO/AEO/control-plane, experiment/publishing, affiliate/loyalty/proposal/survey pages now surface Supabase/storage read failures instead of rendering empty or zero-valued operational state.
-- Source checkpoint before final docs refresh: `00f07856` (merged concurrent main changes); documentation publication follows this refresh.
+- Source checkpoint before final docs refresh: `00f07856` (merged concurrent main changes); docs and source are published on `origin/codex/world-class-production` at `1f4fe78d`.
