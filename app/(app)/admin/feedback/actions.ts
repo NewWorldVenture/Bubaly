@@ -72,6 +72,43 @@ export async function deleteIdeaAction(input: { ideaId: string }): Promise<Resul
   return done();
 }
 
+/** Run the feedback ↔ GitHub bot on demand (backfill + reconcile + relay). */
+export async function syncGithubNowAction(): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+  const g = await guard();
+  if (!('supabase' in g)) return g;
+  try {
+    const { runGithubFeedbackSync, summarizeSync } = await import('@/lib/feedback/github-sync');
+    const { notifySuperAdmins } = await import('@/lib/feedback/notify');
+    const result = await runGithubFeedbackSync(g.supabase);
+    if (result.configured && (result.created > 0 || result.changes.length > 0)) {
+      await notifySuperAdmins(g.supabase, {
+        kind: 'github_sync',
+        title: `Feedback ↔ GitHub (manual): ${summarizeSync(result)}`,
+        body: result.changes.map((c) => `• ${c.title}: ${c.from} → ${c.to} (#${c.issue})`).join('\n') || undefined,
+        url: '/admin/feedback', email: false,
+      });
+    }
+    revalidatePath('/admin/feedback');
+    revalidatePath('/feedback');
+    return { ok: true, summary: summarizeSync(result) };
+  } catch (e) {
+    const f = fail('sync with GitHub', e);
+    return { ok: false, error: 'error' in f ? f.error : 'Could not sync with GitHub.' };
+  }
+}
+
+/** Mark super-admin notifications read (all unread, or a specific set). */
+export async function markAdminNotificationsReadAction(ids?: string[]): Promise<Result> {
+  const g = await guard();
+  if (!('supabase' in g)) return g;
+  let q = g.supabase.from('admin_notifications').update({ is_read: true });
+  q = ids && ids.length ? q.in('id', ids) : q.eq('is_read', false);
+  const { error } = await q;
+  if (error) return fail('update notifications', error);
+  revalidatePath('/admin/feedback');
+  return { ok: true };
+}
+
 /** Post an official team reply on an idea (rendered as a Bubaly-team comment). */
 export async function postTeamReplyAction(input: { ideaId: string; body: string }): Promise<Result> {
   const g = await guard();

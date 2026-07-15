@@ -333,6 +333,23 @@ Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display
 > (`feedbackAdminSummary` + `filterIdeasForAdmin`, **6 tests**); tsc·eslint·2906 tests·build green. No
 > new migration (reuses 0197).
 
+> **+ Bugs + GitHub tracker + super-admin alerts SHIPPED (2026-07-14).** `/feedback` now takes **bug
+> reports** as well as ideas (an Idea/Bug toggle that retunes the form copy). Every submission (a)
+> **notifies the super admin** — an `admin_notifications` platform feed on `/admin/feedback` **plus email**
+> to all super-admin emails — and (b) is **mirrored to a GitHub issue tracker** with two label-driven
+> lists (`bug` vs `enhancement`), the issue link stored back on the row. A **bot** cron
+> (`/api/cron/feedback-github-sync`, hourly) reads **both lists**, backfills any unsynced ideas, reflects
+> each issue's open/closed + workflow labels back onto the idea's status (closed→shipped, not-planned→
+> declined, "in progress"/"planned" labels→status), and **relays a digest** to the super admin. Admin
+> console gains a live **Activity relay** feed (mark-read), a **Sync GitHub now** button, an Idea/Bug
+> filter, and a per-idea GitHub issue link. Migration **`0206_feedback_github_tracker.sql`**
+> (`feedback_ideas.kind` + github_* columns; `admin_notifications`, service-role RLS; PG16 ×2). Pure
+> `lib/feedback/github-map.ts` (**11 tests**) + key-gated `lib/integrations/github.ts` client + best-effort
+> `lib/feedback/notify.ts` / `github-sync.ts`. 100% Supabase-wired; the GitHub half is **key-gated**
+> (`GITHUB_TOKEN` + `GITHUB_FEEDBACK_REPO`) and ships dark — submissions still notify the super admin
+> without it. 3006 tests + build green; tsc·eslint clean. ⚠️ apply `0206` + set the GitHub keys (see
+> `docs/PENDING_PROD_MIGRATIONS.md`).
+
 Owner ask: build a **new `/feedback` page** opened by the **Gift icon** in the home top bar, mirroring the
 "Let's make life easier—together" idea-board design 100%, fully Supabase-wired and production-ready.
 

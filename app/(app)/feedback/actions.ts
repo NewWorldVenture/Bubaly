@@ -38,10 +38,22 @@ export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?
     category: norm.value.category,
     impact: norm.value.impact,
     audience: norm.value.audience,
+    kind: norm.value.kind,
     image_url: norm.value.imageUrl,
-  }).select('id').single();
+  }).select('id, title, kind, category, problem, body, impact, vote_count, author_name').single();
 
   if (error) return actionFailure('submit the idea', error);
+
+  // Fire-and-forget side effects: notify the super admin + mirror to the GitHub
+  // tracker. Best-effort — the submission already succeeded, so a notification
+  // or GitHub hiccup must never fail the user's action.
+  try {
+    const { onFeedbackSubmitted } = await import('@/lib/feedback/notify');
+    await onFeedbackSubmitted(createServiceClient(), data);
+  } catch (e) {
+    console.error('[feedback] post-submit side effects failed', e);
+  }
+
   revalidatePath('/feedback');
   return { ok: true, id: data.id };
 }

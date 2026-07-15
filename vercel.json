@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/feedback-github-sync",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/cron/chore-reminders",
       "schedule": "0 18 * * 0"
     },

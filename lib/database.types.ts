@@ -459,9 +459,14 @@ export interface Database {
         Partial<{ role: string; rating: number; comment: string | null }>
       >;
       feedback_ideas: T<
-        { id: string; author_id: string | null; author_name: string; family_id: string | null; title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; image_url: string | null; status: string; admin_note: string | null; vote_count: number; comment_count: number; pinned: boolean } & Stamps,
-        { id?: string; author_id?: string | null; author_name?: string; family_id?: string | null; title: string; problem?: string | null; body?: string | null; category?: string; impact?: string; audience?: string; image_url?: string | null; status?: string; admin_note?: string | null; vote_count?: number; comment_count?: number; pinned?: boolean },
-        Partial<{ title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; image_url: string | null; status: string; admin_note: string | null; pinned: boolean }>
+        { id: string; author_id: string | null; author_name: string; family_id: string | null; title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; kind: string; image_url: string | null; status: string; admin_note: string | null; vote_count: number; comment_count: number; pinned: boolean; github_issue_number: number | null; github_issue_url: string | null; github_state: string | null; github_synced_at: string | null } & Stamps,
+        { id?: string; author_id?: string | null; author_name?: string; family_id?: string | null; title: string; problem?: string | null; body?: string | null; category?: string; impact?: string; audience?: string; kind?: string; image_url?: string | null; status?: string; admin_note?: string | null; vote_count?: number; comment_count?: number; pinned?: boolean; github_issue_number?: number | null; github_issue_url?: string | null; github_state?: string | null; github_synced_at?: string | null },
+        Partial<{ title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; kind: string; image_url: string | null; status: string; admin_note: string | null; pinned: boolean; github_issue_number: number | null; github_issue_url: string | null; github_state: string | null; github_synced_at: string | null }>
+      >;
+      admin_notifications: T<
+        { id: string; kind: string; title: string; body: string | null; url: string | null; related_type: string | null; related_id: string | null; meta: Json; is_read: boolean; created_at: string },
+        { id?: string; kind?: string; title: string; body?: string | null; url?: string | null; related_type?: string | null; related_id?: string | null; meta?: Json; is_read?: boolean },
+        Partial<{ kind: string; title: string; body: string | null; url: string | null; is_read: boolean }>
       >;
       feedback_votes: T<
         { id: string; idea_id: string; user_id: string; created_at: string },

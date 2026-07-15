@@ -9,6 +9,7 @@ export type FeedbackCategory =
   | 'communication' | 'marketplace' | 'ai_assistant' | 'kids' | 'health' | 'mobile' | 'other';
 export type FeedbackImpact = 'nice_to_have' | 'helpful' | 'game_changer';
 export type FeedbackAudience = 'me' | 'others' | 'everyone';
+export type FeedbackKind = 'idea' | 'bug';
 
 export type FeedbackSort = 'top' | 'new' | 'trending';
 
@@ -20,6 +21,7 @@ export type IdeaRow = {
   category: string;
   impact: string;
   audience: string;
+  kind?: string;
   status: string;
   admin_note: string | null;
   image_url: string | null;
@@ -27,8 +29,23 @@ export type IdeaRow = {
   vote_count: number;
   comment_count: number;
   pinned: boolean;
+  github_issue_number?: number | null;
+  github_issue_url?: string | null;
   created_at: string;
 };
+
+// ── Kind (bug vs enhancement) ────────────────────────────────────────────────
+export const KIND_META: Record<FeedbackKind, { label: string; emoji: string; noun: string; tone: string }> = {
+  idea: { label: 'Idea',       emoji: '💡', noun: 'idea',       tone: 'bg-amber-500/15 text-amber-500 border-amber-500/25' },
+  bug:  { label: 'Bug report', emoji: '🐛', noun: 'bug report', tone: 'bg-rose-500/15 text-rose-500 border-rose-500/25' },
+};
+export const KIND_ORDER = Object.keys(KIND_META) as FeedbackKind[];
+export function isFeedbackKind(v: unknown): v is FeedbackKind {
+  return typeof v === 'string' && v in KIND_META;
+}
+export function kindMeta(v: string): { label: string; emoji: string; noun: string; tone: string } {
+  return isFeedbackKind(v) ? KIND_META[v] : KIND_META.idea;
+}
 
 // ── Status (the public roadmap pipeline) ─────────────────────────────────────
 type Meta = { label: string; tone: string; dot: string; badge: string };
@@ -117,6 +134,7 @@ export type IdeaDraft = {
   category?: string;
   impact?: string;
   audience?: string;
+  kind?: string;
   imageUrl?: string;
 };
 
@@ -127,6 +145,7 @@ export type NormalizedIdea = {
   category: FeedbackCategory;
   impact: FeedbackImpact;
   audience: FeedbackAudience;
+  kind: FeedbackKind;
   imageUrl: string | null;
 };
 
@@ -153,6 +172,7 @@ export function normalizeIdea(draft: IdeaDraft): { ok: false; error: string } | 
       category: isFeedbackCategory(draft.category) ? draft.category : 'other',
       impact: isFeedbackImpact(draft.impact) ? draft.impact : 'helpful',
       audience: isFeedbackAudience(draft.audience) ? draft.audience : 'me',
+      kind: isFeedbackKind(draft.kind) ? draft.kind : 'idea',
       imageUrl: image ? image : null,
     },
   };

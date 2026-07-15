@@ -5,35 +5,58 @@
 // Bubaly team, or remove spam — all wired to Supabase via super-admin server
 // actions that revalidate the public /feedback board instantly.
 
-import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useMemo, useState, useTransition } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
-  ArrowBigUp, MessageSquare, Search,
+  ArrowBigUp, MessageSquare, Search, Github, RefreshCw, Bell, Check, ExternalLink,
 } from 'lucide-react';
 import {
-  STATUS_META, CATEGORY_META, FILTERABLE_STATUSES, categoryMeta, statusMeta,
-  type IdeaRow, type FeedbackStatus,
+  STATUS_META, CATEGORY_META, FILTERABLE_STATUSES, KIND_META, KIND_ORDER,
+  categoryMeta, statusMeta, kindMeta,
+  type IdeaRow, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
 import { feedbackAdminSummary, filterIdeasForAdmin, type AdminFeedbackFilter } from '@/lib/feedback/admin';
 import {
   updateIdeaAction, setIdeaPinnedAction, deleteIdeaAction, postTeamReplyAction,
+  syncGithubNowAction, markAdminNotificationsReadAction,
 } from '@/app/(app)/admin/feedback/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
+export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function FeedbackAdmin({ ideas, comments }: { ideas: IdeaRow[]; comments: AdminComment[] }) {
+export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
+  ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
+}) {
   const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<AdminFeedbackFilter>({ status: 'all', category: 'all' });
+  const [kindFilter, setKindFilter] = useState<'all' | FeedbackKind>('all');
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [syncing, startSync] = useTransition();
+  const [marking, startMark] = useTransition();
 
   const summary = useMemo(() => feedbackAdminSummary(ideas), [ideas]);
+  const unreadNotes = notifications.filter((n) => !n.is_read);
+
+  function runSync() {
+    startSync(async () => {
+      const res = await syncGithubNowAction();
+      if (res.ok) success(res.summary); else toastError(res.error);
+    });
+  }
+  function markAllRead() {
+    startMark(async () => {
+      const res = await markAdminNotificationsReadAction();
+      if (!res.ok) toastError(res.error);
+    });
+  }
   const commentsByIdea = useMemo(() => {
     const m = new Map<string, AdminComment[]>();
     for (const c of comments) { const a = m.get(c.idea_id) ?? []; a.push(c); m.set(c.idea_id, a); }
@@ -42,9 +65,10 @@ export function FeedbackAdmin({ ideas, comments }: { ideas: IdeaRow[]; comments:
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    const base = filterIdeasForAdmin(ideas, filter);
+    let base = filterIdeasForAdmin(ideas, filter);
+    if (kindFilter !== 'all') base = base.filter((i) => (i.kind ?? 'idea') === kindFilter);
     return q ? base.filter((i) => i.title.toLowerCase().includes(q) || (i.body ?? '').toLowerCase().includes(q) || (i.problem ?? '').toLowerCase().includes(q)) : base;
-  }, [ideas, filter, q]);
+  }, [ideas, filter, kindFilter, q]);
 
   const cards: { label: string; value: number; tone: string }[] = [
     { label: 'Needs review', value: summary.needsReview, tone: 'text-amber-500' },
@@ -66,9 +90,62 @@ export function FeedbackAdmin({ ideas, comments }: { ideas: IdeaRow[]; comments:
         ))}
       </div>
 
+      {/* Relay feed — new submissions + bot sync relays, with GitHub sync control */}
+      <div className="rounded-2xl border border-border bg-surface/40 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-bold text-fg">
+            <Bell className="h-4 w-4 text-brand-text" /> Activity relay
+            {unreadNotes.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadNotes.length} new</span>}
+          </p>
+          <div className="flex items-center gap-2">
+            {unreadNotes.length > 0 && (
+              <button type="button" onClick={markAllRead} disabled={marking}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
+                {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Mark all read
+              </button>
+            )}
+            <button type="button" onClick={runSync} disabled={syncing}
+              title={githubConfigured ? 'Backfill + reconcile with GitHub now' : 'Set GITHUB_TOKEN + GITHUB_FEEDBACK_REPO to enable'}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Sync GitHub now
+            </button>
+          </div>
+        </div>
+        {!githubConfigured && (
+          <p className="mb-2 flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+            <Github className="h-3.5 w-3.5 shrink-0" /> GitHub tracker is dark — set <code>GITHUB_TOKEN</code> + <code>GITHUB_FEEDBACK_REPO</code> to mirror bugs &amp; ideas. Notifications still work.
+          </p>
+        )}
+        {notifications.length === 0 ? (
+          <p className="py-3 text-center text-xs text-muted">No activity yet. New submissions and GitHub syncs will appear here.</p>
+        ) : (
+          <ul className="max-h-64 space-y-1.5 overflow-y-auto scrollbar-none">
+            {notifications.slice(0, 30).map((n) => (
+              <li key={n.id} className={cn('flex items-start gap-2 rounded-lg border px-3 py-2 text-xs', n.is_read ? 'border-border/60 bg-transparent' : 'border-brand/25 bg-brand/5')}>
+                <span className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', n.is_read ? 'bg-transparent' : 'bg-brand')} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-fg">{n.title}</p>
+                  {n.body && <p className="mt-0.5 whitespace-pre-line text-muted">{n.body}</p>}
+                  <p className="mt-0.5 text-[11px] text-muted/60">{fmt(n.created_at)}</p>
+                </div>
+                {n.url && <Link href={n.url} className="shrink-0 text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></Link>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Kind: idea vs bug (the two lists) */}
+          <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>All types</FilterChip>
+          {KIND_ORDER.map((k) => (
+            <FilterChip key={k} active={kindFilter === k} onClick={() => setKindFilter(k)}>
+              {KIND_META[k].emoji} {KIND_META[k].label}
+            </FilterChip>
+          ))}
+          <span className="mx-1 h-4 w-px bg-border" />
           <FilterChip active={filter.status === 'all'} onClick={() => setFilter((f) => ({ ...f, status: 'all' }))}>All</FilterChip>
           {FILTERABLE_STATUSES.map((s) => (
             <FilterChip key={s} active={filter.status === s} onClick={() => setFilter((f) => ({ ...f, status: s }))}>
@@ -143,6 +220,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
 
   const cat = categoryMeta(idea.category);
   const meta = statusMeta(idea.status);
+  const kind = kindMeta(idea.kind ?? 'idea');
   const dirty = status !== idea.status || (note.trim() !== (idea.admin_note ?? '').trim());
 
   async function run(key: string, fn: () => Promise<{ ok: true } | { ok: false; error: string }>, okMsg: string) {
@@ -165,10 +243,19 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold', kind.tone)}>
+              {kind.emoji} {kind.label}
+            </span>
             <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold', meta.badge)}>
               <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} /> {meta.label}
             </span>
             <span className="text-[11px] text-muted">{cat.emoji} {cat.label}</span>
+            {idea.github_issue_url && (
+              <a href={idea.github_issue_url} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text hover:underline">
+                <Github className="h-3 w-3" /> #{idea.github_issue_number}
+              </a>
+            )}
             {idea.pinned && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text"><Pin className="h-3 w-3" /> Pinned</span>}
             <span className="text-[11px] text-muted/70">· {idea.author_name} · {fmt(idea.created_at)}</span>
           </div>

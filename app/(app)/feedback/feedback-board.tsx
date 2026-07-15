@@ -1,13 +1,13 @@
 'use client';
 
 import { useMemo, useRef, useState, useTransition } from 'react';
-import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb } from 'lucide-react';
+import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
   STATUS_META, FILTERABLE_STATUSES, CATEGORY_META, CATEGORY_ORDER, IMPACT_META, IMPACT_ORDER,
-  AUDIENCE_META, AUDIENCE_ORDER, statusMeta, categoryMeta, impactMeta, sortIdeas, toggleVote,
-  isFeedbackStatus, type IdeaRow, type FeedbackSort, type FeedbackStatus,
+  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, statusMeta, categoryMeta, impactMeta, sortIdeas, toggleVote,
+  isFeedbackStatus, type IdeaRow, type FeedbackSort, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
@@ -30,6 +30,7 @@ const SORTS: { id: FeedbackSort; label: string }[] = [
 // ── Share-your-idea form (inline card) ───────────────────────────────────────
 function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea: IdeaRow) => void }) {
   const { success, error } = useToast();
+  const [kind, setKind] = useState<FeedbackKind>('idea');
   const [title, setTitle] = useState('');
   const [problem, setProblem] = useState('');
   const [body, setBody] = useState('');
@@ -38,23 +39,24 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
   const [audience, setAudience] = useState('me');
   const [imageUrl, setImageUrl] = useState('');
   const [pending, start] = useTransition();
+  const isBug = kind === 'bug';
 
   function reset() {
-    setTitle(''); setProblem(''); setBody('');
+    setKind('idea'); setTitle(''); setProblem(''); setBody('');
     setCategory('other'); setImpact('helpful'); setAudience('me'); setImageUrl('');
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
-      const res = await submitIdeaAction({ title, problem, body, category, impact, audience, imageUrl });
-      if (!res.ok || !res.id) { error(res.error ?? 'Could not submit your idea.'); return; }
+      const res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
+      if (!res.ok || !res.id) { error(res.error ?? `Could not submit your ${isBug ? 'bug report' : 'idea'}.`); return; }
       onCreated({
         id: res.id, title: title.trim(), problem: problem.trim() || null, body: body.trim() || null,
-        category, impact, audience, status: 'under_review', admin_note: null, image_url: imageUrl.trim() || null,
+        category, impact, audience, kind, status: 'under_review', admin_note: null, image_url: imageUrl.trim() || null,
         author_name: 'You', vote_count: 1, comment_count: 0, pinned: false, created_at: new Date().toISOString(),
       });
-      success('Thanks! Your idea is on the board. 💡');
+      success(isBug ? 'Thanks! The team has been notified. 🐛' : 'Thanks! Your idea is on the board. 💡');
       reset();
     });
   }
@@ -64,20 +66,41 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
+      <div>
+        <label className={label}>What are you sharing?</label>
+        <div className="grid grid-cols-2 gap-2">
+          {(['idea', 'bug'] as FeedbackKind[]).map((k) => {
+            const active = kind === k;
+            const Icon = k === 'bug' ? Bug : Lightbulb;
+            return (
+              <button
+                key={k} type="button" onClick={() => setKind(k)} aria-pressed={active}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition',
+                  active ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" /> {KIND_META[k].emoji} {k === 'bug' ? 'Report a bug' : 'Suggest an idea'}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div>
         <label className={label}>Title</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
-          placeholder="A quick, memorable summary" className={field} />
+          placeholder={isBug ? 'A short summary of what’s broken' : 'A quick, memorable summary'} className={field} />
       </div>
       <div>
-        <label className={label}>What problem would this solve?</label>
+        <label className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
         <input value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
-          placeholder="Today, I struggle with…" className={field} />
+          placeholder={isBug ? 'When I tap X, Y happens instead of…' : 'Today, I struggle with…'} className={field} />
       </div>
       <div>
-        <label className={label}>Your idea</label>
+        <label className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
-          placeholder="Describe how it might work — even a rough sketch helps." className={cn(field, 'resize-y')} />
+          placeholder={isBug ? 'Device, what you expected, anything else that helps us fix it.' : 'Describe how it might work — even a rough sketch helps.'} className={cn(field, 'resize-y')} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
@@ -109,7 +132,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
           <button type="button" onClick={reset} disabled={pending} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated disabled:opacity-50">Cancel</button>
           <button type="submit" disabled={pending || !title.trim()}
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Submit idea
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isBug ? <Bug className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />} {isBug ? 'Submit bug report' : 'Submit idea'}
           </button>
         </div>
       </div>
