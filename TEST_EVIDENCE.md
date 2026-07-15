@@ -8,7 +8,7 @@ Audit date: 2026-07-15
   2 files, 5 tests passed.
 - `npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run db:audit:migrations`: passed. The migration
   audit reports 224 numbered SQL files with next version `0209`.
-- `npm.cmd exec vitest run`: 402 files, 3,021 tests passed. Clean `npm.cmd run build` generated all 250
+- `npm.cmd exec vitest run`: 403 files, 3,024 tests passed. Clean `npm.cmd run build` generated all 250
   static pages; dependency audit reported 0 vulnerabilities.
 - `npm.cmd run db:audit:schema`: all 11 required live schema checks passed. The 600-record production seed
   invariant passed.
@@ -19,7 +19,7 @@ Audit date: 2026-07-15
 
 - `npm.cmd exec vitest run tests/wallet-allowance-persistence.test.ts tests/wallet-atomic-persistence.test.ts tests/server-action-error-boundaries.test.ts`:
   3 files, 7 tests passed.
-- `npm.cmd exec vitest run`: 402 files, 3,021 tests passed.
+- `npm.cmd exec vitest run`: 403 files, 3,024 tests passed.
 - `npm.cmd run typecheck`, `npm.cmd run lint`, and clean `npm.cmd run build`: passed; 250 static pages generated.
 - Dependency audit: 0 vulnerabilities. No migration changed in the manual allowance increment; the current
   migration audit now reports 224 numbered SQL files with next version `0209`.
