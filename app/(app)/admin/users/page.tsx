@@ -3,7 +3,7 @@ import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-reac
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
 import { PLANS } from '@/lib/constants/plans';
 import { fmtDate } from '@/lib/utils/format';
@@ -92,6 +92,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     ['super_admins', superAdminsRes],
   ] as const) {
     if (res.error) loadErrors.push(`Could not load “${label}”: ${res.error.message}`);
+  }
+
+  if (loadErrors.length > 0) {
+    console.error('[admin-users] users read failed', loadErrors.join('; '));
+    return <AdminUsersReadError />;
   }
 
   const profiles = profilesRes.data;
@@ -456,6 +461,19 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+function AdminUsersReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Users &amp; Families</h1>
+        <p className="mt-1 text-sm text-muted">Manage all users, families, and their access levels.</p>
+      </div>
+      <ErrorState message="Could not load users and family access data from Supabase. Refresh and try again." />
+      <a href="/admin/users" className="text-sm font-medium text-brand-text underline">Refresh users</a>
     </div>
   );
 }

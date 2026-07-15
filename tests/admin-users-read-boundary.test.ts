@@ -8,5 +8,8 @@ describe('admin users read boundary', () => {
     expect(source).toContain("['super_admins', superAdminsRes]");
     expect(source).toContain('if (res.error) loadErrors.push');
     expect(source).toContain('Some data couldn');
+    expect(source).toContain('if (loadErrors.length > 0)');
+    expect(source).toContain('Could not load users and family access data from Supabase');
+    expect(source).toContain('Refresh users');
   });
 });
