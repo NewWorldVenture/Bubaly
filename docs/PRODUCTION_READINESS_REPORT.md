@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 16:21 America/New_York
+Audit snapshot: 2026-07-15 16:34 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 463 Vitest files and 3,209 tests pass in the latest full local gate.
+- 463 Vitest files and 3,210 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -46,9 +46,11 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Super Admin Users now fails visibly when required profile, family, membership, subscription, invite, role,
   permission, or super-admin reads fail, instead of rendering partial access data and misleading counts.
 - Family Sync and Sync history now fail visibly when connection, calendar, conflict, run, or audit-history
-  reads fail, instead of presenting zero health or “no runs” states as if synchronization were current.
+  reads fail, instead of presenting zero health or â€œno runsâ€ states as if synchronization were current.
 - Sync conflicts, connected accounts, and provider detail now fail visibly when their required reads fail,
   instead of presenting no conflicts or disconnected provider states from partial data.
+- The family Connections hub now surfaces its realtime Supabase read error with a retry action instead of
+  rendering every provider as disconnected after a failed connection query.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
@@ -70,7 +72,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   guardian, and webhook routes to reach their own rate-limit, token, secret, or signature checks.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
-- The Connections hub no longer creates label-only “connected” records for providers without a real OAuth
+- The Connections hub no longer creates label-only â€œconnectedâ€ records for providers without a real OAuth
   or sync path; remaining provider implementations and live callback verification are still open.
 - The Admin digest cron now reports feed and recipient failures; live Resend delivery and scheduled-cron
   verification remain open.
@@ -190,3 +192,4 @@ the full route/role/workflow audit remain open. See:
 - `docs/SUPABASE_WIRING_MATRIX.md` for schema, RLS, runtime and integration wiring.
 - `docs/LAUNCH_BLOCKERS.md` for release gates.
 - `docs/PRODUCT_LAUNCH_AUDIT.md` for issue-level evidence.
+
