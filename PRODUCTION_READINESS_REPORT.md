@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,972 unit tests, builds all 250 static Next.js
+The tree compiles, passes lint and type checking, passes 2,974 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -19,6 +19,9 @@ writes on failure, and scopes concierge conversations to the active family and v
 Latest repair increment (2026-07-14): the AI meal planner now fails closed on candidate and pantry
 read errors, preserves targeted slots while replacing a plan, compensates generated meals, and
 reports success only after every assignment is persisted.
+
+Latest repair increment (2026-07-14): family AI chat now revalidates client-supplied conversation
+IDs against both active-family and user ownership before reading history or accepting messages.
 
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
 checkout contains 221 numbered migration files and 17 known historical duplicate prefixes; new or

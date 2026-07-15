@@ -2,6 +2,16 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - AI chat conversation ownership
+
+- `npm.cmd exec vitest run tests/ai-chat-ownership.test.ts tests/database-error-boundaries.test.ts`:
+  2 files, 3 tests passed.
+- `npm.cmd exec vitest run`: 393 files, 2,974 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, and clean `npm.cmd run build`: passed; 250 static pages generated.
+- The client-provided conversation UUID is now re-read with both `family_id` and `user_id` ownership filters;
+  ownership read failures return a stable temporary-unavailable response and mismatches stop before history
+  or message access.
+
 ## Latest Audit Update - AI meal planner persistence boundaries
 
 - `npm.cmd exec vitest run tests/ai-meal-plan-persistence.test.ts tests/database-error-boundaries.test.ts`:

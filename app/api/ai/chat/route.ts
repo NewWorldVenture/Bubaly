@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: describeActionError(conversationUpsertError, 'Could not start this conversation.') }, { status: 500 });
     }
 
+    // The client owns the UUID, but never the conversation's authorization
+    // boundary. Re-read it through both family and user ownership before
+    // exposing history or accepting a new message.
+    const { data: conversation, error: conversationReadError } = await supabase.from('ai_conversations')
+      .select('id').eq('id', conversationId).eq('family_id', familyId).eq('user_id', ctx.user.id).maybeSingle();
+    if (conversationReadError) {
+      console.error('[ai-chat] conversation ownership read failed', conversationReadError);
+      return NextResponse.json({ error: 'Could not open this conversation.' }, { status: 503 });
+    }
+    if (!conversation) return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
     const [

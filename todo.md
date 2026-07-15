@@ -4344,3 +4344,21 @@ roadmap entries and user worktree changes are preserved.
   restoration, and checked replacement writes.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0277 - AI chat accepted unverified conversation ownership
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family AI / authorization / privacy
+- Feature: Streaming family assistant conversations
+- File or files: `app/api/ai/chat/route.ts`, `tests/ai-chat-ownership.test.ts`
+- Description: The client generated the conversation UUID and the endpoint used it after an ignore-duplicate
+  upsert without explicitly confirming that the existing conversation belonged to the active family and user.
+- Resolution: Every conversation ID is re-read through active `family_id` and `user_id` ownership filters before
+  history is loaded or messages are persisted. Read failures and missing ownership now stop with stable responses.
+- Tests performed: Focused AI chat ownership and database-boundary tests, full Vitest, typecheck, lint, and clean
+  production build.
+- Evidence: `tests/ai-chat-ownership.test.ts` guards the ownership filters and the no-history/no-message path
+  when ownership validation fails.
+- Verified by: Codex
+- Date completed: 2026-07-14
