@@ -4,7 +4,7 @@ import {
   Sparkles, ShieldCheck, Star, MapPin, Users, BadgeCheck, Lock, CreditCard,
   ShoppingBag, Clock, Package, HelpCircle, Gift, Repeat, Building2, HandHeart,
   Shirt, Baby, Smartphone, Home as HomeIcon, Dumbbell, Mountain, Car, Wrench,
-  ToyBrick, LayoutGrid, ArrowRight, Activity as ActivityIcon,
+  ToyBrick, LayoutGrid, ArrowRight, Activity as ActivityIcon, AlertTriangle,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -62,32 +62,51 @@ export default async function MarketplaceHomePage() {
   const now = new Date();
 
   // ── Load everything best-effort: a not-yet-applied 0151 must never 500 ──────
-  const safe = async <T,>(q: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
-    try { return ((await q).data ?? []) as T[]; } catch { return []; }
+  const dataWarnings: string[] = [];
+  const safe = async <T,>(label: string, q: PromiseLike<{ data: T[] | null; error?: { message?: string | null } | null }>): Promise<T[]> => {
+    try {
+      const result = await q;
+      if (result.error) {
+        console.error(`[marketplace] ${label} read failed`, result.error);
+        dataWarnings.push(label);
+      }
+      return (result.data ?? []) as T[];
+    } catch (error) {
+      console.error(`[marketplace] ${label} read threw`, error);
+      dataWarnings.push(label);
+      return [];
+    }
   };
 
   const listings = await safe<ListingRow>(
+    'Listings',
     sb.from('marketplace_listings')
       .select('id, kind, category, status, title, member_id, price_cents, created_at, rent_period, location, condition')
       .eq('family_id', familyId).limit(800),
   );
 
-  const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
-  const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.display_name ?? null;
+  const members = await safe<{ id: string; display_name: string | null }>(
+    'Family members',
+    sb.from('family_members').select('id, display_name').eq('family_id', familyId),
+  );
+  const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   const [offers, matches, saves, stores, follows, reviews, orders, collections, collItems] = await Promise.all([
-    safe<{ listing_id: string; status: string }>(sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).eq('status', 'open').limit(1000)),
-    safe<{ supply_id: string }>(sb.from('marketplace_matches').select('supply_id').eq('family_id', familyId).eq('status', 'active').limit(200)),
-    safe<{ listing_id: string; member_id: string }>(sb.from('marketplace_saves').select('listing_id, member_id').eq('family_id', familyId).limit(2000)),
-    safe<CreatorStore>(sb.from('marketplace_stores').select('id, member_id, name, emoji, is_active').eq('family_id', familyId)),
-    safe<{ store_id: string; member_id: string }>(sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000)),
+    safe<{ listing_id: string; status: string }>('Offers', sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).eq('status', 'open').limit(1000)),
+    safe<{ supply_id: string }>('Matches', sb.from('marketplace_matches').select('supply_id').eq('family_id', familyId).eq('status', 'active').limit(200)),
+    safe<{ listing_id: string; member_id: string }>('Saved listings', sb.from('marketplace_saves').select('listing_id, member_id').eq('family_id', familyId).limit(2000)),
+    safe<CreatorStore>('Stores', sb.from('marketplace_stores').select('id, member_id, name, emoji, is_active').eq('family_id', familyId)),
+    safe<{ store_id: string; member_id: string }>('Store follows', sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000)),
     safe<{ listing_id: string | null; reviewee_member: string | null; rating: number; created_at: string; id: string }>(
+      'Reviews',
       sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500)),
     safe<ActivityOrder & { seller_member: string | null; amount_cents: number }>(
+      'Orders',
       sb.from('marketplace_orders').select('id, kind, status, buyer_member, seller_member, listing_id, amount_cents, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(200)),
     safe<{ id: string; name: string; emoji: string | null; description: string | null }>(
+      'Collections',
       sb.from('marketplace_collections').select('id, name, emoji, description').eq('family_id', familyId).limit(8)),
-    safe<{ collection_id: string }>(sb.from('marketplace_collection_items').select('collection_id').eq('family_id', familyId).limit(2000)),
+    safe<{ collection_id: string }>('Collection items', sb.from('marketplace_collection_items').select('collection_id').eq('family_id', familyId).limit(2000)),
   ]);
 
   // ── Derived intelligence (all pure engines) ─────────────────────────────────
@@ -151,7 +170,19 @@ export default async function MarketplaceHomePage() {
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="space-y-4">
+      {dataWarnings.length > 0 && (
+        <div
+          role="status"
+          aria-label="Marketplace data health"
+          className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+        >
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some marketplace data is temporarily unavailable.</p>
+          <p className="mt-1 text-xs">The page is still usable, but affected sections may be incomplete. Refresh after the connection is restored.</p>
+          <p className="mt-1 text-xs">Unavailable: {Array.from(new Set(dataWarnings)).join(', ')}.</p>
+        </div>
+      )}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-5">
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
         <section className="overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface via-surface to-brand/10 p-5 sm:p-6">
@@ -385,6 +416,7 @@ export default async function MarketplaceHomePage() {
           </Link>
         </section>
       </aside>
+      </div>
     </div>
   );
 }
