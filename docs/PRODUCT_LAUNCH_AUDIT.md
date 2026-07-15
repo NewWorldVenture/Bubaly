@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; existing ledger family scoping, RLS, and Stripe event processing boundaries remain in force
 - Tests run: `tests/wallet-money-action-boundaries.test.ts` (7 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
 - Validation evidence: latest full gate passed with 455 test files, 3,197 tests, 0 production dependency vulnerabilities, and a 250-route build
-- Commit: pending publication
+- Commit: `1439d361`
 - Status: Resolved in code; live workflow evidence remains open
 - Remaining dependencies: execute isolated authorization, capture, reversal, duplicate-delivery, reconciliation, RLS, concurrency, and browser drills against deployed Supabase/Stripe
 
