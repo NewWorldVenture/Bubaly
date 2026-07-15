@@ -19,3 +19,20 @@ export function isNewPaidConversion(prev: SubState, next: { plan: string; status
   if (!prev) return true;                         // no prior state → brand-new paid sub
   return !isPaidActive({ plan: prev.plan, status: prev.status }); // was not paid+active before
 }
+
+// Terminal "the subscription is lost" states (as opposed to `past_due`, which is
+// dunning that may still recover, so it must NOT count as churn).
+const LOST_STATUSES = new Set(['canceled', 'unpaid', 'incomplete_expired']);
+
+/**
+ * True when a PAYING family just churned: was paid+active, and is now either on
+ * the free plan (downgrade) or in a terminal lost status (canceled/unpaid/
+ * expired). Fires once on the loss — NOT on a tier change that stays paid+active
+ * (plus↔basic), and NOT on transient `past_due`. Mirror of isNewPaidConversion
+ * so the founder sees losses as clearly as wins.
+ */
+export function isChurn(prev: SubState, next: { plan: string; status: string }): boolean {
+  if (!prev || !isPaidActive({ plan: prev.plan, status: prev.status })) return false; // wasn't paying
+  if (isPaidActive(next)) return false;                    // still paying (e.g. tier change) → not churn
+  return next.plan === 'free' || LOST_STATUSES.has(next.status);
+}

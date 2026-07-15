@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import {
   Bell, MessageSquare, Bug, Github, LifeBuoy, ShieldAlert, Info, Check,
-  Sparkles, CreditCard, ArrowUpRight,
+  Sparkles, CreditCard, TrendingDown, ArrowUpRight,
 } from 'lucide-react';
 import {
   adminNoteKindMeta, filterAdminNotes, countByKind,
@@ -27,6 +27,7 @@ const ICONS: Record<string, typeof Bell> = {
   marketplace_report: ShieldAlert,
   family_signup: Sparkles,
   subscription: CreditCard,
+  subscription_churn: TrendingDown,
   info: Info,
 };
 
@@ -57,7 +58,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
   const kindChips = useMemo(() => {
     const order = [
       'feedback_new', 'github_sync', 'github_error', 'support_ticket',
-      'marketplace_report', 'family_signup', 'subscription', 'info',
+      'marketplace_report', 'family_signup', 'subscription', 'subscription_churn', 'info',
     ];
     return order.filter((k) => counts[k]);
   }, [counts]);

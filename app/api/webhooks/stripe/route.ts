@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { markReferralConverted } from '@/lib/referrals/server';
-import { isNewPaidConversion } from '@/lib/billing/conversion';
+import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -59,8 +59,10 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     catch (e) { console.error('[referral] conversion crediting failed', e); }
   }
 
-  // 🎉 Alert the super admin on a NEW paid conversion (not renewals). Best-effort.
-  if (isNewPaidConversion(priorSub, { plan, status: sub.status })) {
+  // Alert the super admin on the two growth transitions — a NEW paid conversion
+  // (🎉, not renewals) and CHURN (📉, a paying family lost). Both best-effort.
+  const nextState = { plan, status: sub.status };
+  if (isNewPaidConversion(priorSub, nextState)) {
     try {
       const { recordAdminNotification } = await import('@/lib/admin/notify');
       const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
@@ -73,6 +75,20 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
         meta: { plan, status: sub.status },
       });
     } catch (e) { console.error('[admin-notify] paid-conversion alert failed', e); }
+  } else if (isChurn(priorSub, nextState)) {
+    try {
+      const { recordAdminNotification } = await import('@/lib/admin/notify');
+      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
+      const lost = priorSub?.plan ?? 'a paid plan';
+      await recordAdminNotification(supabase, {
+        kind: 'subscription_churn',
+        title: `Churn: ${fam?.name ?? 'a family'} left ${lost}`,
+        body: plan === 'free' ? `Downgraded to free (${sub.status}).` : `Subscription ${sub.status}.`,
+        url: '/admin/subscriptions',
+        relatedType: 'subscription', relatedId: familyId,
+        meta: { from: lost, plan, status: sub.status },
+      });
+    } catch (e) { console.error('[admin-notify] churn alert failed', e); }
   }
 }
 
