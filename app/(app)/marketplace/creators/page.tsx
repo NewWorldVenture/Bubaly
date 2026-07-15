@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Users } from 'lucide-react';
+import { AlertTriangle, Users } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { FollowButton } from '@/components/marketplace/follow-button';
 import { rankCreators, type CreatorStore } from '@/lib/marketplace/discover';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Creators · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -15,13 +16,31 @@ export default async function MarketplaceCreatorsPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
+  const dataWarnings: string[] = [];
 
-  const [{ data: stores }, { data: follows }, { data: reviews }, { data: listings }] = await Promise.all([
+  const [{ data: stores, error: storesError }, { data: follows, error: followsError }, { data: reviews, error: reviewsError }, { data: listings, error: listingsError }] = await Promise.all([
     sb.from('marketplace_stores').select('id, member_id, name, tagline, emoji, is_active').eq('family_id', familyId),
     sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000),
     sb.from('marketplace_reviews').select('reviewee_member, rating').eq('family_id', familyId).limit(1000),
     sb.from('marketplace_listings').select('member_id').eq('family_id', familyId).in('status', ['available', 'pending']).limit(1000),
   ]);
+
+  if (storesError) {
+    console.error('[marketplace-creators] Storefronts read failed', storesError);
+    return <ErrorState message="Could not load marketplace storefronts. Refresh and try again." />;
+  }
+  if (followsError) {
+    console.error('[marketplace-creators] Follows read failed', followsError);
+    dataWarnings.push('Follows');
+  }
+  if (reviewsError) {
+    console.error('[marketplace-creators] Reviews read failed', reviewsError);
+    dataWarnings.push('Reviews');
+  }
+  if (listingsError) {
+    console.error('[marketplace-creators] Open listings read failed', listingsError);
+    dataWarnings.push('Open listings');
+  }
 
   const ratingsByMember = new Map<string, number[]>();
   for (const r of reviews ?? []) {
@@ -44,6 +63,12 @@ export default async function MarketplaceCreatorsPage() {
   return (
     <div>
       <PageHeader title="Creators" description="Verified & trusted sellers — the family storefronts, ranked by rating and following." />
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Marketplace creators data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some creator details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Users className="mx-auto mb-2 h-6 w-6" />

@@ -1503,3 +1503,12 @@ Audit date: 2026-07-15
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime warning remains when emitted.
 - Source commit: `4f06b696`; branch and `main` publication verified.
+
+## Latest Local Evidence - Marketplace Creators Read Failure
+
+- Focused Marketplace creators read-boundary suite: 1 file, 2 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `/marketplace/creators` now fails clearly when storefronts cannot be read and surfaces follower, review, and open-listing failures instead of presenting an incomplete creator ranking.
+- Source commit: pending full-suite verification and publication.

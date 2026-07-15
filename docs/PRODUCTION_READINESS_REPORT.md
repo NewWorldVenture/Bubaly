@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 13:04 America/New_York
+Audit snapshot: 2026-07-15 13:08 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 444 Vitest files and 3,151 tests pass in the latest full local gate.
+- 445 Vitest files and 3,153 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -103,6 +103,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   listing titles, family members, review history, and handoff coordination failures.
 - Marketplace Alerts now fails clearly when saved searches cannot be read and surfaces matching-listing and
   saved-state failures instead of presenting a healthy empty alert view.
+- Marketplace Creators now fails clearly when storefronts cannot be read and surfaces follow, review, and
+  open-listing failures instead of presenting an incomplete creator ranking.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

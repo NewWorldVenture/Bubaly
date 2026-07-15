@@ -746,6 +746,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
+### PLA-0314 - Marketplace Creators hid storefront and trust-data failures
+
+- Timestamp: 2026-07-15 13:08 America/New_York
+- Service: Marketplace storefront directory and creator trust context
+- Route: `/marketplace/creators`
+- Affected files: `app/(app)/marketplace/creators/page.tsx`, `tests/marketplace-creators-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: storefront, follow, review, or open-listing reads failed while the page displayed an empty or incomplete creator ranking
+- Severity: P1
+- Launch impact: users could miss sellers or act on incomplete ratings and inventory context
+- Root cause: Promise.all result errors were discarded and failed reads became empty ranking inputs
+- Resolution: storefront failure now renders a retryable ErrorState; dependent failures are logged and shown in an accessible data-health warning
+- Supabase impact: no schema change; storefront and trust reads remain scoped to the active family and existing permissions
+- Tests run: `tests/marketplace-creators-read-boundary.test.ts` (2 focused tests); full suite/build pending
+- Validation evidence: source repair pending commit; live creator/RLS, role, browser, and family-isolation evidence remain open
+- Status: Resolved in code; full verification and live workflow evidence remain open
+- Remaining dependencies: execute isolated storefront, follow, review, inventory, and family-isolation drills against deployed Supabase
+
 ### PLA-0313 - Marketplace Alerts hid saved-search and matching-data failures
 
 - Timestamp: 2026-07-15 13:04 America/New_York
