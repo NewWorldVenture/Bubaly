@@ -8,7 +8,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock } from '@/components/ui/states';
+import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { StatPill, Progress } from './shared';
 import { ReadinessRing } from './vacations-list';
 import { computeReadiness } from '@/lib/vacations/readiness';
@@ -27,23 +27,48 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: tripRows, loading } = useRealtimeQuery<Tables<'vacations'>>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
+  const tripQuery = useRealtimeQuery<Tables<'vacations'>>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
+  const membersQuery = useRealtimeQuery<Tables<'vacation_members'>>(q('vacation_members', familyId, vacationId));
+  const lodgingQuery = useRealtimeQuery<Tables<'vacation_lodging'>>(q('vacation_lodging', familyId, vacationId));
+  const flightsQuery = useRealtimeQuery<Tables<'vacation_flights'>>(q('vacation_flights', familyId, vacationId));
+  const transportQuery = useRealtimeQuery<Tables<'vacation_transportation'>>(q('vacation_transportation', familyId, vacationId));
+  const activitiesQuery = useRealtimeQuery<Tables<'vacation_activities'>>(q('vacation_activities', familyId, vacationId));
+  const reservationsQuery = useRealtimeQuery<Tables<'vacation_reservations'>>(q('vacation_reservations', familyId, vacationId));
+  const budgetsQuery = useRealtimeQuery<Tables<'vacation_budgets'>>(q('vacation_budgets', familyId, vacationId));
+  const expensesQuery = useRealtimeQuery<Tables<'vacation_expenses'>>(q('vacation_expenses', familyId, vacationId));
+  const packingQuery = useRealtimeQuery<Tables<'vacation_packing_items'>>(q('vacation_packing_items', familyId, vacationId));
+  const docsQuery = useRealtimeQuery<Tables<'vacation_documents'>>(q('vacation_documents', familyId, vacationId));
+  const emergencyQuery = useRealtimeQuery<Tables<'vacation_emergency_contacts'>>(q('vacation_emergency_contacts', familyId, vacationId));
+  const daysQuery = useRealtimeQuery<Tables<'vacation_itinerary_days'>>(q('vacation_itinerary_days', familyId, vacationId));
+  const itemsQuery = useRealtimeQuery<Tables<'vacation_itinerary_items'>>(q('vacation_itinerary_items', familyId, vacationId));
+  const weatherQuery = useRealtimeQuery<Tables<'vacation_weather_snapshots'>>(q('vacation_weather_snapshots', familyId, vacationId));
+  const recosQuery = useRealtimeQuery<Tables<'vacation_ai_recommendations'>>(q('vacation_ai_recommendations', familyId, vacationId));
+
+  const readQueries = [
+    tripQuery, membersQuery, lodgingQuery, flightsQuery, transportQuery, activitiesQuery,
+    reservationsQuery, budgetsQuery, expensesQuery, packingQuery, docsQuery, emergencyQuery,
+    daysQuery, itemsQuery, weatherQuery, recosQuery,
+  ];
+  const tripRows = tripQuery.data;
   const trip = tripRows[0];
-  const { data: members } = useRealtimeQuery<Tables<'vacation_members'>>(q('vacation_members', familyId, vacationId));
-  const { data: lodging } = useRealtimeQuery<Tables<'vacation_lodging'>>(q('vacation_lodging', familyId, vacationId));
-  const { data: flights } = useRealtimeQuery<Tables<'vacation_flights'>>(q('vacation_flights', familyId, vacationId));
-  const { data: transport } = useRealtimeQuery<Tables<'vacation_transportation'>>(q('vacation_transportation', familyId, vacationId));
-  const { data: activities } = useRealtimeQuery<Tables<'vacation_activities'>>(q('vacation_activities', familyId, vacationId));
-  const { data: reservations } = useRealtimeQuery<Tables<'vacation_reservations'>>(q('vacation_reservations', familyId, vacationId));
-  const { data: budgets } = useRealtimeQuery<Tables<'vacation_budgets'>>(q('vacation_budgets', familyId, vacationId));
-  const { data: expenses } = useRealtimeQuery<Tables<'vacation_expenses'>>(q('vacation_expenses', familyId, vacationId));
-  const { data: packing } = useRealtimeQuery<Tables<'vacation_packing_items'>>(q('vacation_packing_items', familyId, vacationId));
-  const { data: docs } = useRealtimeQuery<Tables<'vacation_documents'>>(q('vacation_documents', familyId, vacationId));
-  const { data: emergency } = useRealtimeQuery<Tables<'vacation_emergency_contacts'>>(q('vacation_emergency_contacts', familyId, vacationId));
-  const { data: days } = useRealtimeQuery<Tables<'vacation_itinerary_days'>>(q('vacation_itinerary_days', familyId, vacationId));
-  const { data: items } = useRealtimeQuery<Tables<'vacation_itinerary_items'>>(q('vacation_itinerary_items', familyId, vacationId));
-  const { data: weather } = useRealtimeQuery<Tables<'vacation_weather_snapshots'>>(q('vacation_weather_snapshots', familyId, vacationId));
-  const { data: recos } = useRealtimeQuery<Tables<'vacation_ai_recommendations'>>(q('vacation_ai_recommendations', familyId, vacationId));
+  const members = membersQuery.data;
+  const lodging = lodgingQuery.data;
+  const flights = flightsQuery.data;
+  const transport = transportQuery.data;
+  const activities = activitiesQuery.data;
+  const reservations = reservationsQuery.data;
+  const budgets = budgetsQuery.data;
+  const expenses = expensesQuery.data;
+  const packing = packingQuery.data;
+  const docs = docsQuery.data;
+  const emergency = emergencyQuery.data;
+  const days = daysQuery.data;
+  const items = itemsQuery.data;
+  const weather = weatherQuery.data;
+  const recos = recosQuery.data;
+  const loading = readQueries.some((query) => query.loading);
+  const readError = readQueries.some((query) => query.error);
+  const refreshAll = () => { void Promise.all(readQueries.map((query) => query.refresh())); };
 
   const budget = useMemo(() => summarizeBudget(budgets, expenses), [budgets, expenses]);
   const transportTotal = flights.length + transport.length;
@@ -96,6 +121,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
+  if (readError) return <ErrorState message="Could not load this trip overview. Refresh and try again." onRetry={refreshAll} />;
 
   const lvlLabel = { not_started: 'Not started', getting_there: 'Getting there', almost_ready: 'Almost ready', ready: 'Ready to go!' }[readiness.level];
 
