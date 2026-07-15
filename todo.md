@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:23:01 -04:00
+- Last updated: 2026-07-15 17:27:51 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `da83e4b` adds emergency-summary read safety after shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `2a86d411` adds weather and packing read safety after the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0351 - Weather and packing views hid failed trip dependencies as empty plans
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation weather and packing / Supabase failure handling
+- Feature: Trip Weather and Trip Packing
+- Route: `/dashboard/vacations/[id]/weather`, `/dashboard/vacations/[id]/packing`
+- File or files: `components/vacations/trip-weather.tsx`, `components/vacations/trip-packing.tsx`, `tests/trip-weather-packing-boundary.test.ts`
+- Database objects: `vacations`, `vacation_weather_snapshots`, `vacation_packing_lists`, `vacation_packing_items`, and `vacation_activities`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: weather, packing, or activity dependency reads could fail while pages rendered no forecast or no packing items.
+- Launch impact: travelers could plan without current weather or lose visibility into a partially unavailable packing plan.
+- Root cause: both views used fallback arrays while ignoring secondary query loading and errors.
+- Required remediation: track every required dependency read, wait for complete data, and render sanitized retry states before empty-state UI.
+- Implementation notes: Weather now validates trip and snapshot reads; Packing validates all five trip, list, item, weather, and activity reads and retries them together.
+- Test plan: focused weather/packing boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/trip-weather-packing-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 469 files/3,222 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `2a86d411`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0350 - Emergency summary hid contact and medical read failures as no emergency data
 
@@ -199,30 +220,7 @@
 - Severity: P1
 - Category: Admin access management / Supabase failure handling
 - Feature: Super Admin Users & Families
-- Route: `/admin/users`
-- File or files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
-- Database objects: `profiles`, `family_members`, `families`, `subscriptions`, `invites`, `roles`, `permissions`, and `super_admins`
-- Affected roles: Super Admin and access-management operators
-- Scenario: any required access, family, subscription, invitation, role, permission, or super-admin read could fail while the page rendered partial users, empty filters, or misleading access counts.
-- Launch impact: operators could change access based on incomplete or stale membership and permission data.
-- Root cause: query failures were collected into a warning banner but the page continued to derive metrics and rows from partial results.
-- Required remediation: fail closed at the page boundary, log diagnostics server-side, and render a sanitized retry state before any access data is shown.
-- Implementation notes: the page now returns a retryable error state whenever environment or required read validation fails.
-- Test plan: focused Users read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/admin-users-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 461 files/3,207 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `3e44cb89`; documentation stamp and push pending.
-- Remaining dependencies: live Super Admin role/RLS, browser, audit-log, backup, and deployed verification.
-
-#### TODO-0341 - Admin Social hid publishing and provider errors as zero metrics
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Social integrations / publishing operations / Supabase failure handling
-- Feature: Super Admin Social platform
-- Route: `/admin/social`
-- File or files: `app/(app)/admin/social/page.tsx`, `tests/admin-social-read-boundary.test.ts`
-- Database objects: `social…112304 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Route: `/admin/us…112829 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
