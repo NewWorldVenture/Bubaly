@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { ITEM_KINDS, DAY_PARTS, dollars, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
@@ -26,20 +26,26 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: tripRows } = useRealtimeQuery<Trip>({
+  const tripQuery = useRealtimeQuery<Trip>({
     table: 'vacations', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId),
   });
-  const trip = tripRows[0];
+  const trip = tripQuery.data[0];
 
-  const { data: days, loading: daysLoading } = useRealtimeQuery<Day>({
+  const daysQuery = useRealtimeQuery<Day>({
     table: 'vacation_itinerary_days', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_itinerary_days').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: items } = useRealtimeQuery<Item>({
+  const itemsQuery = useRealtimeQuery<Item>({
     table: 'vacation_itinerary_items', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_itinerary_items').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
+  const days = daysQuery.data;
+  const items = itemsQuery.data;
+  const readQueries = [tripQuery, daysQuery, itemsQuery];
+  const loading = readQueries.some((query) => query.loading);
+  const readError = readQueries.some((query) => query.error);
+  const refreshAll = () => { void Promise.all(readQueries.map((query) => query.refresh())); };
 
   const sortedDays = useMemo(() => [...days].sort((a, b) => a.day_date.localeCompare(b.day_date)), [days]);
   const dayById = useMemo(() => new Map(days.map((d) => [d.id, d])), [days]);
@@ -103,7 +109,8 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     setForm({ id: it.id, day_id: it.day_id ?? '', day_part: it.day_part, kind: it.kind, title: it.title, location: it.location ?? '', start_time: it.start_time?.slice(0, 5) ?? '', end_time: it.end_time?.slice(0, 5) ?? '', cost: it.cost_cents != null ? String(it.cost_cents / 100) : '', booked: it.booked, notes: it.notes ?? '' });
   }
 
-  if (daysLoading) return <LoadingBlock />;
+  if (loading) return <LoadingBlock />;
+  if (readError) return <ErrorState message="Could not load this itinerary. Refresh and try again." onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -124,13 +131,13 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {sortedDays.length === 0 ? (
-        <EmptyState icon={CalendarRange} title="No days planned yet" description="Set trip dates then click “Build days from dates”, or add days as you go." />
+        <EmptyState icon={CalendarRange} title="No days planned yet" description="Set trip dates then click â€œBuild days from datesâ€, or add days as you go." />
       ) : (
         <div className="space-y-4">
           {sortedDays.map((day, i) => (
             <div key={day.id} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold">Day {i + 1} · {fmtDate(day.day_date)}</h3>
+                <h3 className="font-semibold">Day {i + 1} Â· {fmtDate(day.day_date)}</h3>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {DAY_PARTS.map((part) => {
@@ -152,11 +159,11 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                               </span>
                             </div>
                             {(it.start_time || it.location || it.cost_cents != null) && (
-                              <p className="mt-0.5 text-[11px] text-muted">{[it.start_time?.slice(0, 5), it.location, it.cost_cents != null && dollars(it.cost_cents)].filter(Boolean).join(' · ')}</p>
+                              <p className="mt-0.5 text-[11px] text-muted">{[it.start_time?.slice(0, 5), it.location, it.cost_cents != null && dollars(it.cost_cents)].filter(Boolean).join(' Â· ')}</p>
                             )}
                           </li>
                         ))}
-                        {list.length === 0 && <li className="py-1 text-center text-[11px] text-muted">—</li>}
+                        {list.length === 0 && <li className="py-1 text-center text-[11px] text-muted">â€”</li>}
                       </ul>
                     </div>
                   );
@@ -195,3 +202,4 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     </div>
   );
 }
+
