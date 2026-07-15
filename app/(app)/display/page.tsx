@@ -4,7 +4,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 import {
-  DisplayShell, DEFAULT_TILES, resolveDisplaySettings,
+  DisplayShell, DEFAULT_TILES, resolveTiles, resolveDisplaySettings,
   type DisplayData, type Tile,
 } from '@/components/display/display-grid';
 import type { DisplaySettings } from '@/lib/display/ambient';
@@ -138,8 +138,10 @@ async function loadDisplay(
     calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
   };
 
-  const savedTiles = (layoutRow?.tiles as Tile[] | null) ?? null;
-  const initialTiles = Array.isArray(savedTiles) && savedTiles.length ? savedTiles : DEFAULT_TILES;
+  // The stored layout is untrusted jsonb: a single malformed element (e.g. a
+  // literal null from a historical sparse-array save) used to crash the whole
+  // page during SSR — where widget boundaries can't catch. Normalize BOTH blobs.
+  const initialTiles = resolveTiles(layoutRow?.tiles ?? null);
   const initialSettings = resolveDisplaySettings(layoutRow?.settings ?? null);
 
   return { data, initialTiles, initialSettings };

@@ -17,6 +17,7 @@ import {
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
+import { DEFAULT_TILES, resolveTiles, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 import { KitchenTimers } from './kitchen-timers';
@@ -43,12 +44,12 @@ export type DisplayData = {
   calendar: { year: number; month: number; today: number; eventDays: number[] };
 };
 
-export type WidgetKey =
-  | 'clock' | 'weather' | 'schedule' | 'upcoming' | 'calendar' | 'chores'
-  | 'meals' | 'grocery' | 'members' | 'reminders' | 'birthdays' | 'featured' | 'notes' | 'timers';
-
-type TileSize = 'sm' | 'md' | 'lg' | 'wide' | 'hero';
-export type Tile = { id: string; widget: WidgetKey; size: TileSize };
+// The tile model + layout normalization live in lib/display/tiles (pure,
+// tested) — the stored layout is untrusted jsonb and MUST be resolved through
+// resolveTiles before render (a malformed element crashes SSR, where widget
+// boundaries can't catch). Re-exported here for existing importers.
+export { DEFAULT_TILES, resolveTiles } from '@/lib/display/tiles';
+export type { Tile, WidgetKey } from '@/lib/display/tiles';
 
 export const WIDGETS: { key: WidgetKey; label: string; icon: typeof Calendar }[] = [
   { key: 'featured', label: 'Featured', icon: Sparkles },
@@ -76,18 +77,6 @@ const SIZES: { key: TileSize; label: string; cls: string }[] = [
   { key: 'hero', label: 'Hero', cls: 'lg:col-span-4 lg:row-span-3' },
 ];
 const sizeClass = (s: TileSize) => SIZES.find((x) => x.key === s)?.cls ?? SIZES[0].cls;
-
-export const DEFAULT_TILES: Tile[] = [
-  { id: 't1', widget: 'featured', size: 'hero' },
-  { id: 't2', widget: 'schedule', size: 'md' },
-  { id: 't3', widget: 'timers', size: 'md' },
-  { id: 't4', widget: 'weather', size: 'sm' },
-  { id: 't5', widget: 'meals', size: 'sm' },
-  { id: 't6', widget: 'chores', size: 'sm' },
-  { id: 't7', widget: 'grocery', size: 'sm' },
-  { id: 't8', widget: 'calendar', size: 'md' },
-  { id: 't9', widget: 'members', size: 'wide' },
-];
 
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -435,7 +424,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
   initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
 }) {
   const { success, error: toastError } = useToast();
-  const [tiles, setTiles] = useState<Tile[]>(initialTiles.length ? initialTiles : DEFAULT_TILES);
+  // Defense in depth: even the props are re-normalized (SSR throws here are
+  // uncatchable by widget boundaries, so the shell must be garbage-proof).
+  const [tiles, setTiles] = useState<Tile[]>(() => resolveTiles(initialTiles));
   const [settings, setSettings] = useState<DisplaySettings>(initialSettings);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -489,7 +480,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
   }
   function add() { setTiles((t) => [...t, { id: uid(), widget: 'schedule', size: 'sm' }]); }
   function resetDefault() { setTiles(DEFAULT_TILES.map((t) => ({ ...t, id: uid() }))); }
-  function cancel() { setTiles(initialTiles.length ? initialTiles : DEFAULT_TILES); setSettings(initialSettings); setEditing(false); }
+  function cancel() { setTiles(resolveTiles(initialTiles)); setSettings(initialSettings); setEditing(false); }
 
   async function save() {
     setSaving(true);
