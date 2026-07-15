@@ -26,7 +26,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   use a per-user advisory lock around the membership check and initial household writes. Remote application
   and an authenticated two-request first-login drill remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f6612-b504-764d-ba45-1f0f81e7d090`); local Docker/Supabase status is unavailable.
+  `019f6657-6cfb-7a90-915c-2e2e6a8923db`); local Docker/Supabase status is unavailable.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
 - The Connections hub no longer creates label-only “connected” records for providers without a real OAuth
