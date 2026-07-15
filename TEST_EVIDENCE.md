@@ -1348,4 +1348,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `/admin/system` and `/admin/backup` now render refreshable error states when privileged usage/count reads fail instead of reporting zero metrics.
-- Source commit: `ecfb4f95`; merged remote work and source are published on `origin/main` at `4accc171`; docs publication commit is pending.
+- Source commit: `ecfb4f95`; merged remote work and source are published on `origin/main` at `8b712349`.

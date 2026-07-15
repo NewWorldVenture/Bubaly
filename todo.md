@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 10:54:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `4accc171` (published main; source repair `ecfb4f95`)
+- Commit: `8b712349` (published main; source repair `ecfb4f95`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -41,7 +41,7 @@
 - Resolution: preserve read errors, log the boundary, and render a refreshable error state before displaying metrics
 - Tests performed: `tests/admin-system-read-boundary.test.ts`, `tests/admin-audit-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (6 focused tests); full 423-file/3,092-test suite; migration audit; typecheck; lint; dependency audit; production build; diff check
 - Evidence: focused contracts cover system and table-count failures plus visible error-state paths
-- Remaining dependencies: publish docs and run isolated operational-read failure/browser drills
+- Remaining dependencies: run isolated operational-read failure/browser drills
 
 #### TODO-0299 - Admin audit views hid incomplete history after read failures
 
