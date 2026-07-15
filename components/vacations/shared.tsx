@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 
 // ---- small presentational helpers reused across trip pages ----
 
@@ -105,7 +105,7 @@ export function TripCrudSection<T extends Row>({
   const { success, error: toastError } = useToast();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data, loading } = useRealtimeQuery<T>({
+  const { data, loading, error, refresh } = useRealtimeQuery<T>({
     table, familyId, deps: [familyId, vacationId],
     // Generic over an arbitrary table name, so we step outside the typed client here.
     fetcher: (sb) => (sb as never as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k: string, v: string) => PromiseLike<{ data: T[] | null; error: { message: string } | null }> } } } })
@@ -142,7 +142,7 @@ export function TripCrudSection<T extends Row>({
       <SectionHeader icon={icon} title={title} action={
         <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {addLabel}</Button>
       } />
-      {loading ? <LoadingBlock /> : rows.length === 0 ? (
+      {loading ? <LoadingBlock /> : error ? <ErrorState message={`Could not load ${title.toLowerCase()}. Refresh and try again.`} onRetry={refresh} /> : rows.length === 0 ? (
         <EmptyState icon={icon} title={emptyText} description="Add your first one to get started." />
       ) : (
         <ul className="space-y-2">

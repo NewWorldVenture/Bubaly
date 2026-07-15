@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
+import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, StatPill, Progress, type FieldDef } from './shared';
 import { BUDGET_CATEGORIES, dollars, lookup } from '@/lib/vacations/meta';
 import { summarizeBudget } from '@/lib/vacations/budget';
@@ -29,11 +30,11 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: budgets } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading: budgetsLoading, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'vacation_budgets', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_budgets').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: expenses } = useRealtimeQuery<Expense>({
+  const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useRealtimeQuery<Expense>({
     table: 'vacation_expenses', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
@@ -42,6 +43,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
   const plannedByCat = useMemo(() => new Map(budgets.map((b) => [b.category, b])), [budgets]);
   const [editing, setEditing] = useState<VacBudgetCategory | null>(null);
   const [draft, setDraft] = useState('');
+  const refreshAll = () => { void Promise.all([refreshBudgets(), refreshExpenses()]); };
 
   async function savePlanned(cat: VacBudgetCategory) {
     const cents = draft ? Math.round(parseFloat(draft) * 100) : 0;
@@ -52,6 +54,9 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     if (error) toastError(error.message); else success('Budget updated');
     setEditing(null);
   }
+
+  if (budgetsLoading || expensesLoading) return <LoadingBlock />;
+  if (budgetsError || expensesError) return <ErrorState message="Could not load this trip budget. Refresh and try again." onRetry={refreshAll} />;
 
   return (
     <div className="space-y-6">
