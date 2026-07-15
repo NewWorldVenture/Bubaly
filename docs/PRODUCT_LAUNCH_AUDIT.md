@@ -577,3 +577,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `c0bd9ffa`
 - Status: Resolved in code; live billing/notification outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated billing and notification read-failure drills and verify no empty view is presented as authoritative
+
+### PLA-0302 - Admin feedback and integrations hid read failures as empty or unconfigured
+
+- Timestamp: 2026-07-15 11:04 America/New_York
+- Service: Super Admin feedback queue and integrations
+- Routes: `/admin/feedback`, `/admin/integrations`
+- Affected files: `app/(app)/admin/feedback/page.tsx`, `app/(app)/admin/integrations/page.tsx`, `tests/admin-feedback-integrations-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: feedback ideas/comments/alerts or connected-account status failed to load while the UI substituted an empty board or “not configured” status
+- Severity: P1
+- Launch impact: operators could miss user feedback or misdiagnose a connected integration during an outage
+- Root cause: feedback queue and Google Calendar connected-account read errors were discarded
+- Resolution: both pages now preserve read errors, log the boundary, and render refreshable error states before displaying queue or integration status
+- Supabase impact: no schema change; feedback and connected-account failures are explicit and non-destructive
+- Tests run: `tests/admin-feedback-integrations-read-boundary.test.ts` (2 focused tests), full 425-file/3,096-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify feedback ideas/comments/notification reads, connected-account reads, and visible retry states
+- Commit: `9f4c6fa9`
+- Status: Resolved in code; live feedback/integration outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated feedback and connected-account read-failure drills and verify no empty/configuration status is presented as authoritative

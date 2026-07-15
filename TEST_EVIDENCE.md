@@ -1361,3 +1361,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/admin/billing` and `/admin/notifications` now render refreshable error states when their Supabase reads fail instead of reporting empty or zero-valued data.
 - Source commit: `c0bd9ffa`; docs and source are published on `origin/main` at `cae8e833`.
+
+## Latest Local Evidence - Admin Feedback and Integration Read Failure
+
+- `npm.cmd exec vitest run tests/admin-feedback-integrations-read-boundary.test.ts`: 1 file, 2 focused tests passed.
+- `npm.cmd test`: 425 files, 3,096 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `/admin/feedback` and `/admin/integrations` now render refreshable error states when their Supabase reads fail instead of reporting an empty queue or false not-configured status.
+- Source commit: `9f4c6fa9`; docs publication commit is pending.

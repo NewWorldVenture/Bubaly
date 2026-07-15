@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 11:00:00 -04:00
+- Last updated: 2026-07-15 11:04:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `cae8e833` (published main; source repair `c0bd9ffa`)
+- Commit: `9f4c6fa9` (published main; source repair `9f4c6fa9`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0302 - Admin feedback and integrations hid read failures as empty or unconfigured
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin feedback queue and integrations
+- Route: `/admin/feedback`, `/admin/integrations`
+- File or files: `app/(app)/admin/feedback/page.tsx`, `app/(app)/admin/integrations/page.tsx`, `tests/admin-feedback-integrations-read-boundary.test.ts`
+- Database objects: `feedback_ideas`, `feedback_comments`, `admin_notifications`, `user_preferences`
+- Affected roles: Super Admin
+- Scenario: feedback queue or connected-account status read fails
+- Launch impact: an operator can miss feedback or mistake an unavailable integration query for a not-configured integration
+- Root cause: Supabase read errors were discarded during page loading
+- Resolution: preserve read errors, log the boundary, and render refreshable error states before displaying queue or integration status
+- Tests performed: `tests/admin-feedback-integrations-read-boundary.test.ts` (2 focused tests); full 425-file/3,096-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover feedback ideas/comments/notification reads, connected-account status, and visible error-state paths
+- Remaining dependencies: publish docs and run isolated feedback/integration read-failure/browser drills
 
 #### TODO-0301 - Admin billing and notifications hid read failures as empty views
 
