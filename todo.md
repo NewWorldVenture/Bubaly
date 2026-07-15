@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:12:00 -04:00
+- Last updated: 2026-07-15 14:16:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest published source repair `1e2c8172` hardens remaining wallet reads; Stripe webhook state-boundary repair is currently being verified
+- Commit: latest local source repair includes allowance plan-gating; publication to branch and `main` is pending
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0322 - Allowance cron skipped credits when subscription gating read failed
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Reliability / wallet automation / financial state
+- Feature: Scheduled allowance crediting
+- Route: `/api/cron/wallet-allowance`
+- File or files: `app/api/cron/wallet-allowance/route.ts`, `tests/cron-wallet-allowance-persistence.test.ts`
+- Database objects: `allowance_rules`, `subscriptions`, `wallet_transactions`, and `wallet_buckets`
+- Affected roles: household managers, parents, children receiving allowances, and scheduled cron delivery
+- Scenario: a failed subscriptions read returned no rows, causing paid-family plan gating to skip credits as though every family were on Free
+- Launch impact: allowances could be silently skipped without a retryable cron failure
+- Root cause: the subscriptions query error was discarded
+- Resolution: subscription plan-gating errors now throw through the cron failure path; existing schedule claim rollback protects against partial credit failures
+- Tests performed: `tests/cron-wallet-allowance-persistence.test.ts`, `tests/cron-auth.test.ts` (9 focused tests); typecheck; lint; diff check
+- Evidence: focused validation passes; final full gate passed with 450 files/3,178 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run isolated cron test-mode execution with subscription outages, duplicate invocations, and ledger/RLS verification
 
 #### TODO-0321 - Stripe subscription webhook ignored prior billing state failures
 

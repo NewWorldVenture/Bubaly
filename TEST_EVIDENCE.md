@@ -33,6 +33,16 @@ Audit date: 2026-07-15
 - Stripe subscription webhooks now fail closed when billing-customer or prior-subscription state reads fail; payment automation failures are logged instead of silently swallowed.
 - Live Stripe test-mode lifecycle, replay/idempotency, retry, and Super Admin alert evidence remain open.
 
+## Latest Local Evidence - Allowance Cron Plan-Gating Boundary
+
+- Focused allowance/auth cron suites: 2 files, 9 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- The allowance cron now fails when subscription plan-gating reads fail instead of silently skipping paid-family credits.
+- Live cron scheduling, duplicate-run, outage, ledger, and RLS evidence remain open.
+- Final full gate after this increment: 450 test files, 3,178 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
+
 ## Latest Live Evidence Snapshot - Authentication and Supabase
 
 - `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID

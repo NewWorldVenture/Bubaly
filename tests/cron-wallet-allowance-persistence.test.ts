@@ -8,6 +8,11 @@ describe('cron wallet allowance persistence boundaries', () => {
     expect(source).toContain('next_run_on, last_run_on');
   });
 
+  it('fails the run when plan gating cannot be read', () => {
+    expect(source).toContain('subscriptionsError');
+    expect(source).toContain('if (subscriptionsError) throw subscriptionsError;');
+  });
+
   it('checks the schedule claim before crediting the wallet', () => {
     const creditIndex = source.indexOf('const res = await creditChildWallet');
     const scheduleIndex = source.indexOf(".select('id')");

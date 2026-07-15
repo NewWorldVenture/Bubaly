@@ -40,11 +40,12 @@ export async function GET(req: NextRequest) {
     const families = Array.from(new Set((rules ?? []).map((r) => r.family_id)));
     const planByFamily = new Map<string, string | null>();
     if (families.length > 0) {
-      const { data: subs } = await supabase
+      const { data: subs, error: subscriptionsError } = await supabase
         .from('subscriptions')
         .select('family_id, plan, status')
         .in('family_id', families)
         .in('status', ['active', 'trialing']);
+      if (subscriptionsError) throw subscriptionsError;
       for (const s of subs ?? []) planByFamily.set(s.family_id, s.plan);
     }
 

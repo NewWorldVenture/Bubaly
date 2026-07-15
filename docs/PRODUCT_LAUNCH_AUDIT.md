@@ -941,3 +941,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live Stripe evidence remain open
 - Status: Resolved in code; live replay/idempotency and provider evidence remain open
 - Remaining dependencies: execute non-destructive subscription lifecycle, replay, retry, and growth-alert drills in Stripe test mode
+### PLA-0322 - Allowance cron skipped credits when subscription gating read failed
+
+- Timestamp: 2026-07-15 14:14 America/New_York
+- Service: Scheduled wallet allowance automation
+- Route: `/api/cron/wallet-allowance`
+- Affected files: `app/api/cron/wallet-allowance/route.ts`, `tests/cron-wallet-allowance-persistence.test.ts`
+- Role: family manager, parent, child recipient, and scheduled cron worker
+- Scenario: a failed subscriptions read produced an empty plan map, so paid-family eligibility could be treated as Free and credits skipped
+- Severity: P0
+- Launch impact: scheduled allowances could disappear without a retryable failure signal
+- Root cause: the subscription plan-gating error was discarded
+- Resolution: subscription read errors now fail the cron through its 500 error path; schedule claim and credit rollback remain checked
+- Supabase impact: no schema change; allowance and subscription family scopes remain unchanged
+- Tests run: `tests/cron-wallet-allowance-persistence.test.ts`, `tests/cron-auth.test.ts` (9 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation passes; full gate and live cron/RLS evidence remain open
+- Status: Resolved in code; live scheduled execution remains open
+- Remaining dependencies: execute isolated outage, duplicate-run, and ledger/RLS drills
