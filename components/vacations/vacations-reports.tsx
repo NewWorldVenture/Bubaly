@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { BarChart3, Plane, Wallet, Gauge } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { StatPill, Progress } from './shared';
 import { VACATION_KINDS, dollars, lookup } from '@/lib/vacations/meta';
 import { daysUntil } from '@/lib/vacations/dates';
@@ -18,10 +18,14 @@ type Score = Tables<'vacation_travel_scores'>;
 
 export function VacationsReports() {
   const { familyId } = useApp();
-  const { data: trips, loading } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
-  const { data: expenses } = useRealtimeQuery<Expense>({ table: 'vacation_expenses', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId) });
-  const { data: budgets } = useRealtimeQuery<Budget>({ table: 'vacation_budgets', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_budgets').select('*').eq('family_id', familyId) });
-  const { data: scores } = useRealtimeQuery<Score>({ table: 'vacation_travel_scores', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_travel_scores').select('*').eq('family_id', familyId) });
+  const { data: trips, loading: tripsLoading, error: tripsError, refresh: refreshTrips } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
+  const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useRealtimeQuery<Expense>({ table: 'vacation_expenses', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId) });
+  const { data: budgets, loading: budgetsLoading, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({ table: 'vacation_budgets', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_budgets').select('*').eq('family_id', familyId) });
+  const { data: scores, loading: scoresLoading, error: scoresError, refresh: refreshScores } = useRealtimeQuery<Score>({ table: 'vacation_travel_scores', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_travel_scores').select('*').eq('family_id', familyId) });
+
+  const refreshAll = () => {
+    void Promise.all([refreshTrips(), refreshExpenses(), refreshBudgets(), refreshScores()]);
+  };
 
   const spentByTrip = useMemo(() => {
     const m = new Map<string, number>();
@@ -50,7 +54,10 @@ export function VacationsReports() {
   }, [trips]);
   const maxKind = Math.max(1, ...byKind.map(([, n]) => n));
 
-  if (loading) return <LoadingBlock />;
+  if (tripsLoading || expensesLoading || budgetsLoading || scoresLoading) return <LoadingBlock />;
+  if (tripsError || expensesError || budgetsError || scoresError) {
+    return <ErrorState message="Could not load complete vacation reports. Refresh and try again." onRetry={refreshAll} />;
+  }
   if (trips.length === 0) return <EmptyState icon={BarChart3} title="No trips to report on yet" description="Create a vacation to see analytics here." />;
 
   return (
@@ -97,3 +104,4 @@ export function VacationsReports() {
     </div>
   );
 }
+
