@@ -213,7 +213,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: migration `0210_onboarding_idempotency.sql` adds four nullable columns and four unique indexes; no destructive data operation
 - Tests run: focused onboarding safety/idempotency/migration tests, full Vitest, typecheck, lint, dependency audit, migration audit, diff check, production build
 - Validation evidence: 8 focused tests; 406 files/3,033 tests; 226 numbered migrations with next `0211`; 250-route build; 0 dependency vulnerabilities
-- Commit: pending publication
+- Commit: `6148080d`
 - Status: Resolved in code; remote migration application, live RLS, and authenticated E2E remain open dependencies
 - Remaining dependencies: apply `0210`, exercise partial-failure replay in isolated Supabase, verify invite/email behavior and cross-tenant denial
 
