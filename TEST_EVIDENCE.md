@@ -1538,7 +1538,7 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Wallet Send Money, Activity, Treasury, Goals, Allowance, and Cards now fail clearly on primary wallet reads and surface dependent ledger, identity, configuration, connected-account, sync, and issued-card failures instead of silently deriving zero or incomplete financial views.
-- Source commit: pending publication.
+- Source commit: `b8e085d0`; branch and `main` publication verified.
 
 ## Progress Snapshot - 2026-07-15 13:30
 
