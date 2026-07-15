@@ -32,10 +32,14 @@ export async function resolveFamilyPlanLevel(
   familyId: string,
 ): Promise<number> {
   const admin = createServiceClient();
-  const [{ data: subs }, { data: fam }] = await Promise.all([
+  const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await Promise.all([
     admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']),
     admin.from('families').select('trial_ends_at, closed_at').eq('id', familyId).maybeSingle(),
   ]);
+  if (subscriptionsError || familyError || !fam) {
+    console.error('[plan] family entitlement read failed', { subscriptionsError, familyError, familyId, foundFamily: Boolean(fam) });
+    throw new Error('Family subscription state is unavailable.');
+  }
   const paidLevel = (subs ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
   // During the 5-day free trial a family gets Family Basic (level 1); existing
   // grandfathered free families (trial_ends_at NULL) stay at their paid level.

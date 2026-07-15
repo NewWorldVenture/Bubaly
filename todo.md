@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 15:30:00 -04:00
+- Last updated: 2026-07-15 16:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes wallet provisioning and spend-approval failure boundaries; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes wallet action read boundaries and fail-closed entitlement resolution; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0331 - Wallet actions and entitlement reads hid Supabase failures
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Wallet / billing entitlement / persistence safety
+- Feature: Wallet money actions and family plan gating
+- Route: wallet server actions, `resolveFamilyPlanLevel`
+- File or files: `app/(app)/wallet/actions.ts`, `lib/server/plan.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Database objects: `child_wallets`, `wallet_rules`, `wallet_buckets`, `wallet_transactions`, `chore_assignments`, `wallet_goals`, `gift_payments`, `pay_handles`, `parent_approvals`, `subscriptions`, and `families`
+- Affected roles: household members, family managers, and any feature gated by the active subscription tier
+- Scenario: required reads could fail while actions treated the result as not-found, defaulted wallet configuration, or continued with incomplete money state; entitlement reads could silently downgrade a valid family to Free
+- Launch impact: money operations could be denied incorrectly, act on incomplete state, or expose the wrong subscription capability surface
+- Root cause: Supabase query errors were discarded in action-level `maybeSingle`/`Promise.all` reads and plan resolution reduced failed reads to empty/default values
+- Resolution: required wallet reads now return sanitized failures; subscription and family entitlement reads log and throw when unavailable or missing
+- Tests performed: `tests/wallet-money-action-boundaries.test.ts` (6 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Evidence: latest full gate passed with 455 files/3,196 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run live subscription/tier, wallet activation, approval failure, concurrency, RLS, reconciliation, and browser drills
 
 #### TODO-0330 - Wallet money actions acknowledged incomplete required writes
 

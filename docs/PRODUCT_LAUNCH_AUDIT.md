@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0331 - Wallet actions and entitlement reads hid Supabase failures
+
+- Timestamp: 2026-07-15 16:00 America/New_York
+- Service: Family Wallet money actions and subscription entitlement resolution
+- Route: wallet server actions, `resolveFamilyPlanLevel`
+- Affected files: `app/(app)/wallet/actions.ts`, `lib/server/plan.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Role: household member, family manager, or any authenticated feature consumer gated by the active plan
+- Scenario: failed wallet, ledger, gift, goal, Pay-ID, approval, transfer, subscription, or family reads could become not-found/default state or silently Free-tier entitlement
+- Severity: P0
+- Launch impact: users could make decisions from incomplete financial state, receive incorrect access, or encounter inconsistent paid-feature behavior during a Supabase outage
+- Root cause: required query errors were discarded in action-level reads and plan resolution reduced unavailable reads to empty/default values
+- Resolution: wallet actions now fail closed on required read errors; entitlement resolution logs and throws when subscription/family state is unavailable or the family row is missing
+- Supabase impact: no schema change; existing family scoping, service-role entitlement read, and RLS boundaries remain in force
+- Tests run: `tests/wallet-money-action-boundaries.test.ts` (6 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Validation evidence: latest full gate passed with 455 test files, 3,196 tests, 0 production dependency vulnerabilities, and a 250-route build
+- Commit: pending publication
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated subscription/tier, wallet activation, approval-insert failure, concurrency, reconciliation, RLS, and browser drills against deployed Supabase
+
 ### PLA-0330 - Wallet money actions acknowledged incomplete required writes
 
 - Timestamp: 2026-07-15 15:30 America/New_York

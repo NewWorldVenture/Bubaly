@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Wallet Action and Entitlement Read Boundaries
+
+- Focused wallet money boundary suite: 1 file, 6 tests passed.
+- Full `npm.cmd test`: 455 test files, 3,196 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required probes passed.
+- `git diff --check`: passed.
+- Wallet money actions now surface required read failures instead of treating outages as missing records, defaults, or empty money state; entitlement reads fail closed instead of silently returning Free.
+- Live wallet/subscription RLS, role, concurrency, reconciliation, and browser evidence remain open.
+
 ## Latest Local Evidence - Wallet Provisioning and Approval Failure Boundaries
 
 - Focused wallet money boundary suite: 1 file, 5 tests passed.

@@ -38,4 +38,12 @@ describe('wallet and Stripe money action boundaries', () => {
     expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval');");
     expect(walletMoneyActions).toContain("return actionFailure(approvalError, 'Could not create the spend approval request.')");
   });
+
+  it('does not silently downgrade entitlement when subscription reads fail', () => {
+    const planSource = readFileSync('lib/server/plan.ts', 'utf8');
+    expect(planSource).toContain('error: subscriptionsError');
+    expect(planSource).toContain('error: familyError');
+    expect(planSource).toContain('if (subscriptionsError || familyError || !fam)');
+    expect(planSource).toContain("throw new Error('Family subscription state is unavailable.')");
+  });
 });
