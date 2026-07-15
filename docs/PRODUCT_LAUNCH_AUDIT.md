@@ -705,7 +705,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Root cause: shared auth and shell queries discarded errors, and the middleware public inventory did not include all intentionally anonymous or machine-authenticated routes
 - Resolution: shared auth now logs and fails closed on provider errors, context treats auth reads as unavailable, OAuth callback membership errors redirect to retry, admin shell read failures are visible, and middleware reaches route-level rate-limit/token/secret/signature checks for intended public/internal endpoints
 - Supabase impact: no schema change; auth and route-read failures are explicit and non-destructive
-- Tests run: `tests/auth-context-error-contract.test.ts`, `tests/auth-callback-boundary.test.ts`, `tests/admin-shell-read-boundary.test.ts`, `tests/middleware-public-api-boundary.test.ts`, `tests/cron-auth.test.ts`; full 439-file/3,137-test suite; typecheck; lint; dependency audit; production build; diff check
-- Validation evidence: source commit `2a409b13`; build generated 250 routes; live Auth Admin, deployed callback, browser, and provider smoke evidence remain open
+- Tests run: `tests/auth-context-error-contract.test.ts`, `tests/auth-callback-boundary.test.ts`, `tests/admin-shell-read-boundary.test.ts`, `tests/middleware-public-api-boundary.test.ts`, `tests/cron-auth.test.ts`; full 439-file/3,141-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `2a409b13` in merged checkpoint `ed87386f`; build generated 250 routes; live Auth Admin, deployed callback, browser, and provider smoke evidence remain open
 - Status: Resolved in code; live deployment and provider evidence remain open
 - Remaining dependencies: execute isolated deployed public/callback and authenticated role/device drills

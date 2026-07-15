@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 439 Vitest files and 3,137 tests pass in the latest full local gate.
+- 439 Vitest files and 3,141 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -90,6 +90,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   response, and family-label read failures before exposing financial or feedback actions.
 - Concurrent main-branch changes for public feedback-board search and Stripe growth-alert contracts were merged
   cleanly and included in the latest full verification.
+- The latest main-branch merge also includes marketplace Trust & Safety status filtering and feedback-board
+  filtered-result counts; the merged tree remains green under the full verification gate.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

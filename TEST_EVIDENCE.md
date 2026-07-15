@@ -1437,11 +1437,11 @@ Audit date: 2026-07-15
 ## Latest Local Evidence - Auth and Public API Boundaries
 
 - Focused auth context, OAuth callback, admin shell, middleware public API, and cron authorization contracts passed (13 tests across 5 suites).
-- `npm.cmd test`: 439 files, 3,137 tests passed.
+- `npm.cmd test`: 439 files, 3,141 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime compatibility warning remains.
 - `git diff --check`: passed.
 - Shared auth now logs provider/allowlist failures and treats authenticated context failures as unavailable; OAuth callback membership failures no longer route into onboarding; the admin shell exposes profile/invite/notification read warnings; middleware reaches intended public and machine-authenticated route guards.
-- Source commit: `2a409b13`; audit evidence is published at the current branch tip.
+- Source commit: `2a409b13`; merged source checkpoint: `ed87386f`; audit evidence is published at the current branch tip.

@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 12:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: source repair `2a409b13`; audit evidence is published at the current branch tip
+- Commit: merged source checkpoint `ed87386f`; auth source repair `2a409b13`; audit evidence is published at the current branch tip
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -39,7 +39,7 @@
 - Launch impact: public forms and engagement could redirect to login; cron/provider callbacks could be skipped; operators could see misleading admin defaults; authenticated users could be sent into onboarding during a data outage
 - Root cause: ignored Supabase auth/read errors and an incomplete middleware public-route inventory
 - Resolution: log and fail closed on shared auth errors, preserve admin-shell data warnings, fail closed on callback membership errors, and add all intentionally public/internal route roots to the middleware bypass list
-- Tests performed: auth context, auth callback, admin shell, middleware public API, and cron authorization contracts; full 439-file/3,137-test suite; typecheck; lint; dependency audit; production build; diff check
+- Tests performed: auth context, auth callback, admin shell, middleware public API, and cron authorization contracts; full 439-file/3,141-test suite; typecheck; lint; dependency audit; production build; diff check
 - Evidence: source commit `2a409b13`; live Auth Admin, browser, callback, and deployment evidence remain open
 - Remaining dependencies: verify public callback behavior and authenticated role/device paths in deployed preview/production with isolated provider credentials
 
