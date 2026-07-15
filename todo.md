@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:16:00 -04:00
+- Last updated: 2026-07-15 13:18:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -40,7 +40,7 @@
 - Root cause: Supabase result errors were discarded and failed reads became empty arrays
 - Resolution: collection failures now render a retryable error state; item and listing failures are logged and surfaced in accessible collection data-health warnings in both views
 - Tests performed: `tests/marketplace-collections-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
-- Evidence: source commit pending publication; live collection/RLS/role/browser workflow evidence remains open
+- Evidence: source commit `2f844cc3`; branch and `main` publication verified; live collection/RLS/role/browser workflow evidence remains open
 - Remaining dependencies: run isolated collection create/update/delete, item membership, listing visibility, and family-isolation drills against deployed Supabase
 
 #### TODO-0315 - Marketplace Following hid feed and saved-state failures
@@ -58,7 +58,7 @@
 - Root cause: independent Supabase result errors were discarded and all failures became empty arrays
 - Resolution: follow failures now render a retryable error state; save, store, and listing failures are logged and surfaced in an accessible Marketplace following data-health warning
 - Tests performed: `tests/marketplace-following-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
-- Evidence: source commit pending publication; live following/RLS/role/browser workflow evidence remains open
+- Evidence: source commit `2f844cc3`; branch and `main` publication verified; live following/RLS/role/browser workflow evidence remains open
 - Remaining dependencies: run isolated follow/unfollow, feed refresh, save-state, listing visibility, and family-isolation drills against deployed Supabase
 
 #### TODO-0314 - Marketplace Creators hid storefront and trust-data failures

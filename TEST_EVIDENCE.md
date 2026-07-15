@@ -1526,4 +1526,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Following now distinguishes a failed follow read from an empty feed and surfaces saved, store, and listing failures; Collections does the same for collections, items, and collection listings in directory and detail views.
-- Source commit: pending publication.
+- Source commit: `2f844cc3`; branch and `main` publication verified.

@@ -760,7 +760,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: collection failure now renders a retryable ErrorState; item and listing failures are logged and shown in accessible warnings in both directory and detail views
 - Supabase impact: no schema change; reads remain scoped to the active family and listing permissions
 - Tests run: `tests/marketplace-collections-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
-- Validation evidence: source repair pending publication; build generated 250 routes; live collection/RLS, role, browser, and family-isolation evidence remain open
+- Validation evidence: source commit `2f844cc3`; build generated 250 routes; branch and `main` publication verified; live collection/RLS, role, browser, and family-isolation evidence remain open
 - Status: Resolved in code; live workflow evidence remains open
 - Remaining dependencies: execute isolated collection CRUD, item membership, listing visibility, and family-isolation drills against deployed Supabase
 
@@ -778,7 +778,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: follow failure now renders a retryable ErrorState; save, store, and listing failures are logged and shown in an accessible warning
 - Supabase impact: no schema change; feed and saved reads remain family/member scoped
 - Tests run: `tests/marketplace-following-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
-- Validation evidence: source repair pending publication; build generated 250 routes; live following/RLS, role, browser, and family-isolation evidence remain open
+- Validation evidence: source commit `2f844cc3`; build generated 250 routes; branch and `main` publication verified; live following/RLS, role, browser, and family-isolation evidence remain open
 - Status: Resolved in code; live workflow evidence remains open
 - Remaining dependencies: execute isolated follow/unfollow, feed refresh, save-state, and family-isolation drills against deployed Supabase
 
