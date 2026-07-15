@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:24:00 -04:00
+- Last updated: 2026-07-15 10:28:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `b7cd416a` (published main; source repair `46a227b1`)
+- Commit: pending (admin allowlist read failure-contract increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0296 - Admin users hid super-admin allowlist read failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / privileged access / admin
+- Feature: Super Admin users and access management
+- Route: `/admin/users`
+- File or files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
+- Database objects: `super_admins`
+- Affected roles: Super Admin
+- Scenario: the `super_admins` query fails while the page renders the database-backed allowlist as empty
+- Launch impact: an operator could misread an access-control outage as an empty admin list
+- Root cause: the page omitted `superAdminsRes` from its existing Supabase `loadErrors` aggregation
+- Resolution: include `super_admins` in the visible error path so the page reports degraded data instead of presenting an empty allowlist as authoritative
+- Tests performed: `tests/admin-users-read-boundary.test.ts`, `tests/admin-auth-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (6 tests); full 419-file/3,082-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contract confirms the `super_admins` result is reported with the other page reads
+- Remaining dependencies: publish docs and run a live read-failure/browser drill
 
 #### TODO-0295 - Admin family creation relied on an optional trigger for owner access
 

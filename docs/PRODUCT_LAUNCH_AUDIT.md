@@ -463,3 +463,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `46a227b1`
 - Status: Resolved in code; live Super Admin family creation and rollback verification remain open
 - Remaining dependencies: run an isolated trigger-disabled family creation drill and verify owner visibility, subscription state, and rollback parity
+
+### PLA-0296 - Admin users hid super-admin allowlist read failures
+
+- Timestamp: 2026-07-15 10:28 America/New_York
+- Service: Super Admin user and access management
+- Route: `/admin/users`
+- Affected files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: the `super_admins` query failed while the page continued rendering the DB-backed allowlist as an empty set
+- Severity: P1
+- Launch impact: an operator could misread a privileged-access outage as “no database admins” and make unsafe access decisions
+- Root cause: the page included seven Supabase result errors in `loadErrors` but omitted `superAdminsRes`
+- Resolution: `super_admins` is now included in the same visible error aggregation used by the users/families page
+- Supabase impact: no schema change; read failure behavior is now explicit and non-destructive
+- Tests run: `tests/admin-users-read-boundary.test.ts`, `tests/admin-auth-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (6 tests), full 419-file/3,082-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract verifies the allowlist result is part of the visible Supabase error path
+- Commit: `c8ec95b1`
+- Status: Resolved in code; live Super Admin browser/read-failure verification remains open
+- Remaining dependencies: run an isolated `super_admins` read failure drill and verify the page preserves the error banner and does not present an empty allowlist as authoritative
