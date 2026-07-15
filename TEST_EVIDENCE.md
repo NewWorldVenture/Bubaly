@@ -1420,4 +1420,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - The shared customer loader now exposes read errors to diagnostic pages while preserving consumer fallback; `/admin/marketing` and `/admin/marketing/analytics` render retry states instead of zero-valued customer/campaign metrics.
-- Source commit: `e727682c`; docs publication commit is pending.
+- Source commit: `e727682c`; docs and source are published on `origin/main` at `2276f9d8`.
