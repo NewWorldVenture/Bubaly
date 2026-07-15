@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:27:51 -04:00
+- Last updated: 2026-07-15 17:33:09 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2a86d411` adds weather and packing read safety after the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `b72a02d2` adds family check-in read safety after weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0352 - Family check-in feed hid safety read failures as no check-ins
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Family Check In
+- Route: `/dashboard/check-in`
+- File or files: `components/family/check-in-view.tsx`, `tests/family-check-in-boundary.test.ts`
+- Database objects: `safety_check_ins`
+- Affected roles: authenticated family members and safety operators
+- Scenario: the family check-in read could fail while the feed rendered â€œNo check-ins yet,â€ indistinguishable from a household with no safety activity.
+- Launch impact: family members could miss safety status updates during an incident.
+- Root cause: the view ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Required remediation: surface a sanitized retryable error before rendering the empty feed.
+- Implementation notes: Family Check In now renders an ErrorState with the realtime refresh callback on read failure.
+- Test plan: focused check-in boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-check-in-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 470 files/3,223 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `b72a02d2`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0351 - Weather and packing views hid failed trip dependencies as empty plans
 
@@ -201,26 +222,7 @@
 - Feature: Family Sync hub and history
 - Route: `/dashboard/sync`, `/dashboard/sync/history`
 - File or files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/history/page.tsx`, `tests/sync-read-boundary.test.ts`
-- Database objects: `sync_connections`, `sync_calendars`, `sync_conflicts`, `sync_job_runs`, and `sync_audit_logs`
-- Affected roles: authenticated family members and household integration operators
-- Scenario: connection, calendar, conflict, run, or audit-history reads could fail while the pages rendered zero health metrics or â€œno runsâ€ empty states.
-- Launch impact: families could miss provider outages, open conflicts, or failed synchronization and assume their data was current.
-- Root cause: query results were used without checking their error fields.
-- Required remediation: check all required reads, log diagnostics server-side, and render sanitized retry states before deriving health or history data.
-- Implementation notes: the Sync hub and history page now fail visibly with route-specific retry links.
-- Test plan: focused Sync read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 462 files/3,208 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `91394c90`; documentation stamp and push pending.
-- Remaining dependencies: provider callbacks, retry/conflict drills, RLS, browser, backup, and deployed verification.
-
-#### TODO-0342 - Admin Users rendered partial access data after required reads failed
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Admin access management / Supabase failure handling
-- Feature: Super Admin Users & Families
-- Route: `/admin/us…112829 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Database objects: `sync_connections`…113263 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
