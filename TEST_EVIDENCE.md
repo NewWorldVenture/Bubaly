@@ -1335,4 +1335,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - The `/admin/audit` and `/admin/audit-logs` pages now render refreshable error states when audit-log, family, or actor-profile reads fail.
-- Source commit: `03442ccf`; docs publication commit is pending.
+- Source commit: `03442ccf`; docs and source are published on `origin/main` at `cfd52efa`.
