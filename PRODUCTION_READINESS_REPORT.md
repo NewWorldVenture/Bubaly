@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 3,033 unit tests, builds all 250 static Next.js
+tree compiles, passes lint and type checking, passes 3,035 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -36,6 +36,10 @@ silently ignoring either persistence failure.
 
 Latest repair increment (2026-07-15): savings-goal funding now uses a manager-checked, row-locking RPC so
 the Save-bucket debit, goal progress update, and audit event commit together without a partial financial state.
+
+Latest repair increment (2026-07-15): Guardian emergency escalation now validates bounded internal payloads,
+claims a durable callback event before SMS/calls, resolves parent phones through `family_members.user_id`, and
+keeps database failures retryable. Live provider, privacy, role, and RLS evidence remains open.
 
 Latest repair increment (2026-07-15): onboarding finalization now derives authenticated deterministic
 submission/item keys and uses database-enforced keyed upserts for managed members, invites, imported

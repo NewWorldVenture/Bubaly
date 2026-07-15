@@ -216,3 +216,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending publication
 - Status: Resolved in code; remote migration application, live RLS, and authenticated E2E remain open dependencies
 - Remaining dependencies: apply `0210`, exercise partial-failure replay in isolated Supabase, verify invite/email behavior and cross-tenant denial
+
+### PLA-0283 - Guardian escalation could replay telephony or miss parent phones
+
+- Timestamp: 2026-07-15 08:30 America/New_York
+- Service: Guardian emergency escalation
+- Route: `/api/guardian/escalate`
+- Affected files: `app/api/guardian/escalate/route.ts`, `lib/guardian/escalation.ts`, `lib/guardian/callbacks.ts`, `tests/guardian-escalation-replay.test.ts`
+- Role: Guardian system notifying family parents/managers
+- Scenario: a valid internal escalation request is retried or needs to resolve parent phone numbers
+- Severity: P1
+- Launch impact: duplicate SMS/calls or silent failure to notify parents
+- Root cause: the route had no durable callback claim before telephony, and it queried `profiles.id` using `family_members.id` instead of `family_members.user_id`
+- Resolution: bounded Zod payload validation, communication-aware deterministic event IDs, service-only callback claim/error/processed state, and correct profile lookup through `user_id`
+- Supabase impact: reuses `guardian_callback_events` from migration `0181_guardian_callback_replay.sql`; no schema change
+- Tests run: `tests/guardian-escalation-replay.test.ts` and `tests/guardian-callback-security.test.ts` (11 tests), typecheck, diff check
+- Validation evidence: claim occurs before `sendSms`/`initiateCall`; parent phones resolve from profile IDs; callback errors remain retryable
+- Commit: pending publication
+- Status: Resolved in code; live provider, role/privacy, and RLS verification remain open
+- Remaining dependencies: run isolated Twilio retry/failure smoke tests and verify parent notification privacy in Supabase

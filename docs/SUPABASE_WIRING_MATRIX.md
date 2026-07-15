@@ -14,7 +14,7 @@ contract is not yet verified.
 | Chores/rewards | chores, assignments, submissions, rewards | child submit vs parent review | server actions, notifications | Partial | Transition repairs covered; full UI and role traversal pending |
 | Food/meals | meals, pantry, grocery lists, recipes | family-scoped policies | AI routes, CRUD actions | Partial | AI persistence fixed; complete seed and import paths pending |
 | Messages/files | messages, threads, files, documents | family policies and storage policies | Storage buckets, signed URLs, realtime | Partial | Bucket policy and delete/replace audit pending |
-| Safety/guardian | contacts, rules, callbacks, events | guardian/parent boundaries | SMS/provider callbacks, cron | Partial | Callback live smoke and privacy review pending |
+| Safety/guardian | contacts, rules, callbacks, events | guardian/parent boundaries | SMS/provider callbacks, cron | Partial | Service-only callback claim ledger and `family_members.user_id` to `profiles.id` mapping are locally covered; live callback, privacy, role, and RLS smoke pending |
 | Vacations | vacations, itinerary, activities, budgets | family/vacation ownership | AI and external travel routes | Partial | AI persistence fixed; complete external workflow pending |
 | Marketplace | listings, offers, orders, circles, media | buyer/seller/admin RLS | auction/order RPCs, storage | Partial | Several atomic/RLS repairs exist; full buyer/seller matrix pending |
 | AI | conversations, messages, generated artifacts | family/user ownership and rate limits | OpenAI/Anthropic routes | Partial | Ownership and persistence tests exist; provider outage/cost proof pending |

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 08:18:00 -04:00
+- Last updated: 2026-07-15 08:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f464ac9e` (validated audit increment; push pending)
+- Commit: `0d9cb4d5` (published audit increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -47,8 +47,28 @@
 - Tests performed: `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts`, and `tests/migration-version-safety.test.ts` (8 tests); full Vitest (406 files, 3,033 tests); typecheck; lint; dependency audit; production build; migration audit; diff check.
 - Evidence: `onboardingRunKey` and `onboardingItemKey` are stable/different by user, row, and kind; finalization uses keyed upserts and the family claim uses a per-user advisory lock; migration audit reports 226 numbered SQL files and next version `0211`.
 - Resolution: Added `lib/onboarding/idempotency.ts`, migration `0210_onboarding_idempotency.sql`, generated type fields, keyed member/invite/calendar/import upserts, duplicate-email suppression for replayed invites, and typed `onboarding_claim_family` first-family serialization.
-- Verified by: Codex local validation; commit `f464ac9e`; remote migration application remains required for launch closure.
+- Verified by: Codex local validation; commit `0d9cb4d5`; remote migration application remains required for launch closure.
 - Date completed: 2026-07-15 (code repair verified locally; issue remains open for deployment evidence)
+
+#### TODO-0283 - Guardian emergency escalation could replay calls and miss parent phone mapping
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Security / notification reliability / Guardian
+- Feature: Emergency escalation
+- Route: `/api/guardian/escalate`
+- File or files: `app/api/guardian/escalate/route.ts`, `lib/guardian/escalation.ts`, `lib/guardian/callbacks.ts`, `tests/guardian-escalation-replay.test.ts`
+- Database objects: `guardian_callback_events`, `guardian_escalations`, `family_members`, `profiles`
+- Affected roles: family parents/managers; Guardian system
+- Scenario: repeated internal escalation or a critical event that needs parent SMS/call delivery
+- Launch impact: duplicate SMS/calls or no parent notification
+- Root cause: no durable claim before telephony and the phone lookup used membership IDs instead of `family_members.user_id` profile IDs
+- Required remediation: validate the bounded payload, derive a deterministic event key, claim the service-only callback ledger before side effects, resolve phones through `user_id`, and preserve retryable callback errors
+- Supabase impact: reuses migration `0181_guardian_callback_replay.sql`; no new migration
+- Tests performed: `tests/guardian-escalation-replay.test.ts`, `tests/guardian-callback-security.test.ts` (11 tests); typecheck; diff check
+- Resolution: strict Zod schema, communication-aware event identity, durable claim/error/processed lifecycle, and correct parent profile mapping
+- Verified by: Codex local validation; publication commit recorded in `docs/PRODUCT_LAUNCH_AUDIT.md`
+- Remaining dependencies: live Twilio callback, provider failure/retry, role/privacy, and RLS smoke tests
 
 ## Current Coverage Matrices
 

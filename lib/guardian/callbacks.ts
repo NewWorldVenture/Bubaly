@@ -54,3 +54,10 @@ export async function markGuardianCallbackProcessed(client: CallbackClient, even
     processed_at: new Date().toISOString(),
   }).eq('event_id', eventId);
 }
+
+export async function markGuardianCallbackError(client: CallbackClient, eventId: string, error: string): Promise<void> {
+  await client.from('guardian_callback_events').update({
+    status: 'error',
+    error: error.slice(0, 500),
+  }).eq('event_id', eventId);
+}

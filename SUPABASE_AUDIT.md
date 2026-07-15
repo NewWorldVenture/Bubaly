@@ -461,6 +461,12 @@ Guardian callbacks now enforce bounded provider input and durable event claims b
 `guardian_callback_events` ledger makes Twilio retries idempotent and allows stale crashed claims to be
 reclaimed.
 
+Emergency escalation now reuses that service-only ledger before sending parent SMS or critical outbound
+calls. Its deterministic event identity prefers the source communication ID, and parent phone lookup follows
+the actual relationship from `family_members.user_id` to `profiles.id` rather than treating membership row IDs
+as profile IDs. Database read/record failures remain retryable through the ledger's `error` state. Live Twilio,
+privacy, role, and RLS verification remain launch dependencies.
+
 The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
 to `ab_events` with the service-role client.
 

@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Guardian emergency escalation replay and phone mapping
+
+- `npm.cmd run test -- tests/guardian-escalation-replay.test.ts tests/guardian-callback-security.test.ts`: 2 files, 11 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `git diff --check`: passed.
+- `/api/guardian/escalate` now validates bounded internal input, claims `guardian_callback_events` before SMS/calls,
+  resolves parent phones through `family_members.user_id` to `profiles.id`, and leaves recoverable database failures
+  in the callback ledger's `error` state for stale-claim retry.
+- Live Twilio delivery, privacy/role behavior, RLS, and provider failure smoke tests remain open.
+- Latest broad validation: 407 files, 3,035 tests; lint, dependency audit, migration audit, typecheck, and
+  clean 250-route production build passed. Schema audit passed all 11 probes; Auth Admin still returned HTTP 500
+  with request ID `019f65c5-4a08-7c92-9949-7caaff74a0d0`; local Docker/Supabase status could not connect to the
+  Docker Desktop Linux engine.
+
 ## Latest Audit Update - Onboarding replay integrity
 
 - `npm.cmd run test -- tests/onboarding-failure-safety.test.ts tests/onboarding-idempotency.test.ts tests/migration-version-safety.test.ts`: 3 files, 8 tests passed.

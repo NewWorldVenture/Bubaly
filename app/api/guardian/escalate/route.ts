@@ -8,6 +8,8 @@ import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
 
 export const runtime = 'nodejs';
 
@@ -23,30 +25,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  let body: {
-    familyId: string;
-    commId?: string;
-    escalationType: string;
-    severity: 'high' | 'critical';
-    description: string;
-    callerNumber?: string;
-  };
-
   const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid JSON' }, { status: 400 });
-  body = boundedBody.value as typeof body;
+  const parsed = guardianEscalationSchema.safeParse(boundedBody.value);
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid escalation payload' }, { status: 400 });
+  const body = parsed.data;
 
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
   const supabase = createServiceClient();
+  const callbackId = guardianEscalationEventId(body);
+  const claimed = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
+  if (!claimed) return NextResponse.json({ ok: true, duplicate: true });
+  const finish = async (payload: Record<string, unknown>, status = 200) => {
+    await markGuardianCallbackProcessed(supabase, callbackId);
+    return NextResponse.json(payload, { status });
+  };
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Get all parent/manager members with phone numbers
-  const { data: members } = await supabase
+  const { data: members, error: membersError } = await supabase
     .from('family_members')
-    .select('id, display_name, role')
+    .select('id, user_id, display_name, role')
     .eq('family_id', familyId)
     .eq('is_active', true);
+  if (membersError) {
+    await markGuardianCallbackError(supabase, callbackId, 'Unable to load family members for escalation.');
+    return NextResponse.json({ error: 'Unable to process escalation' }, { status: 500 });
+  }
 
   const notifiedIds: string[] = [];
   let pushSent = false;
@@ -75,14 +81,17 @@ export async function POST(req: NextRequest) {
 
   if (isTwilioConfigured() && members?.length) {
     // Get phones from profiles table where it's stored
-    const { data: profiles } = await supabase.from('profiles').select('id, phone').in('id',
-      (members as { id: string }[]).map(m => m.id)
-    );
+    const userIds = (members as { user_id: string | null }[])
+      .map((member) => member.user_id)
+      .filter((id): id is string => !!id);
+    const { data: profiles } = userIds.length > 0
+      ? await supabase.from('profiles').select('id, phone').in('id', userIds)
+      : { data: [] as { id: string; phone: string | null }[] };
     const phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
     for (const member of members) {
-      const m = member as { id: string; display_name: string; role: string };
+      const m = member as { id: string; user_id: string | null; display_name: string; role: string };
       if (!['owner', 'manager', 'parent'].includes(m.role)) continue;
-      const phone = phoneMap.get(m.id);
+      const phone = m.user_id ? phoneMap.get(m.user_id) : null;
       if (!phone) continue;
       notifiedIds.push(m.id);
 
@@ -105,7 +114,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Record the escalation
-  await gFrom('guardian_escalations').insert({
+  const { error: escalationError } = await gFrom('guardian_escalations').insert({
     family_id: familyId,
     communication_id: commId ?? null,
     escalation_type: escalationType,
@@ -117,6 +126,10 @@ export async function POST(req: NextRequest) {
     sms_sent: smsSent,
     call_attempted: callAttempted,
   });
+  if (escalationError) {
+    await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
+    return NextResponse.json({ error: 'Unable to process escalation' }, { status: 500 });
+  }
 
-  return NextResponse.json({ ok: true, pushSent, smsSent, callAttempted, notifiedCount: notifiedIds.length });
+  return finish({ ok: true, pushSent, smsSent, callAttempted, notifiedCount: notifiedIds.length });
 }

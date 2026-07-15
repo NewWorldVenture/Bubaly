@@ -26,6 +26,9 @@
       confirm only one approval can debit/consume the same balance and each result has matching state.
 - [ ] Exercise Guardian suggestion approval/dismissal after applying `0198`; confirm only managers can
       review, proposed changes and review state commit together, and concurrent reviews are idempotent.
+- [ ] Exercise Guardian emergency escalation with a repeated internal request and a forced provider/database
+      failure; confirm one callback claim prevents duplicate SMS/calls, parent phones resolve through `user_id`,
+      and retryable callback errors do not become processed successes.
 - [ ] Exercise Marketplace hand-off completion after applying `0199`; confirm the code check and both
       hand-off/order status transitions commit together and concurrent completions are idempotent.
 

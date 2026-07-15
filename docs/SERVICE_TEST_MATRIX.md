@@ -15,7 +15,7 @@ have evidence in the issue ledger and a pushed commit.
 | Billing and subscriptions | `/pricing`, `/dashboard/subscriptions`, billing APIs | owner, parent, admin | Stripe integration, webhook, idempotency, E2E | In progress | Live sandbox checkout, failure and refund evidence |
 | Food and meals | `/meals`, food and grocery routes | parent, child, member | unit, AI, CRUD, E2E, seed | In progress | Complete relational data and empty-state audit |
 | Messages and files | `/messages`, `/files`, `/documents` | family roles, invited users | storage, RLS, upload, download, E2E | In progress | Bucket policy and replacement/delete verification |
-| Guardian and safety | `/guardian/*`, safety routes | parent, guardian, child | security, API, callback, privacy, E2E | In progress | SMS/callback and escalation red-team tests |
+| Guardian and safety | `/guardian/*`, safety routes | parent, guardian, child | security, API, callback, privacy, E2E | In progress | Guardian escalation replay/phone-mapping contract passes; live SMS/callback, privacy, role, and RLS tests remain |
 | Vacations and travel | `/dashboard/vacations/*`, travel tools | family roles | AI, CRUD, external API, E2E | In progress | Full itinerary/media/recovery walkthrough |
 | Marketplace | `/marketplace/*`, seller flows | buyer, seller, admin | RLS, concurrency, payments, media, E2E | In progress | End-to-end listing to handoff and dispute |
 | AI assistants | `/ai`, `/api/ai/*`, voice | family roles | request guards, ownership, failure, cost, privacy | In progress | Model outage, quota and streaming verification |
