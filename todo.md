@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:38:44 -04:00
+- Last updated: 2026-07-15 09:45:32 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `24e0b64d` (provider sync cron increment)
+- Commit: `f8226011` (batch cron failure-status increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -4742,3 +4742,24 @@ roadmap entries and user worktree changes are preserved.
 - Commit: `24e0b64d`
 - Date completed: 2026-07-15
 - Remaining dependencies: authenticated provider failure/retry drill, alert routing, and remote cron deployment verification.
+
+### TODO-0290 - Batch crons hid partial failures behind success responses
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Scheduled automation / reliability / observability
+- Feature: Calendar-feed, Autopilot, model-refresh, and auction-settlement crons
+- File or files: `app/api/cron/calendar-feeds/route.ts`, `app/api/cron/autopilot-scan/route.ts`,
+  `app/api/cron/model-refresh/route.ts`, `app/api/cron/close-auctions/route.ts`,
+  `tests/cron-batch-failure-status.test.ts`
+- Description: Several batch routes returned success after per-item failures, and auction RPC failures were
+  not included in the response summary.
+- Resolution: Failure counters now drive `ok` and HTTP status; partial failures return sanitized HTTP 502 and
+  auction settlement failures are counted for retry/monitoring visibility.
+- Tests performed: 11 focused cron/error-boundary tests; full 413-file/3,069-test suite; typecheck; lint;
+  dependency audit; migration audit; diff check; and clean 250-route production build.
+- Evidence: `tests/cron-batch-failure-status.test.ts` guards all four route contracts.
+- Verified by: Codex
+- Commit: `f8226011` (published in merge `59c422ac`)
+- Date completed: 2026-07-15
+- Remaining dependencies: isolated live failure drills, retry behavior, alert routing, and remote deployment verification.

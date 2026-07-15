@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Batch cron failure status
+
+- `npm.cmd run test -- tests/cron-batch-failure-status.test.ts tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 4 files, 11 tests passed.
+- `npm.cmd run test`: 413 files, 3,069 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- Calendar-feed, Autopilot, model-refresh, and auction-settlement crons now return sanitized HTTP 502 when batch work fails instead of reporting unconditional success.
+- Source publication: `f8226011`; merged remote head verified at `59c422ac` after integrating a concurrent Admin notification update.
+
 ## Latest Audit Update - Provider sync cron failure status
 
 - `npm.cmd run test -- tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 3 files, 7 tests passed.

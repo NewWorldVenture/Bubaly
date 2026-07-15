@@ -349,3 +349,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `24e0b64d`
 - Status: Resolved in code; live scheduled invocation and provider callback evidence remain open
 - Remaining dependencies: run an authenticated provider failure/retry drill, verify alert routing, and validate remote cron deployment
+
+### PLA-0290 - Batch crons hid partial failures behind success responses
+
+- Timestamp: 2026-07-15 09:44 America/New_York
+- Service: Scheduled automation, calendar feeds, Autopilot, model refresh, and marketplace settlement
+- Route: `/api/cron/calendar-feeds`, `/api/cron/autopilot-scan`, `/api/cron/model-refresh`, `/api/cron/close-auctions`
+- Affected files: `app/api/cron/calendar-feeds/route.ts`, `app/api/cron/autopilot-scan/route.ts`, `app/api/cron/model-refresh/route.ts`, `app/api/cron/close-auctions/route.ts`, `tests/cron-batch-failure-status.test.ts`
+- Role: scheduled system worker; affected family and marketplace operators
+- Scenario: one or more feed, family refresh, Autopilot, or auction settlement operations failed while the cron endpoint still returned HTTP 200 or omitted the failure count
+- Severity: P1
+- Launch impact: scheduler monitoring could mark partial outages as healthy and delay retries or operator response
+- Root cause: batch routes exposed counters but hard-coded success status, and auction RPC errors were only logged
+- Resolution: each route now derives `ok` from its failure counter, returns sanitized HTTP 502 on partial failure, and includes settlement failures in the auction summary
+- Supabase impact: no schema change; failed work remains retryable and existing transaction boundaries are unchanged
+- Tests run: `tests/cron-batch-failure-status.test.ts`, `tests/cron-provider-sync.test.ts`, `tests/cron-auth.test.ts`, and `tests/database-error-boundaries.test.ts` (11 tests), full 413-file/3,069-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: static contracts cover all four routes; 250-route build passes
+- Commit: `f8226011` (published in merge `59c422ac`)
+- Status: Resolved in code; live scheduled invocation and retry/alert routing evidence remain open
+- Remaining dependencies: execute isolated failure drills for each cron, verify retry behavior, alert routing, and remote deployment

@@ -34,6 +34,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   planned adapters cannot be marked runnable by key presence alone.
 - Provider-sync cron now returns HTTP 502 when any account fails, making scheduled failures visible to monitoring;
   live cron invocation and callback/retry drills remain open.
+- Calendar-feed, Autopilot, model-refresh, and auction-settlement batch crons now return HTTP 502 for partial
+  failure instead of unconditional success; isolated live failure drills remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and
