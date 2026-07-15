@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0350 - Emergency summary hid contact and medical read failures as no emergency data
+
+- Timestamp: 2026-07-15 17:23 America/New_York
+- Service: Trip Emergency Summary
+- Route: `/dashboard/vacations/[id]/emergency`
+- Affected files: `components/vacations/trip-emergency.tsx`, `tests/trip-emergency-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: contact or medical reads could fail while the emergency summary returned null, indistinguishable from having no safety information.
+- Severity: P1
+- Launch impact: travelers could miss emergency contacts or medical details during a time-sensitive situation.
+- Root cause: the summary checked only array lengths and ignored both query loading and error state.
+- Resolution: Emergency Summary now tracks both required reads, distinguishes loading from empty, and renders a sanitized retryable ErrorState before returning no summary.
+- Supabase impact: no schema change; existing family-scoped safety reads now have an explicit failure contract.
+- Tests run: `tests/trip-emergency-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 468 test files, 3,220 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `da83e4b`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Emergency verification
+
 ### PLA-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
 
 - Timestamp: 2026-07-15 17:17 America/New_York
@@ -208,25 +227,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Launch impact: operators could make billing, support, security, or deployment decisions from partial command-center data.
 - Root cause: Promise results and the secondary actor lookup were destructured without preserving error state.
 - Resolution: all required result errors are checked before metrics are derived; actor profile failures have a separate sanitized retry state.
-- Supabase impact: no schema change; service-role dashboard reads now fail visibly instead of substituting empty arrays/zero counts.
-- Tests run: `tests/admin-overview-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 459 test files, 3,205 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `167524d9`
-- Status: Resolved in code; live Super Admin role/browser, alert-routing, RLS, and outage evidence remains open
-- Remaining dependencies: execute authenticated command-center and degraded-Supabase drills against deployed services
-
-### PLA-0338 - Admin Security hid Auth and audit read failures as empty signals
-
-- Timestamp: 2026-07-15 16:05 America/New_York
-- Service: Super Admin Security and Auth Admin operations
-- Route: `/admin/security`
-- Affected files: `app/(app)/admin/security/page.tsx`, `tests/admin-security-read-boundary.test.ts`
-- Role: Super Admin and security operator
-- Scenario: Auth Admin users, invites, audit logs, families, or actor profiles could fail while the page rendered empty account security and sensitive activity signals.
-- Severity: P1
-- Launch impact: operators could miss unconfirmed, banned, or newly created accounts and audit activity during an authentication or database outage.
-- Root cause: parallel results and actor lookup results were destructured without preserving error state.
-- Resolution: required reads now fail visibly with sanitized retryable ErrorState responses; server logs retain diagnostics without exposing them to the U…22304 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Supabase impact: no schema change; service-r…22712 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
