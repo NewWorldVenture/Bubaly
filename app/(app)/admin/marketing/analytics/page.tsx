@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
-import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { planMonthlyCents } from '@/lib/constants/plans';
 
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
@@ -11,11 +12,19 @@ export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
   const supabase = createServiceClient();
-  const [customers, { data: campaigns }, { data: emails }] = await Promise.all([
-    getMarketingCustomers(supabase),
+  const [customersResult, campaignsResult, emailsResult] = await Promise.all([
+    getMarketingCustomersWithError(supabase),
     supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null),
     supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status'),
   ]);
+  const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-analytics] analytics read failed', readError);
+    return <MarketingAnalyticsReadError />;
+  }
+  const { customers } = customersResult;
+  const { data: campaigns } = campaignsResult;
+  const { data: emails } = emailsResult;
   const m = summarizeCustomers(customers);
 
   // Customer acquisition — last 6 months from real family.created_at.
@@ -102,6 +111,19 @@ export default async function AnalyticsPage() {
           </ul>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function MarketingAnalyticsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Analytics</h1>
+        <p className="mt-1 text-sm text-muted">Live customer, campaign, and email performance metrics.</p>
+      </div>
+      <ErrorState message="Could not load marketing analytics from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/analytics" className="text-sm font-medium text-brand-text underline">Refresh analytics</a>
     </div>
   );
 }

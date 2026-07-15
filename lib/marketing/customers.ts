@@ -34,13 +34,21 @@ function monthsBetween(from: string, to: number): number {
  * row is derived from the existing families + subscriptions + members + profiles
  * tables, so it always reflects live data and links back to the source family.
  */
-export async function getMarketingCustomers(supabase: DB): Promise<MarketingCustomer[]> {
-  const [{ data: families }, { data: subs }, { data: members }, { data: profiles }] = await Promise.all([
+export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
+  const [familiesResult, subsResult, membersResult, profilesResult] = await Promise.all([
     supabase.from('families').select('id, name, created_at, updated_at').order('created_at', { ascending: false }).limit(2000),
     supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
     supabase.from('family_members').select('family_id, user_id, role, is_active'),
     supabase.from('profiles').select('id, email'),
   ]);
+
+  const error = familiesResult.error ?? subsResult.error ?? membersResult.error ?? profilesResult.error;
+  if (error) return { customers: [], error };
+
+  const { data: families } = familiesResult;
+  const { data: subs } = subsResult;
+  const { data: members } = membersResult;
+  const { data: profiles } = profilesResult;
 
   const emailByUser = new Map((profiles ?? []).map((p) => [p.id, p.email]));
   const subByFamily = new Map((subs ?? []).map((s) => [s.family_id, s]));
@@ -53,7 +61,7 @@ export async function getMarketingCustomers(supabase: DB): Promise<MarketingCust
 
   const now = Date.now();
 
-  return (families ?? []).map((f) => {
+  const customers = (families ?? []).map((f) => {
     const fam = membersByFamily.get(f.id) ?? [];
     const active = fam.filter((m) => m.is_active);
     const owner = fam.find((m) => m.role === 'parent' && m.user_id) ?? fam.find((m) => m.user_id);
@@ -91,6 +99,11 @@ export async function getMarketingCustomers(supabase: DB): Promise<MarketingCust
       lastActivityAt: f.updated_at,
     };
   });
+  return { customers, error: null };
+}
+
+export async function getMarketingCustomers(supabase: DB): Promise<MarketingCustomer[]> {
+  return (await getMarketingCustomersWithError(supabase)).customers;
 }
 
 // ── Segment rule engine (pure, testable) ─────────────────────────────────────

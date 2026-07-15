@@ -6,24 +6,25 @@ import {
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
-import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 
 export const metadata: Metadata = { title: 'Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketingDashboard() {
   const supabase = createServiceClient();
-  const customers = await getMarketingCustomers(supabase);
+  const { customers, error: customersError } = await getMarketingCustomersWithError(supabase);
   const m = summarizeCustomers(customers);
 
   const [
-    { count: activeSegments },
-    { count: activeCampaigns },
-    { data: emails },
-    { count: leads },
-    { count: seoPages },
-    { data: aeo },
+    activeSegmentsResult,
+    activeCampaignsResult,
+    emailsResult,
+    leadsResult,
+    seoPagesResult,
+    aeoResult,
   ] = await Promise.all([
     supabase.from('marketing_segments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('marketing_campaigns').select('id', { count: 'exact', head: true }).in('status', ['active', 'scheduled']),
@@ -32,6 +33,25 @@ export default async function MarketingDashboard() {
     supabase.from('marketing_seo_pages').select('id', { count: 'exact', head: true }),
     supabase.from('marketing_aeo_questions').select('status'),
   ]);
+
+  const readError = customersError
+    ?? activeSegmentsResult.error
+    ?? activeCampaignsResult.error
+    ?? emailsResult.error
+    ?? leadsResult.error
+    ?? seoPagesResult.error
+    ?? aeoResult.error;
+  if (readError) {
+    console.error('[admin-marketing] dashboard read failed', readError);
+    return <MarketingDashboardReadError />;
+  }
+
+  const { count: activeSegments } = activeSegmentsResult;
+  const { count: activeCampaigns } = activeCampaignsResult;
+  const { data: emails } = emailsResult;
+  const { count: leads } = leadsResult;
+  const { count: seoPages } = seoPagesResult;
+  const { data: aeo } = aeoResult;
 
   const emailRows = emails ?? [];
   const sent = emailRows.filter((e) => e.status === 'sent');
@@ -135,6 +155,19 @@ export default async function MarketingDashboard() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function MarketingDashboardReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing</h1>
+        <p className="mt-1 text-sm text-muted">Live customer, campaign, and growth overview.</p>
+      </div>
+      <ErrorState message="Could not load marketing dashboard data from Supabase. Refresh and try again." />
+      <a href="/admin/marketing" className="text-sm font-medium text-brand-text underline">Refresh marketing dashboard</a>
     </div>
   );
 }
