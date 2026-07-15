@@ -1275,4 +1275,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `adminDeleteDocumentAction` now resolves `storage_path` from the database, returns a sanitized failure when storage removal fails, and confirms the database delete result before reporting success.
-- Publication commit: `34a24ddd`; docs update and remote push verification remain pending.
+- Source commit: `34a24ddd`; docs and source are published on `origin/main` at `a0b6900e`.

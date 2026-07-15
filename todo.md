@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 10:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: pending (admin document deletion failure-contract increment)
+- Commit: `a0b6900e` (published main; source repair `34a24ddd`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
