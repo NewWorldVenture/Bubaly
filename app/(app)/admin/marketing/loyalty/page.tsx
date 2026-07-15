@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { computeTier, TIER_LABELS, DEFAULT_LOYALTY, type Tier } from '@/lib/marketing/loyalty';
 import { RewardRow, AddReward, type Reward } from './reward-editor';
 import { RedemptionRow, type Redemption } from './redemption-row';
@@ -18,13 +19,23 @@ const TIER_TONE: Record<Tier, 'neutral' | 'brand' | 'warning'> = { bronze: 'neut
 export default async function LoyaltyPage() {
   const supabase = createServiceClient();
 
-  const [{ data: settings }, { data: rewards }, { data: accounts }, { data: redemptions }, { data: families }] = await Promise.all([
+  const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await Promise.all([
     supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle(),
     supabase.from('loyalty_rewards').select('*').is('deleted_at', null).order('sort', { ascending: true }).limit(200),
     supabase.from('loyalty_accounts').select('*').order('lifetime_points', { ascending: false }).limit(100),
     supabase.from('loyalty_redemptions').select('*').order('created_at', { ascending: false }).limit(100),
     supabase.from('families').select('id, name').limit(1000),
   ]);
+  const readError = settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error;
+  if (readError) {
+    console.error('[admin-marketing-loyalty] loyalty read failed', readError);
+    return <AdminLoyaltyReadError />;
+  }
+  const { data: settings } = settingsResult;
+  const { data: rewards } = rewardsResult;
+  const { data: accounts } = accountsResult;
+  const { data: redemptions } = redemptionsResult;
+  const { data: families } = familiesResult;
 
   const set = settings ?? null;
   const rewardRows = (rewards ?? []) as Reward[];
@@ -134,6 +145,19 @@ export default async function LoyaltyPage() {
           <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">Save settings</button></div>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminLoyaltyReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Loyalty &amp; Rewards</h1>
+        <p className="mt-1 text-sm text-muted">Manage points, rewards, redemptions, and program settings.</p>
+      </div>
+      <ErrorState message="Could not load loyalty data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/loyalty" className="text-sm font-medium text-brand-text underline">Refresh loyalty</Link>
     </div>
   );
 }

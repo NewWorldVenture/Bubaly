@@ -4,7 +4,7 @@ import { Gauge, Plus, MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { SURVEY_TYPES, summarize, isSurveyType, type SurveyType } from '@/lib/marketing/surveys';
 import { createSurveyAction } from './actions';
 
@@ -16,10 +16,17 @@ const STATUS_TONE = { draft: 'neutral', active: 'success', closed: 'warning' } a
 
 export default async function SurveysPage() {
   const supabase = createServiceClient();
-  const [{ data: surveys }, { data: responses }] = await Promise.all([
+  const [surveysResult, responsesResult] = await Promise.all([
     supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('survey_responses').select('survey_id, score'),
   ]);
+  const readError = surveysResult.error ?? responsesResult.error;
+  if (readError) {
+    console.error('[admin-marketing-surveys] survey read failed', readError);
+    return <AdminSurveysReadError />;
+  }
+  const { data: surveys } = surveysResult;
+  const { data: responses } = responsesResult;
 
   const scoresBySurvey = new Map<string, number[]>();
   for (const r of responses ?? []) {
@@ -96,6 +103,19 @@ export default async function SurveysPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminSurveysReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Surveys</h1>
+        <p className="mt-1 text-sm text-muted">Create and measure NPS, CSAT, and CES surveys.</p>
+      </div>
+      <ErrorState message="Could not load survey data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">Refresh surveys</Link>
     </div>
   );
 }

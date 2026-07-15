@@ -5,7 +5,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { MessagesSquare } from 'lucide-react';
 import {
   SURVEY_TYPES, summarize, computeNps, distribution, isSurveyType,
@@ -20,11 +20,19 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 export default async function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: survey } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+  const { data: survey, error: surveyError } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+  if (surveyError) {
+    console.error('[admin-marketing-survey-detail] survey read failed', surveyError);
+    return <SurveyDetailReadError />;
+  }
   if (!survey) notFound();
 
-  const { data: responses } = await supabase
+  const { data: responses, error: responsesError } = await supabase
     .from('survey_responses').select('*').eq('survey_id', id).order('submitted_at', { ascending: false });
+  if (responsesError) {
+    console.error('[admin-marketing-survey-detail] response read failed', responsesError);
+    return <SurveyDetailReadError />;
+  }
   const rows = responses ?? [];
   const scores = rows.map((r) => r.score);
   const type = isSurveyType(survey.type) ? survey.type : 'custom';
@@ -112,6 +120,19 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function SurveyDetailReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Survey</h1>
+        <p className="mt-1 text-sm text-muted">Review survey configuration and responses.</p>
+      </div>
+      <ErrorState message="Could not load this survey from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">Back to surveys</Link>
     </div>
   );
 }

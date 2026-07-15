@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { FileText, Send, CheckCircle2, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { contactDisplayName, formatCents } from '@/lib/marketing/crm';
 import {
@@ -27,10 +29,17 @@ const STATUS_TINT: Record<QuoteStatus, string> = {
 
 export default async function ProposalsPage() {
   const supabase = createServiceClient();
-  const [{ data: quotes }, { data: contacts }] = await Promise.all([
+  const [quotesResult, contactsResult] = await Promise.all([
     supabase.from('crm_quotes').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
   ]);
+  const readError = quotesResult.error ?? contactsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-proposals] proposal read failed', readError);
+    return <AdminProposalsReadError />;
+  }
+  const { data: quotes } = quotesResult;
+  const { data: contacts } = contactsResult;
 
   const list = (quotes ?? []) as Quote[];
   const contactList = (contacts ?? []) as Pick<Contact, 'id' | 'first_name' | 'last_name' | 'email'>[];
@@ -127,6 +136,19 @@ export default async function ProposalsPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminProposalsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Proposals &amp; Quotes</h1>
+        <p className="mt-1 text-sm text-muted">Create and track quotes from draft through acceptance.</p>
+      </div>
+      <ErrorState message="Could not load proposals from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/proposals" className="text-sm font-medium text-brand-text underline">Refresh proposals</Link>
     </div>
   );
 }

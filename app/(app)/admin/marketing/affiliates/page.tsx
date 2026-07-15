@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Handshake, DollarSign, BadgeCheck, Wallet } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { formatCents } from '@/lib/marketing/crm';
 import { summarizeReferrals, payoutByAffiliate, type ReferralLike } from '@/lib/marketing/affiliates';
 import type { Tables } from '@/lib/database.types';
@@ -17,10 +19,17 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 
 export default async function AffiliatesPage() {
   const supabase = createServiceClient();
-  const [{ data: affiliates }, { data: referrals }] = await Promise.all([
+  const [affiliatesResult, referralsResult] = await Promise.all([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
     supabase.from('affiliate_referrals').select('affiliate_id, status, commission_cents').limit(10000),
   ]);
+  const readError = affiliatesResult.error ?? referralsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-affiliates] affiliate read failed', readError);
+    return <AdminAffiliatesReadError />;
+  }
+  const { data: affiliates } = affiliatesResult;
+  const { data: referrals } = referralsResult;
   const list = (affiliates ?? []) as Affiliate[];
   const refs = (referrals ?? []) as ReferralLike[];
   const overall = summarizeReferrals(refs);
@@ -104,6 +113,19 @@ export default async function AffiliatesPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminAffiliatesReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Affiliates</h1>
+        <p className="mt-1 text-sm text-muted">Manage partner conversions and payouts.</p>
+      </div>
+      <ErrorState message="Could not load affiliate payout data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/affiliates" className="text-sm font-medium text-brand-text underline">Refresh affiliates</Link>
     </div>
   );
 }
