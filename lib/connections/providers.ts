@@ -16,6 +16,8 @@ export type Provider = {
   description: string;
   /** Live data sync needs an OAuth/provider key configured server-side. */
   needsKeys: boolean;
+  /** Provider id for the real OAuth/sync surface, when one is implemented. */
+  syncProvider?: 'google' | 'microsoft' | 'apple';
 };
 
 export const CATEGORY_LABELS: Record<ConnectionCategory, string> = {
@@ -27,9 +29,9 @@ export const CATEGORY_ORDER: ConnectionCategory[] = ['calendar', 'email', 'banki
 
 /** The connectable services, grouped by category. */
 export const PROVIDERS: Provider[] = [
-  { id: 'google_calendar',  name: 'Google Calendar', category: 'calendar', icon: 'calendar', description: 'Two-way sync of events and reminders.', needsKeys: true },
-  { id: 'apple_calendar',   name: 'Apple Calendar',  category: 'calendar', icon: 'calendar', description: 'Sync your iCloud calendars.', needsKeys: true },
-  { id: 'outlook_calendar', name: 'Outlook Calendar',category: 'calendar', icon: 'calendar', description: 'Sync Microsoft 365 calendars.', needsKeys: true },
+  { id: 'google_calendar',  name: 'Google Calendar', category: 'calendar', icon: 'calendar', description: 'Two-way sync of events and reminders.', needsKeys: true, syncProvider: 'google' },
+  { id: 'apple_calendar',   name: 'Apple Calendar',  category: 'calendar', icon: 'calendar', description: 'Sync your iCloud calendars.', needsKeys: true, syncProvider: 'apple' },
+  { id: 'outlook_calendar', name: 'Outlook Calendar',category: 'calendar', icon: 'calendar', description: 'Sync Microsoft 365 calendars.', needsKeys: true, syncProvider: 'microsoft' },
   { id: 'gmail',            name: 'Gmail',           category: 'email',    icon: 'mail',     description: 'Triage family email into the inbox.', needsKeys: true },
   { id: 'outlook_email',    name: 'Outlook',         category: 'email',    icon: 'mail',     description: 'Triage Outlook email.', needsKeys: true },
   { id: 'plaid',            name: 'Bank (Plaid)',    category: 'banking',  icon: 'bank',     description: 'Connect accounts for balances and bills.', needsKeys: true },

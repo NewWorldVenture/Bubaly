@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Connections false-success prevention
+
+- `npm.cmd run test -- tests/connections-providers.test.ts tests/connections-adapter.test.ts tests/connections-ui-boundary.test.ts`: 3 files, 23 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `/dashboard/connections` now sends Google, Microsoft, and Apple users to their actual OAuth/sync setup pages.
+- Gmail, banking, grocery, and smart-home directory entries no longer persist a label-only Connected record; they visibly report that live setup is unavailable.
+- Full suite: 410 files, 3,048 tests passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- Push verification remains pending for this increment.
+
 ## Latest Audit Update - Admin notification failure visibility
 
 - `npm.cmd run test -- tests/admin-notification-boundary.test.ts tests/admin-notifications.test.ts`: 2 files, 12 tests passed.

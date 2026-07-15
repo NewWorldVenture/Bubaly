@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:04:32 -04:00
+- Last updated: 2026-07-15 09:11:21 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `991ad4dd` (Admin Notifications increment)
+- Commit: pending publication (Connections increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -109,6 +109,26 @@
 - Resolution: checked and logged insert errors; added visible `role=alert` error states to history and bell mark-read flows; refresh occurs only after a successful server action
 - Verified by: Codex local validation; 409-file/3,045-test suite, lint, typecheck, audit, migration audit, diff check, schema probes, and 250-route production build pass
 - Remaining dependencies: live Super Admin authorization, failure injection, alert routing, and operator/browser workflow verification
+
+#### TODO-0286 - Connections hub reported label-only integrations as live
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Integrations / user trust / data integrity
+- Feature: Family Connections hub
+- Route: `/dashboard/connections`
+- File or files: `components/modules/connections-module.tsx`, `lib/connections/providers.ts`, `tests/connections-providers.test.ts`, `tests/connections-ui-boundary.test.ts`
+- Database objects: `family_connections`, `sync_accounts`, `sync_tokens`
+- Affected roles: authenticated family members
+- Scenario: a member clicked Connect for a provider without an OAuth or sync implementation
+- Launch impact: the UI wrote a `family_connections` row and showed Connected even though no credentials, sync account, or data flow existed
+- Root cause: the module treated a typed account label as a successful integration and never routed through the real provider setup surface
+- Required remediation: route only implemented Google, Microsoft, and Apple providers through their secure sync setup pages; show unsupported providers as unavailable instead of persisting false success
+- Supabase impact: no schema change; prevents new false-positive `family_connections` rows and preserves real family-scoped disconnect behavior
+- Tests performed: `tests/connections-providers.test.ts`, `tests/connections-adapter.test.ts`, and `tests/connections-ui-boundary.test.ts` (23 tests); typecheck; lint; diff check
+- Resolution: added explicit live sync-provider metadata, routed implemented providers to `/dashboard/sync/accounts/*`, removed label-only upsert/modal behavior, and made unsupported providers visibly unavailable
+- Verified by: Codex local validation; 410-file/3,048-test suite, lint, typecheck, dependency audit, migration audit, diff check, and 250-route production build pass
+- Remaining dependencies: implement and expose Gmail, banking, grocery, and smart-home provider flows before advertising them as connectable
 
 ## Current Coverage Matrices
 

@@ -20,6 +20,7 @@ contract is not yet verified.
 | AI | conversations, messages, generated artifacts | family/user ownership and rate limits | OpenAI/Anthropic routes | Partial | Ownership and persistence tests exist; provider outage/cost proof pending |
 | Notifications | notifications, devices, preferences | family/user ownership | push, email, realtime, cron | Partial | Job-by-job delivery/replay audit pending |
 | Admin/marketing | admin audit, content, campaigns, feedback, `admin_notifications` | Super Admin/support roles | admin APIs, media, webhooks, service-role notification feed | Partial | Notification insert/action failures are locally surfaced; live permission, audit-log, alert-routing, and full admin workflow proof pending |
+| Connections/integrations | `family_connections`, `sync_accounts`, `sync_tokens`, provider mappings | family membership plus provider OAuth/session boundary | real sync routes for Google/Microsoft/Apple; directory-only providers are no longer label-connectable | Partial | False-positive connection write path is removed; remaining provider wiring, token lifecycle, callbacks, and live RLS tests pending |
 | Observability | audit logs, webhook events, operational records | operator/admin access | instrumentation, logs, alerts | Partial | Production alert routing and retention pending |
 
 ## Wiring Completion Gate

@@ -12,6 +12,14 @@ describe('PROVIDERS registry', () => {
   it('resolves by id', () => {
     expect(PROVIDERS_BY_ID.google_calendar.name).toBe('Google Calendar');
   });
+
+  it('marks only providers with a real OAuth/sync route as connectable', () => {
+    expect(PROVIDERS_BY_ID.google_calendar.syncProvider).toBe('google');
+    expect(PROVIDERS_BY_ID.outlook_calendar.syncProvider).toBe('microsoft');
+    expect(PROVIDERS_BY_ID.apple_calendar.syncProvider).toBe('apple');
+    expect(PROVIDERS_BY_ID.gmail.syncProvider).toBeUndefined();
+    expect(PROVIDERS_BY_ID.plaid.syncProvider).toBeUndefined();
+  });
 });
 
 describe('mergeConnections', () => {

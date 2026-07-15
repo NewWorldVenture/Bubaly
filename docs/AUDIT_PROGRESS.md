@@ -18,7 +18,7 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 
 | ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
 | --- | --- | ---: | --- | --- | --- |
-| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 409 Vitest files, 3,045 tests; clean 250-route build; lint/typecheck/audit | Keep green after every repair |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 410 Vitest files, 3,048 tests; clean 250-route build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 227 migration audit; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
 | A-03 | Authentication, tenant isolation and RLS | 7 | In progress | `tests/admin-auth-boundary.test.ts`, `tests/tenant-isolation-rls.test.ts`; migration 0211 repairs membership self-update drift; live Auth Admin and cross-tenant probes still open | Apply 0211, test every role/family boundary/session edge, and run live RLS paths |
 | A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization and per-user family claim contract; 8 focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |
@@ -35,7 +35,7 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 | A-15 | AI assistants, chat, voice and generated artifacts | 5 | In progress | AI persistence, ownership and request-guard tests | Verify model failures, quotas, privacy, streaming and cost controls |
 | A-16 | Notifications, reminders, automations and cron jobs | 4 | In progress | Cron auth and allowance recovery tests | Verify schedules, retries, deduplication, delivery and observability |
 | A-17 | Admin, marketing, social and content management | 4 | In progress | Admin route inventory, notification helpers, and 12 focused notification boundary tests | Verify Super Admin permissions, CRUD, media, real-time saves, alert routing, and audit log |
-| A-18 | Google, email, push, Stripe and other third-party integrations | 5 | In progress | Provider-specific tests and OAuth hardening | Live sandbox callbacks, secret rotation, retry and outage behavior |
+| A-18 | Google, email, push, Stripe and other third-party integrations | 5 | In progress | Connections hub no longer reports label-only providers as live; implemented Google/Microsoft/Apple routes remain separate from unsupported provider directory entries | Live sandbox callbacks, secret rotation, retry and outage behavior; implement remaining providers |
 | A-19 | Mobile, responsive, accessibility and browser compatibility | 5 | In progress | Public Playwright/axe/overflow baseline | Page-by-page device matrix, keyboard, screen reader and touch testing |
 | A-20 | E2E interactions, performance, observability, backups and deployment | 7 | In progress | Public E2E baseline and production build | Full interaction coverage, restore drill, monitoring and launch smoke |
 |  | **Total** | **100** |  | **Verified: 10** |  |

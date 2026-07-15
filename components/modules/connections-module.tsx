@@ -4,18 +4,16 @@
 // family already uses (calendars, email, banking, grocery, smart home). The
 // connection records are real + family-scoped; live data sync activates per
 // provider as its OAuth keys are configured server-side. 100% Supabase.
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Network, Calendar, Mail, Landmark, ShoppingCart, Home, Plug, Check, X, Loader2, KeyRound,
+  Network, Calendar, Mail, Landmark, ShoppingCart, Home, Plug, X, KeyRound,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { Modal } from '@/components/ui/modal';
-import { Input, Field } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
@@ -38,11 +36,9 @@ const STATUS_STYLE: Record<ConnectionStatus, string> = {
 };
 
 export function ConnectionsModule() {
-  const { familyId, userId } = useApp();
+  const { familyId } = useApp();
+  const router = useRouter();
   const { success, error: toastError } = useToast();
-  const [connecting, setConnecting] = useState<ProviderState | null>(null);
-  const [account, setAccount] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const { data: rows, loading } = useRealtimeQuery<Connection>({
     table: 'family_connections', familyId, deps: [familyId],
@@ -52,23 +48,6 @@ export function ConnectionsModule() {
   const states = useMemo(() => mergeConnections((rows ?? []) as ConnectionLike[]), [rows]);
   const grouped = useMemo(() => groupByCategory(states), [states]);
   const connected = connectedCount(states);
-
-  async function connect(e: React.FormEvent) {
-    e.preventDefault();
-    if (!connecting) return;
-    const label = account.trim();
-    if (!label) { toastError('Add the account to connect'); return; }
-    setSaving(true);
-    const sb = createClient();
-    const { error: err } = await sb.from('family_connections').upsert({
-      family_id: familyId, provider: connecting.id, category: connecting.category,
-      status: 'connected', account_label: label, external_account_id: label, created_by: userId,
-    }, { onConflict: 'family_id,provider,external_account_id' });
-    setSaving(false);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(`${connecting.name} connected`);
-    setConnecting(null); setAccount('');
-  }
 
   async function disconnect(p: ProviderState) {
     if (!confirm(`Disconnect ${p.name}?`)) return;
@@ -118,10 +97,12 @@ export function ConnectionsModule() {
                           <button onClick={() => disconnect(p)} className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-rose-400">
                             <X className="h-3.5 w-3.5" /> Disconnect
                           </button>
-                        ) : (
-                          <button onClick={() => { setConnecting(p); setAccount(''); }} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-fg transition hover:border-brand/40 hover:bg-elevated">
-                            <Plug className="h-3.5 w-3.5" /> Connect
+                        ) : p.syncProvider ? (
+                          <button onClick={() => router.push(`/dashboard/sync/accounts/${p.syncProvider}`)} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-fg transition hover:border-brand/40 hover:bg-elevated">
+                            <Plug className="h-3.5 w-3.5" /> Open secure setup
                           </button>
+                        ) : (
+                          <span className="text-xs text-muted">Live connection setup unavailable</span>
                         )}
                       </div>
                     </div>
@@ -139,19 +120,6 @@ export function ConnectionsModule() {
         sync for each provider activates as its secure keys are configured — nothing here stores your passwords.
       </p>
 
-      {/* Connect modal */}
-      <Modal open={!!connecting} onClose={() => setConnecting(null)} title={connecting ? `Connect ${connecting.name}` : 'Connect'}>
-        <form onSubmit={connect} className="space-y-4">
-          <Field label="Account" required>
-            {(id) => <Input id={id} value={account} onChange={(e) => setAccount(e.target.value)} placeholder={connecting?.category === 'email' || connecting?.category === 'calendar' ? 'name@example.com' : 'Account name'} autoFocus />}
-          </Field>
-          <p className="text-xs text-muted">Bubaly links this account to your family. You can disconnect anytime.</p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setConnecting(null)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Connect</Button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

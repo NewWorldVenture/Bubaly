@@ -26,6 +26,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   `019f65db-10f5-7cfd-92bf-085293f40a5a`); local Docker/Supabase status is unavailable.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
+- The Connections hub no longer creates label-only “connected” records for providers without a real OAuth
+  or sync path; remaining provider implementations and live callback verification are still open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and
