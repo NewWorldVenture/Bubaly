@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Database, HardDrive, Shield, Info } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Admin · Data & Storage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -33,12 +34,26 @@ export default async function AdminDataPage() {
 
   const counts = await Promise.all(
     TABLES.map(async (t) => {
-      const { count } = await supabase.from(t.table as 'families').select('id', { count: 'exact', head: true });
-      return { ...t, count: count ?? 0 };
+      const { count, error } = await supabase.from(t.table as 'families').select('id', { count: 'exact', head: true });
+      return { ...t, count: count ?? 0, error };
     }),
   );
 
-  const { data: docs } = await supabase.from('documents').select('size_bytes');
+  const { data: docs, error: docsError } = await supabase.from('documents').select('size_bytes');
+  const readError = counts.find((c) => c.error)?.error ?? docsError;
+  if (readError) {
+    console.error('[admin-backup] data read failed', readError);
+    return (
+      <div className="module-page">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Data &amp; Storage</h1>
+          <p className="mt-1 text-sm text-muted">Live row counts and document storage across the platform.</p>
+        </div>
+        <ErrorState message="Could not load data and storage metrics from Supabase. Refresh and try again." />
+        <a href="/admin/backup" className="text-sm font-medium text-brand-text underline">Refresh data overview</a>
+      </div>
+    );
+  }
   const usedBytes = (docs ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
   const totalRows = counts.reduce((sum, c) => sum + c.count, 0);
 

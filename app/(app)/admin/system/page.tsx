@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, Users, Home, DollarSign, FolderLock, Database, R
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { GrowthChart } from '@/components/admin/growth-chart';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail, type HealthCheck } from '@/lib/server/health';
 import { PLANS } from '@/lib/constants/plans';
@@ -38,11 +39,11 @@ export default async function AdminSystemPage() {
 
   const [
     healthResults,
-    { count: userCount },
-    { count: familyCount },
-    { data: profiles },
-    { data: subscriptions },
-    { data: documents },
+    userCountResult,
+    familyCountResult,
+    profilesResult,
+    subscriptionsResult,
+    documentsResult,
   ] = await Promise.all([
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
@@ -51,6 +52,24 @@ export default async function AdminSystemPage() {
     supabase.from('subscriptions').select('plan, status'),
     supabase.from('documents').select('size_bytes'),
   ]);
+
+  const readError = [
+    userCountResult.error,
+    familyCountResult.error,
+    profilesResult.error,
+    subscriptionsResult.error,
+    documentsResult.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[admin-system] usage read failed', readError);
+    return <AdminSystemReadError />;
+  }
+
+  const { count: userCount } = userCountResult;
+  const { count: familyCount } = familyCountResult;
+  const { data: profiles } = profilesResult;
+  const { data: subscriptions } = subscriptionsResult;
+  const { data: documents } = documentsResult;
 
   const planById = (id: string) => PLANS.find((p) => p.id === id);
   const mrr = (subscriptions ?? [])
@@ -141,6 +160,19 @@ export default async function AdminSystemPage() {
           </div>
         </dl>
       </Card>
+    </div>
+  );
+}
+
+function AdminSystemReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">System Overview</h1>
+        <p className="mt-1 text-sm text-muted">Live connectivity checks and real usage measured just now.</p>
+      </div>
+      <ErrorState message="Could not load system usage from Supabase. Refresh and try again." />
+      <a href="/admin/system" className="text-sm font-medium text-brand-text underline">Refresh system overview</a>
     </div>
   );
 }
