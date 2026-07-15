@@ -311,3 +311,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `50cbbeef`
 - Status: Resolved in code; live cron/provider delivery remains open
 - Remaining dependencies: Resend sandbox delivery, alert routing, scheduled invocation, and remote deployment verification
+
+### PLA-0288 - Legacy connection adapters reported planned sync as runnable
+
+- Timestamp: 2026-07-15 09:33 America/New_York
+- Service: Family Connections and third-party integrations
+- Route: legacy adapter registry and sync planner contract
+- Affected files: `lib/connections/adapter.ts`, `lib/connections/adapters/google-calendar.ts`, `lib/connections/adapters/gmail.ts`, `lib/connections/adapters/index.ts`, `tests/connections-adapter.test.ts`
+- Role: authenticated family member; background sync worker
+- Scenario: Google Calendar or Gmail OAuth keys were present and a saved connection existed, but the planned adapter methods returned empty success without making provider calls
+- Severity: P1
+- Launch impact: a future worker could mark a provider sync as runnable and advance an empty cursor or report zero pushed items as success
+- Root cause: the reference adapters declared capabilities and used key presence as readiness even though their provider I/O was still TODO
+- Resolution: planned adapters now declare `isImplemented: false`, the planner blocks them as unsupported, and credentialed methods return explicit unavailable errors; only implemented adapters are reported by `syncableProviderIds()`
+- Supabase impact: no schema change; prevents false-positive sync execution before provider credentials, token lifecycle, and API calls are wired
+- Tests run: focused Connections suite (25 tests), full 411-file/3,063-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: planner and credentialed execution regressions cover fail-closed behavior; 250-route build passes
+- Commit: `0ae5cdb0`
+- Status: Resolved in code; full third-party integration audit remains open
+- Remaining dependencies: implement real Gmail, banking, grocery, and smart-home providers, then verify OAuth callbacks, token storage, retries, and provider sandbox behavior

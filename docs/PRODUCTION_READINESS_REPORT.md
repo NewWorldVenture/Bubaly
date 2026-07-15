@@ -30,6 +30,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   or sync path; remaining provider implementations and live callback verification are still open.
 - The Admin digest cron now reports feed and recipient failures; live Resend delivery and scheduled-cron
   verification remain open.
+- Legacy Google Calendar and Gmail adapter contracts now fail closed until real provider I/O is implemented;
+  planned adapters cannot be marked runnable by key presence alone.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

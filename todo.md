@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:27:31 -04:00
+- Last updated: 2026-07-15 09:33:11 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `50cbbeef` (Admin digest increment)
+- Commit: `0ae5cdb0` (legacy connection adapter increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -4702,3 +4702,24 @@ roadmap entries and user worktree changes are preserved.
   and removal of direct best-effort money writes from the action.
 - Verified by: Codex
 - Date completed: 2026-07-15
+
+### TODO-0288 - Legacy connection adapters reported planned sync as runnable
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Connections / third-party integrations / sync correctness
+- Feature: Legacy Google Calendar and Gmail adapter registry
+- File or files: `lib/connections/adapter.ts`, `lib/connections/adapters/google-calendar.ts`,
+  `lib/connections/adapters/gmail.ts`, `lib/connections/adapters/index.ts`, `tests/connections-adapter.test.ts`
+- Description: OAuth key presence and a saved connection made planned adapters appear runnable even though
+  their provider methods returned empty success without real API I/O.
+- Resolution: Added explicit implementation readiness, blocked planned adapters in `planSync`, returned
+  unavailable errors from credentialed methods, and filtered `syncableProviderIds()` to implemented adapters.
+- Tests performed: 25 focused Connections tests; full 411-file/3,063-test suite; typecheck; lint; dependency
+  audit; migration audit; diff check; and clean 250-route production build.
+- Evidence: `tests/connections-adapter.test.ts` covers planned-adapter blocking and credentialed failure paths.
+- Verified by: Codex
+- Commit: `0ae5cdb0`
+- Date completed: 2026-07-15
+- Remaining dependencies: implement and expose Gmail, banking, grocery, and smart-home provider flows with
+  real OAuth, token, retry, callback, and sandbox evidence before advertising them as live integrations.

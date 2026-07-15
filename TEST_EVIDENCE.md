@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Legacy connection adapters fail closed
+
+- `npm.cmd run test -- tests/connections-adapter.test.ts tests/connections-providers.test.ts tests/connections-ui-boundary.test.ts`: 3 files, 25 tests passed.
+- `npm.cmd run test`: 411 files, 3,063 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- Planned Google Calendar and Gmail adapters no longer become runnable merely because OAuth keys are present; credentialed calls return explicit unavailable errors until real provider I/O exists.
+- Publication verified at commit `0ae5cdb0`; local and `origin/main` are aligned.
+
 ## Latest Audit Update - Admin digest failure visibility
 
 - `npm.cmd run test -- tests/admin-digest.test.ts tests/cron-auth.test.ts tests/admin-notification-boundary.test.ts`: 3 files, 20 tests passed.
