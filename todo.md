@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0305 - Marketing Ads and Automation hid list read failures as empty planning views
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketing admin
+- Feature: Marketing campaign and automation planning
+- Route: `/admin/marketing/ads`, `/admin/marketing/automation`
+- File or files: `app/(app)/admin/marketing/ads/page.tsx`, `app/(app)/admin/marketing/automation/page.tsx`, `tests/admin-marketing-read-boundary.test.ts`
+- Database objects: `marketing_ad_campaigns`, `marketing_automation_workflows`
+- Affected roles: Marketing Admin / Super Admin
+- Scenario: a campaign or workflow list read fails
+- Launch impact: an operator can mistake unavailable planning data for no marketing activity
+- Root cause: Supabase list errors were discarded by both pages
+- Resolution: preserve read errors, log the boundary, and render refreshable error states before displaying planning data
+- Tests performed: `tests/admin-marketing-read-boundary.test.ts` (2 focused tests); full 428-file/3,101-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover campaign/workflow failures and visible error-state paths
+- Remaining dependencies: publish docs and audit remaining marketing list/detail pages plus read/write failure drills
+
 #### TODO-0304 - Admin Stripe hid financial reads as zero or unavailable capabilities
 
 - Status: `[~]` In progress

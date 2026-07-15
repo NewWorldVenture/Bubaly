@@ -634,3 +634,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `748d0a7d`
 - Status: Resolved in code; live Stripe credentials, callbacks, permissions, and browser evidence remain open
 - Remaining dependencies: run isolated Stripe read-failure and callback drills with production-safe test credentials
+
+### PLA-0305 - Marketing Ads and Automation hid list read failures as empty planning views
+
+- Timestamp: 2026-07-15 11:28 America/New_York
+- Service: Admin marketing planning
+- Routes: `/admin/marketing/ads`, `/admin/marketing/automation`
+- Affected files: `app/(app)/admin/marketing/ads/page.tsx`, `app/(app)/admin/marketing/automation/page.tsx`, `tests/admin-marketing-read-boundary.test.ts`
+- Role: Marketing Admin / Super Admin
+- Scenario: advertising campaign or automation workflow reads failed while the page substituted an empty list and zero counts
+- Severity: P1
+- Launch impact: operators could mistake unavailable campaign/workflow state for no planned marketing activity
+- Root cause: primary Supabase list errors were discarded by both pages
+- Resolution: both pages now preserve read errors, log the boundary, and render refreshable error states before displaying planning data
+- Supabase impact: no schema change; marketing-read failures are explicit and non-destructive
+- Tests run: `tests/admin-marketing-read-boundary.test.ts` (2 focused tests), full 428-file/3,101-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify campaign/workflow failure paths and visible retry states
+- Commit: `e20a11d4`
+- Status: Resolved in code; live marketing permission, write-action, and browser evidence remain open
+- Remaining dependencies: audit all remaining marketing list/detail pages and run isolated read/write failure drills

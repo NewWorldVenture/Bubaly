@@ -1397,3 +1397,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/admin/stripe` now renders a refreshable error state for feature-flag, configuration, financial-table, or webhook read failures while wallet consumers retain ledger fallback.
 - Source commit: `748d0a7d`; docs and source are published on `origin/main` at `59b7392c`.
+
+## Latest Local Evidence - Admin Marketing Read Failure
+
+- `npm.cmd exec vitest run tests/admin-marketing-read-boundary.test.ts`: 1 file, 2 focused tests passed.
+- `npm.cmd test`: 428 files, 3,101 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `/admin/marketing/ads` and `/admin/marketing/automation` now render refreshable error states when their primary Supabase reads fail instead of reporting empty planning views.
+- Source commit: `e20a11d4`; docs publication commit is pending.
