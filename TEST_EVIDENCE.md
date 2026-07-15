@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Security/Auth Read Boundary
+
+- Focused security suite: 1 file, 1 test passed.
+- Full `npm.cmd test`: 458 test files, 3,204 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- `/admin/security` now preserves Auth Admin, invite, audit, family, and actor-profile failures and renders a retryable sanitized error state.
+- Live Auth Admin health, authenticated role/RLS, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Admin Wallet Overview Read Boundary
 
 - Focused admin-wallet suites: 2 files, 2 tests passed.

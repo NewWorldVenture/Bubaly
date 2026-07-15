@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 15:50:00 -04:00
+- Last updated: 2026-07-15 16:05:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `93f3594b` adds admin wallet overview read safety; live provider and deployment evidence remains open
+- Commit: latest source increment adds Admin Security/Auth Admin read safety; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0338 - Admin Security hid Auth and audit read failures as empty signals
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Security operations / Auth Admin / Supabase failure handling
+- Feature: Super Admin Security page
+- Route: `/admin/security`
+- File or files: `app/(app)/admin/security/page.tsx`, `tests/admin-security-read-boundary.test.ts`
+- Database objects: `invites`, `audit_logs`, `families`, and actor `profiles`; Supabase Auth Admin users endpoint
+- Affected roles: Super Admin and security operators
+- Scenario: Auth Admin users, invite, audit, family, or actor-profile reads could fail while the page rendered zero/empty account security and sensitive activity signals.
+- Launch impact: operators could miss unconfirmed, banned, or newly created accounts and audit activity precisely when the security backend is degraded.
+- Root cause: parallel results and actor lookup results were destructured without preserving error state.
+- Required remediation: fail visibly on any required source read, retain server diagnostics, and provide a refresh path.
+- Implementation notes: required query results and actor profile lookup now surface sanitized retryable ErrorState responses.
+- Test plan: focused Security read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-security-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest full gate passed with 458 files/3,204 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: live Auth Admin health, Super Admin role/browser, audit-log, and deployed Supabase evidence.
 
 #### TODO-0337 - Admin wallet overview hid required read failures as zero metrics
 

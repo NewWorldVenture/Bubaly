@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0338 - Admin Security hid Auth and audit read failures as empty signals
+
+- Timestamp: 2026-07-15 16:05 America/New_York
+- Service: Super Admin Security and Auth Admin operations
+- Route: `/admin/security`
+- Affected files: `app/(app)/admin/security/page.tsx`, `tests/admin-security-read-boundary.test.ts`
+- Role: Super Admin and security operator
+- Scenario: Auth Admin users, invites, audit logs, families, or actor profiles could fail while the page rendered empty account security and sensitive activity signals.
+- Severity: P1
+- Launch impact: operators could miss unconfirmed, banned, or newly created accounts and audit activity during an authentication or database outage.
+- Root cause: parallel results and actor lookup results were destructured without preserving error state.
+- Resolution: required reads now fail visibly with sanitized retryable ErrorState responses; server logs retain diagnostics without exposing them to the UI.
+- Supabase impact: no schema change; Auth Admin and service-role audit reads now have explicit failure contracts.
+- Tests run: `tests/admin-security-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 458 test files, 3,204 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: pending source commit
+- Status: Resolved in code; live Auth Admin, role, browser, RLS, and outage evidence remains open
+- Remaining dependencies: restore healthy Auth Admin users endpoint and execute authenticated security-operation drills
+
 ### PLA-0337 - Admin wallet overview hid required read failures as zero metrics
 
 - Timestamp: 2026-07-15 15:50 America/New_York

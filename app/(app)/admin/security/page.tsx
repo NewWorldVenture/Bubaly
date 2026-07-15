@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { UserSecurityActions } from '@/components/admin/user-security-actions';
 import { fmtDate } from '@/lib/utils/format';
 
@@ -23,12 +23,32 @@ const POSTURE = [
 export default async function AdminSecurityPage() {
   const supabase = createServiceClient();
 
-  const [{ data: invites }, { data: authUsers }, { data: auditLogs }, { data: families }] = await Promise.all([
+  const [invitesResult, authUsersResult, auditLogsResult, familiesResult] = await Promise.all([
     supabase.from('invites').select('status'),
     supabase.auth.admin.listUsers({ perPage: 1000 }),
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at').order('created_at', { ascending: false }).limit(25),
     supabase.from('families').select('id, name'),
   ]);
+
+  const readError = invitesResult.error ?? authUsersResult.error ?? auditLogsResult.error ?? familiesResult.error;
+  if (readError) {
+    console.error('[admin-security] security read failed', readError);
+    return (
+      <div className="module-page space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Security</h1>
+          <p className="mt-1 text-sm text-muted">Live access-control signals across accounts, invites, and sensitive activity.</p>
+        </div>
+        <ErrorState message="Could not load security data from Supabase. Refresh and try again." />
+        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">Refresh security overview</a>
+      </div>
+    );
+  }
+
+  const { data: invites } = invitesResult;
+  const { data: authUsers } = authUsersResult;
+  const { data: auditLogs } = auditLogsResult;
+  const { data: families } = familiesResult;
 
   const inviteCounts = { pending: 0, accepted: 0, expired: 0, revoked: 0, declined: 0 };
   for (const inv of invites ?? []) {
@@ -58,9 +78,23 @@ export default async function AdminSecurityPage() {
 
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const actorIds = [...new Set((auditLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const { data: actors } = actorIds.length
+  const actorsResult = actorIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+  if ('error' in actorsResult && actorsResult.error) {
+    console.error('[admin-security] actor profile read failed', actorsResult.error);
+    return (
+      <div className="module-page space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Security</h1>
+          <p className="mt-1 text-sm text-muted">Live access-control signals across accounts, invites, and sensitive activity.</p>
+        </div>
+        <ErrorState message="Could not load security activity details from Supabase. Refresh and try again." />
+        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">Refresh security overview</a>
+      </div>
+    );
+  }
+  const { data: actors } = actorsResult;
   const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
 
   return (
