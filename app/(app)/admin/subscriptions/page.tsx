@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { PLANS, type Plan } from '@/lib/constants/plans';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { GrowthChart } from '@/components/admin/growth-chart';
@@ -71,11 +71,21 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'plans';
   const supabase = createServiceClient();
 
-  const [{ data: subscriptions }, { data: families }, { data: billingCustomers }] = await Promise.all([
+  const [subscriptionsResult, familiesResult, billingCustomersResult] = await Promise.all([
     supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
     supabase.from('families').select('id, name'),
     supabase.from('billing_customers').select('family_id, customer_ref'),
   ]);
+
+  const readError = subscriptionsResult.error ?? familiesResult.error ?? billingCustomersResult.error;
+  if (readError) {
+    console.error('[admin-subscriptions] subscription read failed', readError);
+    return <AdminSubscriptionsReadError tab={tab} />;
+  }
+
+  const { data: subscriptions } = subscriptionsResult;
+  const { data: families } = familiesResult;
+  const { data: billingCustomers } = billingCustomersResult;
 
   const subs = subscriptions ?? [];
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
@@ -254,6 +264,19 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+function AdminSubscriptionsReadError({ tab }: { tab: TabKey }) {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Subscriptions</h1>
+        <p className="mt-1 text-sm text-muted">Manage subscription plans, pricing, and customer subscriptions.</p>
+      </div>
+      <ErrorState message="Could not load subscription data from Supabase. Refresh and try again." />
+      <a href={`/admin/subscriptions?tab=${tab}`} className="text-sm font-medium text-brand-text underline">Refresh subscriptions</a>
     </div>
   );
 }
