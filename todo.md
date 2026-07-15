@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:11:39 -04:00
+- Last updated: 2026-07-15 17:17:03 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `7e6ce831` adds itinerary read safety after Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `3adef7e6` adds shared vacation CRUD and budget read safety after Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation CRUD and budget / Supabase failure handling
+- Feature: Vacation shared CRUD sections and Trip Budget
+- Route: `/dashboard/vacations/[id]/budget` plus shared lodging, travel, activity, document, family, and emergency sections
+- File or files: `components/vacations/shared.tsx`, `components/vacations/trip-budget.tsx`, `tests/vacation-crud-read-boundary.test.ts`
+- Database objects: family-scoped vacation child tables, `vacation_budgets`, and `vacation_expenses`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: shared CRUD list reads or budget/expense reads could fail while sections rendered empty lists or zero financial totals.
+- Launch impact: families could miss trip records or make budget decisions from incomplete data.
+- Root cause: `TripCrudSection` ignored read errors, and Trip Budget did not track loading or errors for its summary queries.
+- Required remediation: surface retryable errors in the shared CRUD primitive and fail closed on both budget summary reads.
+- Implementation notes: shared vacation CRUD sections now show sanitized retry states; Trip Budget waits for both reads and retries them together.
+- Test plan: focused CRUD/budget boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/vacation-crud-read-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 467 files/3,218 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `3adef7e6`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0348 - Trip itinerary hid failed day and item reads as an empty schedule
 
@@ -200,29 +221,7 @@
 - Category: Third-party integrations / sync operations / Supabase failure handling
 - Feature: Super Admin Sync Platform
 - Route: `/admin/sync`
-- File or files: `app/(app)/admin/sync/page.tsx`, `tests/admin-sync-read-boundary.test.ts`
-- Database objects: `sync_connections`, `sync_provider_errors`, `sync_jobs`, `sync_webhook_events`, and `sync_providers`
-- Affected roles: Super Admin, integration operators, and households using provider sync
-- Scenario: connection, fatal provider error, dead-letter, webhook signature, or provider-catalog reads could fail while the page rendered zero counts and a complete catalog.
-- Launch impact: operators could miss failed sync jobs, security-signature failures, or provider outages and assume data synchronization was healthy.
-- Root cause: Promise query results were used without checking their error fields.
-- Required remediation: check all five reads, log diagnostics server-side, and show a retryable page-level error before rendering operations.
-- Implementation notes: the page now fails visibly on any required read failure and keeps the existing encryption-key fail-closed signal.
-- Test plan: focused sync read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/admin-sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: latest full gate passed with 460 files/3,206 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `6a9d7494`; push and post-push ref verification pending.
-- Remaining dependencies: live provider callbacks, retry/dead-letter drills, RLS, and deployed Admin Sync evidence.
-
-#### TODO-0339 - Admin dashboard hid command-center read failures as zero or empty metrics
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Admin command center / operational observability / Supabase failure handling
-- Feature: Super Admin dashboard
-- Route: `/admin`
-- File or files: `app/(app)/admin/page.tsx`, `tests/admin-overview-read-boundary.test.ts`
-- Database objects: `families`, `family_members`, `subscriptions`, `documents`, `audit_logs`, `suppor…111314 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- File or files: `app/(app)/admin/sync/page.tsx`, `tests/admin-sync-read-b…111835 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
