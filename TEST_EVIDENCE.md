@@ -1396,4 +1396,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `/admin/stripe` now renders a refreshable error state for feature-flag, configuration, financial-table, or webhook read failures while wallet consumers retain ledger fallback.
-- Source commit: `748d0a7d`; docs publication commit is pending.
+- Source commit: `748d0a7d`; docs and source are published on `origin/main` at `59b7392c`.
