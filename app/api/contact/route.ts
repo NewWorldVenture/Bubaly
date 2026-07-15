@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       kind: 'support_ticket',
       title: `New support ticket from ${name}`,
       body: message.slice(0, 200),
-      url: '/admin/support-tickets',
+      url: '/admin/support-tickets?tab=open',
       relatedType: 'support_ticket',
     });
   } catch {
