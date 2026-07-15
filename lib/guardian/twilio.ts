@@ -59,12 +59,21 @@ export function twimlGather(opts: {
 </Gather>`;
 }
 
-/** TwiML: record a voicemail. */
-export function twimlRecord(opts: { action: string; maxLength?: number; text: string; voice?: string }): string {
-  const { action, maxLength = 120, text, voice = 'Polly.Joanna-Neural' } = opts;
+/** TwiML: record a voicemail. `action` redirects after recording; omit it to let
+ *  the call continue to the next verbs. `transcribeCallback` receives the async
+ *  transcription (the `action` POST fires before the transcript is ready). */
+export function twimlRecord(opts: {
+  action?: string; transcribeCallback?: string; maxLength?: number; text: string; voice?: string;
+}): string {
+  const { action, transcribeCallback, maxLength = 120, text, voice = 'Polly.Joanna-Neural' } = opts;
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const attrs = [
+    action ? `action="${action}"` : '',
+    `maxLength="${maxLength}"`,
+    transcribeCallback ? `transcribe="true" transcribeCallback="${transcribeCallback}"` : '',
+  ].filter(Boolean).join(' ');
   return `<Say voice="${voice}">${escaped}</Say>
-<Record action="${action}" maxLength="${maxLength}" transcribe="true" />`;
+<Record ${attrs} />`;
 }
 
 /** TwiML: transfer to a phone number. */
@@ -135,6 +144,36 @@ export function validateTwilioSignature(
   } catch {
     return false;
   }
+}
+
+// ─── Number Provisioning ────────────────────────────────────────────────────
+
+/** Search the account for one available US local number (optionally by area
+ *  code). Returns an E.164 number, or null when none are available/configured. */
+export async function searchAvailableNumber(areaCode?: string): Promise<string | null> {
+  if (!isTwilioConfigured()) return null;
+  const qs = new URLSearchParams({ SmsEnabled: 'true', VoiceEnabled: 'true', PageSize: '1' });
+  if (areaCode && /^\d{3}$/.test(areaCode)) qs.set('AreaCode', areaCode);
+  const data = await twilioFetch(`/AvailablePhoneNumbers/US/Local.json?${qs.toString()}`) as {
+    available_phone_numbers?: { phone_number: string }[];
+  };
+  return data.available_phone_numbers?.[0]?.phone_number ?? null;
+}
+
+/** Buy a number and point its Voice + SMS webhooks at our Contact Center routes.
+ *  Returns the provisioned number + its Twilio SID. */
+export async function provisionNumber(params: {
+  phoneNumber: string; voiceUrl: string; smsUrl: string; friendlyName?: string;
+}): Promise<{ phoneNumber: string; sid: string }> {
+  const data = await twilioFetch('/IncomingPhoneNumbers.json', {
+    PhoneNumber: params.phoneNumber,
+    VoiceUrl: params.voiceUrl,
+    VoiceMethod: 'POST',
+    SmsUrl: params.smsUrl,
+    SmsMethod: 'POST',
+    ...(params.friendlyName ? { FriendlyName: params.friendlyName } : {}),
+  }) as { sid: string; phone_number: string };
+  return { phoneNumber: data.phone_number, sid: data.sid };
 }
 
 /** Look up caller ID name via Twilio Lookup API. */

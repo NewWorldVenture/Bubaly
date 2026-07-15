@@ -34,6 +34,7 @@ export const SERVICE_DESCRIPTIONS: Record<string, string> = {
   '/dashboard/concierge': 'An AI planner for the big stuff — trips, events, projects — that researches options and builds the plan for you.',
   '/dashboard/trip-intel': 'Deep research for any trip: routes, timing, weather, and what to pack, assembled into one brief.',
   '/dashboard/front-desk': 'An AI receptionist that screens calls, takes messages, and handles the phone tasks you’d rather not.',
+  '/dashboard/contact-center': 'Your family’s own @bubaly.com address and dedicated phone number — every call, text, and email lands in one AI-triaged inbox.',
   '/guardian': 'Screens unknown callers before they ever reach you and flags likely spam and scams.',
   '/dashboard/inbox': 'One place for every family message — school emails, texts, notices — with the action items pulled out automatically.',
   '/dashboard/calendar': 'One shared family calendar where every event has an owner, colour-coded by person, with conflict detection.',
