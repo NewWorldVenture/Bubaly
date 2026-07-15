@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 14:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest published source repair `6767d374` includes billing state boundaries and Contact Center baseline; Contact Center persistence repair is currently being verified
+- Commit: latest local source repair `32b541d1` hardens Contact Center email ingress; publication to branch and `main` is pending
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
