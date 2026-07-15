@@ -1,0 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const source = readFileSync('app/(app)/admin/users/page.tsx', 'utf8');
+
+describe('admin users read boundary', () => {
+  it('surfaces super-admin allowlist read failures instead of rendering a silent empty list', () => {
+    expect(source).toContain("['super_admins', superAdminsRes]");
+    expect(source).toContain('if (res.error) loadErrors.push');
+    expect(source).toContain('Some data couldn');
+  });
+});

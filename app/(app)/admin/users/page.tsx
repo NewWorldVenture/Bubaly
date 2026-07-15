@@ -89,6 +89,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   for (const [label, res] of [
     ['profiles', profilesRes], ['family_members', membersRes], ['families', familiesRes],
     ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
+    ['super_admins', superAdminsRes],
   ] as const) {
     if (res.error) loadErrors.push(`Could not load “${label}”: ${res.error.message}`);
   }
