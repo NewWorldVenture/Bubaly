@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
+import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, StatPill, Progress, type FieldDef } from './shared';
 import { BUDGET_CATEGORIES, dollars, lookup } from '@/lib/vacations/meta';
 import { summarizeBudget } from '@/lib/vacations/budget';
@@ -29,11 +30,11 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: budgets } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading: budgetsLoading, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'vacation_budgets', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_budgets').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: expenses } = useRealtimeQuery<Expense>({
+  const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useRealtimeQuery<Expense>({
     table: 'vacation_expenses', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
@@ -42,6 +43,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
   const plannedByCat = useMemo(() => new Map(budgets.map((b) => [b.category, b])), [budgets]);
   const [editing, setEditing] = useState<VacBudgetCategory | null>(null);
   const [draft, setDraft] = useState('');
+  const refreshAll = () => { void Promise.all([refreshBudgets(), refreshExpenses()]); };
 
   async function savePlanned(cat: VacBudgetCategory) {
     const cents = draft ? Math.round(parseFloat(draft) * 100) : 0;
@@ -53,13 +55,16 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     setEditing(null);
   }
 
+  if (budgetsLoading || expensesLoading) return <LoadingBlock />;
+  if (budgetsError || expensesError) return <ErrorState message="Could not load this trip budget. Refresh and try again." onRetry={refreshAll} />;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatPill label="Planned" value={dollars(summary.planned_cents)} />
         <StatPill label="Spent" value={dollars(summary.spent_cents)} />
         <StatPill label="Remaining" value={dollars(summary.remaining_cents)} tone={summary.remaining_cents < 0 ? 'border-rose-500/40' : ''} />
-        <StatPill label="Used" value={`${summary.pct === 999 ? '∞' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
+        <StatPill label="Used" value={`${summary.pct === 999 ? 'âˆž' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
       </div>
 
       {summary.over && (
@@ -86,7 +91,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
                     </span>
                   ) : (
                     <button onClick={() => { setEditing(cat.value); setDraft(planned ? String(planned / 100) : ''); }} className="text-sm text-muted hover:text-brand-text">
-                      {dollars(spent)} / {dollars(planned)} ✎
+                      {dollars(spent)} / {dollars(planned)} âœŽ
                     </button>
                   )}
                 </div>
@@ -107,7 +112,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="font-semibold">{x.description}</p>
-                <p className="mt-0.5 text-xs text-muted">{[lookup(BUDGET_CATEGORIES, x.category).label, fmtDate(x.spent_on), who].filter(Boolean).join(' · ')}</p>
+                <p className="mt-0.5 text-xs text-muted">{[lookup(BUDGET_CATEGORIES, x.category).label, fmtDate(x.spent_on), who].filter(Boolean).join(' Â· ')}</p>
               </div>
               <span className="shrink-0 font-semibold">{dollars(x.amount_cents)}</span>
             </div>
@@ -117,3 +122,4 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     </div>
   );
 }
+
