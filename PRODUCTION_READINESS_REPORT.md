@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 3,035 unit tests, builds all 250 static Next.js
+tree compiles, passes lint and type checking, passes 3,045 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -44,6 +44,10 @@ keeps database failures retryable. Live provider, privacy, role, and RLS evidenc
 Latest repair increment (2026-07-15): migration `0211_family_members_update_rls.sql` restores manager-only
 `family_members` UPDATE policies after migration `0118` reintroduced a self-update exception. Local RLS
 contracts pass; remote application and two-tenant authenticated probes remain open.
+
+Latest repair increment (2026-07-15): the Super Admin Notification Center now logs returned Supabase
+insert failures and exposes sanitized mark-read failures without refreshing stale state. Live admin role,
+alert-routing, and browser workflow verification remain open.
 
 Latest repair increment (2026-07-15): onboarding finalization now derives authenticated deterministic
 submission/item keys and uses database-enforced keyed upserts for managed members, invites, imported

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 08:48:00 -04:00
+- Last updated: 2026-07-15 08:58:36 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `eb99f0a0` (published auth/RLS increment)
+- Commit: pending publication (Admin Notifications increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -89,6 +89,26 @@
 - Resolution: added migration `0211` and static contract coverage proving the self-update exception is absent and ordinary account actions have no direct membership update path
 - Verified by: Codex local validation; remote migration application and two-tenant role/RLS probes remain required
 - Remaining dependencies: apply `0211`, run authenticated member/manager cross-tenant allow/deny tests, and verify profile/child-login workflows in isolation
+
+#### TODO-0285 - Admin notification failures were silent to operators
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin operations
+- Feature: Super Admin Notification Center
+- Route: `/admin/notifications`, global admin notification bell
+- File or files: `lib/admin/notify.ts`, `app/(app)/admin/notifications-actions.ts`, `components/admin/admin-notifications-list.tsx`, `components/admin/admin-notification-bell.tsx`, `tests/admin-notification-boundary.test.ts`
+- Database objects: `admin_notifications`
+- Affected roles: Super Admin and the server-side feedback/support/marketplace/onboarding/Stripe producers
+- Scenario: an admin notification insert or mark-read update returns a Supabase error
+- Launch impact: important operational alerts could disappear without diagnostics, or an operator could believe a read mutation succeeded when it did not
+- Root cause: notification insert awaited the query but ignored its returned `error`; client handlers refreshed unconditionally without inspecting the action result
+- Required remediation: log returned Supabase insert errors while retaining best-effort producer behavior, and surface sanitized mutation failures without refreshing stale UI as if the action succeeded
+- Supabase impact: no schema change; uses existing service-role-only `admin_notifications` table
+- Tests performed: `tests/admin-notification-boundary.test.ts`, `tests/admin-notifications.test.ts` (12 tests); typecheck; diff check
+- Resolution: checked and logged insert errors; added visible `role=alert` error states to history and bell mark-read flows; refresh occurs only after a successful server action
+- Verified by: Codex local validation; 409-file/3,045-test suite, lint, typecheck, audit, migration audit, diff check, schema probes, and 250-route production build pass
+- Remaining dependencies: live Super Admin authorization, failure injection, alert routing, and operator/browser workflow verification
 
 ## Current Coverage Matrices
 

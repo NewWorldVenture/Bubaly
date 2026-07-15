@@ -23,7 +23,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   direct membership UPDATE path that could change role, activation state, or family assignment. Remote
   application and authenticated cross-tenant probes remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f65cf-7a30-7a5b-b7d0-0ae58eb1dcde`); local Docker/Supabase status is unavailable.
+  `019f65db-10f5-7cfd-92bf-085293f40a5a`); local Docker/Supabase status is unavailable.
+- Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
+  permission, browser, and alert-routing verification remains open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

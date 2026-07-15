@@ -2,6 +2,24 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Admin notification failure visibility
+
+- `npm.cmd run test -- tests/admin-notification-boundary.test.ts tests/admin-notifications.test.ts`: 2 files, 12 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `git diff --check`: passed.
+- `npm.cmd run test`: 409 files, 3,045 tests passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public health passed; Auth Admin users returned HTTP 500 with request ID
+  `019f65db-10f5-7cfd-92bf-085293f40a5a`.
+- `supabase status`: unavailable because the Docker Desktop Linux engine is not running.
+- `recordAdminNotification` now checks and logs Supabase's returned insert error while preserving its intentional best-effort contract.
+- The Admin Notifications history and bell now display sanitized `role=alert` failures and only refresh after a successful mark-read action.
+- Live Super Admin permission, failure-injection, alert-routing, and browser workflow evidence remain pending.
+
 ## Latest Audit Update - Family membership RLS tenant boundary
 
 - `npm.cmd run test -- tests/tenant-isolation-rls.test.ts tests/migration-version-safety.test.ts tests/admin-auth-boundary.test.ts tests/account-action-error-boundaries.test.ts`: 4 files, 9 tests passed.

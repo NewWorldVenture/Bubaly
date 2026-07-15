@@ -232,7 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: reuses `guardian_callback_events` from migration `0181_guardian_callback_replay.sql`; no schema change
 - Tests run: `tests/guardian-escalation-replay.test.ts` and `tests/guardian-callback-security.test.ts` (11 tests), typecheck, diff check
 - Validation evidence: claim occurs before `sendSms`/`initiateCall`; parent phones resolve from profile IDs; callback errors remain retryable
-- Commit: `eb99f0a0`
+- Commit: `6148080d`
 - Status: Resolved in code; live provider, role/privacy, and RLS verification remain open
 - Remaining dependencies: run isolated Twilio retry/failure smoke tests and verify parent notification privacy in Supabase
 
@@ -251,6 +251,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: policy-only repair on `family_members`; no destructive data change; migration must be applied remotely
 - Tests run: four focused files, 9 tests; typecheck; migration filename audit; diff check
 - Validation evidence: migration contains manager-only update predicates and no self-update exception; ordinary account actions have no direct client membership update path
-- Commit: pending publication
+- Commit: `eb99f0a0`
 - Status: Resolved in code; remote migration application and authenticated two-tenant RLS verification remain open
 - Remaining dependencies: apply `0211`, prove non-manager deny/manager allow behavior, and re-run Auth Admin health
+
+### PLA-0285 - Admin notification failures were silent to operators
+
+- Timestamp: 2026-07-15 08:55 America/New_York
+- Service: Admin operations and notification observability
+- Route: `/admin/notifications`, global admin notification bell
+- Affected files: `lib/admin/notify.ts`, `app/(app)/admin/notifications-actions.ts`, `components/admin/admin-notifications-list.tsx`, `components/admin/admin-notification-bell.tsx`, `tests/admin-notification-boundary.test.ts`
+- Role: Super Admin; server-side alert producers
+- Scenario: an `admin_notifications` insert or mark-read update fails at the Supabase boundary
+- Severity: P1
+- Launch impact: operational alerts could disappear without diagnostics, or a Super Admin could be shown stale unread state after a failed mutation
+- Root cause: returned Supabase insert errors were ignored, and the client refreshed regardless of the mark-read action result
+- Resolution: log returned insert errors and expose sanitized action failures through accessible alert states; refresh only after success
+- Supabase impact: existing service-role-only `admin_notifications` table; no migration or data change
+- Tests run: `tests/admin-notification-boundary.test.ts` and `tests/admin-notifications.test.ts` (12 tests), full 409-file/3,045-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: producer checks query errors; both history and bell handlers branch on `{ ok: false }` before `router.refresh()`; 250-route build passed; live schema audit passed all 11 checks
+- Commit: pending publication
+- Status: Resolved in code; live Super Admin workflow and failure-injection evidence remain open
+- Remaining dependencies: failure injection, auth permission, alert routing, and browser/operator smoke tests

@@ -42,6 +42,7 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const unread = notifications.filter((n) => !n.is_read).length;
@@ -56,7 +57,15 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
 
   function markAll() {
     if (unread === 0) return;
-    start(async () => { await markAdminNotesReadAction(); router.refresh(); });
+    start(async () => {
+      const result = await markAdminNotesReadAction();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setError(null);
+      router.refresh();
+    });
   }
 
   return (
@@ -87,6 +96,8 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
               </button>
             )}
           </div>
+
+          {error && <p role="alert" className="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">{error}</p>}
 
           <div className="max-h-[60vh] overflow-y-auto">
             {/* Pending invites — a live count, not an admin_notifications row */}

@@ -20,7 +20,7 @@ have evidence in the issue ledger and a pushed commit.
 | Marketplace | `/marketplace/*`, seller flows | buyer, seller, admin | RLS, concurrency, payments, media, E2E | In progress | End-to-end listing to handoff and dispute |
 | AI assistants | `/ai`, `/api/ai/*`, voice | family roles | request guards, ownership, failure, cost, privacy | In progress | Model outage, quota and streaming verification |
 | Notifications and cron | notification center, `/api/cron/*` | system, parent, admin | auth, retry, dedupe, delivery, observability | In progress | Every scheduled job with replay/failure evidence |
-| Admin and marketing | `/admin/*`, marketing routes | Super Admin, admin, support | authorization, CRUD, audit, responsive, E2E | In progress | Admin permission and live-save matrix |
+| Admin and marketing | `/admin/*`, marketing routes | Super Admin, admin, support | authorization, CRUD, audit, responsive, E2E | In progress | Admin notification boundary tests pass; complete permission, mutation-failure, live-save, responsive, and browser matrix |
 | Third-party integrations | Google, Stripe, Resend, push, OAuth | connected account owner, system | callback, secret, retry, outage, audit | In progress | Sandbox callback and credential-rotation evidence |
 | Mobile and accessibility | Capacitor, all public/app pages | all roles and devices | Playwright, axe, keyboard, touch, performance | In progress | Full viewport/page and assistive-tech matrix |
 | Deployment and operations | Vercel, Supabase, GitHub Actions | deployer, operator | build, smoke, rollback, backup/restore, monitoring | In progress | Production launch rehearsal and restore drill |

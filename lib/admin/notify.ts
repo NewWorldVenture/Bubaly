@@ -15,7 +15,7 @@ export async function recordAdminNotification(admin: Admin, input: {
   relatedType?: string | null; relatedId?: string | null; meta?: Record<string, unknown>;
 }): Promise<void> {
   try {
-    await admin.from('admin_notifications').insert({
+    const { error } = await admin.from('admin_notifications').insert({
       kind: input.kind,
       title: input.title.slice(0, 300),
       body: input.body ? input.body.slice(0, 2000) : null,
@@ -24,6 +24,7 @@ export async function recordAdminNotification(admin: Admin, input: {
       related_id: input.relatedId ?? null,
       meta: (input.meta ?? {}) as never,
     });
+    if (error) console.error('[admin-notify] insert failed', error);
   } catch (e) {
     console.error('[admin-notify] insert failed', e);
   }

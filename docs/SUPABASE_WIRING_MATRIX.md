@@ -19,7 +19,7 @@ contract is not yet verified.
 | Marketplace | listings, offers, orders, circles, media | buyer/seller/admin RLS | auction/order RPCs, storage | Partial | Several atomic/RLS repairs exist; full buyer/seller matrix pending |
 | AI | conversations, messages, generated artifacts | family/user ownership and rate limits | OpenAI/Anthropic routes | Partial | Ownership and persistence tests exist; provider outage/cost proof pending |
 | Notifications | notifications, devices, preferences | family/user ownership | push, email, realtime, cron | Partial | Job-by-job delivery/replay audit pending |
-| Admin/marketing | admin audit, content, campaigns, feedback | Super Admin/support roles | admin APIs, media, webhooks | Partial | Live permission and audit-log proof pending |
+| Admin/marketing | admin audit, content, campaigns, feedback, `admin_notifications` | Super Admin/support roles | admin APIs, media, webhooks, service-role notification feed | Partial | Notification insert/action failures are locally surfaced; live permission, audit-log, alert-routing, and full admin workflow proof pending |
 | Observability | audit logs, webhook events, operational records | operator/admin access | instrumentation, logs, alerts | Partial | Production alert routing and retention pending |
 
 ## Wiring Completion Gate

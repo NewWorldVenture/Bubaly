@@ -44,6 +44,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<'all' | string>('all');
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const counts = useMemo(() => countByKind(notifications), [notifications]);
   const unread = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
@@ -62,11 +63,20 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
   }, [counts]);
 
   function markRead(ids?: string[]) {
-    start(async () => { await markAdminNotesReadAction(ids); router.refresh(); });
+    start(async () => {
+      const result = await markAdminNotesReadAction(ids);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setError(null);
+      router.refresh();
+    });
   }
 
   return (
     <div className="space-y-4">
+      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <button
