@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime } from '@/lib/family/safety';
@@ -23,7 +23,7 @@ export function DrivingSafetyView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading } = useRealtimeQuery<Trip>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Trip>({
     table: 'driving_trips', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('driving_trips').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(200),
   });
@@ -51,7 +51,7 @@ export function DrivingSafetyView() {
         <Stat label="Miles" value={totalMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} tint="text-fg" icon={TrendingDown} />
       </div>
 
-      {loading ? <SkeletonList /> : trips.length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load driving trips. Refresh and try again." onRetry={refresh} /> : trips.length === 0 ? (
         <EmptyState icon={Car} title="No trips logged" description="Log a trip to start tracking driving safety scores."
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Log trip</Button>} />
       ) : (
