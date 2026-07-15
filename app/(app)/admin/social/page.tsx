@@ -6,6 +6,7 @@ import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Social Admin', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,19 @@ export default async function AdminSocialPage() {
     supabase.from('social_ai_generations').select('id', { count: 'exact', head: true }),
     supabase.from('social_provider_errors').select('id', { count: 'exact', head: true }),
   ]);
+
+  const readError = accounts.error ?? posts.error ?? published.error ?? failedResults.error ?? generations.error ?? errors.error;
+  if (readError) {
+    console.error('[admin-social] social platform read failed', readError);
+    return (
+      <div className="module-page space-y-5">
+        <h1 className="text-2xl font-bold tracking-tight">Social platform</h1>
+        <AdminSocialSubnav active="/admin/social" />
+        <ErrorState message="Could not load social platform data from Supabase. Refresh and try again." />
+        <a href="/admin/social" className="text-sm font-medium text-brand-text underline">Refresh social overview</a>
+      </div>
+    );
+  }
 
   const stats = [
     { label: 'Accounts (all families)', value: accounts.count ?? 0, icon: Users2 },
