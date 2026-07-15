@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { FileText, BookOpen, Send } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
@@ -147,7 +148,7 @@ function AdminContentReadError() {
         <p className="mt-1 text-sm text-muted">Manage the content pipeline and published blog posts.</p>
       </div>
       <ErrorState message="Could not load marketing content from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">Refresh content</a>
+      <Link href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">Refresh content</Link>
     </div>
   );
 }

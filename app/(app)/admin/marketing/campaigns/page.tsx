@@ -69,7 +69,7 @@ function AdminCampaignsReadError() {
         <p className="mt-1 text-sm text-muted">Plan and monitor lifecycle campaigns.</p>
       </div>
       <ErrorState message="Could not load marketing campaigns from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Refresh campaigns</a>
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Refresh campaigns</Link>
     </div>
   );
 }
