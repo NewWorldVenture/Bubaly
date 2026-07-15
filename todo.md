@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:05:57 -04:00
+- Last updated: 2026-07-15 17:11:39 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f36ea6c5` adds trip overview read safety after Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `7e6ce831` adds itinerary read safety after Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0348 - Trip itinerary hid failed day and item reads as an empty schedule
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation itinerary / Supabase failure handling
+- Feature: Trip Itinerary
+- Route: `/dashboard/vacations/[id]/itinerary`
+- File or files: `components/vacations/trip-itinerary.tsx`, `tests/trip-itinerary-boundary.test.ts`
+- Database objects: `vacations`, `vacation_itinerary_days`, and `vacation_itinerary_items`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: trip, day, or itinerary-item reads could fail while the page rendered no days planned or an incomplete schedule.
+- Launch impact: families could miss planned activities or incorrectly rebuild an itinerary from incomplete data.
+- Root cause: only the itinerary days query exposed loading state; trip and item read failures were ignored.
+- Required remediation: track all three required reads, wait for complete data, and render a sanitized retry state before showing an empty schedule.
+- Implementation notes: Trip Itinerary now fails closed on any required read failure and retries all three reads together.
+- Test plan: focused itinerary boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/trip-itinerary-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 466 files/3,216 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `7e6ce831`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0347 - Trip overview hid incomplete readiness and itinerary reads
 
@@ -201,27 +222,7 @@
 - Feature: Super Admin dashboard
 - Route: `/admin`
 - File or files: `app/(app)/admin/page.tsx`, `tests/admin-overview-read-boundary.test.ts`
-- Database objects: `families`, `family_members`, `subscriptions`, `documents`, `audit_logs`, `support_tickets`, `admin_notifications`, and actor `profiles`
-- Affected roles: Super Admin and operational administrators
-- Scenario: any of the dashboard's required counts, lists, notifications, or activity actor reads could fail while the page rendered plausible zeros, empty cards, or incomplete audit activity.
-- Launch impact: operators could make deployment, billing, support, or security decisions from incomplete command-center data.
-- Root cause: Promise results and the secondary actor lookup were destructured without preserving error state.
-- Required remediation: check all required source reads, log diagnostics server-side, and render a retryable page-level error before deriving metrics.
-- Implementation notes: the dashboard now retains each result and fails visibly on any required read failure; actor lookup failures receive a separate sanitized retry state.
-- Test plan: focused admin dashboard boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/admin-overview-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: latest full gate passed with 459 files/3,205 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `167524d9`; push and post-push ref verification pending.
-- Remaining dependencies: live Super Admin role/browser, alert routing, and deployed Supabase outage evidence.
-
-#### TODO-0338 - Admin Security hid Auth and audit read failures as empty signals
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Security operations / Auth Admin / Supabase failure handling
-- Feature: Super Admin Security page
-- Route: `/admin/security`
-- File or files: `app/(app)/admin…110845 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Database objects: `families`, `family_members`, `subscriptions`, `documents`, `audit_logs`, `suppor…111314 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
