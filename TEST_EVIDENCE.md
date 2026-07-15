@@ -1408,4 +1408,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `/admin/marketing/ads` and `/admin/marketing/automation` now render refreshable error states when their primary Supabase reads fail instead of reporting empty planning views.
-- Source commit: `e20a11d4`; docs publication commit is pending.
+- Source commit: `e20a11d4`; docs and source are published on `origin/main` at `7df21625`.
