@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,981 unit tests, builds all 250 static Next.js
+The tree compiles, passes lint and type checking, passes 3,014 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -29,6 +29,10 @@ and disputes do not silently diverge.
 
 Latest repair increment (2026-07-15): manual allowance runs now advance a rule only through a checked
 schedule write, roll the schedule back when wallet credit fails, and report only credits that succeeded.
+
+Latest repair increment (2026-07-15): the allowance cron now checks its schedule claim before writing the
+wallet ledger, restores the previous schedule after a failed credit, and fails the run visibly instead of
+silently ignoring either persistence failure.
 
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
 checkout contains 221 numbered migration files and 17 known historical duplicate prefixes; new or

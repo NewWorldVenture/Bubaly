@@ -4447,3 +4447,21 @@ roadmap entries and user worktree changes are preserved.
   success counters.
 - Verified by: Codex
 - Date completed: 2026-07-15
+
+### TODO-0280 - Allowance cron ignored schedule and credit failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Wallet / financial data integrity / scheduled automation
+- Feature: Cron-driven due allowances
+- File or files: `app/api/cron/wallet-allowance/route.ts`, `tests/cron-wallet-allowance-persistence.test.ts`
+- Description: The cron ignored its schedule update result and could advance a rule after a failed wallet
+  credit, making retries unsafe and hiding persistence failures from monitoring.
+- Resolution: The cron now checks the schedule claim before crediting, restores the prior schedule after a
+  failed credit, counts only successful credits, and fails visibly when the run cannot persist safely.
+- Tests performed: Focused cron allowance persistence contract, full Vitest, typecheck, lint, dependency audit,
+  and clean production build.
+- Evidence: `tests/cron-wallet-allowance-persistence.test.ts` guards schedule-before-credit ordering, rollback,
+  checked failures, and success-only counters.
+- Verified by: Codex
+- Date completed: 2026-07-15

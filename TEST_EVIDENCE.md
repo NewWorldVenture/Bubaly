@@ -1,17 +1,24 @@
 # Test Evidence
 
-Audit date: 2026-07-14
+Audit date: 2026-07-15
 
 ## Latest Audit Update - Wallet allowance failure recovery
 
 - `npm.cmd exec vitest run tests/wallet-allowance-persistence.test.ts tests/wallet-atomic-persistence.test.ts tests/server-action-error-boundaries.test.ts`:
   3 files, 7 tests passed.
-- `npm.cmd exec vitest run`: 395 files, 2,981 tests passed.
+- `npm.cmd exec vitest run`: 400 files, 3,014 tests passed.
 - `npm.cmd run typecheck`, `npm.cmd run lint`, and clean `npm.cmd run build`: passed; 250 static pages generated.
 - Dependency audit: 0 vulnerabilities. No migration changed in this increment; the published migration audit
   remains 221 numbered SQL files with next version `0206`.
 - Due allowance reads and schedule advances now check database results. A failed wallet credit restores the
   prior schedule so the allowance remains due, and `ranCount`/`paidCents` include only successful credits.
+
+## Latest Audit Update - Wallet allowance cron recovery
+
+- `npm.cmd exec vitest run tests/cron-wallet-allowance-persistence.test.ts tests/wallet-allowance-persistence.test.ts`:
+  focused persistence contract passed.
+- The cron now checks the schedule write before crediting, restores `next_run_on` and `last_run_on` when
+  crediting fails, and returns a failed cron response instead of silently advancing an unpaid rule.
 
 ## Latest Audit Update - Chore state transition persistence
 

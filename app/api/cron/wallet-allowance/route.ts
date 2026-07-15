@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     const { data: rules, error } = await supabase
       .from('allowance_rules')
-      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on')
+      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')
       .eq('is_active', true)
       .lte('next_run_on', today)
       .limit(2000);
@@ -55,21 +55,42 @@ export async function GET(req: NextRequest) {
       if (!walletFeatureEnabled(tier, 'allowances')) { skippedFree++; continue; }
 
       const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence, today, 1);
-      if (runs > 0) {
-        const res = await creditChildWallet(supabase, {
-          familyId: rule.family_id,
-          childWalletId: rule.child_wallet_id,
-          amountCents: rule.amount_cents,
-          type: 'allowance',
-          description: 'Weekly allowance',
-          createdBy: null,
-          relatedType: 'allowance_rules',
-          relatedId: rule.id,
-          splitOverride: rule.split as Partial<Split> | null,
-        });
-        if (res.ok) paid++;
+      if (runs === 0) continue;
+
+      // Claim the schedule before the ledger write. If crediting fails, restore
+      // the prior schedule so the next cron run can retry without skipping pay.
+      const { error: scheduleError } = await supabase
+        .from('allowance_rules')
+        .update({ next_run_on: next, last_run_on: today })
+        .eq('id', rule.id)
+        .eq('family_id', rule.family_id)
+        .select('id')
+        .single();
+      if (scheduleError) throw scheduleError;
+
+      const res = await creditChildWallet(supabase, {
+        familyId: rule.family_id,
+        childWalletId: rule.child_wallet_id,
+        amountCents: rule.amount_cents,
+        type: 'allowance',
+        description: 'Weekly allowance',
+        createdBy: null,
+        relatedType: 'allowance_rules',
+        relatedId: rule.id,
+        splitOverride: rule.split as Partial<Split> | null,
+      });
+      if (!res.ok) {
+        const { error: rollbackError } = await supabase
+          .from('allowance_rules')
+          .update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
+          .eq('id', rule.id)
+          .eq('family_id', rule.family_id);
+        if (rollbackError) {
+          console.error('Allowance schedule rollback error:', rollbackError);
+        }
+        throw new Error(`Allowance credit failed: ${res.error}`);
       }
-      await supabase.from('allowance_rules').update({ next_run_on: next, last_run_on: today }).eq('id', rule.id);
+      paid++;
     }
 
     return NextResponse.json({ ok: true, due: (rules ?? []).length, paid, skippedFree });
