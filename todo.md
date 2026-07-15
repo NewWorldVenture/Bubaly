@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0328 - Onboarding provisioning acknowledged incomplete state writes
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Onboarding / tenant isolation / subscription state
+- Feature: Profile completion and compatibility first-family provisioning
+- Route: `completeProfileOnboardingAction`, `ensureActiveFamily`, and protected-page onboarding fallback
+- File or files: `app/onboarding/actions.ts`, `lib/server/ensure-family.ts`, `tests/onboarding-failure-safety.test.ts`
+- Database objects: `family_members`, `user_preferences`, `subscriptions`, `profiles`, and `families`
+- Affected roles: new account owners, existing multi-family users, family managers, and first-login provisioning workers
+- Scenario: membership/preference reads or subscription/active-family writes failed while onboarding returned success or updated every family membership for the user
+- Launch impact: onboarding could complete without a usable tenant/subscription state or mutate another family’s member presentation
+- Root cause: secondary Supabase result errors were ignored and a member color update lacked a family scope
+- Resolution: required reads and writes now fail closed, compatibility provisioning reports false on subscription/active-family failures, and color updates target the resolved family only
+- Tests performed: `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts`, `tests/ensure-family-concurrency.test.ts`, `tests/auth-context-integrity.test.ts` (11 focused tests); typecheck; lint; diff check
+- Evidence: focused validation and final full gate passed with 455 files/3,192 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run live invite/tier/first-login/cross-tenant drills and verify migrations 0210/0212 remotely
+
 #### TODO-0327 - Incomplete family context could be misclassified as onboarding
 
 - Status: `[~]` In progress

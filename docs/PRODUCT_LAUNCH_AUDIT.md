@@ -975,6 +975,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0328 - Onboarding provisioning acknowledged incomplete state writes
+
+- Timestamp: 2026-07-15 15:00 America/New_York
+- Service: Profile onboarding and compatibility first-family provisioning
+- Route: `completeProfileOnboardingAction`, `ensureActiveFamily`, and protected-page onboarding fallback
+- Affected files: `app/onboarding/actions.ts`, `lib/server/ensure-family.ts`, `tests/onboarding-failure-safety.test.ts`
+- Role: new account owner, existing multi-family user, family manager, and first-login provisioning worker
+- Scenario: membership/preference reads or subscription/active-family writes failed while onboarding returned success, or a color update touched every family membership
+- Severity: P0
+- Launch impact: onboarding could complete without valid tenant/subscription state or mutate another family’s UI data
+- Root cause: secondary Supabase result errors were ignored and the member color update lacked a family scope
+- Resolution: required reads and writes now fail closed, compatibility provisioning reports false on subscription/active-family failures, and color updates target the resolved family only
+- Supabase impact: no schema change; protects existing family_members/user_preferences/subscriptions/families boundaries
+- Tests run: `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts`, `tests/ensure-family-concurrency.test.ts`, `tests/auth-context-integrity.test.ts` (11 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and full local gate pass; live onboarding, tier, invite, and cross-tenant RLS evidence remains open
+- Status: Resolved in code; live onboarding/deployment evidence remains open
+- Remaining dependencies: apply and verify migrations 0210/0212, then execute first-login, invite, tier, and two-tenant drills
+
 ### PLA-0327 - Incomplete family context could be misclassified as onboarding
 
 - Timestamp: 2026-07-15 14:50 America/New_York

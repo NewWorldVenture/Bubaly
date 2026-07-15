@@ -35,4 +35,20 @@ describe('onboarding failure safety', () => {
     expect(source).not.toMatch(/if \(prefErr\) console\.error/);
     expect(source).not.toMatch(/return profileRes;/);
   });
+
+  it('fails closed on profile onboarding reads and scopes member updates to the resolved family', () => {
+    const source = readFileSync('app/onboarding/actions.ts', 'utf8');
+    expect(source).toContain('membershipError');
+    expect(source).toContain("onboardingFailure('membership lookup', membershipError");
+    expect(source).toContain('prefReadError');
+    expect(source).toContain(".update({ color }).eq('user_id', auth.user.id).eq('family_id', familyId)");
+  });
+
+  it('does not acknowledge compatibility provisioning after subscription state failures', () => {
+    const source = readFileSync('lib/server/ensure-family.ts', 'utf8');
+    expect(source).toContain('subReadErr');
+    expect(source).toContain('if (subReadErr)');
+    expect(source).toContain('active family upsert failed');
+    expect(source).toContain('return false;');
+  });
 });

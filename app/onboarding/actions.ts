@@ -304,17 +304,19 @@ export async function completeProfileOnboardingAction(input: {
   const admin = createServiceClient();
 
   // 3. Resolve the active family + apply the chosen colour to this member.
-  const { data: membership } = await admin
+  const { data: membership, error: membershipError } = await admin
     .from('family_members')
     .select('family_id')
     .eq('user_id', auth.user.id)
     .eq('is_active', true)
     .limit(1)
     .maybeSingle();
+  if (membershipError) return onboardingFailure('membership lookup', membershipError, 'Could not finish setting up your space.');
   const familyId = membership?.family_id ?? '';
+  if (!familyId) return { ok: false, error: 'Could not finish setting up your space.' };
   if (color) {
     const { error: colorErr } = await admin.from('family_members')
-      .update({ color }).eq('user_id', auth.user.id);
+      .update({ color }).eq('user_id', auth.user.id).eq('family_id', familyId);
     if (colorErr) return onboardingFailure('member colour update', colorErr, 'Could not save your profile colour.');
   }
 
@@ -323,8 +325,9 @@ export async function completeProfileOnboardingAction(input: {
   //    Settings card uses) but is stored DISABLED: App Lock stays off until the user
   //    flips it on in Settings — at which point they don't have to re-enter the PIN.
   //    Service-role client so it persists reliably under this env's flaky RLS writes.
-  const { data: prefRow } = await admin
+  const { data: prefRow, error: prefReadError } = await admin
     .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
+  if (prefReadError) return onboardingFailure('profile preferences lookup', prefReadError, 'Could not finish setting up your profile.');
   const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
   const age = normalizeAge(inputAge);

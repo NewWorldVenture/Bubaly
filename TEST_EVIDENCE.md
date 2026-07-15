@@ -2,6 +2,16 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Onboarding Provisioning Boundaries
+
+- Focused onboarding/provisioning suites: 4 files, 11 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- Profile onboarding now checks membership and preference reads and scopes member color updates to the resolved family. Compatibility family provisioning now fails when subscription or active-family persistence fails.
+- Final full gate after this increment: 455 test files, 3,192 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
+- Live invite, subscription-tier, first-login, and cross-tenant RLS evidence remain open.
+
 ## Latest Local Evidence - Auth Context Tenant Boundary
 
 - Focused authentication/tenant suites: 4 files, 8 tests passed.

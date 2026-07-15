@@ -61,11 +61,12 @@ export async function ensureActiveFamily(
   }
   if (existing && existing.length > 0) return true;
 
-  const { data: profile } = await admin
+  const { data: profile, error: profileErr } = await admin
     .from('profiles')
     .select('display_name, full_name')
     .eq('id', user.id)
     .maybeSingle();
+  if (profileErr) console.error('[ensure-family] profile lookup failed; using auth metadata', profileErr);
   const ownerName = deriveName(user, profile?.display_name ?? profile?.full_name ?? null);
   const familyName = ownerName.endsWith('s') ? `${ownerName}' Family` : `${ownerName}'s Family`;
 
@@ -111,14 +112,21 @@ export async function ensureActiveFamily(
 
   // Ensure a trial subscription exists (the trigger may have created one; only
   // insert when missing so we never duplicate). Non-fatal.
-  const { data: existingSub } = await admin
+  const { data: existingSub, error: subReadErr } = await admin
     .from('subscriptions').select('id').eq('family_id', family.id).limit(1);
+  if (subReadErr) {
+    console.error('[ensure-family] subscription lookup failed', subReadErr);
+    return false;
+  }
   if (!existingSub || existingSub.length === 0) {
     const { error: subErr } = await admin.from('subscriptions').insert({
       family_id: family.id, plan: 'free', status: 'trialing',
       current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
     });
-    if (subErr) console.error('[ensure-family] trial subscription insert failed', subErr);
+    if (subErr) {
+      console.error('[ensure-family] trial subscription insert failed', subErr);
+      return false;
+    }
   }
 
   // Make it the active family.
@@ -126,7 +134,10 @@ export async function ensureActiveFamily(
     { user_id: user.id, active_family_id: family.id },
     { onConflict: 'user_id' },
   );
-  if (prefErr) console.error('[ensure-family] active family upsert failed', prefErr);
+  if (prefErr) {
+    console.error('[ensure-family] active family upsert failed', prefErr);
+    return false;
+  }
   }
 
   // Confirm the membership is in place before we report success.
