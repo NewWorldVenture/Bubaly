@@ -1,0 +1,29 @@
+# Supabase Wiring Matrix
+
+This matrix tracks whether a feature is genuinely wired through Supabase rather than merely rendering
+successfully. `Partial` means some evidence exists but the complete schema, RLS, runtime, and failure
+contract is not yet verified.
+
+| Domain | Tables/relationships | RLS/auth boundary | RPC/API/storage/realtime | Status | Evidence or gap |
+| --- | --- | --- | --- | --- | --- |
+| Auth and families | `auth.users`, `families`, `family_members` | session family membership and role checks | Supabase Auth, middleware, invite APIs | Partial | Auth Admin users probe still returns HTTP 500 |
+| Onboarding | profiles, invites, subscriptions, family relations | invite token and family-scoped policies | email/API flows | Partial | Live invite and tier matrix pending |
+| Wallet | wallet tables, goals, buckets, immutable transactions | family RLS plus manager-checked RPCs | `0205`, `0208`, typed RPC wrappers | Partial | Goal RPC is published; remote migration ledger/deployment still needs proof |
+| Billing | subscriptions, checkout/session records, Stripe refs | family/owner/admin boundaries | Stripe checkout, webhooks, portal | Partial | Live idempotency/refund and secret validation pending |
+| Calendar/planning | events, routines, tasks, provider accounts | family member policies | Google/provider sync, cron | Partial | Conflict and callback verification pending |
+| Chores/rewards | chores, assignments, submissions, rewards | child submit vs parent review | server actions, notifications | Partial | Transition repairs covered; full UI and role traversal pending |
+| Food/meals | meals, pantry, grocery lists, recipes | family-scoped policies | AI routes, CRUD actions | Partial | AI persistence fixed; complete seed and import paths pending |
+| Messages/files | messages, threads, files, documents | family policies and storage policies | Storage buckets, signed URLs, realtime | Partial | Bucket policy and delete/replace audit pending |
+| Safety/guardian | contacts, rules, callbacks, events | guardian/parent boundaries | SMS/provider callbacks, cron | Partial | Callback live smoke and privacy review pending |
+| Vacations | vacations, itinerary, activities, budgets | family/vacation ownership | AI and external travel routes | Partial | AI persistence fixed; complete external workflow pending |
+| Marketplace | listings, offers, orders, circles, media | buyer/seller/admin RLS | auction/order RPCs, storage | Partial | Several atomic/RLS repairs exist; full buyer/seller matrix pending |
+| AI | conversations, messages, generated artifacts | family/user ownership and rate limits | OpenAI/Anthropic routes | Partial | Ownership and persistence tests exist; provider outage/cost proof pending |
+| Notifications | notifications, devices, preferences | family/user ownership | push, email, realtime, cron | Partial | Job-by-job delivery/replay audit pending |
+| Admin/marketing | admin audit, content, campaigns, feedback | Super Admin/support roles | admin APIs, media, webhooks | Partial | Live permission and audit-log proof pending |
+| Observability | audit logs, webhook events, operational records | operator/admin access | instrumentation, logs, alerts | Partial | Production alert routing and retention pending |
+
+## Wiring Completion Gate
+
+Each row requires: migration present and applied, relationships/indexes reviewed, RLS tested with at least
+two tenants and all relevant roles, storage/realtime/functions verified where used, runtime error handling
+tested, and a production-safe seed/profile path demonstrated.

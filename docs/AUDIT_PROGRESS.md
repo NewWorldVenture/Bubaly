@@ -1,0 +1,55 @@
+# FamilyOS Launch Audit Progress
+
+Audit started: 2026-07-15
+Owner: Codex
+Current decision: NO-GO
+
+## Calculation
+
+Progress is calculated only from audit units whose code, Supabase contract, tests, documentation,
+commit, and pushed verification are complete. Partial work contributes zero until the unit passes its
+completion gate.
+
+Formula: `verified completed weight / total audit weight * 100`
+
+Current calculation: `10 / 100 * 100 = 10.0%`
+
+## Weighted Inventory
+
+| ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
+| --- | --- | ---: | --- | --- | --- |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 403 Vitest files, 3,024 tests; clean 250-route build; lint/typecheck/audit | Keep green after every repair |
+| A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 224 migration audit; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
+| A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Existing auth/RLS tests and schema probes | Test every role, family boundary, session edge and live RLS path |
+| A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Existing focused tests and route inventory | Page/workflow/role matrix plus live invite and tier tests |
+| A-05 | Home and dashboard command surfaces | 3 | In progress | Existing route and component tests | Verify every dashboard action, empty state, mobile state and error |
+| A-06 | Calendar, planning, routines and sync | 5 | In progress | Supabase feature notes and focused unit coverage | Verify CRUD, recurrence, provider sync, conflicts and permissions |
+| A-07 | Chores, missions, rewards and proof review | 5 | In progress | Transition persistence repair and regression tests | Complete page, role, upload, dispute and notification audit |
+| A-08 | Wallet, goals, allowances, transfers and treasury | 7 | In progress | Atomic wallet RPCs, goal funding repair, allowance recovery tests | Verify every wallet page, RPC deployment, concurrency and reconciliation |
+| A-09 | Billing, subscriptions, Stripe checkout and public pay flows | 6 | In progress | Existing Stripe and billing tests | Live webhook/idempotency, tier, failure and refund smoke tests |
+| A-10 | Meals, groceries, nutrition and food household data | 4 | In progress | Existing meal planning persistence repair | Verify all CRUD, AI, imports, empty states and relational seed data |
+| A-11 | Messages, files, documents and storage | 5 | In progress | Feature-specific Supabase notes | Verify upload/download/delete, bucket policies, previews and tenant isolation |
+| A-12 | Guardian, family safety, contacts and escalation | 5 | In progress | Existing safety tests and schema notes | Verify role boundaries, SMS/provider callbacks, throttling and privacy |
+| A-13 | Vacations, travel, itineraries and concierge | 4 | In progress | Vacation AI persistence repair | Verify every trip workflow, external integration, media and recovery path |
+| A-14 | Marketplace, listings, offers, auctions and orders | 5 | In progress | RLS and atomic auction repairs | Verify buyer/seller roles, media, payments, disputes and inventory races |
+| A-15 | AI assistants, chat, voice and generated artifacts | 5 | In progress | AI persistence, ownership and request-guard tests | Verify model failures, quotas, privacy, streaming and cost controls |
+| A-16 | Notifications, reminders, automations and cron jobs | 4 | In progress | Cron auth and allowance recovery tests | Verify schedules, retries, deduplication, delivery and observability |
+| A-17 | Admin, marketing, social and content management | 4 | In progress | Admin route inventory and focused feature tests | Verify Super Admin permissions, CRUD, media, real-time saves and audit log |
+| A-18 | Google, email, push, Stripe and other third-party integrations | 5 | In progress | Provider-specific tests and OAuth hardening | Live sandbox callbacks, secret rotation, retry and outage behavior |
+| A-19 | Mobile, responsive, accessibility and browser compatibility | 5 | In progress | Public Playwright/axe/overflow baseline | Page-by-page device matrix, keyboard, screen reader and touch testing |
+| A-20 | E2E interactions, performance, observability, backups and deployment | 7 | In progress | Public E2E baseline and production build | Full interaction coverage, restore drill, monitoring and launch smoke |
+|  | **Total** | **100** |  | **Verified: 10** |  |
+
+## Completion Rules
+
+- `Verified` requires implementation, Supabase wiring evidence, focused and broad tests, documentation,
+  commit, push, and a clean post-push status.
+- `In progress` means evidence exists for part of the unit but the unit is not launch-complete.
+- `Blocked` is reserved for a repeated external dependency that prevents meaningful progress; it does not
+  make the unit complete.
+- The percentage must never be increased to reflect code volume, test count, or intent.
+
+## Update Cadence
+
+Every 30 minutes of active work produces a dated record under `docs/progress/` with the calculation,
+completed evidence, blockers, validation state, and next plan.
