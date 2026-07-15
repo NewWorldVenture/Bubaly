@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:04:00 -04:00
+- Last updated: 2026-07-15 13:06:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -40,7 +40,7 @@
 - Root cause: Promise.all results discarded Supabase errors and treated all failed reads as empty arrays
 - Resolution: saved-search failures now render a retryable error state; matching-listing and saved-state failures are logged and surfaced in an accessible Marketplace alerts data-health warning
 - Tests performed: `tests/marketplace-alerts-read-boundary.test.ts` (2 focused tests); full 444-file/3,151-test suite; typecheck; lint; dependency audit; production build; diff check
-- Evidence: source commit pending publication; live alert/RLS/role/browser workflow evidence remains open
+- Evidence: source commit `4f06b696`; branch and `main` publication verified; live alert/RLS/role/browser workflow evidence remains open
 - Remaining dependencies: run isolated saved-search create/update/delete and cross-family listing visibility drills against deployed Supabase
 
 #### TODO-0312 - Marketplace Orders hid transaction and fee-read failures as incomplete data

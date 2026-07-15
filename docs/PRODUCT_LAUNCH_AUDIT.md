@@ -760,7 +760,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: primary saved-search failure now renders a retryable ErrorState; matching-listing and saved-state failures are logged and shown in an accessible data-health warning
 - Supabase impact: no schema change; alert and listing reads remain scoped to the active family/member permissions
 - Tests run: `tests/marketplace-alerts-read-boundary.test.ts` (2 focused tests); full 444-file/3,151-test suite; typecheck; lint; dependency audit; production build; diff check
-- Validation evidence: source repair pending publication; build generated 250 routes; live alert/RLS, role, browser, and cross-family evidence remain open
+- Validation evidence: source commit `4f06b696`; build generated 250 routes; branch and `main` publication verified; live alert/RLS, role, browser, and cross-family evidence remain open
 - Status: Resolved in code; full verification and live workflow evidence remain open
 - Remaining dependencies: execute isolated alert CRUD, match-count, save-state, and family-isolation drills against deployed Supabase
 

@@ -1502,4 +1502,4 @@ Audit date: 2026-07-15
 - Full `npm.cmd test`: 444 files, 3,151 tests passed.
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime warning remains when emitted.
-- Source commit: pending publication.
+- Source commit: `4f06b696`; branch and `main` publication verified.
