@@ -15,6 +15,16 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/gift',
   // Public exit-intent offer resolve + metric beacon (anonymous visitors).
   '/api/exit-intent',
+  // Public contact, blog, and marketing telemetry endpoints. These routes
+  // apply their own bounded-body, rate-limit, and consent/token controls.
+  '/api/contact',
+  '/api/blog',
+  '/api/ab',
+  '/api/mkt',
+  '/api/services/descriptions',
+  // Public gift-link AI assistant; the gift token and durable IP limiter are
+  // the authorization boundary for this narrowly scoped read path.
+  '/api/ai/gift',
   // Public marketing landing pages + their metric beacon.
   '/lp',
   '/api/lp/track',
@@ -24,6 +34,12 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
+  // Scheduled jobs, internal callbacks, and provider webhooks authenticate
+  // themselves with a shared secret or provider signature in their route.
+  '/api/cron',
+  '/api/concierge-calls',
+  '/api/guardian',
+  '/api/email/welcome',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
   '/api/webhooks',

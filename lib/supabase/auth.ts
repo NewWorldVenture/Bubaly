@@ -30,7 +30,8 @@ function throwContextUnavailable(scope: string, error: unknown): never {
 /** Returns the signed-in user or null. */
 export async function getUser() {
   const supabase = await createServer();
-  const { data } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  if (error) console.error('[auth] user lookup failed', error);
   return data.user;
 }
 
@@ -41,12 +42,17 @@ export async function getUser() {
  */
 export async function isSuperAdmin(): Promise<boolean> {
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    console.error('[auth] super-admin user lookup failed', authError);
+    return false;
+  }
   if (!auth.user) return false;
   // Code/env allowlist first — works even if the super_admins migration (0008)
   // hasn't been applied to this database yet.
   if (isSuperAdminEmail(auth.user.email)) return true;
-  const { data } = await supabase.rpc('is_super_admin');
+  const { data, error } = await supabase.rpc('is_super_admin');
+  if (error) console.error('[auth] super-admin allowlist lookup failed', error);
   return data === true;
 }
 
@@ -67,7 +73,8 @@ export async function effectivePlanLevel(rawLevel: number): Promise<number> {
  */
 export async function getUserContext(): Promise<UserContext | { needsFamily: true } | null> {
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throwContextUnavailable('authenticated user', authError);
   if (!auth.user) return null;
 
   const { data: members, error: membersError } = await supabase

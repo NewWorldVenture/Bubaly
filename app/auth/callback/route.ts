@@ -21,8 +21,14 @@ export async function GET(request: Request) {
       // Super admins land on the admin console; everyone else on the dashboard.
       // Check the env/code allowlist as well as the DB RPC, so this works even
       // before migration 0008 is applied.
-      const { data: { user } } = await supabase.auth.getUser();
-      const isAdmin = isSuperAdminEmail(user?.email) || (await supabase.rpc('is_super_admin')).data === true;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        if (userError) console.error('[auth-callback] authenticated user lookup failed', userError);
+        return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+      }
+      const { data: dbAdmin, error: adminLookupError } = await supabase.rpc('is_super_admin');
+      if (adminLookupError) console.error('[auth-callback] super-admin lookup failed', adminLookupError);
+      const isAdmin = isSuperAdminEmail(user.email) || dbAdmin === true;
 
       // Identity stitch (best-effort): attribute the anonymous visitor spine to
       // this now-known user. Covers the OAuth / magic-link / email-confirm paths;
@@ -43,10 +49,14 @@ export async function GET(request: Request) {
       // the caller didn't request a specific deep link (next === '/home').
       let destination = isAdmin && next === '/home' ? '/admin' : next;
       if (next === '/home' && user && !isAdmin) {
-        const { data: membership } = await supabase
+        const { data: membership, error: membershipError } = await supabase
           .from('family_members').select('family_id')
           .eq('user_id', user.id).eq('is_active', true).limit(1);
-        if (!membership || membership.length === 0) destination = '/onboarding';
+        if (membershipError) {
+          console.error('[auth-callback] membership lookup failed', membershipError);
+          return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+        }
+        if (membership.length === 0) destination = '/onboarding';
       }
 
       const res = NextResponse.redirect(new URL(destination, url.origin));

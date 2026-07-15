@@ -45,12 +45,14 @@ export function AdminShell({
   adminEmail,
   pendingInviteCount,
   notifications = [],
+  dataWarnings = [],
 }: {
   children: React.ReactNode;
   adminName: string;
   adminEmail: string | null;
   pendingInviteCount: number;
   notifications?: AdminNotificationRow[];
+  dataWarnings?: string[];
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -160,6 +162,18 @@ export function AdminShell({
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-6xl">{children}</div>
+          {dataWarnings.length > 0 && (
+            <div
+              role="status"
+              aria-label="Admin data health"
+              className="mx-auto mt-5 max-w-6xl rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+            >
+              <p className="font-semibold">Some admin data is temporarily unavailable.</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {dataWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </div>
+          )}
         </main>
       </div>
     </div>

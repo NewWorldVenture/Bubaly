@@ -12,7 +12,7 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   if (!superAdmin) redirect('/dashboard');
 
   const supabase = createServiceClient();
-  const [{ data: profile }, { count: pendingInviteCount }, { data: notifications }] = await Promise.all([
+  const [profileRes, invitesRes, notificationsRes] = await Promise.all([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
     supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('admin_notifications')
@@ -21,14 +21,29 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
       .limit(20),
   ]);
 
-  const adminName = profile?.full_name || profile?.email || user.email || 'Admin';
+  const dataWarnings: string[] = [];
+  if (profileRes.error) {
+    console.error('[admin-shell] profile read failed:', profileRes.error);
+    dataWarnings.push('Your admin profile could not be loaded; your account email is shown instead.');
+  }
+  if (invitesRes.error) {
+    console.error('[admin-shell] pending invite count read failed:', invitesRes.error);
+    dataWarnings.push('The pending invitation count is unavailable.');
+  }
+  if (notificationsRes.error) {
+    console.error('[admin-shell] notification feed read failed:', notificationsRes.error);
+    dataWarnings.push('The admin notification feed is unavailable.');
+  }
+
+  const adminName = profileRes.data?.full_name || profileRes.data?.email || user.email || 'Admin';
 
   return (
     <AdminShell
       adminName={adminName}
       adminEmail={user.email ?? null}
-      pendingInviteCount={pendingInviteCount ?? 0}
-      notifications={notifications ?? []}
+      pendingInviteCount={invitesRes.count ?? 0}
+      notifications={notificationsRes.data ?? []}
+      dataWarnings={dataWarnings}
     >
       {children}
     </AdminShell>
