@@ -225,3 +225,10 @@ export function statusTally(ideas: readonly IdeaRow[]): Record<FeedbackStatus, n
   for (const i of ideas) if (isFeedbackStatus(i.status)) base[i.status] += 1;
   return base;
 }
+
+/** Count ideas vs bug reports; a missing/unknown kind counts as an idea. */
+export function kindTally(ideas: readonly IdeaRow[]): Record<FeedbackKind, number> {
+  const base: Record<FeedbackKind, number> = { idea: 0, bug: 0 };
+  for (const i of ideas) base[isFeedbackKind(i.kind) ? i.kind : 'idea'] += 1;
+  return base;
+}

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Lightbulb, ArrowBigUp, Rocket, Heart } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { LEGEND_STATUSES, STATUS_META, statusTally, type IdeaRow } from '@/lib/feedback/board';
+import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, statusTally, kindTally, type IdeaRow } from '@/lib/feedback/board';
 import { cn } from '@/lib/utils/cn';
 import { FeedbackBoard } from './feedback-board';
 
@@ -30,6 +30,7 @@ export default async function FeedbackPage() {
   const ideas = (ideasRes.data ?? []) as IdeaRow[];
   const votedIds = ((votesRes.data ?? []) as { idea_id: string }[]).map((v) => v.idea_id);
   const tally = statusTally(ideas);
+  const kinds = kindTally(ideas);
 
   return (
     <div className="pb-28">
@@ -93,6 +94,19 @@ export default async function FeedbackPage() {
                 </li>
               ))}
             </ol>
+          </div>
+
+          {/* Ideas vs bugs */}
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <h3 className="text-sm font-bold">On the board</h3>
+            <ul className="mt-3 space-y-2.5">
+              {KIND_ORDER.map((k) => (
+                <li key={k} className="flex items-center justify-between gap-2">
+                  <span className="text-xs">{KIND_META[k].emoji} {KIND_META[k].label}</span>
+                  <span className="text-[11px] font-semibold text-muted tabular-nums">{kinds[k]}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Status legend */}

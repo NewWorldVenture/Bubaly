@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   statusMeta, isFeedbackStatus, categoryMeta, impactMeta, LEGEND_STATUSES,
-  normalizeIdea, sortIdeas, toggleVote, trendingScore, ageInDays, statusTally,
+  normalizeIdea, sortIdeas, toggleVote, trendingScore, ageInDays, statusTally, kindTally,
   TITLE_MAX, type IdeaRow,
 } from '@/lib/feedback/board';
 
@@ -12,6 +12,7 @@ function idea(over: Partial<IdeaRow>): IdeaRow {
     status: over.status ?? 'under_review', admin_note: null, image_url: null,
     author_name: 'Test', vote_count: over.vote_count ?? 0, comment_count: over.comment_count ?? 0,
     pinned: over.pinned ?? false, created_at: over.created_at ?? '2026-01-01T00:00:00Z',
+    ...('kind' in over ? { kind: over.kind } : {}),
   };
 }
 
@@ -121,5 +122,19 @@ describe('statusTally', () => {
     expect(t.shipped).toBe(2);
     expect(t.planned).toBe(1);
     expect(t.under_review).toBe(0);
+  });
+});
+
+describe('kindTally', () => {
+  it('counts ideas vs bugs, treating missing/unknown kind as idea', () => {
+    const t = kindTally([
+      idea({ kind: 'bug' }), idea({ kind: 'bug' }),
+      idea({ kind: 'idea' }), idea({ kind: undefined }), idea({ kind: 'nonsense' }),
+    ]);
+    expect(t.bug).toBe(2);
+    expect(t.idea).toBe(3);
+  });
+  it('is zeroed for an empty board', () => {
+    expect(kindTally([])).toEqual({ idea: 0, bug: 0 });
   });
 });
