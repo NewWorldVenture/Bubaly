@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0340 - Admin Sync hid provider and queue read failures as healthy metrics
+
+- Timestamp: 2026-07-15 16:35 America/New_York
+- Service: Super Admin Sync Platform and third-party integration operations
+- Route: `/admin/sync`
+- Affected files: `app/(app)/admin/sync/page.tsx`, `tests/admin-sync-read-boundary.test.ts`
+- Role: Super Admin, integration operator, and household provider-sync user
+- Scenario: connection, fatal provider error, dead-letter job, webhook-signature, or provider-catalog reads could fail while the page rendered zero failures and a complete catalog.
+- Severity: P1
+- Launch impact: operators could miss provider outages, failed jobs, or signature failures and assume synchronization was healthy.
+- Root cause: Promise query results were used without checking error fields.
+- Resolution: all five required reads now fail visibly with a retryable sanitized ErrorState before metrics are rendered.
+- Supabase impact: no schema change; service-role sync operational reads now have explicit failure contracts.
+- Tests run: `tests/admin-sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 460 test files, 3,206 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: pending source commit
+- Status: Resolved in code; live callback, retry, RLS, role, browser, and deployed integration evidence remains open
+- Remaining dependencies: provider sandbox callbacks, dead-letter recovery, signature-failure drills, and deployed Admin Sync verification
+
 ### PLA-0339 - Admin dashboard hid command-center read failures as zero or empty metrics
 
 - Timestamp: 2026-07-15 16:20 America/New_York

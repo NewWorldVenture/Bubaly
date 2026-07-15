@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:20:00 -04:00
+- Last updated: 2026-07-15 16:35:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `167524d9` adds Admin Security/Auth Admin and command-center read safety; live provider and deployment evidence remains open
+- Commit: latest source increment adds Admin Security/Auth Admin, command-center, and Sync read safety; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0340 - Admin Sync hid provider and queue read failures as healthy metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Third-party integrations / sync operations / Supabase failure handling
+- Feature: Super Admin Sync Platform
+- Route: `/admin/sync`
+- File or files: `app/(app)/admin/sync/page.tsx`, `tests/admin-sync-read-boundary.test.ts`
+- Database objects: `sync_connections`, `sync_provider_errors`, `sync_jobs`, `sync_webhook_events`, and `sync_providers`
+- Affected roles: Super Admin, integration operators, and households using provider sync
+- Scenario: connection, fatal provider error, dead-letter, webhook signature, or provider-catalog reads could fail while the page rendered zero counts and a complete catalog.
+- Launch impact: operators could miss failed sync jobs, security-signature failures, or provider outages and assume data synchronization was healthy.
+- Root cause: Promise query results were used without checking their error fields.
+- Required remediation: check all five reads, log diagnostics server-side, and show a retryable page-level error before rendering operations.
+- Implementation notes: the page now fails visibly on any required read failure and keeps the existing encryption-key fail-closed signal.
+- Test plan: focused sync read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest full gate passed with 460 files/3,206 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: live provider callbacks, retry/dead-letter drills, RLS, and deployed Admin Sync evidence.
 
 #### TODO-0339 - Admin dashboard hid command-center read failures as zero or empty metrics
 

@@ -3,6 +3,7 @@ import { RefreshCw, Plug, AlertTriangle, Webhook, KeyRound } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind } from '@/lib/sync/capabilities';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 
@@ -21,6 +22,21 @@ export default async function AdminSyncPage() {
     supabase.from('sync_webhook_events').select('id', { count: 'exact', head: true }).eq('signature_ok', false),
     supabase.from('sync_providers').select('provider, label, is_enabled, auth_kind'),
   ]);
+
+  const readError = conns.error ?? errors.error ?? deadJobs.error ?? webhookFails.error ?? providers.error;
+  if (readError) {
+    console.error('[admin-sync] sync platform read failed', readError);
+    return (
+      <div className="module-page space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync Platform</h1>
+          <p className="mt-1 text-sm text-muted">Provider health, failed jobs, and connection status across all families.</p>
+        </div>
+        <ErrorState message="Could not load sync platform data from Supabase. Refresh and try again." />
+        <a href="/admin/sync" className="text-sm font-medium text-brand-text underline">Refresh sync overview</a>
+      </div>
+    );
+  }
 
   const connRows = conns.data ?? [];
   const activeConns = conns.count ?? connRows.length;
