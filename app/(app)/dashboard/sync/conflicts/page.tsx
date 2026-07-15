@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
 
 export const metadata: Metadata = { title: 'Sync conflicts' };
@@ -19,13 +20,24 @@ const KIND_LABEL: Record<string, string> = {
 export default async function SyncConflictsPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: conflicts } = await supabase
+  const { data: conflicts, error } = await supabase
     .from('sync_conflicts')
     .select('id, provider, item_type, conflict_kind, status, created_at')
     .eq('family_id', ctx.active.familyId)
     .eq('status', 'open')
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (error) {
+    console.error('[sync-conflicts] family conflict read failed', error);
+    return (
+      <div className="module-page">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Conflicts</h1>
+        <ErrorState message="Could not load your sync conflicts from Supabase. Refresh and try again." />
+        <a href="/dashboard/sync/conflicts" className="text-sm font-medium text-brand-text underline">Refresh conflicts</a>
+      </div>
+    );
+  }
 
   const rows = conflicts ?? [];
 

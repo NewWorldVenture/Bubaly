@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
@@ -100,12 +101,26 @@ export default async function SyncProviderPage({
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: account } = await supabase
+  const { data: account, error } = await supabase
     .from('sync_accounts')
     .select('id, display_name, external_id, sync_status, last_synced_at')
     .eq('family_id', ctx.active.familyId)
     .eq('provider', provider)
     .maybeSingle();
+
+  if (error) {
+    console.error('[sync-provider] provider account read failed', error);
+    return (
+      <div className="module-page">
+        <Link href="/dashboard/sync/accounts" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
+          <ArrowLeft className="h-4 w-4" /> All accounts
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
+        <ErrorState message="Could not load this provider account from Supabase. Refresh and try again." />
+        <a href={`/dashboard/sync/accounts/${provider}`} className="text-sm font-medium text-brand-text underline">Refresh provider account</a>
+      </div>
+    );
+  }
 
   const setup = SETUP[provider];
   const caps = CAPABILITIES[provider];

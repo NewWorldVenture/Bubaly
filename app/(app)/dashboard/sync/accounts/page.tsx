@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, isSupported, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
@@ -19,10 +20,21 @@ export default async function SyncAccountsPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: accounts } = await supabase
+  const { data: accounts, error } = await supabase
     .from('sync_accounts')
     .select('id, provider, display_name, sync_status, external_id, last_synced_at')
     .eq('family_id', ctx.active.familyId);
+
+  if (error) {
+    console.error('[sync-accounts] connected-account read failed', error);
+    return (
+      <div className="module-page">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Connected accounts</h1>
+        <ErrorState message="Could not load your connected accounts from Supabase. Refresh and try again." />
+        <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">Refresh connected accounts</Link>
+      </div>
+    );
+  }
 
   const byProvider = new Map((accounts ?? []).map((a) => [a.provider, a]));
 
