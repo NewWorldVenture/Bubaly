@@ -18,14 +18,14 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 
 | ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
 | --- | --- | ---: | --- | --- | --- |
-| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 447 Vitest files, 3,157 tests; 250-route production build; lint/typecheck/audit | Keep green after every repair |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 448 Vitest files, 3,159 tests; 250-route production build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 229 migration audit; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
 | A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Auth/admin shell failure contracts, OAuth membership fail-closed handling, middleware public/internal API boundary tests, tenant/RLS contracts, and migrations 0211/0212; live Auth Admin and cross-tenant probes still open | Apply 0211/0212, test every role/family boundary/session edge, and run live RLS paths |
 | A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization, per-user family claim, and locked first-family provisioning contracts; focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |
 | A-05 | Home and dashboard command surfaces | 3 | In progress | Existing route and component tests | Verify every dashboard action, empty state, mobile state and error |
 | A-06 | Calendar, planning, routines and sync | 5 | In progress | Supabase feature notes and focused unit coverage | Verify CRUD, recurrence, provider sync, conflicts and permissions |
 | A-07 | Chores, missions, rewards and proof review | 5 | In progress | Transition persistence repair and regression tests | Complete page, role, upload, dispute and notification audit |
-| A-08 | Wallet, goals, allowances, transfers and treasury | 7 | In progress | Atomic wallet RPCs, goal funding repair, allowance recovery tests | Verify every wallet page, RPC deployment, concurrency and reconciliation |
+| A-08 | Wallet, goals, allowances, transfers and treasury | 7 | In progress | Atomic wallet RPCs, goal funding repair, allowance recovery tests, and Send/Activity/Treasury read-boundary coverage | Verify every wallet page, RPC deployment, concurrency and reconciliation |
 | A-09 | Billing, subscriptions, Stripe checkout and public pay flows | 6 | In progress | Existing Stripe and billing tests | Live webhook/idempotency, tier, failure and refund smoke tests |
 | A-10 | Meals, groceries, nutrition and food household data | 4 | In progress | Existing meal planning persistence repair | Verify all CRUD, AI, imports, empty states and relational seed data |
 | A-11 | Messages, files, documents and storage | 5 | In progress | Feature-specific Supabase notes | Verify upload/download/delete, bucket policies, previews and tenant isolation |

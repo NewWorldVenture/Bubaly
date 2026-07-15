@@ -1527,3 +1527,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - Following now distinguishes a failed follow read from an empty feed and surfaces saved, store, and listing failures; Collections does the same for collections, items, and collection listings in directory and detail views.
 - Source commit: `2f844cc3`; branch and `main` publication verified.
+
+## Latest Local Evidence - Wallet Read Failure
+
+- Focused wallet read-boundary suite: 1 file, 2 tests passed.
+- Full `npm.cmd test`: 448 files, 3,159 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `git diff --check`: passed.
+- Wallet Send Money, Activity, and Treasury now fail clearly on primary wallet reads and surface dependent ledger/identity/configuration failures instead of silently deriving zero or incomplete financial views.
+- Source commit: pending publication.

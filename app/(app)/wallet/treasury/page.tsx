@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Treasury' };
 export const dynamic = 'force-dynamic';
@@ -13,12 +15,17 @@ export default async function WalletTreasuryPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  const dataWarnings: string[] = [];
 
-  const { data: wallet } = await supabase
+  const { data: wallet, error: walletError } = await supabase
     .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  if (walletError) {
+    console.error('[wallet-treasury] Wallet read failed', walletError);
+    return <ErrorState message="Could not load the family wallet. Refresh and try again." />;
+  }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
-  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }, { data: rules }] = await Promise.all([
+  const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }, { data: goals, error: goalsError }, { data: rules, error: rulesError }] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
     supabase.from('wallet_transactions')
@@ -32,6 +39,12 @@ export default async function WalletTreasuryPage() {
       .select('child_wallet_id, split')
       .eq('family_id', familyId),
   ]);
+  if (childWalletsError) { console.error('[wallet-treasury] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
+  if (bucketsError) { console.error('[wallet-treasury] Wallet buckets read failed', bucketsError); dataWarnings.push('Wallet buckets'); }
+  if (txnsError) { console.error('[wallet-treasury] Wallet transactions read failed', txnsError); dataWarnings.push('Wallet transactions'); }
+  if (membersError) { console.error('[wallet-treasury] Family members read failed', membersError); dataWarnings.push('Family members'); }
+  if (goalsError) { console.error('[wallet-treasury] Wallet goals read failed', goalsError); dataWarnings.push('Wallet goals'); }
+  if (rulesError) { console.error('[wallet-treasury] Wallet rules read failed', rulesError); dataWarnings.push('Wallet rules'); }
 
   const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -100,16 +113,24 @@ export default async function WalletTreasuryPage() {
   }
 
   return (
-    <TreasuryView
-      familyTotal={familyTotal}
-      wallets={children}
-      thisMonthIn={thisMonthIn}
-      thisMonthOut={thisMonthOut}
-      totalGoalSaved={totalGoalSaved}
-      totalGoalTargets={totalGoalTargets}
-      totalActiveGoals={totalActiveGoals}
-      trend={trend}
-      canManage={isManager(ctx.active.role)}
-    />
+    <div>
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Wallet treasury data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some treasury details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
+      <TreasuryView
+        familyTotal={familyTotal}
+        wallets={children}
+        thisMonthIn={thisMonthIn}
+        thisMonthOut={thisMonthOut}
+        totalGoalSaved={totalGoalSaved}
+        totalGoalTargets={totalGoalTargets}
+        totalActiveGoals={totalActiveGoals}
+        trend={trend}
+        canManage={isManager(ctx.active.role)}
+      />
+    </div>
   );
 }

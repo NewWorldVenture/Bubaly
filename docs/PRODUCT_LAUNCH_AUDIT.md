@@ -746,6 +746,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
+### PLA-0317 - Wallet pages hid wallet and ledger read failures as inactive or zero data
+
+- Timestamp: 2026-07-15 13:24 America/New_York
+- Service: Wallet Send Money, Activity, and Family Treasury read boundaries
+- Route: `/wallet/send`, `/wallet/activity`, `/wallet/treasury`
+- Affected files: `app/(app)/wallet/send/page.tsx`, `app/(app)/wallet/activity/page.tsx`, `app/(app)/wallet/treasury/page.tsx`, `tests/wallet-read-boundary.test.ts`
+- Role: household manager, parent, and member with wallet visibility
+- Scenario: failed wallet or dependent ledger reads rendered activation prompts, zero balances, incomplete history, or fallback identity data
+- Severity: P0
+- Launch impact: users could make financial decisions from incomplete data or be offered an unsafe activation path during an outage
+- Root cause: Supabase result errors were discarded by all three server-rendered wallet pages
+- Resolution: primary wallet failure now renders a retryable ErrorState; dependent failures are logged and shown in accessible page-specific data-health warnings
+- Supabase impact: no schema change; all reads remain family scoped and preserve existing wallet permissions
+- Tests run: `tests/wallet-read-boundary.test.ts` (2 focused tests); full 448-file/3,159-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source repair pending publication; build generated 250 routes; live wallet/RLS, role, concurrency, and payment workflow evidence remain open
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated wallet activation, balance, send, ledger, goal, rule, concurrency, and tenant-isolation drills against deployed Supabase
+
 ### PLA-0316 - Marketplace Collections hid collection and item failures
 
 - Timestamp: 2026-07-15 13:16 America/New_York
