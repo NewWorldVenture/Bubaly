@@ -1481,3 +1481,13 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - Community Circles now distinguishes missing migrations from transient circle/member/share/listing failures and surfaces the affected source labels without hiding usable data.
 - Source commit: `57e973d3`; docs refresh and publication are in progress.
+
+## Latest Local Evidence - Marketplace Orders Read Failure
+
+- Focused Marketplace orders read-boundary suite: 1 file, 2 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `git diff --check`: passed.
+- `/marketplace/orders` now fails clearly on the primary order read and surfaces labeled warnings for fee settings, listing titles, family members, review history, and handoff coordination failures.
+- Source commit: pending full-suite verification and publication.

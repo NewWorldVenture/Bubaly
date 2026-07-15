@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Receipt } from 'lucide-react';
+import { AlertTriangle, Receipt } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
@@ -10,6 +10,7 @@ import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { cn } from '@/lib/utils/cn';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -37,51 +38,80 @@ export default async function MarketplaceOrdersPage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
   const now = new Date();
+  const dataWarnings: string[] = [];
 
-  const { data: orders } = await sb
+  const { data: orders, error: ordersError } = await sb
     .from('marketplace_orders')
     .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at')
     .eq('family_id', familyId)
     .order('created_at', { ascending: false })
     .limit(100);
 
+  if (ordersError) {
+    console.error('[marketplace-orders] Orders read failed', ordersError);
+    return <ErrorState message="Could not load your marketplace orders. Refresh and try again." />;
+  }
+
   // Honest fee disclosure: the Bubaly service fee is applied only when Super
   // Admin has enabled it (same non-secret config the billing page reads). When
   // off, the buyer pays exactly the sale price and the seller keeps all of it.
   let serviceFeeCents = 0;
   try {
-    const { data: feeCfg } = await createServiceClient()
+    const { data: feeCfg, error: feeError } = await createServiceClient()
       .from('stripe_settings').select('enabled, service_fee_cents, service_fee_price_id').eq('id', 'singleton').maybeSingle();
-    serviceFeeCents = marketplaceServiceFeeCents(feeCfg);
-  } catch {
+    if (feeError) {
+      console.error('[marketplace-orders] Service fee settings read failed', feeError);
+      dataWarnings.push('Service fee settings');
+    } else {
+      serviceFeeCents = marketplaceServiceFeeCents(feeCfg);
+    }
+  } catch (error) {
+    console.error('[marketplace-orders] Service fee settings read failed', error);
+    dataWarnings.push('Service fee settings');
     /* stripe_settings may not exist yet — no fee */
   }
 
   const mine = (orders ?? []).filter((o) => o.buyer_member === selfId || o.seller_member === selfId);
   const listingIds = [...new Set(mine.map((o) => o.listing_id))];
-  const { data: listings } = listingIds.length
+  const { data: listings, error: listingsError } = listingIds.length
     ? await sb.from('marketplace_listings').select('id, title').in('id', listingIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (listingsError) {
+    console.error('[marketplace-orders] Listing titles read failed', listingsError);
+    dataWarnings.push('Listing titles');
+  }
   const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
 
-  const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
+  const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
+  if (membersError) {
+    console.error('[marketplace-orders] Family members read failed', membersError);
+    dataWarnings.push('Family members');
+  }
   const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.display_name ?? 'Someone';
 
   // Which completed orders have I already reviewed?
-  const { data: myReviews } = await sb
+  const { data: myReviews, error: reviewsError } = await sb
     .from('marketplace_reviews')
     .select('order_id')
     .eq('family_id', familyId)
     .eq('reviewer_member', selfId);
+  if (reviewsError) {
+    console.error('[marketplace-orders] Review history read failed', reviewsError);
+    dataWarnings.push('Review history');
+  }
   const reviewed = new Set((myReviews ?? []).map((r) => r.order_id));
 
   // Pickup & hand-off coordination, one per order.
   const orderIds = mine.map((o) => o.id);
-  const { data: handoffs } = orderIds.length
+  const { data: handoffs, error: handoffsError } = orderIds.length
     ? await sb.from('marketplace_handoffs')
         .select('order_id, proposer_role, meet_at, location_label, location_kind, status, confirm_code, calendar_event_id, notes')
         .in('order_id', orderIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (handoffsError) {
+    console.error('[marketplace-orders] Handoff coordination read failed', handoffsError);
+    dataWarnings.push('Handoff coordination');
+  }
   const handoffByOrder = new Map((handoffs ?? []).map((h) => [h.order_id, h]));
   const handoffFor = (orderId: string): HandoffData => {
     const h = handoffByOrder.get(orderId);
@@ -96,6 +126,12 @@ export default async function MarketplaceOrdersPage() {
   return (
     <div>
       <PageHeader title="Orders" description="Every exchange you’re part of — confirm, hand off, complete, and review." />
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Marketplace orders data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some order details are temporarily unavailable: {dataWarnings.join(', ')}. The order list remains available.</p>
+        </div>
+      )}
       {mine.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Receipt className="mx-auto mb-2 h-6 w-6" />

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:52:00 -04:00
+- Last updated: 2026-07-15 12:58:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
+- Commit: latest source repair in progress for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; merged remote checkpoint follows
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0312 - Marketplace Orders hid transaction and fee-read failures as incomplete data
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace / transaction integrity
+- Feature: Marketplace orders, fee disclosure, reviews, and handoff coordination
+- Route: `/marketplace/orders`
+- File or files: `app/(app)/marketplace/orders/page.tsx`, `tests/marketplace-orders-read-boundary.test.ts`
+- Database objects: `marketplace_orders`, `stripe_settings`, `marketplace_listings`, `family_members`, `marketplace_reviews`, and `marketplace_handoffs`
+- Affected roles: authenticated buyers, sellers, and Super Admin marketplace operators
+- Scenario: order, fee, listing-title, member, review-history, or handoff reads failed while the page rendered an apparently healthy empty or incomplete transaction view
+- Launch impact: users could miss orders, misunderstand service fees, misidentify counterparties, or lose coordination context while completing an exchange
+- Root cause: Supabase result errors were discarded and the fee fallback silently treated an unavailable configuration as no fee
+- Resolution: primary order failures now render a retryable error state; dependent failures are logged and surfaced in an accessible Marketplace orders data-health warning
+- Tests performed: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); typecheck; lint; dependency audit; diff check; full suite and production build pending
+- Evidence: source repair currently uncommitted; live order/RLS/role/browser workflow evidence remains open
+- Remaining dependencies: run isolated buyer/seller fee, order, review, handoff, return, and dispute drills against deployed Supabase
 
 #### TODO-0311 - Community Circles mislabeled transient failures as an unapplied migration
 

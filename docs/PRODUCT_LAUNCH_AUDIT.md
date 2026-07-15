@@ -746,6 +746,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
+### PLA-0312 - Marketplace Orders hid transaction and fee-read failures as incomplete data
+
+- Timestamp: 2026-07-15 12:58 America/New_York
+- Service: Marketplace orders and exchange coordination
+- Route: `/marketplace/orders`
+- Affected files: `app/(app)/marketplace/orders/page.tsx`, `tests/marketplace-orders-read-boundary.test.ts`
+- Role: authenticated buyer, seller, and Super Admin marketplace operator
+- Scenario: primary order, service-fee, listing-title, member, review-history, or handoff reads failed while the page looked healthy or incomplete
+- Severity: P1
+- Launch impact: users could miss transactions, misunderstand fees, misidentify counterparties, or lose handoff context
+- Root cause: Supabase result errors were discarded and an unavailable fee configuration silently fell back to zero
+- Resolution: primary order failures now render a retryable ErrorState; dependent failures are logged and surfaced in a visible accessible Marketplace orders data-health warning
+- Supabase impact: no schema change; order and related reads remain scoped to the active family and existing permissions
+- Tests run: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); typecheck; lint; dependency audit; diff check; full suite/build pending
+- Validation evidence: source repair pending commit; live order/RLS, role, browser, and fee workflow evidence remain open
+- Status: Resolved in code; full verification and live workflow evidence remain open
+- Remaining dependencies: execute isolated buyer/seller order, fee, review, handoff, return, and dispute drills against deployed Supabase
+
 ### PLA-0311 - Community Circles mislabeled transient failures as an unapplied migration
 
 - Timestamp: 2026-07-15 12:52 America/New_York
