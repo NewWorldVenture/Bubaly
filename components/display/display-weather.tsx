@@ -9,6 +9,8 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { MapPin, CloudSun } from 'lucide-react';
 import { fetchForecast, reverseGeocode, weatherInfo, type Forecast } from '@/lib/weather/open-meteo';
 import { tempFromFahrenheit, type TempUnit } from '@/lib/display/ambient';
+import { isCompactTile, type TileSize } from '@/lib/display/tiles';
+import { cn } from '@/lib/utils/cn';
 
 export type WeatherState = {
   status: 'loading' | 'denied' | 'ready';
@@ -82,12 +84,19 @@ export function WeatherChip() {
 }
 
 /** Full Weather tile body — current conditions + a 3-day strip. */
-export function WeatherTile() {
+/**
+ * The Weather tile — DYNAMIC to the selected tile size. In a compact (1-row)
+ * tile it shows just place + current temp + condition (which is all that fits,
+ * so nothing clips); a taller tile adds the multi-day forecast strip. `days`
+ * grows with height. Sizing comes from lib/display/tiles so it stays in sync
+ * with the grid's row-spans.
+ */
+export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
   const { state, unit } = useWeatherCtx();
   if (state.status === 'loading') return <div className="h-full animate-pulse rounded-xl bg-white/5" />;
   if (state.status === 'denied' || !state.forecast) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-white/50">
+      <div className="flex h-full flex-col items-center justify-center text-center text-white/50">
         <CloudSun className="h-9 w-9" />
         <p className="mt-2 text-sm">Enable location for weather</p>
       </div>
@@ -95,26 +104,33 @@ export function WeatherTile() {
   }
   const f = state.forecast;
   const info = weatherInfo(f.current.code, f.current.isDay);
+  const compact = isCompactTile(size);
+  const days = size === 'hero' || size === 'lg' ? 5 : 3;
+
   return (
-    <div className="flex h-full flex-col">
-      <p className="flex items-center gap-1 text-xs text-white/50"><MapPin className="h-3 w-3" />{state.place}</p>
-      <div className="mt-1 flex items-center gap-3">
-        <span className="text-5xl leading-none">{info.icon}</span>
-        <div>
-          <p className="text-5xl font-black leading-none">{tempFromFahrenheit(f.current.temp, unit)}</p>
-          <p className="mt-0.5 text-sm text-white/60">{info.label} · feels {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
+    <div className="flex h-full min-h-0 flex-col">
+      <p className="flex items-center gap-1 text-xs text-white/50"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{state.place}</span></p>
+      <div className={cn('mt-1 flex items-center gap-3', compact && 'flex-1')}>
+        <span className={cn('leading-none', compact ? 'text-4xl' : 'text-5xl')}>{info.icon}</span>
+        <div className="min-w-0">
+          <p className={cn('font-black leading-none', compact ? 'text-4xl' : 'text-5xl')}>{tempFromFahrenheit(f.current.temp, unit)}</p>
+          <p className="mt-0.5 truncate text-sm text-white/60">{info.label} · feels {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
         </div>
       </div>
-      <div className="mt-auto flex justify-between gap-1 pt-3">
-        {f.daily.slice(1, 4).map((d) => (
-          <div key={d.date} className="flex-1 rounded-xl bg-white/5 py-2 text-center">
-            <p className="text-[11px] text-white/50">{new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}</p>
-            <p className="text-xl leading-tight">{weatherInfo(d.code).icon}</p>
-            <p className="text-sm font-bold">{tempFromFahrenheit(d.tempMax, unit)}</p>
-            <p className="text-[11px] text-white/40">{tempFromFahrenheit(d.tempMin, unit)}</p>
-          </div>
-        ))}
-      </div>
+      {/* Forecast strip only when there's vertical room — this is the piece that
+          used to clip in a 1-row tile. */}
+      {!compact && (
+        <div className="mt-auto flex justify-between gap-1 pt-3">
+          {f.daily.slice(1, 1 + days).map((d) => (
+            <div key={d.date} className="flex-1 rounded-xl bg-white/5 py-2 text-center">
+              <p className="text-[11px] text-white/50">{new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}</p>
+              <p className="text-xl leading-tight">{weatherInfo(d.code).icon}</p>
+              <p className="text-sm font-bold">{tempFromFahrenheit(d.tempMax, unit)}</p>
+              <p className="text-[11px] text-white/40">{tempFromFahrenheit(d.tempMin, unit)}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

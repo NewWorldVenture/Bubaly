@@ -288,6 +288,16 @@ Skylight/Hearth. Built on top of the v1 ambient shell (below):
   photo bg + frame) ≈ 502 rows. PG16-verified ×2 (idempotent), counts asserted.
 - **Verified** tsc 0 · eslint 0 · vitest 2858 green · `next build` green (`/display` 16.6 kB).
 
+> **+ Responsive, size-dynamic tiles SHIPPED (2026-07-14).** Fixed the reported **weather-tile cutoff**
+> and made every tile **render dynamically to its selected size**. New pure helpers in
+> `lib/display/tiles.ts` (`tileRowSpan` · `isCompactTile` · `tileListLimit`, tested) map each size to its
+> vertical room. `WeatherTile` now takes a `size`: a compact (1-row) tile shows just place + temp +
+> condition (which is all that fits — the forecast strip was the piece clipping), while md/lg/hero add
+> the multi-day forecast (5 days at lg/hero). Every list widget (schedule/chores/grocery/reminders/
+> notes/upcoming) shows a size-scaled number of rows via `tileListLimit`. Structurally, each tile is now
+> a flex-column whose body **flexes to fill and scrolls (hidden scrollbar) as a safety net**, so nothing
+> is ever hard-clipped regardless of size or data. +4 tests; 2996 green; tsc·eslint·build clean.
+
 ## 📺 KITCHEN DISPLAY — WORLD-CLASS BUILD-OUT — DONE (2026-07-14)
 
 Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display`) — make it world-class.

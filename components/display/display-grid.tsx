@@ -17,7 +17,7 @@ import {
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
-import { DEFAULT_TILES, resolveTiles, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
+import { DEFAULT_TILES, resolveTiles, tileListLimit, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
 import { recipeImage, mealImage, AMBIENT_FALLBACK_PHOTOS } from '@/lib/display/imagery';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
@@ -124,12 +124,14 @@ function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName
 }
 
 // ── Widget bodies ─────────────────────────────────────────────────────────────
-function WidgetBody({ widget, data, memberById, now }: {
-  widget: WidgetKey; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
+// `size` makes every widget DYNAMIC to the tile it's in: a compact tile shows a
+// condensed layout / fewer rows (so it never clips), a taller tile shows more.
+function WidgetBody({ widget, size, data, memberById, now }: {
+  widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
-    case 'weather': return <WeatherTile />;
+    case 'weather': return <WeatherTile size={size} />;
     case 'timers': return <KitchenTimers />;
     case 'featured': return <FeaturedWidget list={data.featured} familyName={data.familyName} />;
 
@@ -137,7 +139,7 @@ function WidgetBody({ widget, data, memberById, now }: {
       const { current, next } = nowAndNext(data.events, now);
       return data.events.length ? (
         <ul className="space-y-2.5">
-          {data.events.slice(0, 7).map((e) => {
+          {data.events.slice(0, tileListLimit(size, 4)).map((e) => {
             const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
             const isNow = current?.id === e.id;
             const isNext = next?.id === e.id;
@@ -160,7 +162,7 @@ function WidgetBody({ widget, data, memberById, now }: {
     case 'upcoming':
       return data.upcoming.length ? (
         <ul className="space-y-2">
-          {data.upcoming.slice(0, 8).map((e) => (
+          {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
             <li key={e.id} className="flex items-center gap-3 text-sm">
               <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
@@ -174,7 +176,7 @@ function WidgetBody({ widget, data, memberById, now }: {
     case 'chores':
       return data.chores.length ? (
         <ul className="space-y-2.5">
-          {data.chores.slice(0, 7).map((c) => {
+          {data.chores.slice(0, tileListLimit(size, 4)).map((c) => {
             const who = memberById.get(c.member_id);
             return (
               <li key={c.id} className="flex items-center gap-2.5">
@@ -208,8 +210,8 @@ function WidgetBody({ widget, data, memberById, now }: {
       return (
         <div className="flex h-full flex-col">
           <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
-          <ul className="mt-2 space-y-1 text-sm text-white/60">
-            {data.grocery.items.slice(0, 5).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
+          <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto text-sm text-white/60 scrollbar-none">
+            {data.grocery.items.slice(0, tileListLimit(size, 4)).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
             {data.grocery.count === 0 && <li>List is empty</li>}
           </ul>
         </div>
@@ -230,7 +232,7 @@ function WidgetBody({ widget, data, memberById, now }: {
     case 'reminders':
       return data.reminders.length ? (
         <ul className="space-y-2 text-sm">
-          {data.reminders.slice(0, 7).map((r) => (
+          {data.reminders.slice(0, tileListLimit(size, 4)).map((r) => (
             <li key={r.id} className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 shrink-0 text-amber-300" /><span className="min-w-0 flex-1 truncate text-white">{r.title}</span></li>
           ))}
         </ul>
@@ -248,7 +250,7 @@ function WidgetBody({ widget, data, memberById, now }: {
     case 'notes':
       return data.notes.length ? (
         <ul className="space-y-2 text-sm">
-          {data.notes.slice(0, 5).map((n) => (
+          {data.notes.slice(0, tileListLimit(size, 3)).map((n) => (
             <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/50">{n.body}</p></li>
           ))}
         </ul>
@@ -599,18 +601,21 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
         )}>
           {tiles.map((tile) => (
             <section key={tile.id} className={cn(
-              'relative min-h-[172px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:min-h-0',
+              'relative flex min-h-[172px] flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:min-h-0',
               sizeClass(tile.size), editing && 'ring-1 ring-brand/50',
             )}>
               {tile.widget !== 'featured' && tile.widget !== 'clock' && (
-                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-white/60">
-                  {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4" />; })()}
-                  {widgetLabel(tile.widget)}
+                <div className="mb-3 flex shrink-0 items-center gap-2 text-sm font-bold text-white/60">
+                  {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4 shrink-0" />; })()}
+                  <span className="truncate">{widgetLabel(tile.widget)}</span>
                 </div>
               )}
-              <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0')}>
+              {/* Body flexes to fill the tile; list widgets scroll (scrollbar
+                  hidden) as a safety net so nothing is ever hard-clipped, while
+                  the size-aware widgets above keep content fitting by design. */}
+              <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0 flex-1 overflow-y-auto scrollbar-none')}>
                 <WidgetBoundary label={tile.widget}>
-                  <WidgetBody widget={tile.widget} data={data} memberById={memberById} now={now} />
+                  <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} />
                 </WidgetBoundary>
               </div>
 

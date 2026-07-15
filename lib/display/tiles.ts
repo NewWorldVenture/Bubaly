@@ -32,6 +32,37 @@ export const DEFAULT_TILES: Tile[] = [
   { id: 't9', widget: 'members', size: 'wide' },
 ];
 
+// ── Size → how much vertical room a tile has ─────────────────────────────────
+// The grid maps each size to a row-span; widgets read these so their CONTENT is
+// dynamic to the selected size (a compact tile shows a condensed layout; a
+// taller one shows the full thing) — that's what keeps a small Weather tile from
+// clipping its forecast, and lets a large list show more rows.
+
+/** Vertical rows a size occupies in the display grid (1 = short, 3 = hero). */
+export function tileRowSpan(size: TileSize): number {
+  switch (size) {
+    case 'sm':
+    case 'wide': return 1;
+    case 'hero': return 3;
+    case 'md':
+    case 'lg':
+    default: return 2;
+  }
+}
+
+/** True when a tile is only one row tall — render the condensed widget layout. */
+export function isCompactTile(size: TileSize): boolean {
+  return tileRowSpan(size) <= 1;
+}
+
+/** How many list rows a widget should show at a given size (scales with height). */
+export function tileListLimit(size: TileSize, base = 3): number {
+  const rows = tileRowSpan(size);
+  if (rows <= 1) return base;
+  if (rows === 2) return base * 2 + 1;
+  return base * 3 + 2;
+}
+
 const fallbackUid = () => Math.random().toString(36).slice(2, 9);
 
 /**
