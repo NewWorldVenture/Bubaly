@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 12:58:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source repair in progress for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; merged remote checkpoint follows
+- Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -39,8 +39,8 @@
 - Launch impact: users could miss orders, misunderstand service fees, misidentify counterparties, or lose coordination context while completing an exchange
 - Root cause: Supabase result errors were discarded and the fee fallback silently treated an unavailable configuration as no fee
 - Resolution: primary order failures now render a retryable error state; dependent failures are logged and surfaced in an accessible Marketplace orders data-health warning
-- Tests performed: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); typecheck; lint; dependency audit; diff check; full suite and production build pending
-- Evidence: source repair currently uncommitted; live order/RLS/role/browser workflow evidence remains open
+- Tests performed: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); full 443-file/3,149-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit `f1e2ef12`; live order/RLS/role/browser workflow evidence remains open
 - Remaining dependencies: run isolated buyer/seller fee, order, review, handoff, return, and dispute drills against deployed Supabase
 
 #### TODO-0311 - Community Circles mislabeled transient failures as an unapplied migration

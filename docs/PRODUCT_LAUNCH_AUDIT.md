@@ -759,9 +759,9 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Root cause: Supabase result errors were discarded and an unavailable fee configuration silently fell back to zero
 - Resolution: primary order failures now render a retryable ErrorState; dependent failures are logged and surfaced in a visible accessible Marketplace orders data-health warning
 - Supabase impact: no schema change; order and related reads remain scoped to the active family and existing permissions
-- Tests run: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); typecheck; lint; dependency audit; diff check; full suite/build pending
-- Validation evidence: source repair pending commit; live order/RLS, role, browser, and fee workflow evidence remain open
-- Status: Resolved in code; full verification and live workflow evidence remain open
+- Tests run: `tests/marketplace-orders-read-boundary.test.ts` (2 focused tests); full 443-file/3,149-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `f1e2ef12`; build generated 250 routes; live order/RLS, role, browser, and fee workflow evidence remain open
+- Status: Resolved in code and published to branch and `main`; live workflow evidence remains open
 - Remaining dependencies: execute isolated buyer/seller order, fee, review, handoff, return, and dispute drills against deployed Supabase
 
 ### PLA-0311 - Community Circles mislabeled transient failures as an unapplied migration

@@ -1490,4 +1490,4 @@ Audit date: 2026-07-15
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `git diff --check`: passed.
 - `/marketplace/orders` now fails clearly on the primary order read and surfaces labeled warnings for fee settings, listing titles, family members, review history, and handoff coordination failures.
-- Source commit: pending full-suite verification and publication.
+- Source commit: `f1e2ef12`; branch and `main` publication verified.
