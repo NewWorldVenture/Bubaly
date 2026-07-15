@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:12:01 -04:00
+- Last updated: 2026-07-15 16:16:36 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `3e44cb89` adds Admin Users read safety after the Social, Security/Auth Admin, command-center, and Sync repairs; live role and deployment evidence remains open
+- Commit: `91394c90` adds family Sync read safety after the Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0343 - Family Sync showed zero health and history after required reads failed
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family integrations / sync observability / Supabase failure handling
+- Feature: Family Sync hub and history
+- Route: `/dashboard/sync`, `/dashboard/sync/history`
+- File or files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/history/page.tsx`, `tests/sync-read-boundary.test.ts`
+- Database objects: `sync_connections`, `sync_calendars`, `sync_conflicts`, `sync_job_runs`, and `sync_audit_logs`
+- Affected roles: authenticated family members and household integration operators
+- Scenario: connection, calendar, conflict, run, or audit-history reads could fail while the pages rendered zero health metrics or “no runs” empty states.
+- Launch impact: families could miss provider outages, open conflicts, or failed synchronization and assume their data was current.
+- Root cause: query results were used without checking their error fields.
+- Required remediation: check all required reads, log diagnostics server-side, and render sanitized retry states before deriving health or history data.
+- Implementation notes: the Sync hub and history page now fail visibly with route-specific retry links.
+- Test plan: focused Sync read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 462 files/3,208 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally in commit `91394c90`; documentation stamp and push pending.
+- Remaining dependencies: provider callbacks, retry/conflict drills, RLS, browser, backup, and deployed verification.
 
 #### TODO-0342 - Admin Users rendered partial access data after required reads failed
 

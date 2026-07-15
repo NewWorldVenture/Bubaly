@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Sync Read Boundary
+
+- Focused Sync suite: 1 file, 1 test passed.
+- Full `npm.cmd test`: 462 test files, 3,208 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- `/dashboard/sync` and `/dashboard/sync/history` now fail closed with route-specific retry states when required provider, conflict, run, or audit-history reads fail.
+- Live provider callbacks, recovery/conflict drills, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Admin Users Access Read Boundary
 
 - Focused Users suite: 1 file, 1 test passed.
