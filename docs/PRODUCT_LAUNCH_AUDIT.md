@@ -232,7 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: reuses `guardian_callback_events` from migration `0181_guardian_callback_replay.sql`; no schema change
 - Tests run: `tests/guardian-escalation-replay.test.ts` and `tests/guardian-callback-security.test.ts` (11 tests), typecheck, diff check
 - Validation evidence: claim occurs before `sendSms`/`initiateCall`; parent phones resolve from profile IDs; callback errors remain retryable
-- Commit: pending publication
+- Commit: `eb99f0a0`
 - Status: Resolved in code; live provider, role/privacy, and RLS verification remain open
 - Remaining dependencies: run isolated Twilio retry/failure smoke tests and verify parent notification privacy in Supabase
 
