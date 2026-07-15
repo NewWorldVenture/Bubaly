@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
   STATUS_META, FILTERABLE_STATUSES, CATEGORY_META, CATEGORY_ORDER, IMPACT_META, IMPACT_ORDER,
-  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, statusMeta, categoryMeta, impactMeta, sortIdeas, toggleVote,
+  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, toggleVote,
   isFeedbackStatus, type IdeaRow, type FeedbackSort, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
@@ -268,7 +268,14 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <h3 className="text-sm font-bold sm:text-base">{idea.title}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-bold sm:text-base">
+              {idea.kind === 'bug' && (
+                <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide', kindMeta('bug').tone)}>
+                  🐛 Bug
+                </span>
+              )}
+              {idea.title}
+            </h3>
             <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold', meta.badge)}>
               <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} /> {meta.label}
             </span>
@@ -306,14 +313,16 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
   const [sort, setSort] = useState<FeedbackSort>('top');
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState<FeedbackKind | 'all'>('all');
   const listRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => {
     const filtered = ideas.filter((i) =>
       (statusFilter === 'all' || i.status === statusFilter) &&
-      (categoryFilter === 'all' || i.category === categoryFilter));
+      (categoryFilter === 'all' || i.category === categoryFilter) &&
+      (kindFilter === 'all' || (i.kind ?? 'idea') === kindFilter));
     return sortIdeas(filtered, sort);
-  }, [ideas, sort, statusFilter, categoryFilter]);
+  }, [ideas, sort, statusFilter, categoryFilter, kindFilter]);
 
   function handleVote(ideaId: string) {
     const { next, voted: nowVoted } = toggleVote(voted, ideaId);
@@ -367,6 +376,11 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
         {FILTERABLE_STATUSES.map((s) => (
           <button key={s} onClick={() => setStatusFilter(s)} className={pill(statusFilter === s)}>{STATUS_META[s].label}</button>
         ))}
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <button onClick={() => setKindFilter('all')} className={pill(kindFilter === 'all')}>All types</button>
+        {KIND_ORDER.map((k) => (
+          <button key={k} onClick={() => setKindFilter(k)} className={pill(kindFilter === k)}>{KIND_META[k].emoji} {KIND_META[k].label}</button>
+        ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button onClick={() => setCategoryFilter('all')} className={pill(categoryFilter === 'all')}>All categories</button>
@@ -382,7 +396,7 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
             <p className="text-sm font-semibold">No ideas match these filters</p>
             <p className="mt-1 text-xs text-muted">Try clearing a filter, or add a new idea above.</p>
             <button
-              onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); }}
+              onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); setKindFilter('all'); }}
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated">
               Clear filters
             </button>
