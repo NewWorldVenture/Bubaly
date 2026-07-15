@@ -91,13 +91,53 @@ export async function adminCreateFamilyAction(input: {
   if (!parsedEmail.success) return { ok: false, error: 'Enter the owner’s email address' };
 
   const supabase = createServiceClient();
-  const { data: owner } = await supabase.from('profiles').select('id').eq('email', parsedEmail.data).maybeSingle();
+  const { data: owner, error: ownerLookupError } = await supabase
+    .from('profiles').select('id, full_name, email').eq('email', parsedEmail.data).maybeSingle();
+  if (ownerLookupError) return actionFailure(ownerLookupError, 'Could not look up the family owner.');
   if (!owner) return { ok: false, error: 'No account found with that email — create the user first' };
 
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
   }).select('id').single();
   if (error) return actionFailure(error, 'Could not create the family.');
+
+  // Do not rely on `handle_new_family`: production environments can have an
+  // incomplete migration ledger, and a family without its owner is invisible
+  // to the owner. Reconcile required rows explicitly before reporting success.
+  const ownerName = owner.full_name?.trim() || owner.email?.split('@')[0] || 'Parent';
+  const { error: memberError } = await supabase.from('family_members').upsert({
+    family_id: family.id,
+    user_id: owner.id,
+    role: 'parent',
+    display_name: ownerName,
+    is_active: true,
+  }, { onConflict: 'family_id,user_id' });
+  if (memberError) {
+    const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
+    if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+    return actionFailure(memberError, 'Could not add the owner to the new family.');
+  }
+
+  const { data: existingSubscription, error: subscriptionLookupError } = await supabase
+    .from('subscriptions').select('id').eq('family_id', family.id).limit(1);
+  if (subscriptionLookupError) {
+    const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
+    if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+    return actionFailure(subscriptionLookupError, 'Could not verify the new family subscription.');
+  }
+  if (!existingSubscription || existingSubscription.length === 0) {
+    const { error: subscriptionError } = await supabase.from('subscriptions').insert({
+      family_id: family.id,
+      plan: 'free',
+      status: 'trialing',
+      current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
+    });
+    if (subscriptionError) {
+      const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
+      if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+      return actionFailure(subscriptionError, 'Could not create the new family trial.');
+    }
+  }
 
   await adminAuditLog({ familyId: family.id, action: 'create', resource: 'families', resourceId: family.id, metadata: { name, owner_email: parsedEmail.data } });
   revalidatePath('/admin/users');
