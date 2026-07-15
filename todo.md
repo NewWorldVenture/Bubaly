@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:34:48 -04:00
+- Last updated: 2026-07-15 16:58:06 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `299e2608` adds Connections hub read safety after the Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `194e4ecb` adds vacation report read safety after the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0346 - Vacation reports hid incomplete financial and travel-score reads
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation reporting / Supabase failure handling
+- Feature: Vacation Reports
+- Route: `/dashboard/vacations/reports`
+- File or files: `components/vacations/vacations-reports.tsx`, `tests/vacations-reports-boundary.test.ts`
+- Database objects: `vacations`, `vacation_expenses`, `vacation_budgets`, and `vacation_travel_scores`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: expense, budget, or travel-score reads could fail while the report rendered trip counts and partial financial totals as if complete.
+- Launch impact: families could make travel budget decisions from incomplete or stale report data.
+- Root cause: only the trips query exposed loading state; secondary report reads ignored their loading and error contracts.
+- Required remediation: track all report reads, wait for every required result, and render a sanitized retry state before calculating totals or charts.
+- Implementation notes: Vacation Reports now fails closed on any required read failure and retries all four reads together.
+- Test plan: focused vacation report boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 464 files/3,212 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `194e4ecb`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 ### Active audit issue
 

@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Vacation Reports Read Boundary
+
+- Focused vacation reports suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 464 test files, 3,212 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- `/dashboard/vacations/reports` now waits for and validates trips, expenses, budgets, and travel scores before calculating totals, and renders a retryable failure state on any required read error.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Family Connections Read Boundary
 
 - Focused Connections suite: 1 file, 3 assertions passed.

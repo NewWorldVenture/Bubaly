@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0346 - Vacation reports hid incomplete financial and travel-score reads
+
+- Timestamp: 2026-07-15 16:58 America/New_York
+- Service: Vacation Reports
+- Route: `/dashboard/vacations/reports`
+- Affected files: `components/vacations/vacations-reports.tsx`, `tests/vacations-reports-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: expense, budget, or travel-score reads could fail while the report rendered trip counts and partial financial totals as if complete.
+- Severity: P1
+- Launch impact: families could make travel budget decisions from incomplete or stale report data.
+- Root cause: only the trips query exposed loading state; secondary report reads ignored their loading and error contracts.
+- Resolution: Vacation Reports now tracks all four required reads, waits for complete data, and renders a sanitized retryable ErrorState before deriving totals or charts.
+- Supabase impact: no schema change; existing family-scoped report reads now have an explicit failure contract.
+- Tests run: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 464 test files, 3,212 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `194e4ecb`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Vacation Reports verification
+
 ### PLA-0345 - Connections hub hid family connection read failures as disconnected providers
 
 - Timestamp: 2026-07-15 16:34 America/New_York
