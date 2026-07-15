@@ -120,14 +120,20 @@ export function readStripeEnv(): StripeEnv {
 
 type DB = SupabaseClient<Database>;
 
-/** Load the money-related feature flags from the database (defaults when absent). */
-export async function readMoneyFlags(supabase: DB): Promise<MoneyFlags> {
+/** Load the money-related feature flags and preserve a read error for diagnostic surfaces. */
+export async function readMoneyFlagsWithError(supabase: DB): Promise<{ flags: MoneyFlags; error: unknown | null }> {
   const keys = Object.keys(DEFAULT_MONEY_FLAGS) as (keyof MoneyFlags)[];
-  const { data } = await supabase.from('feature_flags').select('key, enabled').in('key', keys);
+  const { data, error } = await supabase.from('feature_flags').select('key, enabled').in('key', keys);
   const byKey = new Map((data ?? []).map((r) => [r.key, r.enabled]));
   const out = { ...DEFAULT_MONEY_FLAGS };
   for (const k of keys) out[k] = byKey.get(k) ?? false;
-  return out;
+  return { flags: out, error };
+}
+
+/** Consumer pages keep the historical ledger fallback; diagnostic pages can use the error-aware helper. */
+export async function readMoneyFlags(supabase: DB): Promise<MoneyFlags> {
+  const { flags } = await readMoneyFlagsWithError(supabase);
+  return flags;
 }
 
 /** The async entry point used by pages/actions: env + flags → capabilities. */

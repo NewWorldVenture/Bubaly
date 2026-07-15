@@ -3,8 +3,9 @@ import { CreditCard, Landmark, ShieldCheck, AlertTriangle, Radio, ToggleLeft, To
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { getMoneyCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
+import { readMoneyFlagsWithError, readStripeEnv, resolveCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
 import { StripeSetupForm } from '@/components/admin/stripe-setup-form';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Admin · Money', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -37,12 +38,12 @@ function CapRow({ label, on }: { label: string; on: boolean }) {
 
 export default async function AdminStripeMoneyPage() {
   const supabase = createServiceClient();
-  const caps: MoneyCapabilities = await getMoneyCapabilities(supabase);
-  const { data: stripeCfg } = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
+  const { flags: moneyFlags, error: moneyFlagsError } = await readMoneyFlagsWithError(supabase);
+  const stripeCfgResult = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
 
   const [
-    { data: flags }, { data: accounts }, { count: financialCount },
-    { data: cards }, { data: auths }, { data: webhooks },
+    flagsResult, accountsResult, financialCountResult,
+    cardsResult, authsResult, webhooksResult,
   ] = await Promise.all([
     supabase.from('feature_flags').select('key, enabled').in('key', MONEY_FLAG_KEYS),
     supabase.from('stripe_connected_accounts').select('status'),
@@ -51,6 +52,28 @@ export default async function AdminStripeMoneyPage() {
     supabase.from('stripe_authorizations').select('outcome, decline_reason, merchant_name, amount_cents, created_at').order('created_at', { ascending: false }).limit(20),
     supabase.from('stripe_webhook_events').select('status'),
   ]);
+
+  const readError = moneyFlagsError
+    ?? stripeCfgResult.error
+    ?? flagsResult.error
+    ?? accountsResult.error
+    ?? financialCountResult.error
+    ?? cardsResult.error
+    ?? authsResult.error
+    ?? webhooksResult.error;
+  if (readError) {
+    console.error('[admin-stripe] financial read failed', readError);
+    return <AdminStripeReadError />;
+  }
+
+  const caps: MoneyCapabilities = resolveCapabilities(readStripeEnv(), moneyFlags);
+  const { data: stripeCfg } = stripeCfgResult;
+  const { data: flags } = flagsResult;
+  const { data: accounts } = accountsResult;
+  const { count: financialCount } = financialCountResult;
+  const { data: cards } = cardsResult;
+  const { data: auths } = authsResult;
+  const { data: webhooks } = webhooksResult;
 
   const flagOn = new Map((flags ?? []).map((f) => [f.key, f.enabled]));
   const acctRows = accounts ?? [];
@@ -157,6 +180,19 @@ export default async function AdminStripeMoneyPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminStripeReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold">Money - Stripe Financial Mode</h1>
+        <p className="mt-1 text-sm text-muted">Platform oversight for Stripe financial capabilities.</p>
+      </div>
+      <ErrorState message="Could not load Stripe financial data from Supabase. Refresh and try again." />
+      <a href="/admin/stripe" className="text-sm font-medium text-brand-text underline">Refresh Stripe overview</a>
     </div>
   );
 }
