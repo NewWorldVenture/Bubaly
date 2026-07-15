@@ -25,8 +25,8 @@ const BASE = '/marketplace';
 type Item = { href: string; label: string; icon: typeof Store; exact?: boolean; kind?: string };
 
 const ITEMS: Item[] = [
-  { href: BASE, label: 'Marketplace', icon: Store, exact: true },
-  { href: '/dashboard', label: 'Home', icon: Home },
+  { href: BASE, label: 'Marketplace Home', icon: Store, exact: true },
+  { href: '/dashboard', label: 'Bubaly Home', icon: Home },
   { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
   { href: `${BASE}/browse`, label: 'Browse', icon: Search, exact: true },
   { href: `${BASE}/browse?kind=wanted`, label: 'Requests', icon: HelpCircle, kind: 'wanted' },
