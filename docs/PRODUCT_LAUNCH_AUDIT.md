@@ -653,3 +653,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `e20a11d4`
 - Status: Resolved in code; live marketing permission, write-action, and browser evidence remain open
 - Remaining dependencies: audit all remaining marketing list/detail pages and run isolated read/write failure drills
+
+### PLA-0306 - Marketing dashboard and Analytics hid customer-loader failures as zero metrics
+
+- Timestamp: 2026-07-15 11:35 America/New_York
+- Service: Admin marketing customer metrics
+- Routes: `/admin/marketing`, `/admin/marketing/analytics`
+- Affected files: `lib/marketing/customers.ts`, `app/(app)/admin/marketing/page.tsx`, `app/(app)/admin/marketing/analytics/page.tsx`, `tests/admin-marketing-dashboard-read-boundary.test.ts`
+- Role: Marketing Admin / Super Admin
+- Scenario: family, subscription, family-member, profile, campaign, email, segment, lead, SEO, or AEO reads failed while dashboards substituted empty customer data or zero-valued metrics
+- Severity: P1
+- Launch impact: operators could make growth, lifecycle, revenue, or email decisions from incomplete marketing data
+- Root cause: the shared customer loader and dashboard queries discarded Supabase errors
+- Resolution: added an error-aware customer loader for diagnostic pages and visible retry states for dashboard and Analytics reads; existing consumer fallback remains compatible
+- Supabase impact: no schema change; marketing metric failures are explicit and non-destructive
+- Tests run: `tests/admin-marketing-dashboard-read-boundary.test.ts` (3 focused tests), full 429-file/3,104-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify all shared customer source reads, dashboard metric reads, analytics campaign/email reads, and visible retry states
+- Commit: `e727682c`
+- Status: Resolved in code; live marketing permissions, data freshness, and browser evidence remain open
+- Remaining dependencies: audit all remaining marketing customer/list/detail pages and run isolated read/failure drills

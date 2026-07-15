@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0306 - Marketing dashboard and Analytics hid customer-loader failures as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketing admin
+- Feature: Marketing customer metrics and analytics
+- Route: `/admin/marketing`, `/admin/marketing/analytics`
+- File or files: `lib/marketing/customers.ts`, `app/(app)/admin/marketing/page.tsx`, `app/(app)/admin/marketing/analytics/page.tsx`, `tests/admin-marketing-dashboard-read-boundary.test.ts`
+- Database objects: `families`, `subscriptions`, `family_members`, `profiles`, `marketing_segments`, `marketing_campaigns`, `marketing_email_campaigns`, `support_tickets`, `marketing_seo_pages`, `marketing_aeo_questions`
+- Affected roles: Marketing Admin / Super Admin
+- Scenario: a shared customer or dashboard metric read fails
+- Launch impact: an operator can mistake incomplete data for zero customers, campaigns, or revenue
+- Root cause: customer-loader and dashboard query errors were discarded
+- Resolution: add an error-aware loader for diagnostic pages and render refreshable dashboard/Analytics error states while preserving consumer fallback
+- Tests performed: `tests/admin-marketing-dashboard-read-boundary.test.ts` (3 focused tests); full 429-file/3,104-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover shared customer reads, dashboard metrics, analytics reads, and visible error-state paths
+- Remaining dependencies: publish docs and audit remaining marketing customer/list/detail pages plus failure drills
+
 #### TODO-0305 - Marketing Ads and Automation hid list read failures as empty planning views
 
 - Status: `[~]` In progress

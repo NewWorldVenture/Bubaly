@@ -1409,3 +1409,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/admin/marketing/ads` and `/admin/marketing/automation` now render refreshable error states when their primary Supabase reads fail instead of reporting empty planning views.
 - Source commit: `e20a11d4`; docs and source are published on `origin/main` at `7df21625`.
+
+## Latest Local Evidence - Marketing Dashboard Read Failure
+
+- `npm.cmd exec vitest run tests/admin-marketing-dashboard-read-boundary.test.ts`: 1 file, 3 focused tests passed.
+- `npm.cmd test`: 429 files, 3,104 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- The shared customer loader now exposes read errors to diagnostic pages while preserving consumer fallback; `/admin/marketing` and `/admin/marketing/analytics` render retry states instead of zero-valued customer/campaign metrics.
+- Source commit: `e727682c`; docs publication commit is pending.
