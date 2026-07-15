@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,960 unit tests, builds all 250 static Next.js
+The tree compiles, passes lint and type checking, passes 2,964 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -11,6 +11,10 @@ required probes, but authenticated RLS behavior and Auth Admin health remain unv
 Recommended decision: **NO-GO until full migration history/RLS behavior is verified, the live Supabase
 Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is rotated.** After
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
+
+Latest repair increment (2026-07-14): Vacation AI now fails closed on trip-context read errors,
+checks recommendation replacement writes, compensates generated itinerary/activity/budget/packing
+writes on failure, and scopes concierge conversations to the active family and vacation.
 
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
 checkout contains 221 numbered migration files and 17 known historical duplicate prefixes; new or

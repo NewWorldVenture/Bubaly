@@ -4303,3 +4303,24 @@ roadmap entries and user worktree changes are preserved.
   helper use, typed RPC routing, and removal of direct partial state transitions.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0275 - Vacation AI could report success after partial persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Vacation AI / data integrity / authorization
+- Feature: AI vacation builder, recommendations, and concierge conversations
+- File or files: `app/api/vacations/ai/route.ts`, `tests/vacation-ai-persistence-boundaries.test.ts`
+- Description: Trip context reads, recommendation replacement writes, generated itinerary/activity/budget/
+  packing writes, and chat message writes ignored returned database errors. Existing conversation IDs were
+  also accepted without confirming they belonged to the active family and vacation.
+- Resolution: Context and mutation errors now fail closed with stable responses; generated rows are tracked
+  and compensated on failure, existing budgets are restored when needed, and conversation ownership is
+  checked before messages are persisted.
+- Tests performed: Focused Vacation AI and database-boundary tests, full Vitest, typecheck, lint, dependency
+  audit, migration audit, live schema probes, production build, seed invariants, and public Playwright/axe/
+  overflow E2E.
+- Evidence: `tests/vacation-ai-persistence-boundaries.test.ts` guards fail-closed reads, checked writes,
+  rollback tracking, and family/vacation conversation scoping.
+- Verified by: Codex
+- Date completed: 2026-07-14

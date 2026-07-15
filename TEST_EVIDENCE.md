@@ -2,6 +2,22 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Vacation AI persistence boundaries
+
+- `npm.cmd exec vitest run tests/vacation-ai-persistence-boundaries.test.ts tests/database-error-boundaries.test.ts`:
+  2 files, 5 tests passed.
+- `npm.cmd exec vitest run`: 390 files, 2,964 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 221 numbered SQL files, next version
+  `0206`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Local `supabase db lint --local` remains unavailable because no local Postgres container is running;
+  the command failed closed with `LegacyDbConnectError` before evaluating the migration.
+- Vacation AI context reads now fail closed; recommendation writes and every generated-plan write are
+  checked, with tracked inserts compensated on failure. Existing concierge conversations are scoped to
+  the active family and vacation, and both chat messages require successful persistence before success.
+
 ## Latest Audit Update - Atomic Wallet money and approval persistence
 
 - `npm.cmd exec vitest run tests/wallet-atomic-persistence.test.ts tests/server-action-error-boundaries.test.ts tests/wallet-transfer.test.ts tests/wallet-money-action-boundaries.test.ts`:

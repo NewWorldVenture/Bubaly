@@ -14,6 +14,12 @@ export const runtime = 'nodejs';
 
 type Body = { action: 'concierge' | 'build' | 'recommendations'; vacationId: string; conversationId?: string; message?: string; prompt?: string };
 
+const databaseUnavailable = (message: string) => NextResponse.json({ error: message }, { status: 503 });
+
+function logDatabaseFailure(operation: string, error: unknown) {
+  console.error(`[vacation-ai] ${operation} failed:`, error);
+}
+
 export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
@@ -32,11 +38,15 @@ export async function POST(req: NextRequest) {
   if (!vacationId) return NextResponse.json({ error: 'Missing vacationId' }, { status: 400 });
 
   const familyId = ctx.active.familyId;
-  const { data: trip } = await supabase.from('vacations').select('*').eq('id', vacationId).maybeSingle();
+  const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', vacationId).eq('family_id', familyId).maybeSingle();
+  if (tripError) {
+    logDatabaseFailure('trip context read', tripError);
+    return databaseUnavailable('Trip data is temporarily unavailable.');
+  }
   if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
   // Gather trip context (all RLS-scoped).
-  const [members, lodging, flights, transport, activities, reservations, budgets, expenses, packing, docs, emergency, days, items, weather] = await Promise.all([
+  const contextResults = await Promise.all([
     supabase.from('vacation_members').select('*').eq('vacation_id', vacationId),
     supabase.from('vacation_lodging').select('*').eq('vacation_id', vacationId),
     supabase.from('vacation_flights').select('*').eq('vacation_id', vacationId),
@@ -52,6 +62,12 @@ export async function POST(req: NextRequest) {
     supabase.from('vacation_itinerary_items').select('*').eq('vacation_id', vacationId),
     supabase.from('vacation_weather_snapshots').select('*').eq('vacation_id', vacationId),
   ]);
+  const contextError = contextResults.find((result) => result.error)?.error;
+  if (contextError) {
+    logDatabaseFailure('trip context read', contextError);
+    return databaseUnavailable('Trip data is temporarily unavailable.');
+  }
+  const [members, lodging, flights, transport, activities, reservations, budgets, expenses, packing, docs, emergency, days, items, weather] = contextResults;
 
   const m = members.data ?? [], a = activities.data ?? [], r = reservations.data ?? [];
   const hasChildren = m.some((x) => x.role === 'child');
@@ -77,9 +93,17 @@ export async function POST(req: NextRequest) {
     for (const w of tripWeatherAdvice((weather.data ?? []) as WeatherDayLike[])) recos.push({ kind: 'weather_warning', title: 'Weather advisory', detail: w.text, severity: w.severity });
 
     // Replace prior rule-sourced open recommendations.
-    await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
+    const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
+    if (deleteError) {
+      logDatabaseFailure('recommendation cleanup', deleteError);
+      return databaseUnavailable('Recommendations are temporarily unavailable.');
+    }
     if (recos.length) {
-      await supabase.from('vacation_ai_recommendations').insert(recos.map((x) => ({ family_id: familyId, vacation_id: vacationId, kind: x.kind as never, title: x.title, detail: x.detail, severity: x.severity, source: 'rules', created_by: ctx!.user.id })));
+      const { error: insertError } = await supabase.from('vacation_ai_recommendations').insert(recos.map((x) => ({ family_id: familyId, vacation_id: vacationId, kind: x.kind as never, title: x.title, detail: x.detail, severity: x.severity, source: 'rules', created_by: ctx!.user.id })));
+      if (insertError) {
+        logDatabaseFailure('recommendation write', insertError);
+        return databaseUnavailable('Recommendations are temporarily unavailable.');
+      }
     }
     return NextResponse.json({ count: recos.length });
   }
@@ -105,10 +129,56 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
     }
 
     let added = { activities: 0, items: 0, budget: 0, packing: 0 };
+    const createdActivityIds: string[] = [];
+    const createdDayIds: string[] = [];
+    const createdItemIds: string[] = [];
+    const createdBudgetIds: string[] = [];
+    const changedBudgetCategories: NonNullable<typeof budgets.data>[number]['category'][] = [];
+    const createdPackingItemIds: string[] = [];
+    let createdPackingListId: string | null = null;
+    const originalBudgets = new Map((budgets.data ?? []).map((row) => [row.category, {
+      id: row.id,
+      planned_cents: row.planned_cents,
+      notes: row.notes,
+      created_by: row.created_by,
+    }]));
+
+    const removeRows = async (
+      table: 'vacation_activities' | 'vacation_itinerary_days' | 'vacation_itinerary_items' | 'vacation_budgets' | 'vacation_packing_items' | 'vacation_packing_lists',
+      ids: string[],
+    ) => {
+      if (!ids.length) return;
+      const { error } = await supabase.from(table).delete().eq('vacation_id', vacationId).in('id', ids);
+      if (error) logDatabaseFailure(`build rollback ${table}`, error);
+    };
+
+    const rollbackBuild = async () => {
+      await removeRows('vacation_packing_items', createdPackingItemIds);
+      if (createdPackingListId) await removeRows('vacation_packing_lists', [createdPackingListId]);
+      await removeRows('vacation_itinerary_items', createdItemIds);
+      await removeRows('vacation_itinerary_days', createdDayIds);
+      await removeRows('vacation_activities', createdActivityIds);
+      await removeRows('vacation_budgets', createdBudgetIds);
+      for (const category of changedBudgetCategories) {
+        const previous = originalBudgets.get(category);
+        if (!previous) continue;
+        const { error } = await supabase.from('vacation_budgets').update({ planned_cents: previous.planned_cents, notes: previous.notes }).eq('id', previous.id).eq('vacation_id', vacationId);
+        if (error) logDatabaseFailure('build rollback vacation_budgets restore', error);
+      }
+    };
+
+    const buildFailure = async (message: string, error?: unknown) => {
+      if (error) logDatabaseFailure('build persistence', error);
+      await rollbackBuild();
+      return databaseUnavailable(message);
+    };
+
     // activities
     if (Array.isArray(plan.activities) && plan.activities.length) {
       const rows = plan.activities.slice(0, 30).map((x) => ({ family_id: familyId, vacation_id: vacationId, name: String(x.name).slice(0, 200), category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost ? Math.round(x.cost * 100) : null, created_by: ctx!.user.id }));
-      await supabase.from('vacation_activities').insert(rows);
+      const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
+      if (data) createdActivityIds.push(...data.map((row) => row.id));
+      if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Activity insert returned an incomplete result.'));
       added.activities = rows.length;
     }
     // itinerary — ensure days exist, map day number -> day_id
@@ -117,10 +187,15 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
       const existing = new Map((days.data ?? []).map((d) => [d.day_date, d.id]));
       const toCreate = range.filter((d) => !existing.has(d)).map((d) => ({ family_id: familyId, vacation_id: vacationId, day_date: d, created_by: ctx!.user.id }));
       if (toCreate.length) {
-        const { data: created } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date');
-        for (const d of created ?? []) existing.set(d.day_date, d.id);
+        const { data: created, error } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date');
+        if (created) createdDayIds.push(...created.map((day) => day.id));
+        if (error || !created || created.length !== toCreate.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary day insert returned an incomplete result.'));
+        for (const d of created) {
+          existing.set(d.day_date, d.id);
+        }
       }
       const dayIds = range.map((d) => existing.get(d)).filter(Boolean) as string[];
+      if (dayIds.length !== range.length) return buildFailure('Could not save the generated trip plan.', new Error('Itinerary days could not be resolved.'));
       const validParts = new Set(['morning', 'afternoon', 'evening', 'all_day']);
       const validKinds = new Set(['activity', 'meal', 'travel', 'reservation', 'free_time', 'note', 'reminder']);
       const rows = plan.itinerary.slice(0, 60).map((x) => ({
@@ -130,21 +205,41 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
         kind: (validKinds.has(x.kind) ? x.kind : 'activity') as never,
         title: String(x.title).slice(0, 200), created_by: ctx!.user.id,
       })).filter((x) => x.day_id);
-      if (rows.length) { await supabase.from('vacation_itinerary_items').insert(rows); added.items = rows.length; }
+      if (rows.length) {
+        const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
+        if (data) createdItemIds.push(...data.map((row) => row.id));
+        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary item insert returned an incomplete result.'));
+        added.items = rows.length;
+      }
     }
     // budget
     if (Array.isArray(plan.budget) && plan.budget.length) {
       const validCats = new Set(['flights', 'lodging', 'transportation', 'activities', 'food', 'shopping', 'insurance', 'fees', 'misc']);
-      const rows = plan.budget.filter((x) => validCats.has(x.category)).map((x) => ({ family_id: familyId, vacation_id: vacationId, category: x.category as never, planned_cents: Math.max(0, Math.round((x.planned || 0) * 100)), created_by: ctx!.user.id }));
-      if (rows.length) { await supabase.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }); added.budget = rows.length; }
+      const rows = [...new Map(plan.budget.filter((x) => validCats.has(x.category)).map((x) => [x.category, { family_id: familyId, vacation_id: vacationId, category: x.category as never, planned_cents: Math.max(0, Math.round((x.planned || 0) * 100)), created_by: ctx!.user.id }])).values()];
+      if (rows.length) {
+        const { data, error } = await supabase.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category');
+        for (const row of data ?? []) {
+          if (originalBudgets.has(row.category)) changedBudgetCategories.push(row.category);
+          else createdBudgetIds.push(row.id);
+        }
+        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Budget upsert returned an incomplete result.'));
+        added.budget = rows.length;
+      }
     }
     // packing (rule-based, always solid)
     const master = (packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
     const listId = master?.data?.id;
+    if (listId) createdPackingListId = listId;
+    if (master?.error) return buildFailure('Could not save the generated trip plan.', master.error);
     if (listId) {
       const sugg = suggestPacking({ kind: trip.kind, nights: nights || 5, isInternational: trip.is_international, hasChildren, hasBaby: false, activities: a.map((x) => x.name) });
       const rows = sugg.map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category as never, quantity: s.quantity, ai_suggested: true, created_by: ctx!.user.id }));
-      if (rows.length) { await supabase.from('vacation_packing_items').insert(rows); added.packing = rows.length; }
+      if (rows.length) {
+        const { data, error } = await supabase.from('vacation_packing_items').insert(rows).select('id');
+        if (data) createdPackingItemIds.push(...data.map((row) => row.id));
+        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Packing insert returned an incomplete result.'));
+        added.packing = rows.length;
+      }
     }
 
     return NextResponse.json({ ok: true, added });
@@ -160,13 +255,28 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
       const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
       if (error) {
         console.error('Vacation AI conversation write failed:', error);
-        return NextResponse.json({ error: 'Could not start the trip conversation.' }, { status: 500 });
+        return databaseUnavailable('Could not start the trip conversation.');
       }
       conversationId = convo.id;
+    } else {
+      const { data: conversation, error } = await supabase.from('vacation_ai_conversations').select('id').eq('id', conversationId).eq('family_id', familyId).eq('vacation_id', vacationId).maybeSingle();
+      if (error) {
+        logDatabaseFailure('conversation ownership read', error);
+        return databaseUnavailable('Trip conversation is temporarily unavailable.');
+      }
+      if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
-    await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id });
+    const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
+    if (userMessageError) {
+      logDatabaseFailure('user message write', userMessageError);
+      return databaseUnavailable('Could not save your message.');
+    }
 
-    const { data: history } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(20);
+    const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(20);
+    if (historyError) {
+      logDatabaseFailure('conversation history read', historyError);
+      return databaseUnavailable('Trip conversation is temporarily unavailable.');
+    }
 
     const budgetSummary = summarizeBudget(budgets.data ?? [], expenses.data ?? []);
     const context = `TRIP CONTEXT
@@ -193,7 +303,11 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
       return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });
     }
 
-    await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id });
+    const { error: assistantMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id }).select('id').single();
+    if (assistantMessageError) {
+      logDatabaseFailure('assistant message write', assistantMessageError);
+      return databaseUnavailable('Could not save the concierge reply.');
+    }
     return NextResponse.json({ conversationId, reply });
   }
 
