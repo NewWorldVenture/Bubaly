@@ -129,9 +129,9 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
             )}
           </div>
 
-          <Link href="/admin/feedback" onClick={() => setOpen(false)}
+          <Link href="/admin/notifications" onClick={() => setOpen(false)}
             className="block border-t border-border/60 px-4 py-2.5 text-center text-xs font-semibold text-brand-text hover:bg-elevated">
-            Open feedback &amp; ideas
+            See all notifications
           </Link>
         </div>
       )}
