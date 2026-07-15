@@ -3,7 +3,7 @@ import { Target } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
 import { createAdCampaign } from '../actions';
 
@@ -15,7 +15,11 @@ const PLATFORMS = ['meta', 'google', 'linkedin', 'tiktok', 'x'];
 
 export default async function AdsPage() {
   const supabase = createServiceClient();
-  const { data: ads } = await supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: ads, error: adsError } = await supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  if (adsError) {
+    console.error('[admin-marketing-ads] campaign read failed', adsError);
+    return <AdminAdsReadError />;
+  }
 
   const totalBudget = (ads ?? []).reduce((s, a) => s + (a.budget_cents ?? 0), 0);
   const totalSpend = (ads ?? []).reduce((s, a) => s + (a.spend_cents ?? 0), 0);
@@ -65,6 +69,19 @@ export default async function AdsPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminAdsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Advertising</h1>
+        <p className="mt-1 text-sm text-muted">Plan paid campaigns and track budget and spend.</p>
+      </div>
+      <ErrorState message="Could not load advertising campaigns from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/ads" className="text-sm font-medium text-brand-text underline">Refresh advertising</a>
     </div>
   );
 }

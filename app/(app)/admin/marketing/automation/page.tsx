@@ -3,7 +3,7 @@ import { Workflow } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
@@ -15,7 +15,11 @@ const ACTIONS = ['send_email', 'send_sms', 'add_to_segment', 'remove_from_segmen
 
 export default async function AutomationPage() {
   const supabase = createServiceClient();
-  const { data: flows } = await supabase.from('marketing_automation_workflows').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: flows, error: flowsError } = await supabase.from('marketing_automation_workflows').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  if (flowsError) {
+    console.error('[admin-marketing-automation] workflow read failed', flowsError);
+    return <AdminAutomationReadError />;
+  }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -69,6 +73,19 @@ export default async function AutomationPage() {
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create workflow</button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminAutomationReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Automation</h1>
+        <p className="mt-1 text-sm text-muted">Build and manage marketing workflows.</p>
+      </div>
+      <ErrorState message="Could not load marketing workflows from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/automation" className="text-sm font-medium text-brand-text underline">Refresh automation</a>
     </div>
   );
 }
