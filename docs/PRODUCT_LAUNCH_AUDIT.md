@@ -406,3 +406,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `a704a41f`
 - Status: Resolved in code; live Resend/provider failure and retry evidence remain open
 - Remaining dependencies: run sandbox email failure/duplicate/retry drills, verify alert routing, and validate remote cron deployment
+
+### PLA-0293 - Concurrent protected requests could create duplicate first families
+
+- Timestamp: 2026-07-15 10:08 America/New_York
+- Service: Authentication, onboarding, and tenant provisioning
+- Route: `requireUserContext` / `ensureActiveFamily`
+- Affected files: `lib/server/ensure-family.ts`, `supabase/migrations/0212_atomic_family_provisioning.sql`, `lib/database.types.ts`, `tests/ensure-family-concurrency.test.ts`
+- Role: newly authenticated account owner
+- Scenario: multiple tabs, refreshes, or parallel protected server components reach family provisioning before the first membership is visible
+- Severity: P1
+- Launch impact: one account could receive multiple household spaces, splitting preferences and subsequent family data
+- Root cause: the membership check, family insert, owner membership, subscription, and active-family preference were separate service-role statements with no per-user lock
+- Resolution: the primary provisioning path now calls a service-only security-definer RPC guarded by `pg_advisory_xact_lock` and performs the first-family writes in one transaction; a compatibility fallback preserves rolling deployments until migration `0212` is applied
+- Supabase impact: adds `ensure_family_for_user` in migration `0212`; no destructive data changes; the RPC only creates a family when no active membership exists
+- Tests run: `tests/ensure-family-concurrency.test.ts` and `tests/onboarding-idempotency.test.ts` (5 tests), typecheck, migration audit, and diff check
+- Validation evidence: migration audit passes for 228 numbered SQL files with next version `0213`; the regression contract verifies the lock, service-role grant, and primary RPC path
+- Status: Resolved in code; remote migration application and authenticated concurrent onboarding verification remain open
+- Remaining dependencies: apply `0212`, run an isolated two-request first-login drill, and verify the resulting account has exactly one active family and one active-family preference

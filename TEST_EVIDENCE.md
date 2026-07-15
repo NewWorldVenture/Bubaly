@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-15
 
+## Latest Live Evidence Snapshot - Authentication and Supabase
+
+- `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID
+  `019f6612-b504-764d-ba45-1f0f81e7d090`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `supabase status`: unavailable because the Docker Desktop Linux engine is not running.
+- Cross-tenant authenticated RLS probes and remote migration-ledger reconciliation remain unverified.
+
 ## Latest Audit Update - Notification email failure contract
 
 - `npm.cmd run test -- tests/notification-email-boundary.test.ts tests/cron-notification-failure-status.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 4 files, 9 tests passed.
@@ -1246,3 +1254,11 @@ Audit date: 2026-07-15
   path. Buy-It-Now uses the atomic `marketplace_buy_now` RPC.
 - `npm.cmd run build`: passed; 234 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+## Latest Local Evidence - Atomic First-Family Provisioning
+
+- `npm.cmd exec vitest run tests/ensure-family-concurrency.test.ts tests/onboarding-idempotency.test.ts`: 2 files, 5 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run db:audit:migrations`: passed; 228 numbered SQL files, next version `0213`.
+- `git diff --check`: passed.
+- Migration `0212_atomic_family_provisioning.sql` adds a service-only `ensure_family_for_user` RPC with a per-user advisory transaction lock. `ensureActiveFamily` calls it first and retains a compatibility fallback for rolling deployment.
+- This is local contract evidence only. Remote migration application, authenticated two-request first-login verification, Auth Admin health, and cross-family RLS probes remain open.

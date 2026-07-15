@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:56:14 -04:00
+- Last updated: 2026-07-15 10:08:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `a704a41f` (notification email failure-contract increment)
+- Commit: pending (atomic first-family provisioning increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0293 - Concurrent protected requests could create duplicate first families
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / data integrity / authentication
+- Feature: First-family provisioning
+- Route: `requireUserContext` / `ensureActiveFamily`
+- File or files: `lib/server/ensure-family.ts`, `supabase/migrations/0212_atomic_family_provisioning.sql`, `tests/ensure-family-concurrency.test.ts`
+- Database objects: `families`, `family_members`, `subscriptions`, `user_preferences`
+- Affected roles: newly authenticated account owner
+- Scenario: multiple tabs, refreshes, or parallel protected server components provision a first family concurrently
+- Launch impact: one account could receive multiple household spaces and split later family data
+- Root cause: the membership check and first-family writes were separate service-role statements without a per-user lock
+- Required remediation: use a service-only transaction-scoped advisory lock around the membership check and initial family writes
+- Resolution: added `ensure_family_for_user` in migration `0212`; `ensureActiveFamily` calls the locked RPC first and retains a compatibility path for rolling deployments
+- Tests performed: `tests/ensure-family-concurrency.test.ts` and `tests/onboarding-idempotency.test.ts` (5 tests); typecheck; migration audit; diff check
+- Evidence: migration audit reports 228 numbered SQL files and next version `0213`; local concurrency contract is green
+- Remaining dependencies: apply `0212`, run an isolated two-request first-login drill, and confirm one active family plus one active-family preference
+
+#### TODO-0282 â€” Onboarding replay can duplicate household records
 
 #### TODO-0282 — Onboarding replay can duplicate household records
 

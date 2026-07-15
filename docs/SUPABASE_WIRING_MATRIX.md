@@ -6,7 +6,7 @@ contract is not yet verified.
 
 | Domain | Tables/relationships | RLS/auth boundary | RPC/API/storage/realtime | Status | Evidence or gap |
 | --- | --- | --- | --- | --- | --- |
-| Auth and families | `auth.users`, `families`, `family_members` | session family membership and manager-only membership updates (`0211`) | Supabase Auth, middleware, invite APIs | Partial | Membership self-update RLS drift is repaired locally; migration application, Auth Admin users probe, and two-tenant role/RLS tests remain |
+| Auth and families | `auth.users`, `families`, `family_members` | session family membership and manager-only membership updates (`0211`) | Supabase Auth, middleware, invite APIs, locked first-family provisioning (`0212`) | Partial | Membership self-update drift and concurrent first-family creation are repaired locally; migration application, Auth Admin users probe, and two-tenant role/RLS tests remain |
 | Onboarding | profiles, invites, subscriptions, family relations; `onboarding_key` indexes on managed members, invites, calendar events and import markers (`0210`) | authenticated server action plus family-scoped policies | service-role writes, invite email, calendar persistence | Partial | Replay-safe keyed upserts are locally verified; migration application, invite/tier matrix and live RLS tests pending |
 | Wallet | wallet tables, goals, buckets, immutable transactions | family RLS plus manager-checked RPCs | `0205`, `0208`, typed RPC wrappers | Partial | Goal RPC is published; remote migration ledger/deployment still needs proof |
 | Billing | subscriptions, checkout/session records, Stripe refs | family/owner/admin boundaries | Stripe checkout, webhooks, portal | Partial | Live idempotency/refund and secret validation pending |

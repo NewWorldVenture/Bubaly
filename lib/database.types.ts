@@ -2331,6 +2331,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      ensure_family_for_user: {
+        Args: { p_user_id: string; p_name: string; p_timezone?: string; p_display_name?: string | null };
+        Returns: string;
+      };
       onboarding_claim_family: {
         Args: { p_user_id: string; p_name: string; p_timezone: string };
         Returns: { family_id: string; created: boolean }[];

@@ -6,8 +6,8 @@ have evidence in the issue ledger and a pushed commit.
 
 | Service | Primary route surfaces | Roles to verify | Required test layers | Current status | Next evidence |
 | --- | --- | --- | --- | --- | --- |
-| Auth and tenant isolation | `/login`, `/signup`, middleware, family switch | anonymous, member, child, parent, admin | unit, API, RLS, E2E, security | In progress | `tests/admin-auth-boundary.test.ts` plus `tests/tenant-isolation-rls.test.ts`; migration 0211 repairs membership self-update drift, while live Auth Admin health and cross-family probes remain |
-| Onboarding and invitations | `/onboarding`, `/join`, family settings | owner, parent, guardian, member, invited user | integration, API, E2E, email | In progress | Keyed replay regression passes; live invite expiry, role change, tier gates and authenticated browser flows remain |
+| Auth and tenant isolation | `/login`, `/signup`, middleware, family switch | anonymous, member, child, parent, admin | unit, API, RLS, E2E, security | In progress | `tests/admin-auth-boundary.test.ts`, `tests/tenant-isolation-rls.test.ts`, and `tests/ensure-family-concurrency.test.ts`; migrations 0211/0212 repair membership-update drift and first-family provisioning races, while live Auth Admin health and cross-family probes remain |
+| Onboarding and invitations | `/onboarding`, `/join`, family settings | owner, parent, guardian, member, invited user | integration, API, E2E, email | In progress | Keyed replay and first-family concurrency regressions pass; live invite expiry, role change, tier gates and authenticated browser flows remain |
 | Home and dashboards | `/home`, `/dashboard/*` | parent, child, admin | component, E2E, responsive, accessibility | In progress | Action-by-action dashboard traversal |
 | Calendar and planning | `/calendar`, `/dashboard/calendar`, planning routes | all family roles | unit, integration, sync, E2E | In progress | Recurrence, conflict and provider failure matrix |
 | Chores and missions | `/missions`, `/kids`, `/parent` | child, parent, guardian | unit, API, upload, E2E, RLS | In progress | Proof upload, dispute, reward and notification paths |

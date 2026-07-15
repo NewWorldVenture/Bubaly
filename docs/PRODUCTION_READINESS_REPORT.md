@@ -1,14 +1,14 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 09:27 America/New_York
+Audit snapshot: 2026-07-15 10:08 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 411 Vitest files and 3,061 tests pass.
+- 415 Vitest files and 3,073 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
-- Migration filename audit passes for 227 numbered migrations; next version is `0212`.
+- Migration filename audit passes for 228 numbered migrations; next version is `0213`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
@@ -22,8 +22,11 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Family membership RLS drift is repaired locally in migration `0211`: non-managers no longer receive a
   direct membership UPDATE path that could change role, activation state, or family assignment. Remote
   application and authenticated cross-tenant probes remain launch dependencies.
+- First-family provisioning is serialized locally in migration `0212`: concurrent protected requests now
+  use a per-user advisory lock around the membership check and initial household writes. Remote application
+  and an authenticated two-request first-login drill remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f65f5-6fc8-7530-9c7e-5e8688441c29`); local Docker/Supabase status is unavailable.
+  `019f6612-b504-764d-ba45-1f0f81e7d090`); local Docker/Supabase status is unavailable.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
 - The Connections hub no longer creates label-only “connected” records for providers without a real OAuth

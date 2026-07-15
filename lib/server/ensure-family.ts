@@ -69,17 +69,29 @@ export async function ensureActiveFamily(
   const ownerName = deriveName(user, profile?.display_name ?? profile?.full_name ?? null);
   const familyName = ownerName.endsWith('s') ? `${ownerName}' Family` : `${ownerName}'s Family`;
 
-  // Insert the family. Bypassing RLS means the RETURNING row isn't filtered, so
-  // we reliably get the new family id back.
-  const { data: family, error } = await admin
-    .from('families')
-    .insert({ name: familyName, timezone: 'UTC', created_by: user.id })
-    .select('id')
-    .single();
-  if (error || !family) {
-    console.error('[ensure-family] family insert failed', error);
-    return false;
-  }
+  // The locked RPC bypasses RLS and returns the canonical family id.
+  const { data: provisionedFamilyId, error: provisionError } = await admin.rpc('ensure_family_for_user', {
+    p_user_id: user.id,
+    p_name: familyName,
+    p_display_name: ownerName,
+    p_timezone: 'UTC',
+  });
+  let familyId = provisionedFamilyId;
+
+  // Keep a compatibility path for databases that have not applied migration
+  // 0212 yet. It preserves rolling-deployment behavior until the RPC is live.
+  if (provisionError || !familyId) {
+    console.error('[ensure-family] locked provisioning unavailable; using compatibility path', provisionError);
+    const { data: family, error } = await admin
+      .from('families')
+      .insert({ name: familyName, timezone: 'UTC', created_by: user.id })
+      .select('id')
+      .single();
+    if (error || !family) {
+      console.error('[ensure-family] family insert failed', error);
+      return false;
+    }
+    familyId = family.id;
 
   // Explicitly create the owner's parent membership — do NOT rely on the
   // `handle_new_family` trigger, which isn't guaranteed to be installed/active in
@@ -115,6 +127,7 @@ export async function ensureActiveFamily(
     { onConflict: 'user_id' },
   );
   if (prefErr) console.error('[ensure-family] active family upsert failed', prefErr);
+  }
 
   // Confirm the membership is in place before we report success.
   const { data: confirm, error: confirmErr } = await admin
@@ -128,7 +141,7 @@ export async function ensureActiveFamily(
     return false;
   }
   if (!confirm || confirm.length === 0) {
-    console.error('[ensure-family] membership missing after provisioning family', family.id);
+    console.error('[ensure-family] membership missing after provisioning family', familyId);
     return false;
   }
 
@@ -142,7 +155,7 @@ export async function ensureActiveFamily(
       .from('onboarding_progress').select('user_id').eq('user_id', user.id).maybeSingle();
     if (!prior) {
       await admin.from('onboarding_progress').insert({
-        user_id: user.id, family_id: family.id, source: 'auto_provision',
+        user_id: user.id, family_id: familyId, source: 'auto_provision',
         status: 'in_progress', steps_completed: ['profile'], completeness: 40,
       } as never);
     }
