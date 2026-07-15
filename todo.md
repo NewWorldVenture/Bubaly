@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:15:00 -04:00
+- Last updated: 2026-07-15 10:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `cdaf1ce3` (published main merge; source repair `e0674b15`)
+- Commit: pending (admin document deletion failure-contract increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0294 - Admin document deletion could orphan private storage objects
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / private storage / admin
+- Feature: Super Admin content management
+- Route: `/admin/content`
+- File or files: `app/(app)/admin/actions.ts`, `components/admin/document-row-actions.tsx`, `tests/admin-document-delete-boundary.test.ts`
+- Database objects: `documents`, private `documents` Storage bucket
+- Affected roles: Super Admin; families whose private files are managed by an operator
+- Scenario: storage removal fails or the database row is missing during a delete request
+- Launch impact: an operator could see a success toast while leaving a private object orphaned, or audit a delete that did not remove a row
+- Root cause: the action ignored storage errors, trusted a client path, and did not confirm a returned database row
+- Resolution: load the canonical path from the database, stop on storage failure, fail on missing rows, and require a returned row before auditing success
+- Tests performed: `tests/admin-document-delete-boundary.test.ts`, `tests/admin-auth-boundary.test.ts`, and `tests/admin-management-action-boundaries.test.ts` (6 tests); full 417-file/3,079-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused boundary verifies error ordering, canonical path use, missing-row handling, and confirmed delete result
+- Remaining dependencies: publish docs, run an isolated storage failure/retry drill, and verify Super Admin browser behavior
 
 #### TODO-0293 - Concurrent protected requests could create duplicate first families
 

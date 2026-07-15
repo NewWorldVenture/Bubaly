@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 10:08 America/New_York
+Audit snapshot: 2026-07-15 10:20 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 416 Vitest files and 3,077 tests pass in the latest full local gate.
+- 417 Vitest files and 3,079 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
 - Migration filename audit passes for 228 numbered migrations; next version is `0213`.
@@ -43,6 +43,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   email failures are included in the same operational summary.
 - Notification email delivery now returns sent/failed/skipped counts and checks Supabase resolution boundaries;
   live Resend failure/retry evidence remains open.
+- Super Admin document deletion now uses the database's canonical storage path, stops on storage removal
+  failure, and confirms the row delete before auditing success; live storage retry and browser evidence remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

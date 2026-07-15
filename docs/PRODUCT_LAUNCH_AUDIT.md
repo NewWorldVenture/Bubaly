@@ -425,3 +425,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `e0674b15`
 - Status: Resolved in code; remote migration application and authenticated concurrent onboarding verification remain open
 - Remaining dependencies: apply `0212`, run an isolated two-request first-login drill, and verify the resulting account has exactly one active family and one active-family preference
+
+### PLA-0294 - Admin document deletion could orphan private storage objects
+
+- Timestamp: 2026-07-15 10:20 America/New_York
+- Service: Super Admin content management and private document storage
+- Route: `/admin/content`
+- Affected files: `app/(app)/admin/actions.ts`, `components/admin/document-row-actions.tsx`, `tests/admin-document-delete-boundary.test.ts`
+- Role: Super Admin
+- Scenario: storage removal failed or the database row was missing while the action still continued toward deletion
+- Severity: P1
+- Launch impact: the console could report success while leaving private objects orphaned, or delete a row without a confirmed target
+- Root cause: storage removal errors and missing/empty database delete results were ignored; the client-supplied path was trusted over the database row
+- Resolution: the action now loads the document target, uses its canonical `storage_path`, stops on storage failure, and requires a returned database row before auditing success
+- Supabase impact: no schema change; storage and row deletion remain Super Admin-only and retryable after failure
+- Tests run: `tests/admin-document-delete-boundary.test.ts`, `tests/admin-auth-boundary.test.ts`, and `tests/admin-management-action-boundaries.test.ts` (6 tests), full 417-file/3,079-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract verifies storage failure ordering, canonical path use, missing-row handling, and confirmed delete result
+- Commit: `34a24ddd`
+- Status: Resolved in code; live storage failure drill and Super Admin browser verification remain open
+- Remaining dependencies: run an isolated storage error/delete retry drill and verify object/row parity after success and failure

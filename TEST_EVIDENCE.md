@@ -1264,3 +1264,15 @@ Audit date: 2026-07-15
 - After integrating the concurrent feedback-board changes from `origin/main`, the merged suite passed at 416 files and 3,077 tests; typecheck and migration audit passed.
 - Publication verified on `origin/main` at merge commit `cdaf1ce3` (source repair commit `e0674b15`).
 - This is local contract evidence only. Remote migration application, authenticated two-request first-login verification, Auth Admin health, and cross-family RLS probes remain open.
+
+## Latest Local Evidence - Admin Document Deletion
+
+- `npm.cmd exec vitest run tests/admin-document-delete-boundary.test.ts tests/admin-auth-boundary.test.ts tests/admin-management-action-boundaries.test.ts`: 3 files, 6 tests passed.
+- `npm.cmd test`: 417 files, 3,079 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `adminDeleteDocumentAction` now resolves `storage_path` from the database, returns a sanitized failure when storage removal fails, and confirms the database delete result before reporting success.
+- Publication commit: `34a24ddd`; docs update and remote push verification remain pending.
