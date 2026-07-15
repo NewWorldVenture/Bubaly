@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; existing family predicates, RLS, and approval status transitions remain in force
 - Tests run: `tests/wallet-money-action-boundaries.test.ts` (5 focused tests); full Vitest; typecheck; lint; dependency audit; production build; diff check
 - Validation evidence: latest full gate passed with 455 test files, 3,195 tests, 0 production dependency vulnerabilities, and a 250-route build
-- Commit: pending publication
+- Commit: `99bc0457`
 - Status: Resolved in code; live workflow evidence remains open
 - Remaining dependencies: execute isolated activation, approval-insert failure, concurrency, reconciliation, RLS, and browser drills against deployed Supabase
 
