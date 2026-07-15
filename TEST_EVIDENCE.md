@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Trip Weather and Packing Read Boundaries
+
+- Focused weather/packing suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 469 test files, 3,222 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Trip Weather now validates trip and snapshot reads; Trip Packing validates trip, packing-list, item, weather, and activity reads before rendering plans, with retryable failure states.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Trip Emergency Summary Read Boundary
 
 - Focused emergency summary suite: 1 file, 2 assertions passed.
@@ -269,25 +283,7 @@ Audit date: 2026-07-15
 - Wallet money actions now surface required read failures instead of treating outages as missing records, defaults, or empty money state; entitlement reads fail closed instead of silently returning Free.
 - Live wallet/subscription RLS, role, concurrency, reconciliation, and browser evidence remain open.
 
-## Latest Local Evidence - Wallet Provisioning and Approval Failure Boundaries
-
-- Focused wallet money boundary suite: 1 file, 5 tests passed.
-- Full `npm.cmd test`: 455 test files, 3,195 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `git diff --check`: passed.
-- Wallet activation now reports required disclosure, member, child-wallet, bucket, and rule write failures; spend requests cancel held debits when approval-row creation fails.
-- Live wallet RLS, role, concurrency, reconciliation, and browser evidence remain open.
-
-## Latest Local Evidence - Wallet Hub Tenant-Scoped Deletion
-
-- Focused wallet/tenant suites: 4 files, 22 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `git diff --check`: passed.
-- Wallet hub dele…24830 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+## Latest Local Evidence - Wallet Provisioning and Approv…25097 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
