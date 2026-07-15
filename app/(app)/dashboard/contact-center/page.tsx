@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getOrCreateChannel } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult } from '@/lib/contact-center/server';
 import { suggestEmailLocal } from '@/lib/contact-center/address';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import type { Tables } from '@/lib/database.types';
 import { ContactCenterModule } from '@/components/modules/contact-center-module';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Operations Center' };
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,8 @@ export default async function ContactCenterPage() {
   const familyId = ctx.active.familyId;
   const admin = createServiceClient();
 
-  const [channel, { data: messages }] = await Promise.all([
-    getOrCreateChannel(admin, familyId),
+  const [channelResult, messagesResult] = await Promise.all([
+    getOrCreateChannelResult(admin, familyId),
     admin.from('family_inbox_messages')
       .select('id, channel, direction, from_addr, to_addr, subject, body, ai_summary, ai_intent, status, occurred_at')
       .eq('family_id', familyId)
@@ -26,10 +27,15 @@ export default async function ContactCenterPage() {
       .limit(100),
   ]);
 
+  if (channelResult.error || messagesResult.error) {
+    console.error('[contact-center] page data read failed', channelResult.error ?? messagesResult.error);
+    return <ErrorState message="The Contact Center is temporarily unavailable. Please try again." />;
+  }
+
   return (
     <ContactCenterModule
-      channel={channel}
-      messages={(messages ?? []) as InboxRow[]}
+      channel={channelResult.data}
+      messages={(messagesResult.data ?? []) as InboxRow[]}
       suggestedLocal={suggestEmailLocal(ctx.active.family.name)}
       twilioReady={isTwilioConfigured()}
       canManage={ctx.active.role === 'parent'}

@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 449 Vitest files and 3,161 tests pass in the latest full local gate.
+- 450 Vitest files and 3,174 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -115,6 +115,10 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   billing state reads fail; billing-customer writes and checkout tracking/synchronization failures are logged and
   surfaced without presenting a successful billing state. Focused boundary coverage is green; live Stripe and
   Supabase failure drills remain open.
+- The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
+  inbound and outbound inbox persistence errors are no longer discarded, and Twilio callbacks return retryable
+  503 responses for database outages. The migration describes inbound email routing, but no email webhook handler
+  is implemented yet; provider callback and live RLS evidence remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

@@ -6,7 +6,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { describeActionError } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal } from '@/lib/contact-center/address';
-import { getOrCreateChannel, provisionFamilyNumber } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
 
 type Fail = { ok: false; error: string };
 
@@ -30,7 +30,8 @@ export async function assignEmailAction(rawLocal: string): Promise<{ ok: true; l
     return { ok: false, error: 'Pick 3–30 letters/numbers (dots or dashes allowed), e.g. “smith-family”.' };
   }
   const admin = createServiceClient();
-  await getOrCreateChannel(admin, g.familyId);
+  const channel = await getOrCreateChannelResult(admin, g.familyId);
+  if (channel.error) return { ok: false, error: describeActionError(channel.error, 'Could not load the contact channel.') };
   const { error } = await admin
     .from('family_contact_channels')
     .update({ email_local: local })
@@ -62,7 +63,8 @@ export async function updateConciergeAction(input: {
   const g = await guardParentPlus();
   if (!g.ok) return g;
   const admin = createServiceClient();
-  await getOrCreateChannel(admin, g.familyId);
+  const channel = await getOrCreateChannelResult(admin, g.familyId);
+  if (channel.error) return { ok: false, error: describeActionError(channel.error, 'Could not load the contact channel.') };
   const patch: Partial<{ ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }> = {};
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;

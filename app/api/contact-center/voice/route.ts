@@ -9,7 +9,7 @@ import {
   validateTwilioSignature, wrapTwiml, twimlSay, twimlDial, twimlRecord, twimlHangup,
 } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { resolveFamilyByNumber, getOrCreateChannel } from '@/lib/contact-center/server';
+import { resolveFamilyByNumberResult, getOrCreateChannelResult } from '@/lib/contact-center/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,16 +35,26 @@ export async function POST(req: NextRequest) {
 
   const to = params.To ?? '';
   const admin = createServiceClient();
-  const familyId = to ? await resolveFamilyByNumber(admin, to) : null;
+  const routed = to ? await resolveFamilyByNumberResult(admin, to) : { familyId: null, error: null };
+  if (routed.error) {
+    console.error('[contact-center] voice routing read failed', routed.error);
+    return new NextResponse('Routing temporarily unavailable', { status: 503 });
+  }
+  const familyId = routed.familyId;
   if (!familyId) {
     return twiml(wrapTwiml(twimlSay('This number is not in service.'), twimlHangup()));
   }
 
-  const [channel, { data: fam }] = await Promise.all([
-    getOrCreateChannel(admin, familyId),
+  const [channelResult, familyResult] = await Promise.all([
+    getOrCreateChannelResult(admin, familyId),
     admin.from('families').select('name').eq('id', familyId).maybeSingle(),
   ]);
-  const familyLabel = fam?.name || 'this family';
+  if (channelResult.error || familyResult.error) {
+    console.error('[contact-center] voice family context read failed', channelResult.error ?? familyResult.error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  const channel = channelResult.data;
+  const familyLabel = familyResult.data?.name || 'this family';
 
   // Concierge off → forward to the human fallback if set, else take a message.
   if (channel?.ai_concierge_enabled === false) {

@@ -889,3 +889,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused read-boundary contracts and full local gate pass; live Stripe test-mode, webhook/idempotency, outage, refund, and remote Supabase evidence remain open
 - Status: Resolved in code; live billing workflow evidence remains open
 - Remaining dependencies: execute non-destructive checkout, plan-change, cancellation, portal, webhook replay, and refund drills against the configured test environment
+
+### PLA-0319 - Contact Center collapsed routing and inbox failures into empty state
+
+- Timestamp: 2026-07-15 13:54 America/New_York
+- Service: Family Contact Center and unified communications inbox
+- Routes: `/dashboard/contact-center`, `/api/contact-center/sms`, `/api/contact-center/voice`, `/api/contact-center/voice/transcription`
+- Affected files: `lib/contact-center/server.ts`, `app/(app)/dashboard/contact-center/page.tsx`, `app/(app)/dashboard/contact-center/actions.ts`, the three Contact Center API routes, `tests/contact-center.test.ts`
+- Role: Family+ parent, family member, and inbound communications provider
+- Scenario: channel, family, routing, or inbox persistence failures were discarded and the UI/provider flow could continue with null, empty, or unpersisted state; the schema advertised inbound email without an email webhook implementation
+- Severity: P1
+- Launch impact: families could miss messages or receive a false healthy callback response, and inbound email would not reach the inbox
+- Root cause: unchecked Supabase results in channel helpers, page loads, routing lookups, provisioning, and inbox writes; missing email ingress implementation
+- Resolution: channel and page reads now show retryable failure state; Twilio callbacks return 503 on routing/context read failure; provisioning and inbox writes are checked; escalation failures are logged; focused tests cover the boundaries
+- Supabase impact: no schema change; family-scoped reads remain in the migration and service-role writes remain server-only
+- Tests run: `tests/contact-center.test.ts` (13 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation passes; merged-tree gate passed with 450 files/3,172 tests, 0 production dependency vulnerabilities, and 250 generated routes
+- Status: Resolved in code; email routing and live provider/RLS evidence remain open
+- Remaining dependencies: implement or explicitly defer email ingress, then run Twilio retry, provider outage, role, RLS, and browser drills

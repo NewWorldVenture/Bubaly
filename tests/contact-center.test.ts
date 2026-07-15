@@ -8,6 +8,12 @@ import {
   classifyIntent, routeInbound, shouldNotifyFamily, summarizeInbound,
   autoReplyText, intentMeta,
 } from '@/lib/contact-center/routing';
+import { readFileSync } from 'node:fs';
+
+const contactCenterServer = readFileSync('lib/contact-center/server.ts', 'utf8');
+const contactCenterPage = readFileSync('app/(app)/dashboard/contact-center/page.tsx', 'utf8');
+const smsRoute = readFileSync('app/api/contact-center/sms/route.ts', 'utf8');
+const voiceRoute = readFileSync('app/api/contact-center/voice/route.ts', 'utf8');
 
 describe('bubaly address', () => {
   it('normalizes free text to a valid local-part', () => {
@@ -87,5 +93,21 @@ describe('concierge routing', () => {
     expect(autoReplyText('sales', 'the Smiths')).toMatch(/sales/i);
     expect(intentMeta('urgent').label).toBe('Urgent');
     expect(intentMeta('nonsense').label).toBe('General');
+  });
+});
+
+describe('contact center persistence boundaries', () => {
+  it('does not collapse channel and inbox failures into empty state', () => {
+    expect(contactCenterServer).toContain('getOrCreateChannelResult');
+    expect(contactCenterServer).toContain('inbound message persistence failed');
+    expect(contactCenterServer).toContain('outbound message persistence failed');
+    expect(contactCenterPage).toContain('channelResult.error || messagesResult.error');
+  });
+
+  it('fails Twilio routing closed when family lookup fails', () => {
+    expect(smsRoute).toContain('Routing temporarily unavailable');
+    expect(voiceRoute).toContain('Routing temporarily unavailable');
+    expect(smsRoute).toContain('channelResult.error || familyResult.error');
+    expect(voiceRoute).toContain('channelResult.error || familyResult.error');
   });
 });

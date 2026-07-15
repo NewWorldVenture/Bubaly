@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { resolveFamilyByNumber, getOrCreateChannel, recordInboundMessage, recordOutboundMessage } from '@/lib/contact-center/server';
+import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily, autoReplyText } from '@/lib/contact-center/routing';
 
@@ -44,14 +44,24 @@ export async function POST(req: NextRequest) {
   const sid = params.MessageSid ?? params.SmsSid ?? null;
 
   const admin = createServiceClient();
-  const familyId = to ? await resolveFamilyByNumber(admin, to) : null;
+  const routed = to ? await resolveFamilyByNumberResult(admin, to) : { familyId: null, error: null };
+  if (routed.error) {
+    console.error('[contact-center] SMS routing read failed', routed.error);
+    return new NextResponse('Routing temporarily unavailable', { status: 503 });
+  }
+  const familyId = routed.familyId;
   if (!familyId) return xml(''); // not one of our numbers
 
-  const [channel, { data: fam }] = await Promise.all([
-    getOrCreateChannel(admin, familyId),
+  const [channelResult, familyResult] = await Promise.all([
+    getOrCreateChannelResult(admin, familyId),
     admin.from('families').select('name').eq('id', familyId).maybeSingle(),
   ]);
-  const familyLabel = fam?.name || 'the family';
+  if (channelResult.error || familyResult.error) {
+    console.error('[contact-center] SMS family context read failed', channelResult.error ?? familyResult.error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  const channel = channelResult.data;
+  const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
 
@@ -62,14 +72,14 @@ export async function POST(req: NextRequest) {
 
   // Escalate genuine urgencies to the family's human fallback.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent at your Bubaly line: ${result.summary}`); } catch { /* best-effort */ }
+    try { await sendSms(channel.forward_to_phone, `🚨 Urgent at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent SMS escalation failed', error); }
     try {
       await admin.from('notifications').insert({
         family_id: familyId, type: 'system',
         title: '🚨 Urgent message at your family line', body: result.summary,
         related_type: 'contact_center',
       });
-    } catch { /* notifications shape may vary — best-effort */ }
+    } catch (error) { console.error('[contact-center] urgent notification write failed', error); }
   }
 
   // Auto-reply unless the concierge is off or it's spam.

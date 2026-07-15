@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { getOrCreateChannel, recordInboundMessage } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult, recordInboundMessage } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 
@@ -36,11 +36,16 @@ export async function POST(req: NextRequest) {
   if (!text.trim()) return new NextResponse('', { status: 204 });
 
   const admin = createServiceClient();
-  const [channel, { data: fam }] = await Promise.all([
-    getOrCreateChannel(admin, familyId),
+  const [channelResult, familyResult] = await Promise.all([
+    getOrCreateChannelResult(admin, familyId),
     admin.from('families').select('name').eq('id', familyId).maybeSingle(),
   ]);
-  const familyLabel = fam?.name || 'the family';
+  if (channelResult.error || familyResult.error) {
+    console.error('[contact-center] transcription family context read failed', channelResult.error ?? familyResult.error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  const channel = channelResult.data;
+  const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
   await recordInboundMessage(admin, {
@@ -49,14 +54,14 @@ export async function POST(req: NextRequest) {
   });
 
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch { /* best-effort */ }
+    try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
     try {
       await admin.from('notifications').insert({
         family_id: familyId, type: 'system',
         title: '🚨 Urgent voicemail at your family line', body: result.summary,
         related_type: 'contact_center',
       });
-    } catch { /* best-effort */ }
+    } catch (error) { console.error('[contact-center] urgent voicemail notification write failed', error); }
   }
 
   return new NextResponse('', { status: 204 });
