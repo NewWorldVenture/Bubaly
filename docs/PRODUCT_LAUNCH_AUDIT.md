@@ -746,6 +746,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
+### PLA-0313 - Marketplace Alerts hid saved-search and matching-data failures
+
+- Timestamp: 2026-07-15 13:04 America/New_York
+- Service: Marketplace saved-search alerts and match discovery
+- Route: `/marketplace/alerts`
+- Affected files: `app/(app)/marketplace/alerts/page.tsx`, `tests/marketplace-alerts-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: saved-search, matching-listing, or saved-state reads failed while the page displayed an empty or incomplete alert view
+- Severity: P1
+- Launch impact: users could miss relevant new listings or trust inaccurate match counts
+- Root cause: Promise.all result errors were discarded and failed reads became empty arrays
+- Resolution: primary saved-search failure now renders a retryable ErrorState; matching-listing and saved-state failures are logged and shown in an accessible data-health warning
+- Supabase impact: no schema change; alert and listing reads remain scoped to the active family/member permissions
+- Tests run: `tests/marketplace-alerts-read-boundary.test.ts` (2 focused tests); full 444-file/3,151-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source repair pending publication; build generated 250 routes; live alert/RLS, role, browser, and cross-family evidence remain open
+- Status: Resolved in code; full verification and live workflow evidence remain open
+- Remaining dependencies: execute isolated alert CRUD, match-count, save-state, and family-isolation drills against deployed Supabase
+
 ### PLA-0312 - Marketplace Orders hid transaction and fee-read failures as incomplete data
 
 - Timestamp: 2026-07-15 12:58 America/New_York

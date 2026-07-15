@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BellRing, Sparkles } from 'lucide-react';
+import { AlertTriangle, BellRing, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
@@ -13,6 +13,7 @@ import {
 import {
   KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type RentPeriod,
 } from '@/lib/marketplace/listings';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Alerts · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -22,8 +23,9 @@ export default async function MarketplaceAlertsPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const meId = ctx.active.member.id;
+  const dataWarnings: string[] = [];
 
-  const [{ data: searches }, { data: listings }, { data: saves }] = await Promise.all([
+  const [{ data: searches, error: searchesError }, { data: listings, error: listingsError }, { data: saves, error: savesError }] = await Promise.all([
     sb.from('marketplace_saved_searches')
       .select('id, label, query, kind, category, max_price_cents, last_seen_at, created_at')
       .eq('family_id', familyId).eq('member_id', meId).order('created_at', { ascending: false }),
@@ -32,6 +34,19 @@ export default async function MarketplaceAlertsPage() {
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
     sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).eq('member_id', meId),
   ]);
+
+  if (searchesError) {
+    console.error('[marketplace-alerts] Saved searches read failed', searchesError);
+    return <ErrorState message="Could not load your marketplace alerts. Refresh and try again." />;
+  }
+  if (listingsError) {
+    console.error('[marketplace-alerts] Matching listings read failed', listingsError);
+    dataWarnings.push('Matching listings');
+  }
+  if (savesError) {
+    console.error('[marketplace-alerts] Saved listings read failed', savesError);
+    dataWarnings.push('Saved listings');
+  }
 
   const candidates = (listings ?? []) as (MatchableListing & { rent_period: string | null })[];
   const savedIds = new Set((saves ?? []).map((s) => s.listing_id));
@@ -43,6 +58,13 @@ export default async function MarketplaceAlertsPage() {
         title="Alerts"
         description="Tell Bubaly what you’re after — we’ll match new listings the moment they hit the board."
       />
+
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Marketplace alerts data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some alert details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
 
       <AlertComposer />
 

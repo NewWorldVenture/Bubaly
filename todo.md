@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:58:00 -04:00
+- Last updated: 2026-07-15 13:04:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0313 - Marketplace Alerts hid saved-search and matching-data failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace / discovery integrity
+- Feature: Marketplace saved-search alerts and match counts
+- Route: `/marketplace/alerts`
+- File or files: `app/(app)/marketplace/alerts/page.tsx`, `tests/marketplace-alerts-read-boundary.test.ts`
+- Database objects: `marketplace_saved_searches`, `marketplace_listings`, and `marketplace_saves`
+- Affected roles: authenticated household members and Super Admin marketplace operators
+- Scenario: saved-search, matching-listing, or saved-state reads failed while the page rendered no alerts, no matches, or incomplete saved controls
+- Launch impact: users could miss new marketplace matches or trust an inaccurate empty alert view
+- Root cause: Promise.all results discarded Supabase errors and treated all failed reads as empty arrays
+- Resolution: saved-search failures now render a retryable error state; matching-listing and saved-state failures are logged and surfaced in an accessible Marketplace alerts data-health warning
+- Tests performed: `tests/marketplace-alerts-read-boundary.test.ts` (2 focused tests); full 444-file/3,151-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit pending publication; live alert/RLS/role/browser workflow evidence remains open
+- Remaining dependencies: run isolated saved-search create/update/delete and cross-family listing visibility drills against deployed Supabase
 
 #### TODO-0312 - Marketplace Orders hid transaction and fee-read failures as incomplete data
 

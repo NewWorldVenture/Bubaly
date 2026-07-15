@@ -1491,3 +1491,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/marketplace/orders` now fails clearly on the primary order read and surfaces labeled warnings for fee settings, listing titles, family members, review history, and handoff coordination failures.
 - Source commit: `f1e2ef12`; branch and `main` publication verified.
+
+## Latest Local Evidence - Marketplace Alerts Read Failure
+
+- Focused Marketplace alerts read-boundary suite: 1 file, 2 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `/marketplace/alerts` now fails clearly when saved searches cannot be read and surfaces matching-listing and saved-state failures instead of presenting a healthy empty alert view.
+- Full `npm.cmd test`: 444 files, 3,151 tests passed.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime warning remains when emitted.
+- Source commit: pending publication.
