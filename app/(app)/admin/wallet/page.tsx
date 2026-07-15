@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Wallet, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { ErrorState } from '@/components/ui/states';
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
@@ -11,13 +12,13 @@ export default async function AdminWalletPage() {
   const supabase = createServiceClient();
 
   const [
-    { count: activeWallets },
-    { count: childWallets },
-    { count: pendingGifts },
-    { count: pendingApprovals },
-    { data: creditAgg },
-    { data: flags },
-    { data: audit },
+    activeWalletsResult,
+    childWalletsResult,
+    pendingGiftsResult,
+    pendingApprovalsResult,
+    creditAggResult,
+    flagsResult,
+    auditResult,
   ] = await Promise.all([
     supabase.from('family_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('child_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
@@ -27,6 +28,39 @@ export default async function AdminWalletPage() {
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);
+
+  const readError = [
+    activeWalletsResult.error,
+    childWalletsResult.error,
+    pendingGiftsResult.error,
+    pendingApprovalsResult.error,
+    creditAggResult.error,
+    flagsResult.error,
+    auditResult.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[admin-wallet] wallet overview read failed', readError);
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            <Wallet className="h-6 w-6 text-brand-text" /> Family Wallet
+          </h1>
+          <p className="mt-1 text-sm text-muted">Live wallet oversight across every family.</p>
+        </div>
+        <ErrorState message="Could not load wallet oversight from Supabase. Refresh and try again." />
+        <a href="/admin/wallet" className="text-sm font-medium text-brand-text underline">Refresh wallet overview</a>
+      </div>
+    );
+  }
+
+  const { count: activeWallets } = activeWalletsResult;
+  const { count: childWallets } = childWalletsResult;
+  const { count: pendingGifts } = pendingGiftsResult;
+  const { count: pendingApprovals } = pendingApprovalsResult;
+  const { data: creditAgg } = creditAggResult;
+  const { data: flags } = flagsResult;
+  const { data: audit } = auditResult;
 
   const txns = (creditAgg ?? []) as { amount_cents: number; direction: string }[];
   const creditVolumeCents = txns.filter((t) => t.direction === 'credit').reduce((s, t) => s + Number(t.amount_cents), 0);

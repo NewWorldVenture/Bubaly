@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 15:45:00 -04:00
+- Last updated: 2026-07-15 15:50:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `712ee9b3` adds the admin wallet reconciliation read boundary; live provider and deployment evidence remains open
+- Commit: latest source increment adds admin wallet reconciliation and wallet overview read safety; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0337 - Admin wallet overview hid required read failures as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Admin observability / wallet oversight / Supabase failure handling
+- Feature: Super Admin wallet overview
+- Route: `/admin/wallet`
+- File or files: `app/(app)/admin/wallet/page.tsx`, `tests/admin-wallet-read-boundary.test.ts`
+- Database objects: `family_wallets`, `child_wallets`, `gift_payments`, `parent_approvals`, `wallet_transactions`, `feature_flags`, and `wallet_audit_logs`
+- Affected roles: Super Admin and financial operators
+- Scenario: any of seven parallel reads could fail while the page substituted zero counts or empty arrays and rendered operational controls.
+- Launch impact: operators could misread wallet exposure, pending approvals, ledger volume, feature flags, or audit activity during a partial outage.
+- Root cause: Promise results were destructured without retaining or checking error fields.
+- Required remediation: preserve every result, fail the page visibly on any required read failure, and provide a refresh path.
+- Implementation notes: all seven result errors are checked before metrics are derived; server logs retain diagnostics while the UI receives a sanitized ErrorState.
+- Test plan: focused admin wallet read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-wallet-reconciliation-boundary.test.ts` (2 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest full gate passed with 457 files/3,203 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: live Super Admin role/browser outage drill and deployed Supabase evidence.
 
 #### TODO-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
 

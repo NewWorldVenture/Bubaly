@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0337 - Admin wallet overview hid required read failures as zero metrics
+
+- Timestamp: 2026-07-15 15:50 America/New_York
+- Service: Super Admin wallet overview and financial operations
+- Route: `/admin/wallet`
+- Affected files: `app/(app)/admin/wallet/page.tsx`, `tests/admin-wallet-read-boundary.test.ts`
+- Role: Super Admin and financial operator
+- Scenario: any of seven parallel wallet, approval, ledger, feature-flag, or audit reads could fail while the page rendered zero-valued metrics and controls.
+- Severity: P1
+- Launch impact: operators could misread wallet exposure, pending work, feature availability, or audit activity during a partial outage.
+- Root cause: Promise results were destructured without retaining or checking errors.
+- Resolution: all seven result errors are checked before deriving metrics; server diagnostics remain private and the UI renders a retryable ErrorState.
+- Supabase impact: no schema change; existing service-role read path is now fail-visible.
+- Tests run: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-wallet-reconciliation-boundary.test.ts` (2 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 457 test files, 3,203 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: pending source commit
+- Status: Resolved in code; live Super Admin role/browser/outage evidence remains open
+- Remaining dependencies: isolated Supabase read-failure, role, browser, RLS, and deployed admin smoke drills
+
 ### PLA-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
 
 - Timestamp: 2026-07-15 15:45 America/New_York
