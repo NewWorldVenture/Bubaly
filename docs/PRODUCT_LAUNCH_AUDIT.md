@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0347 - Trip overview hid incomplete readiness and itinerary reads
+
+- Timestamp: 2026-07-15 17:05 America/New_York
+- Service: Trip Overview
+- Route: `/dashboard/vacations/[id]/overview`
+- Affected files: `components/vacations/trip-overview.tsx`, `tests/trip-overview-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: any secondary overview read could fail while readiness, budget, transport, weather, or recommendation summaries rendered from partial arrays.
+- Severity: P1
+- Launch impact: families could treat an incomplete trip overview as current and act on an inaccurate readiness score or financial summary.
+- Root cause: only the trip query exposed loading state; the other 16 required reads ignored loading and error state.
+- Resolution: Trip Overview now centralizes all 17 query handles, waits for complete data, and renders a sanitized retryable ErrorState before deriving readiness or summaries.
+- Supabase impact: no schema change; existing family-scoped trip reads now have an explicit page-level failure contract.
+- Tests run: `tests/trip-overview-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 465 test files, 3,214 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `f36ea6c5`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Trip Overview verification
+
 ### PLA-0346 - Vacation reports hid incomplete financial and travel-score reads
 
 - Timestamp: 2026-07-15 16:58 America/New_York
