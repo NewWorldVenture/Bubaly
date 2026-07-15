@@ -1384,4 +1384,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `/admin/subscriptions` now renders a refreshable error state when subscription, family, or billing-customer reads fail instead of reporting empty plan totals.
-- Source commit: `7092ab60`; docs publication commit is pending.
+- Source commit: `7092ab60`; docs and source are published on `origin/main` at `b2da0375`.
