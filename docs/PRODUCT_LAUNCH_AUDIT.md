@@ -520,3 +520,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `5353c8ce`
 - Status: Resolved in code; live analytics outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated count/trend read-failure drills and verify no zero-valued report is presented as authoritative
+
+### PLA-0299 - Admin audit views hid incomplete history after read failures
+
+- Timestamp: 2026-07-15 10:45 America/New_York
+- Service: Super Admin audit and audit-log history
+- Routes: `/admin/audit`, `/admin/audit-logs`
+- Affected files: `app/(app)/admin/audit/page.tsx`, `app/(app)/admin/audit-logs/page.tsx`, `tests/admin-audit-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: the audit-log, family, or actor-profile query failed while either page substituted an empty result and presented incomplete history
+- Severity: P1
+- Launch impact: operators could miss sensitive actions or trust an incomplete audit trail during a Supabase outage
+- Root cause: audit read errors were discarded by both page loaders
+- Resolution: both pages now preserve read errors, log the boundary, and render a refreshable error state before filtering or displaying history
+- Supabase impact: no schema change; audit-read failures are explicit and non-destructive
+- Tests run: `tests/admin-audit-read-boundary.test.ts`, `tests/admin-read-boundaries.test.ts`, and `tests/admin-auth-boundary.test.ts` (7 tests), full 422-file/3,086-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify log, family, actor-profile, and complete-history failure paths plus visible retry states
+- Commit: `03442ccf`
+- Status: Resolved in code; live audit outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated audit-read failure drills and verify the operator can distinguish unavailable history from an empty history

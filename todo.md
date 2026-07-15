@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:40:00 -04:00
+- Last updated: 2026-07-15 10:45:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `8c2f3740` (published main; source repair `5353c8ce`)
+- Commit: `03442ccf` (published main; source repair `03442ccf`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0299 - Admin audit views hid incomplete history after read failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin audit and audit-log history
+- Route: `/admin/audit`, `/admin/audit-logs`
+- File or files: `app/(app)/admin/audit/page.tsx`, `app/(app)/admin/audit-logs/page.tsx`, `tests/admin-audit-read-boundary.test.ts`
+- Database objects: `audit_logs`, `families`, `profiles`
+- Affected roles: Super Admin
+- Scenario: an audit-log, family, or actor-profile read fails
+- Launch impact: an operator can mistake incomplete history for a complete audit trail
+- Root cause: both audit pages discarded Supabase read errors
+- Resolution: preserve read errors, log the boundary, and render a refreshable error state before filtering or displaying history
+- Tests performed: `tests/admin-audit-read-boundary.test.ts`, `tests/admin-read-boundaries.test.ts`, and `tests/admin-auth-boundary.test.ts` (7 tests); full 422-file/3,086-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover log, family, actor-profile, complete-history, and visible error-state paths
+- Remaining dependencies: publish docs and run isolated audit-read failure/browser drills
 
 #### TODO-0298 - Admin reports hid analytics read failures as zero metrics
 
