@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0351 - Weather and packing views hid failed trip dependencies as empty plans
+
+- Timestamp: 2026-07-15 17:27 America/New_York
+- Service: Trip Weather and Trip Packing
+- Route: `/dashboard/vacations/[id]/weather`, `/dashboard/vacations/[id]/packing`
+- Affected files: `components/vacations/trip-weather.tsx`, `components/vacations/trip-packing.tsx`, `tests/trip-weather-packing-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: weather, packing, or activity dependency reads could fail while pages rendered no forecast or no packing items.
+- Severity: P1
+- Launch impact: travelers could plan without current weather or lose visibility into a partially unavailable packing plan.
+- Root cause: both views used fallback arrays while ignoring secondary query loading and errors.
+- Resolution: Weather now validates its trip and snapshot reads; Packing validates all five required reads and renders sanitized retry states before empty-state UI.
+- Supabase impact: no schema change; existing family-scoped trip dependency reads now have explicit page-level failure contracts.
+- Tests run: `tests/trip-weather-packing-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 469 test files, 3,222 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `2a86d411`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Weather/Packing verification
+
 ### PLA-0350 - Emergency summary hid contact and medical read failures as no emergency data
 
 - Timestamp: 2026-07-15 17:23 America/New_York
@@ -207,27 +226,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1
 - Launch impact: operators could miss provider outages, failed jobs, or signature failures and assume synchronization was healthy.
 - Root cause: Promise query results were used without checking error fields.
-- Resolution: all five required reads now fail visibly with a retryable sanitized ErrorState before metrics are rendered.
-- Supabase impact: no schema change; service-role sync operational reads now have explicit failure contracts.
-- Tests run: `tests/admin-sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 460 test files, 3,206 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `6a9d7494`
-- Status: Resolved in code; live callback, retry, RLS, role, browser, and deployed integration evidence remains open
-- Remaining dependencies: provider sandbox callbacks, dead-letter recovery, signature-failure drills, and deployed Admin Sync verification
-
-### PLA-0339 - Admin dashboard hid command-center read failures as zero or empty metrics
-
-- Timestamp: 2026-07-15 16:20 America/New_York
-- Service: Super Admin command center and operational dashboard
-- Route: `/admin`
-- Affected files: `app/(app)/admin/page.tsx`, `tests/admin-overview-read-boundary.test.ts`
-- Role: Super Admin and operational administrator
-- Scenario: required family, member, subscription, storage, audit, ticket, notification, or actor reads could fail while dashboard cards and activity rendered plausible incomplete values.
-- Severity: P1
-- Launch impact: operators could make billing, support, security, or deployment decisions from partial command-center data.
-- Root cause: Promise results and the secondary actor lookup were destructured without preserving error state.
-- Resolution: all required result errors are checked before metrics are derived; actor profile failures have a separate sanitized retry state.
-- Supabase impact: no schema change; service-r…22712 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Resolution: all five required reads now fail visibly with a retryable sanitized ErrorState before metrics are r…23144 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
