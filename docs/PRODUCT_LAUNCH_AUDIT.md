@@ -276,7 +276,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ### PLA-0286 - Connections hub reported label-only integrations as live
 
-- Timestamp: 2026-07-15 09:10 America/New_York
+- Timestamp: 2026-07-15 09:14 America/New_York
 - Service: Family Connections and third-party integrations
 - Route: `/dashboard/connections`
 - Affected files: `components/modules/connections-module.tsx`, `lib/connections/providers.ts`, `tests/connections-providers.test.ts`, `tests/connections-ui-boundary.test.ts`
@@ -289,6 +289,6 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; removes the false-positive write path while retaining family-scoped reads and disconnects
 - Tests run: `tests/connections-providers.test.ts`, `tests/connections-adapter.test.ts`, and `tests/connections-ui-boundary.test.ts` (23 tests), full 410-file/3,048-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
 - Validation evidence: UI contract asserts no label-only upsert/modal and asserts implemented-provider routing; full suite and 250-route build pass
-- Commit: pending publication
+- Commit: `6bd8758f`
 - Status: Resolved in code; full third-party integration audit remains open
 - Remaining dependencies: push verification and real Gmail, banking, grocery, and smart-home provider implementations
