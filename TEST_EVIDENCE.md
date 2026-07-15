@@ -6,7 +6,7 @@ Audit date: 2026-07-14
 
 - `npm.cmd exec vitest run tests/loyalty-atomic-persistence.test.ts tests/marketing-loyalty-action-boundaries.test.ts tests/marketing-loyalty.test.ts`:
   3 files, 11 tests passed.
-- `npm.cmd exec vitest run`: 386 files, 2,945 tests passed.
+- `npm.cmd exec vitest run`: 388 files, 2,958 tests passed.
 - `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
 - Dependency audit: 0 vulnerabilities. Migration filename audit: 220 numbered SQL files, next version
   `0205`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
