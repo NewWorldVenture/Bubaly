@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 455 Vitest files and 3,192 tests pass in the latest full local gate.
+- 455 Vitest files and 3,193 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -138,6 +138,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   family/RLS read from being misclassified as a new-user onboarding state and triggering second-family provisioning.
 - Onboarding profile completion now fails on membership or preference read failures, scopes color changes to the
   resolved family, and compatibility first-family provisioning fails on subscription or active-family persistence failures.
+- Wallet hub deletion now uses an explicit table allowlist and active-family predicate for every supported table,
+  rather than relying on a dynamic table name and ID-only delete.
 - The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
   inbound and outbound inbox persistence errors are no longer discarded, and SMS, voice, voicemail, and inbound
   email callbacks return retryable 503 responses for database outages. Provider callback, retry, and live RLS

@@ -2,6 +2,16 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Wallet Hub Tenant-Scoped Deletion
+
+- Focused wallet/tenant suites: 4 files, 22 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- Wallet hub deletion now uses explicit table branches and an active-family predicate for every supported wallet table; dynamic ID-only deletion was removed.
+- Final full gate after this increment: 455 test files, 3,193 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
+- Live wallet RLS, role, concurrency, and browser evidence remain open.
+
 ## Latest Local Evidence - Onboarding Provisioning Boundaries
 
 - Focused onboarding/provisioning suites: 4 files, 11 tests passed.

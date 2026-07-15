@@ -17,4 +17,10 @@ describe('wallet and Stripe money action boundaries', () => {
     expect(moneyActions).toContain("if (cardError) return actionFailure('load the card', cardError);");
     expect(moneyActions).toContain('logAuditFailure');
   });
+
+  it('keeps wallet hub deletion allowlisted and family-scoped', () => {
+    expect(walletActions).toContain("const DELETABLE = new Set(['wallet_cards', 'wallet_passes', 'wallet_rewards', 'financial_accounts', 'transactions']);");
+    expect(walletActions).toContain(".eq('family_id', ctx.active.familyId)");
+    expect(walletActions).not.toContain('supabase.from(input.table as never)');
+  });
 });

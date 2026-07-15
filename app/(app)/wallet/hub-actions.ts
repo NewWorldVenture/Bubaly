@@ -119,10 +119,21 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
 const DELETABLE = new Set(['wallet_cards', 'wallet_passes', 'wallet_rewards', 'financial_accounts', 'transactions']);
 
 export async function deleteWalletRowAction(input: { table: string; id: string }): Promise<Result> {
-  await requireUserContext();
+  const ctx = await requireUserContext();
   if (!DELETABLE.has(input.table) || !input.id) return { ok: false, error: 'Invalid request' };
   const supabase = await createServer();
-  // RLS ensures the row belongs to the caller's family; scope the delete to the id.
-  const { error } = await supabase.from(input.table as never).delete().eq('id', input.id);
+  // Keep the table allowlist explicit and add the active-family predicate to
+  // every branch. RLS remains the defense in depth, but a delete action should
+  // never depend on policy drift to avoid cross-family targeting.
+  const result = input.table === 'wallet_cards'
+    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+    : input.table === 'wallet_passes'
+      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+      : input.table === 'wallet_rewards'
+        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+        : input.table === 'financial_accounts'
+          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { error } = result;
   return error ? actionFailure('delete the wallet item', error) : { ok: true };
 }

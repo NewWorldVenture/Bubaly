@@ -975,6 +975,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0329 - Wallet hub deletion relied on dynamic ID-only targeting
+
+- Timestamp: 2026-07-15 15:00 America/New_York
+- Service: Wallet hub destructive actions
+- Route: `deleteWalletRowAction`
+- Affected files: `app/(app)/wallet/hub-actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Role: family manager or authenticated household member invoking wallet deletion
+- Scenario: a dynamic table name and ID-only delete relied on RLS instead of explicitly constraining the active family
+- Severity: P0
+- Launch impact: policy drift could permit cross-family deletion of wallet data
+- Root cause: the action used `from(input.table)` and omitted `family_id` from the delete predicate
+- Resolution: explicit supported-table branches now include `family_id = ctx.active.familyId`; RLS remains defense in depth
+- Supabase impact: no schema change; strengthens existing family-scoped wallet tables and RLS policies
+- Tests run: `tests/wallet-money-action-boundaries.test.ts`, `tests/tenant-isolation-rls.test.ts`, `tests/role-surface.test.ts`, `tests/role-density.test.ts` (22 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and full local gate pass; live cross-family/RLS/concurrency evidence remains open
+- Status: Resolved in code; live wallet authorization evidence remains open
+- Remaining dependencies: execute authenticated two-family wallet deletion and role/concurrency drills
+
 ### PLA-0328 - Onboarding provisioning acknowledged incomplete state writes
 
 - Timestamp: 2026-07-15 15:00 America/New_York

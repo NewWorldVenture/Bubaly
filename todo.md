@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0329 - Wallet hub deletion relied on dynamic ID-only targeting
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Wallet / tenant isolation / destructive action
+- Feature: Wallet hub account, card, pass, reward, and transaction deletion
+- Route: `deleteWalletRowAction`
+- File or files: `app/(app)/wallet/hub-actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Database objects: `wallet_cards`, `wallet_passes`, `wallet_rewards`, `financial_accounts`, and `transactions`
+- Affected roles: family managers and any authenticated household member invoking the wallet hub action
+- Scenario: the server action accepted a dynamic table name and deleted by ID without explicitly constraining the active family
+- Launch impact: policy drift or an incorrectly permissive table could turn a wallet deletion request into cross-family destructive access
+- Root cause: the action relied on RLS alone and used a dynamic `from(input.table)` query
+- Resolution: supported tables are explicitly branched and every delete includes `family_id = ctx.active.familyId`; RLS remains defense in depth
+- Tests performed: `tests/wallet-money-action-boundaries.test.ts`, `tests/tenant-isolation-rls.test.ts`, `tests/role-surface.test.ts`, `tests/role-density.test.ts` (22 focused tests); typecheck; lint; diff check
+- Evidence: focused validation and final full gate passed with 455 files/3,193 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run authenticated cross-family wallet deletion, role, concurrency, and deployed RLS drills
+
 #### TODO-0328 - Onboarding provisioning acknowledged incomplete state writes
 
 - Status: `[~]` In progress
