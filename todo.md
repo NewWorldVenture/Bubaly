@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:17:03 -04:00
+- Last updated: 2026-07-15 17:23:01 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `3adef7e6` adds shared vacation CRUD and budget read safety after Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `da83e4b` adds emergency-summary read safety after shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0350 - Emergency summary hid contact and medical read failures as no emergency data
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation safety / Supabase failure handling
+- Feature: Trip Emergency Summary
+- Route: `/dashboard/vacations/[id]/emergency`
+- File or files: `components/vacations/trip-emergency.tsx`, `tests/trip-emergency-boundary.test.ts`
+- Database objects: `vacation_emergency_contacts` and `vacation_medical_information`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: contact or medical reads could fail while the emergency summary returned null, indistinguishable from having no safety information.
+- Launch impact: travelers could miss emergency contacts or medical details during a time-sensitive situation.
+- Root cause: the summary checked only array lengths and ignored both query loading and error state.
+- Required remediation: track both safety reads, distinguish loading from empty, and render a sanitized retry state before returning no summary.
+- Implementation notes: Emergency Summary now waits for both reads and retries them together when either fails.
+- Test plan: focused emergency boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/trip-emergency-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 468 files/3,220 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `da83e4b`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
 
@@ -201,27 +222,7 @@
 - Feature: Super Admin Social platform
 - Route: `/admin/social`
 - File or files: `app/(app)/admin/social/page.tsx`, `tests/admin-social-read-boundary.test.ts`
-- Database objects: `social_accounts`, `social_posts`, `social_publish_results`, `social_ai_generations`, and `social_provider_errors`
-- Affected roles: Super Admin, social operators, and families using social publishing
-- Scenario: any of six count queries could fail while the page rendered zero accounts, posts, failed publishes, AI generations, or provider errors.
-- Launch impact: operators could miss failed publishing and provider incidents and assume social distribution was healthy.
-- Root cause: Promise results were used without checking their error fields.
-- Required remediation: check all six reads, log diagnostics server-side, and render a retryable failure state before metrics or credential readiness.
-- Implementation notes: the page now fails visibly on any required read failure while preserving provider credential checks.
-- Test plan: focused Social read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/admin-social-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 461 files/3,207 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `709aca24`; documentation stamp and push pending.
-- Remaining dependencies: live social provider callbacks, publish/retry drills, role/RLS, browser, and deployed Social evidence.
-
-#### TODO-0340 - Admin Sync hid provider and queue read failures as healthy metrics
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Third-party integrations / sync operations / Supabase failure handling
-- Feature: Super Admin Sync Platform
-- Route: `/admin/sync`
-- File or files: `app/(app)/admin/sync/page.tsx`, `tests/admin-sync-read-b…111835 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Database objects: `social…112304 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
