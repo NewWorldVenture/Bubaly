@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { Progress } from './shared';
 import { PACK_CATEGORIES, lookup } from '@/lib/vacations/meta';
 import { tripNights } from '@/lib/vacations/dates';
@@ -28,12 +28,20 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: tripRows } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
-  const trip = tripRows[0];
-  const { data: lists } = useRealtimeQuery<List>({ table: 'vacation_packing_lists', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_lists').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
-  const { data: items, loading } = useRealtimeQuery<PackItem>({ table: 'vacation_packing_items', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_items').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
-  const { data: weather } = useRealtimeQuery<Weather>({ table: 'vacation_weather_snapshots', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_weather_snapshots').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
-  const { data: activities } = useRealtimeQuery<Activity>({ table: 'vacation_activities', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_activities').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const tripQuery = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
+  const listsQuery = useRealtimeQuery<List>({ table: 'vacation_packing_lists', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_lists').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const itemsQuery = useRealtimeQuery<PackItem>({ table: 'vacation_packing_items', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_items').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const weatherQuery = useRealtimeQuery<Weather>({ table: 'vacation_weather_snapshots', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_weather_snapshots').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const activitiesQuery = useRealtimeQuery<Activity>({ table: 'vacation_activities', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_activities').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const trip = tripQuery.data[0];
+  const lists = listsQuery.data;
+  const items = itemsQuery.data;
+  const weather = weatherQuery.data;
+  const activities = activitiesQuery.data;
+  const readQueries = [tripQuery, listsQuery, itemsQuery, weatherQuery, activitiesQuery];
+  const loading = readQueries.some((query) => query.loading);
+  const readError = readQueries.some((query) => query.error);
+  const refreshAll = () => { void Promise.all(readQueries.map((query) => query.refresh())); };
 
   const byCategory = useMemo(() => {
     const m = new Map<VacPackCategory, PackItem[]>();
@@ -94,6 +102,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
+  if (readError) return <ErrorState message="Could not load the packing plan. Refresh and try again." onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -113,7 +122,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       )}
 
       {items.length === 0 ? (
-        <EmptyState icon={Luggage} title="Nothing packed yet" description="Tap “Smart list” to auto-generate a packing list from your trip type, weather, and activities." />
+        <EmptyState icon={Luggage} title="Nothing packed yet" description="Tap â€œSmart listâ€ to auto-generate a packing list from your trip type, weather, and activities." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {PACK_CATEGORIES.filter((c) => byCategory.has(c.value)).map((cat) => (
@@ -123,7 +132,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
                 {byCategory.get(cat.value)!.map((it) => (
                   <li key={it.id} className="group flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={it.packed} onChange={() => toggle(it)} className="h-4 w-4 rounded border-border" />
-                    <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` ×${it.quantity}` : ''}</span>
+                    <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` Ã—${it.quantity}` : ''}</span>
                     {it.ai_suggested && <Sparkles className="h-3 w-3 text-brand-text/60" />}
                     <button onClick={() => remove(it.id)} className="hidden text-muted hover:text-danger group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
@@ -152,3 +161,4 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     </div>
   );
 }
+
