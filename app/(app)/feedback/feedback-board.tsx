@@ -325,6 +325,9 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
     return sortIdeas(searchIdeas(filtered, search), sort);
   }, [ideas, sort, statusFilter, categoryFilter, kindFilter, search]);
 
+  // A filter/search is narrowing the list when fewer than all ideas show.
+  const isFiltered = statusFilter !== 'all' || categoryFilter !== 'all' || kindFilter !== 'all' || search.trim() !== '';
+
   function handleVote(ideaId: string) {
     const { next, voted: nowVoted } = toggleVote(voted, ideaId);
     setVoted(next);
@@ -359,7 +362,9 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-bold sm:text-xl">Popular ideas</h2>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-xs font-semibold text-muted tabular-nums">{ideas.length}</span>
+        <span className="rounded-full bg-elevated px-2 py-0.5 text-xs font-semibold text-muted tabular-nums">
+          {isFiltered ? `${visible.length} of ${ideas.length}` : ideas.length}
+        </span>
         <div className="relative ml-auto w-full sm:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
