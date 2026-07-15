@@ -78,6 +78,8 @@ export interface SyncAdapter {
   readonly providerId: string;
   readonly category: ConnectionCategory;
   readonly capabilities: SyncCapability[];
+  /** False until the provider methods perform real external I/O. */
+  readonly isImplemented: boolean;
   /** True only when the server has the keys/secret this provider needs. */
   isConfigured(env?: NodeJS.ProcessEnv): boolean;
   pullEvents?(ctx: AdapterContext): Promise<PullResult<NormalizedEvent>>;
@@ -122,6 +124,11 @@ export function planSync(
   env?: NodeJS.ProcessEnv,
 ): SyncPlan {
   const base = { providerId: adapter.providerId, resources: adapter.capabilities };
+
+  if (!adapter.isImplemented) {
+    return { ...base, runnable: false, blockedReason: 'unsupported', incremental: false, since: null,
+      summary: `${adapter.providerId} sync is not available yet.` };
+  }
 
   if (adapter.capabilities.length === 0) {
     return { ...base, runnable: false, blockedReason: 'unsupported', incremental: false, since: null,

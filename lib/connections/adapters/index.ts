@@ -1,10 +1,8 @@
 // Connections — the sync adapter registry (moat R9).
 //
-// Maps a provider id to its SyncAdapter. Adapters here are the *reference
-// implementations of the contract*: they declare real capabilities and stay
-// completely inert (no network calls, clean "not configured" results) until the
-// owner-gated OAuth/provider keys exist — so the orchestration layer can be built
-// and tested now, and each provider goes live the moment its key lands.
+// Maps a provider id to its SyncAdapter. Planned adapters may be registered for
+// contract tests, but the planner and execution methods must remain fail-closed
+// until their provider implementation is live.
 
 import type { SyncAdapter } from '../adapter';
 import { googleCalendarAdapter } from './google-calendar';
@@ -22,9 +20,9 @@ export function adapterFor(providerId: string): SyncAdapter | null {
   return BY_ID[providerId] ?? null;
 }
 
-/** Every provider id that has a sync adapter (the rest are directory-only). */
+/** Every provider id whose registered adapter is ready for real sync. */
 export function syncableProviderIds(): string[] {
-  return ADAPTERS.map((a) => a.providerId);
+  return ADAPTERS.filter((a) => a.isImplemented).map((a) => a.providerId);
 }
 
 export { ADAPTERS };
