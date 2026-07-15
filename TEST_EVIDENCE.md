@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Trip Itinerary Read Boundary
+
+- Focused trip itinerary suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 466 test files, 3,216 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- `/dashboard/vacations/[id]/itinerary` now waits for trip, itinerary-day, and itinerary-item reads before rendering the schedule, and renders a retryable failure state when any read fails.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Trip Overview Read Boundary
 
 - Focused trip overview suite: 1 file, 2 assertions passed.

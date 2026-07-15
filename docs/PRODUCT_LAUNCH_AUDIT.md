@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0348 - Trip itinerary hid failed day and item reads as an empty schedule
+
+- Timestamp: 2026-07-15 17:11 America/New_York
+- Service: Trip Itinerary
+- Route: `/dashboard/vacations/[id]/itinerary`
+- Affected files: `components/vacations/trip-itinerary.tsx`, `tests/trip-itinerary-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: trip, day, or itinerary-item reads could fail while the page rendered no days planned or an incomplete schedule.
+- Severity: P1
+- Launch impact: families could miss planned activities or incorrectly rebuild an itinerary from incomplete data.
+- Root cause: only the itinerary days query exposed loading state; trip and item read failures were ignored.
+- Resolution: Trip Itinerary now tracks all three query handles, waits for complete data, and renders a sanitized retryable ErrorState before showing an empty schedule.
+- Supabase impact: no schema change; existing family-scoped itinerary reads now have an explicit page-level failure contract.
+- Tests run: `tests/trip-itinerary-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 466 test files, 3,216 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `7e6ce831`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Itinerary verification
+
 ### PLA-0347 - Trip overview hid incomplete readiness and itinerary reads
 
 - Timestamp: 2026-07-15 17:05 America/New_York
