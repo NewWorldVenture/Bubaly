@@ -220,6 +220,13 @@ export default async function KitchenDisplayPage() {
   try {
     const supabase = await createServer();
     loaded = await loadDisplay(supabase, familyId, familyName, now);
+    // Serialization firewall: these props cross the server→client boundary
+    // AFTER this function returns, so a single non-JSON value anywhere in the
+    // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any
+    // try/catch and crashes the kiosk as an opaque digest. Round-tripping here
+    // (a) moves that failure INSIDE the guard and (b) strips any poison, so
+    // the props handed to the client are guaranteed serializable.
+    loaded = JSON.parse(JSON.stringify(loaded)) as LoadedDisplay;
   } catch (err) {
     // Absolute backstop: the kiosk still renders a clean, empty display rather
     // than crashing into the app error boundary.
