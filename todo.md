@@ -4324,3 +4324,23 @@ roadmap entries and user worktree changes are preserved.
   rollback tracking, and family/vacation conversation scoping.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0276 - AI meal planning could replace slots after a partial save
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: AI meal planning / data integrity / recovery
+- Feature: One-click AI meal planner with meal and pantry context
+- File or files: `app/api/ai/meals/plan/route.ts`, `tests/ai-meal-plan-persistence.test.ts`
+- Description: Candidate and pantry read errors were ignored, targeted slots were deleted without checking,
+  newly mirrored meals could remain orphaned, and a failed or incomplete plan insert could still leave the
+  planner reporting a successful write.
+- Resolution: Context reads and replacement mutations now fail closed. Existing targeted slots are captured
+  and restored on failure, generated meal rows are removed when they cannot be used, and the success response
+  requires every model assignment to be persisted.
+- Tests performed: Focused AI meal planner and database-boundary tests, full Vitest, typecheck, lint, and
+  dependency audit.
+- Evidence: `tests/ai-meal-plan-persistence.test.ts` guards read failures, generated-meal cleanup, slot
+  restoration, and checked replacement writes.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - AI meal planner persistence boundaries
+
+- `npm.cmd exec vitest run tests/ai-meal-plan-persistence.test.ts tests/database-error-boundaries.test.ts`:
+  2 files, 4 tests passed.
+- `npm.cmd exec vitest run`: 392 files, 2,972 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 221 numbered SQL files, next version
+  `0206`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed
+  in the prior published verification and no schema changed in this increment.
+- The meal planner now checks candidate/pantry reads, preserves existing targeted slots for restoration,
+  cleans up generated meals on resolution failure, and checks replacement/delete/insert results before
+  returning `written: true`.
+
 ## Latest Audit Update - Vacation AI persistence boundaries
 
 - `npm.cmd exec vitest run tests/vacation-ai-persistence-boundaries.test.ts tests/database-error-boundaries.test.ts`:

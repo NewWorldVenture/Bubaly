@@ -14,6 +14,12 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/serve
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const databaseUnavailable = (message: string) => NextResponse.json({ error: message }, { status: 503 });
+
+function logDatabaseFailure(operation: string, error: unknown) {
+  console.error(`[ai-meals-plan] ${operation} failed:`, error);
+}
+
 /**
  * AI Meal Planner. Auto-fills a week of meal slots using the family's saved
  * meals + recipes, honoring dietary constraints and
@@ -53,18 +59,28 @@ export async function POST(req: Request) {
   );
 
   // Candidate dishes ------------------------------------------------------
-  const [{ data: meals }, { data: recipes }] = await Promise.all([
+  const candidateResults = await Promise.all([
     supabase.from('meals').select('id,name,meal_type').eq('family_id', familyId),
     supabase.from('family_recipes').select('id,name,category,allergy_flags').eq('family_id', familyId),
   ]);
+  const candidateError = candidateResults.find((result) => result.error)?.error;
+  if (candidateError) {
+    logDatabaseFailure('candidate read', candidateError);
+    return databaseUnavailable('Meal planning data is temporarily unavailable.');
+  }
+  const [{ data: meals }, { data: recipes }] = candidateResults;
 
   const candidates = buildCandidates(meals ?? [], recipes ?? []);
 
   // Expiring pantry items to use up ---------------------------------------
   let expiring: string[] = [];
   if (useExpiring) {
-    const { data: pantry } = await supabase.from('pantry_items')
+    const { data: pantry, error: pantryError } = await supabase.from('pantry_items')
       .select('name,expires_at').eq('family_id', familyId).not('expires_at', 'is', null);
+    if (pantryError) {
+      logDatabaseFailure('pantry read', pantryError);
+      return databaseUnavailable('Meal planning data is temporarily unavailable.');
+    }
     expiring = expiringSoon(pantry ?? [], 7).map((p) => p.name).slice(0, 12);
   }
 
@@ -98,8 +114,17 @@ export async function POST(req: Request) {
   // Resolve every assignment to a concrete meals.id (meal_plans.meal_id → meals).
   const mealByName = new Map<string, string>((meals ?? []).map((m) => [m.name.toLowerCase(), m.id]));
   const recipeById = new Map<string, { name: string }>((recipes ?? []).map((r) => [r.id, { name: r.name }]));
+  const createdMealIds: string[] = [];
+  let persistenceError: unknown = null;
+
+  const cleanupCreatedMeals = async () => {
+    if (!createdMealIds.length) return;
+    const { error } = await supabase.from('meals').delete().eq('family_id', familyId).in('id', createdMealIds);
+    if (error) logDatabaseFailure('created meal rollback', error);
+  };
 
   async function resolveMealId(a: PlanAssignment): Promise<string | null> {
+    if (persistenceError) return null;
     const parts = refParts(a.ref);
     if (parts?.table === 'meals') return parts.id;
     // recipe or new → mirror into a meals row (reuse by name to avoid dupes)
@@ -107,28 +132,66 @@ export async function POST(req: Request) {
     if (!name) return null;
     const existing = mealByName.get(name.toLowerCase());
     if (existing) return existing;
-    const { data: created } = await supabase.from('meals')
+    const { data: created, error } = await supabase.from('meals')
       .insert({ family_id: familyId, name, meal_type: a.meal_type, created_by: userId })
       .select('id').single();
+    if (error || !created) {
+      persistenceError = error ?? new Error('Meal creation returned no row.');
+      return null;
+    }
+    createdMealIds.push(created.id);
     if (created) mealByName.set(name.toLowerCase(), created.id);
     return created?.id ?? null;
   }
 
   const dates = [...new Set(assignments.map((a) => a.date))];
-  // Clear the targeted slots so re-planning replaces rather than duplicates.
-  await supabase.from('meal_plans').delete().eq('family_id', familyId)
-    .in('plan_date', dates).in('meal_type', request.mealTypes);
 
   const rows: { family_id: string; meal_id: string; plan_date: string; meal_type: MealType; created_by: string }[] = [];
   for (const a of assignments) {
     const mealId = await resolveMealId(a);
     if (mealId) rows.push({ family_id: familyId, meal_id: mealId, plan_date: a.date, meal_type: a.meal_type, created_by: userId });
   }
+  if (persistenceError || rows.length !== assignments.length) {
+    await cleanupCreatedMeals();
+    logDatabaseFailure('meal resolution', persistenceError ?? new Error('Meal plan contains unresolved assignments.'));
+    return databaseUnavailable('Could not save the meal plan.');
+  }
+
+  const { data: existingPlans, error: existingPlansError } = await supabase.from('meal_plans')
+    .select('family_id,meal_id,plan_date,meal_type,created_by')
+    .eq('family_id', familyId).in('plan_date', dates).in('meal_type', request.mealTypes);
+  if (existingPlansError) {
+    await cleanupCreatedMeals();
+    logDatabaseFailure('existing plan read', existingPlansError);
+    return databaseUnavailable('Could not save the meal plan.');
+  }
+
+  const restorePreviousPlans = async () => {
+    const { error: removeError } = await supabase.from('meal_plans').delete().eq('family_id', familyId)
+      .in('plan_date', dates).in('meal_type', request.mealTypes);
+    if (removeError) logDatabaseFailure('failed plan cleanup', removeError);
+    if (existingPlans?.length) {
+      const { error: restoreError } = await supabase.from('meal_plans').insert(existingPlans);
+      if (restoreError) logDatabaseFailure('previous plan restore', restoreError);
+    }
+    await cleanupCreatedMeals();
+  };
+
+  // Clear the targeted slots so re-planning replaces rather than duplicates.
+  const { error: deleteError } = await supabase.from('meal_plans').delete().eq('family_id', familyId)
+    .in('plan_date', dates).in('meal_type', request.mealTypes);
+  if (deleteError) {
+    await cleanupCreatedMeals();
+    logDatabaseFailure('targeted plan cleanup', deleteError);
+    return databaseUnavailable('Could not save the meal plan.');
+  }
+
   if (rows.length) {
-    const { error } = await supabase.from('meal_plans').insert(rows);
-    if (error) {
-      console.error('Meal plan write failed:', error);
-      return NextResponse.json({ error: 'Could not save the meal plan.' }, { status: 500 });
+    const { data: inserted, error } = await supabase.from('meal_plans').insert(rows).select('id');
+    if (error || !inserted || inserted.length !== rows.length) {
+      await restorePreviousPlans();
+      logDatabaseFailure('meal plan write', error ?? new Error('Meal plan insert returned an incomplete result.'));
+      return databaseUnavailable('Could not save the meal plan.');
     }
   }
 
