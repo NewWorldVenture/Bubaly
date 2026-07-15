@@ -975,6 +975,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0327 - Incomplete family context could be misclassified as onboarding
+
+- Timestamp: 2026-07-15 14:50 America/New_York
+- Service: Authenticated user context, tenant membership resolution, and first-family provisioning
+- Route: `lib/supabase/auth.ts`, protected app pages, and onboarding fallback
+- Affected files: `lib/supabase/auth.ts`, `tests/auth-context-integrity.test.ts`
+- Role: authenticated user with memberships, family manager, and first-login provisioning worker
+- Scenario: an active membership could not be joined to its family row, but context resolution returned the onboarding state
+- Severity: P0
+- Launch impact: a partial tenant-context read could create a second family or misroute the user instead of failing safely
+- Root cause: missing family joins were silently filtered before the `needsFamily` branch
+- Resolution: incomplete family joins and membership mappings now return a retryable context-unavailable failure
+- Supabase impact: no schema change; protects existing family_members/families/user_preferences reads and provisioning calls
+- Tests run: `tests/auth-context-integrity.test.ts`, `tests/admin-auth-boundary.test.ts`, `tests/tenant-isolation-rls.test.ts`, `tests/ensure-family-concurrency.test.ts` (8 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and full local gate pass; live Auth Admin/RLS/role/browser evidence remains open
+- Status: Resolved in code; live tenant-isolation evidence remains open
+- Remaining dependencies: apply 0211/0212 and execute authenticated two-tenant and first-login drills
+
 ### PLA-0326 - Scheduled integrations acknowledged secondary persistence failures
 
 - Timestamp: 2026-07-15 14:42 America/New_York

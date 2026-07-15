@@ -92,6 +92,17 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
   if (familiesError) throwContextUnavailable('family', familiesError);
   const byId = new Map((families ?? []).map((f) => [f.id, f]));
 
+  // A membership without its family row is not an onboarding state. Treating
+  // it as one could auto-provision a second family during a partial read or RLS
+  // regression, obscuring the original tenant-context failure.
+  if (familyIds.some((familyId) => !byId.has(familyId))) {
+    console.error('[auth] family context incomplete', {
+      expected: familyIds.length,
+      received: byId.size,
+    });
+    throw new Error('Account context is temporarily unavailable.');
+  }
+
   const memberships: FamilyMembership[] = rows
     .map((m) => {
       const family = byId.get(m.family_id);
@@ -101,6 +112,13 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
     })
     .filter((m): m is FamilyMembership => m !== null);
 
+  if (memberships.length !== rows.length) {
+    console.error('[auth] family membership context incomplete', {
+      expected: rows.length,
+      received: memberships.length,
+    });
+    throw new Error('Account context is temporarily unavailable.');
+  }
   if (memberships.length === 0) return { needsFamily: true };
 
   const { data: prefs, error: prefsError } = await supabase

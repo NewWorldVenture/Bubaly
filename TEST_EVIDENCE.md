@@ -2,6 +2,16 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Auth Context Tenant Boundary
+
+- Focused authentication/tenant suites: 4 files, 8 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `getUserContext` now fails closed when membership rows do not join to family rows, preventing automatic family provisioning from masking a partial tenant-context read.
+- Final full gate after this increment: 455 test files, 3,190 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
+- Live Auth Admin health, authenticated cross-tenant RLS, role, and browser evidence remain open.
+
 ## Latest Live Evidence Snapshot - 14:48 Supabase Refresh
 
 - `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID `019f6718-176b-7afb-b940-546891799a83`.

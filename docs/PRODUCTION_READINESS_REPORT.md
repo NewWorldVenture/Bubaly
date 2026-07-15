@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 454 Vitest files and 3,188 tests pass in the latest full local gate.
+- 455 Vitest files and 3,190 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -134,6 +134,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   Aggregation now checks all source reads, contribution writes/pruning, sanitizes cron errors, and returns 502 on
   incomplete publication. Auction notifications, provider audit logs, and calendar-feed event/status writes are now
   counted and surfaced instead of being silently acknowledged.
+- Auth context now fails closed when an active membership cannot be joined to its family row, preventing a partial
+  family/RLS read from being misclassified as a new-user onboarding state and triggering second-family provisioning.
 - The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
   inbound and outbound inbox persistence errors are no longer discarded, and SMS, voice, voicemail, and inbound
   email callbacks return retryable 503 responses for database outages. Provider callback, retry, and live RLS

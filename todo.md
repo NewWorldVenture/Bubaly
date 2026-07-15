@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0327 - Incomplete family context could be misclassified as onboarding
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Authentication / tenant isolation / provisioning safety
+- Feature: Authenticated user context and automatic first-family provisioning
+- Route: `lib/supabase/auth.ts`, protected app pages, and onboarding fallback
+- File or files: `lib/supabase/auth.ts`, `tests/auth-context-integrity.test.ts`
+- Database objects: `family_members`, `families`, and `user_preferences`
+- Affected roles: authenticated users with memberships, family managers, and first-login provisioning workers
+- Scenario: a readable active membership had no corresponding family row because of partial data, RLS drift, or a transient read; context resolution returned onboarding state and could create a second family
+- Launch impact: tenant context could be lost or duplicate household provisioning could occur during an authorization/data-integrity failure
+- Root cause: missing family joins were silently filtered before the `needsFamily` branch
+- Resolution: missing family joins and incomplete membership mappings now throw a retryable context-unavailable error instead of returning onboarding state
+- Tests performed: `tests/auth-context-integrity.test.ts`, `tests/admin-auth-boundary.test.ts`, `tests/tenant-isolation-rls.test.ts`, `tests/ensure-family-concurrency.test.ts` (8 focused tests); typecheck; lint; diff check
+- Evidence: focused validation and final full gate passed with 455 files/3,190 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: apply migrations 0211/0212, run authenticated two-tenant RLS/role probes, and verify deployed first-login behavior
+
 #### TODO-0326 - Scheduled integrations acknowledged secondary persistence failures
 
 - Status: `[~]` In progress
