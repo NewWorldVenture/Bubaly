@@ -975,3 +975,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0324 - Journey Recovery acknowledged failed abandonment sweeps
+
+- Timestamp: 2026-07-15 14:30 America/New_York
+- Service: Abandoned onboarding and demo-lead recovery cron
+- Route: `/api/cron/journey-recovery`
+- Affected files: `app/api/cron/journey-recovery/route.ts`, `tests/journey-recovery-cron-boundary.test.ts`
+- Role: abandoned user, demo lead, marketing operator, and scheduled cron worker
+- Scenario: onboarding, CRM, profile, or automation failures were logged but the endpoint still returned success with partial counts
+- Severity: P1
+- Launch impact: follow-up workflows could be silently skipped without an operational retry signal
+- Root cause: sweep/profile/automation failures were not counted in the response status
+- Resolution: required reads now fail the sweep, per-record failures increment `failed`, and the endpoint returns 502 when any work fails
+- Supabase impact: no schema change; existing onboarding/profile/CRM scopes remain unchanged
+- Tests run: `tests/journey-recovery-cron-boundary.test.ts`, `tests/cron-auth.test.ts` (6 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and the full local gate pass; live scheduler/provider evidence remains open
+- Status: Resolved in code; live automation evidence remains open
+- Remaining dependencies: execute scheduler, provider outage/retry, duplicate-run, and recipient drills

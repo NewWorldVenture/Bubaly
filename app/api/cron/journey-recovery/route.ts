@@ -28,18 +28,25 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
   let onboardingFired = 0;
   let demoFired = 0;
+  let failed = 0;
 
   // ── Abandoned onboarding ──────────────────────────────────────────────────
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('onboarding_progress')
       .select('user_id, status, completed_at, reset_at, created_at, updated_at')
       .eq('status', 'in_progress')
       .limit(2000);
+    if (error) throw error;
     const stalled = selectAbandonedOnboarding((data ?? []) as OnboardingJourney[], now);
     for (const r of stalled) {
       // The contact's email lives on their profile — resolve best-effort.
-      const { data: profile } = await supabase.from('profiles').select('email').eq('id', r.user_id).maybeSingle();
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('email').eq('id', r.user_id).maybeSingle();
+      if (profileError) {
+        console.error(`onboarding profile read failed for ${r.user_id}:`, profileError);
+        failed++;
+        continue;
+      }
       const email = profile?.email ?? null;
       if (!email) continue;
       try {
@@ -50,18 +57,19 @@ export async function GET(req: NextRequest) {
           context: { userId: r.user_id },
         });
         onboardingFired += 1;
-      } catch (e) { console.error(`onboarding_abandoned fire failed for ${r.user_id}:`, e); }
+      } catch (e) { failed++; console.error(`onboarding_abandoned fire failed for ${r.user_id}:`, e); }
     }
-  } catch (e) { console.error('journey-recovery: onboarding sweep failed', e); }
+  } catch (e) { failed++; console.error('journey-recovery: onboarding sweep failed', e); }
 
   // ── Abandoned demo leads ──────────────────────────────────────────────────
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('crm_contacts')
       .select('email, lead_source, lifecycle_stage, created_at')
       .eq('lead_source', 'demo')
       .neq('lifecycle_stage', 'customer')
       .limit(2000);
+    if (error) throw error;
     const stalled = selectAbandonedDemoLeads((data ?? []) as DemoLead[], now);
     for (const l of stalled) {
       try {
@@ -72,9 +80,9 @@ export async function GET(req: NextRequest) {
           context: { source: 'demo' },
         });
         demoFired += 1;
-      } catch (e) { console.error(`demo_abandoned fire failed for ${l.email}:`, e); }
+      } catch (e) { failed++; console.error(`demo_abandoned fire failed for ${l.email}:`, e); }
     }
-  } catch (e) { console.error('journey-recovery: demo sweep failed', e); }
+  } catch (e) { failed++; console.error('journey-recovery: demo sweep failed', e); }
 
-  return NextResponse.json({ onboardingFired, demoFired });
+  return NextResponse.json({ onboardingFired, demoFired, failed }, { status: failed === 0 ? 200 : 502 });
 }

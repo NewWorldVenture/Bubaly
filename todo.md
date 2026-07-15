@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:20:00 -04:00
+- Last updated: 2026-07-15 14:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes digest cron failure boundaries; publication to branch and `main` is pending
+- Commit: latest local source repair includes Journey Recovery cron failure boundaries; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0324 - Journey Recovery acknowledged failed abandonment sweeps
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / lifecycle automation / scheduled jobs
+- Feature: Abandoned onboarding and demo-lead recovery
+- Route: `/api/cron/journey-recovery`
+- File or files: `app/api/cron/journey-recovery/route.ts`, `tests/journey-recovery-cron-boundary.test.ts`
+- Database objects: `onboarding_progress`, `profiles`, and `crm_contacts`
+- Affected roles: abandoned onboarding users, demo leads, marketing operators, and scheduled cron workers
+- Scenario: onboarding, CRM, profile, or automation reads/delivery failed while the cron still returned a successful response with partial counts
+- Launch impact: abandoned-user follow-up could be silently skipped while monitoring saw a healthy run
+- Root cause: sweep/profile errors were caught or discarded without a failure counter or non-success response
+- Resolution: required reads now fail the sweep, profile and automation failures increment a retryable failure count, and the endpoint returns 502 when any work fails
+- Tests performed: `tests/journey-recovery-cron-boundary.test.ts`, `tests/cron-auth.test.ts` (6 focused tests); typecheck; lint; diff check
+- Evidence: focused validation passes; final full gate passed with 452 files/3,182 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run scheduler, automation-provider outage/retry, duplicate-run, and recipient drills
 
 #### TODO-0323 - Digest crons hid family and delivery failures as zero sends
 
