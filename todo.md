@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 11:55:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0a4d4533` (source repair published to `origin/codex/world-class-production`; audit docs publication follows this checkpoint)
+- Commit: `2562c9c0` (audit evidence published; latest source repair `0a4d4533`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit

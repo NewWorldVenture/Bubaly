@@ -1432,4 +1432,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Marketing content/campaign, asset preview/messaging, customer/lead/CRM, SEO/AEO/control-plane, experiment/publishing, affiliate/loyalty/proposal/survey pages now surface Supabase/storage read failures instead of rendering empty or zero-valued operational state.
-- Source commit: `0a4d4533`; documentation publication commit follows this evidence update.
+- Source commit: `0a4d4533`; docs and source are published on `origin/codex/world-class-production` at `2562c9c0`.
