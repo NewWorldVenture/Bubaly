@@ -61,5 +61,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, synced, skipped, failed, scanned: accounts?.length ?? 0, details });
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, synced, skipped, failed, scanned: accounts?.length ?? 0, details },
+    { status: ok ? 200 : 502 },
+  );
 }
