@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPaidActive, isNewPaidConversion } from '@/lib/billing/conversion';
+import { isPaidActive, isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 
 describe('isPaidActive', () => {
   it('is true only for a non-free, active plan', () => {
@@ -29,5 +29,29 @@ describe('isNewPaidConversion', () => {
     expect(isNewPaidConversion({ plan: 'free', status: 'trialing' }, { plan: 'free', status: 'trialing' })).toBe(false);
     expect(isNewPaidConversion(null, { plan: 'plus', status: 'trialing' })).toBe(false);
     expect(isNewPaidConversion(null, { plan: 'free', status: 'active' })).toBe(false);
+  });
+});
+
+describe('isChurn', () => {
+  it('fires when a paying family cancels or downgrades to free', () => {
+    expect(isChurn({ plan: 'plus', status: 'active' }, { plan: 'plus', status: 'canceled' })).toBe(true);
+    expect(isChurn({ plan: 'plus', status: 'active' }, { plan: 'free', status: 'active' })).toBe(true); // downgrade
+    expect(isChurn({ plan: 'basic', status: 'active' }, { plan: 'basic', status: 'unpaid' })).toBe(true);
+    expect(isChurn({ plan: 'plus', status: 'active' }, { plan: 'plus', status: 'incomplete_expired' })).toBe(true);
+  });
+
+  it('does NOT fire on transient past_due (dunning may recover)', () => {
+    expect(isChurn({ plan: 'plus', status: 'active' }, { plan: 'plus', status: 'past_due' })).toBe(false);
+  });
+
+  it('does NOT fire on a tier change that stays paid+active', () => {
+    expect(isChurn({ plan: 'plus', status: 'active' }, { plan: 'basic', status: 'active' })).toBe(false);
+    expect(isChurn({ plan: 'basic', status: 'active' }, { plan: 'plus', status: 'active' })).toBe(false);
+  });
+
+  it('does NOT fire when they were never a paying customer', () => {
+    expect(isChurn(null, { plan: 'plus', status: 'canceled' })).toBe(false);
+    expect(isChurn({ plan: 'free', status: 'trialing' }, { plan: 'free', status: 'canceled' })).toBe(false);
+    expect(isChurn({ plan: 'plus', status: 'trialing' }, { plan: 'plus', status: 'canceled' })).toBe(false);
   });
 });

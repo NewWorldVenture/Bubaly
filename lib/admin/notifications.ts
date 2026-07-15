@@ -4,7 +4,7 @@
 export type AdminNoteKind =
   | 'feedback_new' | 'github_sync' | 'github_error'
   | 'support_ticket' | 'marketplace_report'
-  | 'family_signup' | 'subscription' | 'info';
+  | 'family_signup' | 'subscription' | 'subscription_churn' | 'info';
 
 export type AdminNotificationRow = {
   id: string; kind: string; title: string; body: string | null;
@@ -20,6 +20,7 @@ export const ADMIN_NOTE_KIND_META: Record<AdminNoteKind, { label: string; tone: 
   marketplace_report: { label: 'Trust & Safety', tone: 'text-rose-500' },
   family_signup:      { label: 'New signup',     tone: 'text-emerald-500' },
   subscription:       { label: 'New conversion', tone: 'text-emerald-500' },
+  subscription_churn: { label: 'Churn',          tone: 'text-rose-500' },
   info:               { label: 'Update',         tone: 'text-muted' },
 };
 

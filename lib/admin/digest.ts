@@ -28,7 +28,7 @@ export function summarizeDigestDelivery(results: readonly DigestDeliveryResult[]
 
 // Growth-first ordering: the numbers a founder cares about most come first.
 const KIND_ORDER = [
-  'subscription', 'family_signup', 'feedback_new', 'support_ticket',
+  'subscription', 'subscription_churn', 'family_signup', 'feedback_new', 'support_ticket',
   'marketplace_report', 'github_error', 'github_sync', 'info',
 ];
 
@@ -56,6 +56,7 @@ export function buildAdminDigest(rows: readonly DigestRow[]): AdminDigest {
 export function buildHeadline(counts: Record<string, number>): string {
   const parts: string[] = [];
   if (counts.subscription) parts.push(plural(counts.subscription, 'new paid plan'));
+  if (counts.subscription_churn) parts.push(plural(counts.subscription_churn, 'cancellation'));
   if (counts.family_signup) parts.push(plural(counts.family_signup, 'new family', 'new families'));
   if (counts.feedback_new) parts.push(plural(counts.feedback_new, 'feedback item'));
   if (counts.support_ticket) parts.push(plural(counts.support_ticket, 'support ticket'));
