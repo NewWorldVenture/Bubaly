@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/dashboard/billing?success=1`,
       cancel_url: `${origin}/dashboard/billing`,
-      metadata: { family_id: familyId },
+      metadata: { family_id: familyId, plan: plan ?? null },
       subscription_data: {
         metadata: { family_id: familyId },
         // The Bubaly service fee, added as a one-time charge on the first

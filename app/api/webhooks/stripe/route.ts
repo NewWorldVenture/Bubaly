@@ -151,11 +151,21 @@ export async function POST(req: NextRequest) {
           if (billingCustomerError) throw new Error('Billing customer persistence failed');
         }
         // Close out the tracked checkout so the abandoned-checkout cron skips it.
-        const { data: checkout, error: checkoutError } = await supabase
+        // The initial tracking insert is intentionally best-effort because Stripe
+        // already owns the session. Upsert here makes completion self-healing when
+        // that insert failed or the webhook arrived first.
+        const { error: checkoutError } = await supabase
           .from('checkout_sessions')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('session_id', session.id).select('id').maybeSingle();
-        if (checkoutError || !checkout) throw new Error('Checkout persistence failed');
+          .upsert({
+            session_id: session.id,
+            family_id: familyId ?? null,
+            email: session.customer_details?.email ?? session.customer_email ?? null,
+            name: session.customer_details?.name ?? null,
+            plan: session.metadata?.plan ?? null,
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          }, { onConflict: 'session_id' });
+        if (checkoutError) throw new Error('Checkout persistence failed');
         // Fire event-driven "payment_completed" automation workflows (deduped by
         // the Stripe session id). Best-effort: never fail the webhook on it.
         try {

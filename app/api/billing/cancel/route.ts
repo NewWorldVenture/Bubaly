@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const { resume } = (body.value && typeof body.value === 'object' ? body.value : {}) as { resume?: boolean };
+    if (typeof resume !== 'boolean') return NextResponse.json({ error: 'Invalid cancellation request.' }, { status: 400 });
 
     const supabase = await createServer();
     const { data: sub, error: subError } = await supabase
@@ -59,7 +60,10 @@ export async function POST(req: NextRequest) {
       .from('subscriptions')
       .update({ cancel_at_period_end: cancelAtPeriodEnd })
       .eq('family_id', familyId);
-    if (syncError) console.error('[billing-cancel] Subscription sync write failed', syncError);
+    if (syncError) {
+      console.error('[billing-cancel] Subscription sync write failed', syncError);
+      return NextResponse.json({ error: 'Stripe updated the subscription, but local billing sync is pending. Please refresh before retrying.', providerUpdated: true }, { status: 503 });
+    }
 
     return NextResponse.json({ ok: true, cancel_at_period_end: cancelAtPeriodEnd });
   } catch (err) {

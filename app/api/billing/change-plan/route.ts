@@ -83,7 +83,10 @@ export async function POST(req: NextRequest) {
         .from('subscriptions')
         .update({ cancel_at_period_end: false })
         .eq('family_id', familyId);
-      if (syncError) console.error('[billing-change-plan] Subscription sync write failed', syncError);
+      if (syncError) {
+        console.error('[billing-change-plan] Subscription sync write failed', syncError);
+        return NextResponse.json({ error: 'Stripe changed the plan, but local billing sync is pending. Please refresh before retrying.', providerUpdated: true }, { status: 503 });
+      }
 
       return NextResponse.json({ ok: true, changed: true, mode: 'updated' });
     }
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/dashboard/billing?success=1`,
       cancel_url: `${origin}/dashboard/billing`,
-      metadata: { family_id: familyId },
+      metadata: { family_id: familyId, plan },
       subscription_data: { metadata: { family_id: familyId } },
       allow_promotion_codes: true,
     });

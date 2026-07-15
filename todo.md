@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:00:00 -04:00
+- Last updated: 2026-07-15 15:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes retry-safe Stripe webhook money effects and unknown-price rejection; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes billing mutation consistency and self-healing Stripe Checkout tracking; source publication follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,48 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0335 - Stripe Checkout completion depended on a best-effort tracking insert
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Stripe checkout / payment lifecycle / scheduled follow-up reliability
+- Feature: Checkout completion and abandoned-checkout tracking
+- Route: `/api/billing/checkout`, `/api/billing/change-plan`, `/api/webhooks/stripe`
+- File or files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/webhooks/stripe/route.ts`, `tests/billing-read-boundary.test.ts`
+- Database objects: `checkout_sessions`, `billing_customers`, and `subscriptions`
+- Affected roles: family managers starting checkout, Stripe webhook delivery, and billing operators
+- Scenario: Stripe Checkout was created before the local tracking insert, so a tracking outage could leave a valid paid session without a row; the completion webhook then treated the missing row as a fatal persistence error and could not close the lifecycle.
+- Launch impact: successful billing could produce a failed webhook, leave abandoned-checkout state unresolved, and create avoidable operator retries.
+- Root cause: pre-checkout tracking was best-effort while completion required an existing row.
+- Required remediation: carry the validated plan in Stripe metadata and make the signed completion webhook upsert the tracking row as the source-of-truth repair path.
+- Implementation notes: checkout and change-plan now include `plan` metadata; `checkout.session.completed` upserts the completed row by unique Stripe session ID.
+- Test plan: focused route contract, full Vitest, typecheck, lint, build, migration, schema, and dependency gates; live Stripe test-mode completion and duplicate-delivery drills remain required.
+- Tests performed: `tests/billing-read-boundary.test.ts`, `tests/webhook-persistence-boundaries.test.ts` (8 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest local gate passed with 455 files/3,201 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: execute isolated Stripe Checkout completion, replay, idempotency, and abandoned-checkout cron drills against deployed services.
+
+#### TODO-0334 - Billing provider mutations could return success after local sync failure
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Billing / Stripe state synchronization / authorization boundary
+- Feature: Plan changes, subscription cancellation, and billing portal access
+- Route: `/api/billing/change-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- File or files: `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
+- Database objects: `subscriptions`, `billing_customers`, and Stripe subscription/customer records
+- Affected roles: family managers, household members, billing administrators, and paid subscribers
+- Scenario: Stripe could accept a plan change or cancellation while the local optimistic sync write failed; the API then returned a normal success response. Billing portal creation also needed the same manager-only boundary as other provider mutations, and cancellation input required runtime validation.
+- Launch impact: the UI could report synchronized billing state while Supabase remained stale, causing repeated mutations, incorrect entitlement display, or unauthorized portal access.
+- Root cause: provider mutation and local persistence were reported as one success state without exposing the partial outcome.
+- Required remediation: return a retryable 503 with `providerUpdated: true` when local sync fails, enforce parent/admin portal access, and reject non-boolean cancellation input.
+- Implementation notes: plan change and cancellation now report local-sync-pending state; portal is manager-only; cancellation validates `resume` at runtime.
+- Test plan: focused billing boundary suite, full Vitest, typecheck, lint, build, migration, schema, dependency, and diff gates; live Stripe mutation/reconciliation drills remain required.
+- Tests performed: `tests/billing-read-boundary.test.ts`, `tests/webhook-persistence-boundaries.test.ts` (8 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest local gate passed with 455 files/3,201 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: run non-destructive Stripe test-mode change-plan, cancel, portal, retry, and local/provider reconciliation drills.
 
 #### TODO-0333 - Stripe webhook money effects could be acknowledged after failed side effects
 

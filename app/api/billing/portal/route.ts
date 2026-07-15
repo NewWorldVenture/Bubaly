@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
+import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
+    if (!isAdmin(ctx.active.role)) {
+      return NextResponse.json({ error: 'Only a parent can open the billing portal.' }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
     const stripe = getStripe();

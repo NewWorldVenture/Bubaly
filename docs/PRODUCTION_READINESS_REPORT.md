@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 17:00 America/New_York
+Audit snapshot: 2026-07-15 15:40 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 455 Vitest files and 3,198 tests pass in the latest full local gate.
+- 455 Vitest files and 3,201 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -25,6 +25,12 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Stripe issuing capture now checks debit persistence before releasing its hold; authorization API failures
   and card mapping read failures are retryable. Billing webhooks reject missing or unknown subscription
   prices instead of silently writing Free. Live Stripe signature, replay, idempotency, and refund evidence remain open.
+- Billing plan-change and cancellation routes now expose a retryable partial-success response when Stripe
+  changes provider state but the local subscription sync fails; billing portal access is restricted to
+  family managers/admins and cancellation input is runtime-validated.
+- Checkout completion is now self-healing: validated plan metadata travels with the Stripe session and the
+  signed completion webhook upserts `checkout_sessions`, so a failed pre-checkout tracking insert does not
+  permanently break completion or abandoned-checkout lifecycle state.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
