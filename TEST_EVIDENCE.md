@@ -2,6 +2,21 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Atomic Wallet money and approval persistence
+
+- `npm.cmd exec vitest run tests/wallet-atomic-persistence.test.ts tests/server-action-error-boundaries.test.ts tests/wallet-transfer.test.ts tests/wallet-money-action-boundaries.test.ts`:
+  4 files, 10 tests passed.
+- `npm.cmd exec vitest run`: 389 files, 2,960 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 221 numbered SQL files, next version
+  `0206`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Local `supabase db lint --local` remains unavailable because no local Postgres container is running;
+  the command failed closed with `LegacyDbConnectError` before evaluating the migration.
+- Wallet transfers, gift approvals, spend approvals, and allowance decisions now use typed RPC wrappers;
+  the database locks the relevant wallet/approval rows and commits ledger, state, and audit writes together.
+
 ## Latest Audit Update - Atomic loyalty persistence boundaries
 
 - `npm.cmd exec vitest run tests/loyalty-atomic-persistence.test.ts tests/marketing-loyalty-action-boundaries.test.ts tests/marketing-loyalty.test.ts`:

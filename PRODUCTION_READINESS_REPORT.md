@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,958 unit tests, builds all 250 static Next.js
+The tree compiles, passes lint and type checking, passes 2,960 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -13,9 +13,14 @@ Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is r
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
-checkout contains 220 numbered migration files and 17 known historical duplicate prefixes; new or
+checkout contains 221 numbered migration files and 17 known historical duplicate prefixes; new or
 changed collisions fail CI and `db:push` before any database connection is attempted. The remote
 migration ledger remains unverified because this checkout is not linked to a Supabase project.
+
+Latest repair increment (2026-07-14): Wallet transfers, gift approvals, spend approvals, and allowance
+decisions now use authenticated manager-checked row-locking RPCs. Ledger credits, debits, approval state,
+gift state, and required audit records commit atomically, with server-side split allocation preserving
+every cent.
 
 Latest repair increment (2026-07-14): loyalty awards, redemptions, finite reward stock, and cancellation
 refunds now run through service-role-only row-locking RPCs. The balance, ledger, redemption, and stock

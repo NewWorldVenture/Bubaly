@@ -5,7 +5,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
-import { creditChildWallet, debitSpendBucket, bucketBalanceCents } from '@/lib/wallet/server';
+import { approveGift, bucketBalanceCents, creditChildWallet, decideAllowance, decideSpend, debitSpendBucket, transferWallets } from '@/lib/wallet/server';
 import { nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -432,14 +432,8 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
   });
   if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-  const res = await creditChildWallet(supabase, {
-    familyId, childWalletId: gift.child_wallet_id, amountCents: gift.amount_cents, type: 'gift_received',
-    description: gift.giver_name ? `Gift from ${gift.giver_name}` : 'Gift received', createdBy: ctx.user.id,
-    relatedType: 'gift_payments', relatedId: gift.id,
-  });
+  const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
-
-  await supabase.from('gift_payments').update({ status: 'completed' }).eq('id', gift.id);
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -745,30 +739,11 @@ export async function decideSpendRequestAction(input: {
     });
     if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-    // Re-validate against the live Spend balance so a stale request can't overdraw.
-    if (txn.child_wallet_id) {
-      const { available } = await bucketBalanceCents(supabase, { familyId, childWalletId: txn.child_wallet_id, kind: 'spend' });
-      if (txn.amount_cents > available) return { ok: false, error: `Not enough left in Spend (${(available / 100).toFixed(2)}).` };
-    }
-    const { error: e } = await supabase.from('wallet_transactions')
-      .update({ status: 'completed', approved_by: ctx.user.id }).eq('id', txn.id);
-    if (e) return actionFailure(e, 'Could not approve that spend request.');
-  } else {
-    const { error: e } = await supabase.from('wallet_transactions')
-      .update({ status: 'cancelled' }).eq('id', txn.id);
-    if (e) return actionFailure(e, 'Could not reject that spend request.');
   }
-
-  await supabase.from('parent_approvals').update({
-    status: input.decision, decided_by: ctx.user.id, decided_at: new Date().toISOString(),
-    note: input.note?.trim() || null,
-  }).eq('id', appr.id);
-
-  await supabase.from('wallet_audit_logs').insert({
-    family_id: familyId, actor_user_id: ctx.user.id, action: `spend_${input.decision}`,
-    entity_type: 'wallet_transactions', entity_id: txn.id,
-    detail: `Spend request ${input.decision}`,
+  const decision = await decideSpend(supabase, {
+    familyId, approvalId: appr.id, decision: input.decision, note: input.note, actorId: ctx.user.id,
   });
+  if (!decision.ok) return { ok: false, error: decision.error };
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -802,32 +777,11 @@ export async function sendMoneyAction(input: {
   });
   if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-  const note = input.note?.trim() || 'Transfer';
-  // Debit the sender's Spend bucket (validates available balance).
-  const debit = await debitSpendBucket(supabase, {
-    familyId, childWalletId: input.fromChildWalletId, amountCents: amount, type: 'transfer',
-    description: `Sent: ${note}`, createdBy: ctx.user.id,
-    relatedType: 'child_wallets', relatedId: input.toChildWalletId,
+  const transfer = await transferWallets(supabase, {
+    familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
+    amountCents: amount, note: input.note, actorId: ctx.user.id,
   });
-  if (!debit.ok) return { ok: false, error: debit.error };
-
-  // Credit the recipient (allocated across their buckets).
-  const credit = await creditChildWallet(supabase, {
-    familyId, childWalletId: input.toChildWalletId, amountCents: amount, type: 'transfer',
-    description: `Received: ${note}`, createdBy: ctx.user.id,
-    relatedType: 'child_wallets', relatedId: input.fromChildWalletId,
-  });
-  if (!credit.ok) {
-    // Roll back the debit with a reversal so money is conserved on failure.
-    if (debit.txnId) {
-      await supabase.from('wallet_transactions').insert({
-        family_id: familyId, child_wallet_id: input.fromChildWalletId, type: 'reversal',
-        status: 'completed', direction: 'credit', amount_cents: amount,
-        description: 'Reversed failed transfer', reverses_id: debit.txnId, created_by: ctx.user.id, approved_by: ctx.user.id,
-      });
-    }
-    return { ok: false, error: credit.error };
-  }
+  if (!transfer.ok) return { ok: false, error: transfer.error };
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -895,26 +849,12 @@ export async function decideAllowanceRequestAction(input: {
     });
     if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-    const res = await creditChildWallet(supabase, {
-      familyId, childWalletId: appr.ref_id, amountCents: amount, type: 'parent_top_up',
-      description: `Allowance request approved${input.note ? `: ${input.note.trim()}` : ''}`,
-      createdBy: ctx.user.id,
-    });
-    if (!res.ok) return { ok: false, error: res.error };
   }
-
-  await supabase.from('parent_approvals').update({
-    status: input.decision, decided_by: ctx.user.id,
-    decided_at: new Date().toISOString(),
-    note: input.note?.trim() || appr.note || null,
-  }).eq('id', appr.id);
-
-  await supabase.from('wallet_audit_logs').insert({
-    family_id: familyId, actor_user_id: ctx.user.id,
-    action: `allowance_${input.decision}`,
-    entity_type: 'parent_approvals', entity_id: appr.id,
-    detail: `Allowance request ${input.decision}`,
+  const decision = await decideAllowance(supabase, {
+    familyId, approvalId: appr.id, decision: input.decision,
+    note: input.note ?? appr.note ?? undefined, actorId: ctx.user.id,
   });
+  if (!decision.ok) return { ok: false, error: decision.error };
 
   revalidatePath('/wallet');
   return { ok: true };

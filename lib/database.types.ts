@@ -2360,6 +2360,10 @@ export interface Database {
       loyalty_award_points: { Args: { p_family_id: string; p_points: number; p_kind?: string; p_reason?: string | null; p_source?: string | null; p_reward_id?: string | null; p_actor_id?: string | null }; Returns: Json };
       loyalty_redeem_reward: { Args: { p_family_id: string; p_reward_id: string; p_actor_id?: string | null }; Returns: Json };
       loyalty_cancel_redemption: { Args: { p_redemption_id: string; p_actor_id?: string | null }; Returns: Json };
+      wallet_transfer: { Args: { p_family_id: string; p_from_child_wallet_id: string; p_to_child_wallet_id: string; p_amount: number; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
+      wallet_approve_gift: { Args: { p_family_id: string; p_gift_payment_id: string; p_actor_id: string }; Returns: Json };
+      wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
+      wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;

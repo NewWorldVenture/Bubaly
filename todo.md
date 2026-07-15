@@ -4283,3 +4283,23 @@ roadmap entries and user worktree changes are preserved.
   stock restoration, and the absence of direct best-effort ledger writes.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0274 - Wallet money actions could leave ledger and approval state partial
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Wallet / financial data integrity / concurrency / Supabase RPC security
+- Feature: Wallet transfers, gift approvals, spend approvals, and allowance approvals
+- File or files: `supabase/migrations/0205_atomic_wallet_money_actions.sql`, `lib/wallet/server.ts`,
+  `app/(app)/wallet/actions.ts`, `tests/wallet-atomic-persistence.test.ts`
+- Description: Transfers debited and credited in separate writes, gift approvals credited before gift
+  state was updated, and parent approvals updated their ledger and approval/audit rows independently.
+- Resolution: Authenticated manager-checked RPCs now lock the affected wallet, bucket, gift, approval, and
+  transaction rows; server-side split allocation preserves every cent, and ledger/state/audit writes
+  commit atomically. Typed wrappers map domain failures to stable action messages.
+- Tests performed: Focused Wallet persistence tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/wallet-atomic-persistence.test.ts` guards row locks, authenticated grants, split-credit
+  helper use, typed RPC routing, and removal of direct partial state transitions.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -4,7 +4,7 @@
 // Reused by parent top-ups, allowance runs, and chore rewards so every credit
 // path is identical and auditable.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, WalletTxnType } from '@/lib/database.types';
+import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -13,6 +13,79 @@ type DB = SupabaseClient<Database>;
 function walletFailure(error: unknown, fallback: string): string {
   console.error('[wallet] operation failed:', error);
   return describeActionError(error, fallback);
+}
+
+type WalletRpcResult = { ok?: boolean; reason?: string; available?: number; transaction_id?: string; debit_transaction_id?: string; credit_transaction_id?: string };
+
+function walletRpcResult(data: Json | null): WalletRpcResult {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  return data as WalletRpcResult;
+}
+
+function walletRpcReason(result: WalletRpcResult, fallback: string): string {
+  switch (result.reason) {
+    case 'forbidden': return 'You are not allowed to manage this family wallet.';
+    case 'not_found':
+    case 'wallet_not_found': return 'The wallet request was not found.';
+    case 'already_processed': return 'This wallet request was already processed.';
+    case 'insufficient_funds': return `Only ${((result.available ?? 0) / 100).toFixed(2)} is available.`;
+    case 'spend_bucket_missing': return 'The wallet Spend bucket is unavailable.';
+    case 'wallet_buckets_missing': return 'The recipient wallet is not fully provisioned.';
+    default: return fallback;
+  }
+}
+
+export async function transferWallets(supabase: DB, params: {
+  familyId: string; fromChildWalletId: string; toChildWalletId: string; amountCents: number; note?: string; actorId: string;
+}): Promise<{ ok: boolean; error?: string; txnId?: string }> {
+  const { data, error } = await supabase.rpc('wallet_transfer', {
+    p_family_id: params.familyId,
+    p_from_child_wallet_id: params.fromChildWalletId,
+    p_to_child_wallet_id: params.toChildWalletId,
+    p_amount: Math.trunc(params.amountCents),
+    p_note: params.note ?? null,
+    p_actor_id: params.actorId,
+  });
+  if (error) return { ok: false, error: walletFailure(error, 'Could not transfer money between those wallets.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not transfer money between those wallets.') };
+  return { ok: true, txnId: result.debit_transaction_id };
+}
+
+export async function approveGift(supabase: DB, familyId: string, giftPaymentId: string, actorId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('wallet_approve_gift', {
+    p_family_id: familyId, p_gift_payment_id: giftPaymentId, p_actor_id: actorId,
+  });
+  if (error) return { ok: false, error: walletFailure(error, 'Could not approve that gift.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not approve that gift.') };
+  return { ok: true };
+}
+
+export async function decideSpend(supabase: DB, params: {
+  familyId: string; approvalId: string; decision: 'approved' | 'rejected'; note?: string; actorId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('wallet_decide_spend', {
+    p_family_id: params.familyId, p_approval_id: params.approvalId, p_decision: params.decision,
+    p_note: params.note ?? null, p_actor_id: params.actorId,
+  });
+  if (error) return { ok: false, error: walletFailure(error, 'Could not decide that spend request.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not decide that spend request.') };
+  return { ok: true };
+}
+
+export async function decideAllowance(supabase: DB, params: {
+  familyId: string; approvalId: string; decision: 'approved' | 'rejected'; note?: string; actorId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('wallet_decide_allowance', {
+    p_family_id: params.familyId, p_approval_id: params.approvalId, p_decision: params.decision,
+    p_note: params.note ?? null, p_actor_id: params.actorId,
+  });
+  if (error) return { ok: false, error: walletFailure(error, 'Could not decide that allowance request.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not decide that allowance request.') };
+  return { ok: true };
 }
 
 export type CreditResult = { ok: boolean; error?: string; credited: number };
