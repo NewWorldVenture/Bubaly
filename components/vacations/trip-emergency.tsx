@@ -5,6 +5,7 @@ import { ShieldAlert, HeartPulse, Printer, Phone } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { Button } from '@/components/ui/button';
+import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, type FieldDef } from './shared';
 import type { Tables } from '@/lib/database.types';
 
@@ -41,15 +42,19 @@ const medicalFields: FieldDef[] = [
 function EmergencySummary({ vacationId }: { vacationId: string }) {
   const { familyId, members } = useApp();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const { data: contacts } = useRealtimeQuery<Contact>({
+  const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
     table: 'vacation_emergency_contacts', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_emergency_contacts').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: medical } = useRealtimeQuery<Medical>({
+  const { data: medical, loading: medicalLoading, error: medicalError, refresh: refreshMedical } = useRealtimeQuery<Medical>({
     table: 'vacation_medical_information', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_medical_information').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
 
+  if (contactsLoading || medicalLoading) return <LoadingBlock />;
+  if (contactsError || medicalError) {
+    return <ErrorState message="Could not load the emergency summary. Refresh and try again." onRetry={() => { void Promise.all([refreshContacts(), refreshMedical()]); }} />;
+  }
   if (contacts.length === 0 && medical.length === 0) return null;
 
   return (
