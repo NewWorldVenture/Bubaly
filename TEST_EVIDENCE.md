@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Vacation CRUD and Budget Read Boundaries
+
+- Focused CRUD/budget suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 467 test files, 3,218 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Shared `TripCrudSection` now renders a retryable error state on failed child-table reads; Trip Budget now waits for and validates budget and expense reads before showing financial totals.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Trip Itinerary Read Boundary
 
 - Focused trip itinerary suite: 1 file, 2 assertions passed.

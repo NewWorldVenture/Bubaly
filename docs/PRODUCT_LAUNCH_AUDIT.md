@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
+
+- Timestamp: 2026-07-15 17:17 America/New_York
+- Service: Vacation shared CRUD sections and Trip Budget
+- Route: `/dashboard/vacations/[id]/budget` plus shared lodging, travel, activity, document, family, and emergency sections
+- Affected files: `components/vacations/shared.tsx`, `components/vacations/trip-budget.tsx`, `tests/vacation-crud-read-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: shared CRUD list reads or budget/expense reads could fail while sections rendered empty lists or zero financial totals.
+- Severity: P1
+- Launch impact: families could miss trip records or make budget decisions from incomplete data.
+- Root cause: `TripCrudSection` ignored read errors, and Trip Budget did not track loading or errors for its summary queries.
+- Resolution: shared vacation CRUD sections now show sanitized retry states, while Trip Budget waits for both required reads and retries them together.
+- Supabase impact: no schema change; existing family-scoped child-table and budget reads now have explicit failure handling.
+- Tests run: `tests/vacation-crud-read-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 467 test files, 3,218 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `3adef7e6`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed vacation CRUD verification
+
 ### PLA-0348 - Trip itinerary hid failed day and item reads as an empty schedule
 
 - Timestamp: 2026-07-15 17:11 America/New_York
