@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   ArrowLeft, Tag, MapPin, Star, ShieldCheck, Clock, Package, Gift, HelpCircle,
-  ShoppingBag, Repeat, HandHeart, Store as StoreIcon,
+  ShoppingBag, Repeat, HandHeart, Store as StoreIcon, AlertTriangle,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -24,6 +24,7 @@ import {
   type ListingKind, type ListingCategory, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -39,18 +40,29 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
+  const dataWarnings: string[] = [];
+  const reportRead = (label: string, error: { message?: string | null } | null | undefined) => {
+    if (!error) return;
+    console.error(`[marketplace-item] ${label} read failed`, error);
+    dataWarnings.push(label);
+  };
 
-  const { data: listing } = await sb
+  const { data: listing, error: listingError } = await sb
     .from('marketplace_listings')
     .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, reserve_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id')
     .eq('id', id).eq('family_id', familyId).maybeSingle();
+  if (listingError) {
+    reportRead('Listing', listingError);
+    return <ErrorState message="Could not load this listing from the marketplace. Refresh and try again." />;
+  }
   if (!listing) notFound();
 
   const isAuctionListing = listing.sale_format === 'auction';
-  const { data: bidRows } = isAuctionListing
+  const { data: bidRows, error: bidsError } = isAuctionListing
     ? await sb.from('marketplace_bids').select('id, bidder_family_id, amount_cents, status, created_at, is_auto')
         .eq('listing_id', id).order('created_at', { ascending: false }).limit(20)
-    : { data: [] };
+    : { data: [], error: null };
+  reportRead('Auction bids', bidsError);
 
   const kind = listing.kind as ListingKind;
   const KindIcon = KIND_ICON[kind] ?? ShoppingBag;
@@ -59,7 +71,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const price = priceLabel(kind, listing.price_cents, listing.rent_period as RentPeriod | null);
 
   // Seller identity + a trust score computed from real activity.
-  const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
+  const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
+  reportRead('Family members', membersError);
   const sellerName = members?.find((m) => m.id === listing.member_id)?.display_name ?? 'A neighbor';
 
   const [sellerReviewsRes, listingReviewsRes, saveRes, offerRes, sellerListingsRes, sellerOrdersRes, storeRes] = await Promise.all([
@@ -71,8 +84,16 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed'),
     listing.member_id
       ? sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', listing.member_id).eq('is_active', true).maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
+
+  reportRead('Seller reviews', sellerReviewsRes.error);
+  reportRead('Listing reviews', listingReviewsRes.error);
+  reportRead('Saved state', saveRes.error);
+  reportRead('Open offers', offerRes.error);
+  reportRead('Seller listings', sellerListingsRes.error);
+  reportRead('Seller orders', sellerOrdersRes.error);
+  reportRead('Seller store', storeRes.error);
 
   const sellerRatings = (sellerReviewsRes.data ?? []).map((r) => r.rating);
   const trust = computeTrustScore({
@@ -106,11 +127,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   // Price history + drop watch (fixed-price listings with a real price).
   const tracksPrice = !isAuctionListing && listing.price_cents > 0;
-  const { data: priceRows } = tracksPrice
+  const { data: priceRows, error: priceHistoryError } = tracksPrice
     ? await sb.from('marketplace_price_history')
         .select('old_cents, new_cents, changed_at').eq('listing_id', id)
         .order('changed_at', { ascending: false }).limit(8)
-    : { data: [] };
+    : { data: [], error: null };
+  reportRead('Price history', priceHistoryError);
   const priceHistory: PriceChange[] = (priceRows ?? []).map((r) => ({
     oldCents: r.old_cents, newCents: r.new_cents, changedAt: r.changed_at,
   }));
@@ -121,11 +143,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   let dealBadge: { text: string; tone: 'ok' | 'good' | 'muted' | 'warn' } | null = null;
   let compBand: string | null = null;
   if (tracksPrice && kind === 'sell' && !isOwner) {
-    const { data: compRows } = await sb
+    const { data: compRows, error: compsError } = await sb
       .from('marketplace_listings')
       .select('category, condition, price_cents, kind')
       .eq('kind', 'sell').eq('category', listing.category).gt('price_cents', 0).neq('id', id)
       .limit(80);
+    reportRead('Comparable listings', compsError);
     const comps: Comp[] = (compRows ?? []).map((c) => ({
       category: c.category, condition: c.condition, priceCents: c.price_cents, kind: c.kind,
     }));
@@ -138,18 +161,20 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const negotiable = !isAuctionListing && kind === 'sell' && listing.price_cents > 0;
   let negThreads: Thread[] = [];
   if (negotiable) {
-    const { data: negRows } = await sb
+    const { data: negRows, error: negotiationsError } = await sb
       .from('marketplace_negotiations')
       .select('id, buyer_member_id, status, current_amount_cents, last_actor, agreed_amount_cents')
       .eq('listing_id', id).order('created_at', { ascending: true });
+    reportRead('Negotiations', negotiationsError);
     const visible = (negRows ?? []).filter((n) =>
       isOwner ? ['open', 'agreed'].includes(n.status) : n.buyer_member_id === selfId && n.status === 'open');
     const negIds = visible.map((n) => n.id);
-    const { data: roundRows } = negIds.length
+    const { data: roundRows, error: roundsError } = negIds.length
       ? await sb.from('marketplace_negotiation_rounds')
           .select('id, negotiation_id, actor_role, kind, amount_cents, message, created_at')
           .in('negotiation_id', negIds).order('created_at', { ascending: true })
-      : { data: [] };
+      : { data: [], error: null };
+    reportRead('Negotiation rounds', roundsError);
     negThreads = visible.map((n) => ({
       id: n.id,
       buyerName: nameOf(n.buyer_member_id),
@@ -166,6 +191,17 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
+      {dataWarnings.length > 0 && (
+        <div
+          role="status"
+          aria-label="Listing data health"
+          className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+        >
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some listing details are temporarily unavailable.</p>
+          <p className="mt-1 text-xs">The listing is still shown, but affected trust, offer, auction, or history details may be incomplete. Refresh after the connection is restored.</p>
+          <p className="mt-1 text-xs">Unavailable: {Array.from(new Set(dataWarnings)).join(', ')}.</p>
+        </div>
+      )}
       <Link href="/marketplace/browse" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
         <ArrowLeft className="h-4 w-4" /> Back to browse
       </Link>
