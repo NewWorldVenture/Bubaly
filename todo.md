@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 16:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source increment adds Admin Security/Auth Admin and command-center read safety; live provider and deployment evidence remains open
+- Commit: `167524d9` adds Admin Security/Auth Admin and command-center read safety; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -43,7 +43,7 @@
 - Test plan: focused admin dashboard boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
 - Tests performed: `tests/admin-overview-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Evidence: latest full gate passed with 459 files/3,205 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally; commit and push verification pending.
+- Resolution: source repair validated locally in commit `167524d9`; push and post-push ref verification pending.
 - Remaining dependencies: live Super Admin role/browser, alert routing, and deployed Supabase outage evidence.
 
 #### TODO-0338 - Admin Security hid Auth and audit read failures as empty signals

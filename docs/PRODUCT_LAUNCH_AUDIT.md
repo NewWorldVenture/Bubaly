@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; service-role dashboard reads now fail visibly instead of substituting empty arrays/zero counts.
 - Tests run: `tests/admin-overview-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 459 test files, 3,205 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `167524d9`
 - Status: Resolved in code; live Super Admin role/browser, alert-routing, RLS, and outage evidence remains open
 - Remaining dependencies: execute authenticated command-center and degraded-Supabase drills against deployed services
 
