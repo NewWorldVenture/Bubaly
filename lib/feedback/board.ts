@@ -232,3 +232,16 @@ export function kindTally(ideas: readonly IdeaRow[]): Record<FeedbackKind, numbe
   for (const i of ideas) base[isFeedbackKind(i.kind) ? i.kind : 'idea'] += 1;
   return base;
 }
+
+/** Case-insensitive search across an idea's title, body, and problem. A blank
+ *  query returns the list unchanged. */
+export function searchIdeas<T extends Pick<IdeaRow, 'title' | 'body' | 'problem'>>(
+  ideas: readonly T[], query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...ideas];
+  return ideas.filter((i) =>
+    i.title.toLowerCase().includes(q) ||
+    (i.body ?? '').toLowerCase().includes(q) ||
+    (i.problem ?? '').toLowerCase().includes(q));
+}
