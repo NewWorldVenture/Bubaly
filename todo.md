@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:23:01 -04:00
+- Last updated: 2026-07-15 17:27:51 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `da83e4b` adds emergency-summary read safety after shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `2a86d411` adds weather and packing read safety after the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0351 - Weather and packing views hid failed trip dependencies as empty plans
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation weather and packing / Supabase failure handling
+- Feature: Trip Weather and Trip Packing
+- Route: `/dashboard/vacations/[id]/weather`, `/dashboard/vacations/[id]/packing`
+- File or files: `components/vacations/trip-weather.tsx`, `components/vacations/trip-packing.tsx`, `tests/trip-weather-packing-boundary.test.ts`
+- Database objects: `vacations`, `vacation_weather_snapshots`, `vacation_packing_lists`, `vacation_packing_items`, and `vacation_activities`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: weather, packing, or activity dependency reads could fail while pages rendered no forecast or no packing items.
+- Launch impact: travelers could plan without current weather or lose visibility into a partially unavailable packing plan.
+- Root cause: both views used fallback arrays while ignoring secondary query loading and errors.
+- Required remediation: track every required dependency read, wait for complete data, and render sanitized retry states before empty-state UI.
+- Implementation notes: Weather now validates trip and snapshot reads; Packing validates all five trip, list, item, weather, and activity reads and retries them together.
+- Test plan: focused weather/packing boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/trip-weather-packing-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 469 files/3,222 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `2a86d411`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0350 - Emergency summary hid contact and medical read failures as no emergency data
 

@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0351 - Weather and packing views hid failed trip dependencies as empty plans
+
+- Timestamp: 2026-07-15 17:27 America/New_York
+- Service: Trip Weather and Trip Packing
+- Route: `/dashboard/vacations/[id]/weather`, `/dashboard/vacations/[id]/packing`
+- Affected files: `components/vacations/trip-weather.tsx`, `components/vacations/trip-packing.tsx`, `tests/trip-weather-packing-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: weather, packing, or activity dependency reads could fail while pages rendered no forecast or no packing items.
+- Severity: P1
+- Launch impact: travelers could plan without current weather or lose visibility into a partially unavailable packing plan.
+- Root cause: both views used fallback arrays while ignoring secondary query loading and errors.
+- Resolution: Weather now validates its trip and snapshot reads; Packing validates all five required reads and renders sanitized retry states before empty-state UI.
+- Supabase impact: no schema change; existing family-scoped trip dependency reads now have explicit page-level failure contracts.
+- Tests run: `tests/trip-weather-packing-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 469 test files, 3,222 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `2a86d411`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Weather/Packing verification
+
 ### PLA-0350 - Emergency summary hid contact and medical read failures as no emergency data
 
 - Timestamp: 2026-07-15 17:23 America/New_York
