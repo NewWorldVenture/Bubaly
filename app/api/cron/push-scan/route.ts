@@ -32,20 +32,29 @@ export async function GET(req: NextRequest) {
   }
 
   let created = 0;
+  let generationFailures = 0;
   for (const f of families ?? []) {
     try {
       created += await generateFamilyNotifications(supabase, f.id);
     } catch (e) {
+      generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);
     }
   }
 
   let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
+  let pushDispatchFailures = 0;
   try {
     pushed = await dispatchPendingPushes(supabase);
   } catch (e) {
+    pushDispatchFailures = 1;
     console.error('Push dispatch failed:', e);
   }
 
-  return NextResponse.json({ families: families?.length ?? 0, created, pushed });
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed;
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, families: families?.length ?? 0, created, pushed, failed },
+    { status: ok ? 200 : 502 },
+  );
 }

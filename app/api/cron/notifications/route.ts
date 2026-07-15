@@ -26,30 +26,41 @@ export async function GET(req: NextRequest) {
   }
 
   let total = 0;
+  let generationFailures = 0;
   for (const f of families ?? []) {
     try {
       total += await generateFamilyNotifications(supabase, f.id);
     } catch (e) {
+      generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);
     }
   }
 
   // Deliver pushes for any un-pushed notifications across all families.
   let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
+  let pushDispatchFailures = 0;
   try {
     pushed = await dispatchPendingPushes(supabase);
   } catch (e) {
+    pushDispatchFailures = 1;
     console.error('Push dispatch failed:', e);
   }
 
   // Email digests across all families (respects the per-user email toggle and
   // marks rows sent so they aren't re-emailed).
   let emailed = 0;
+  let emailDeliveryFailures = 0;
   try {
     emailed = await deliverNotificationEmails(supabase);
   } catch (e) {
+    emailDeliveryFailures = 1;
     console.error('Notification email delivery failed:', e);
   }
 
-  return NextResponse.json({ families: families?.length ?? 0, created: total, pushed, emailed });
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures;
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, families: families?.length ?? 0, created: total, pushed, emailed, failed },
+    { status: ok ? 200 : 502 },
+  );
 }
