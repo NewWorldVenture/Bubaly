@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import { Bell } from 'lucide-react';
+import { Bell, TrendingUp } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { unreadCount, type AdminNotificationRow } from '@/lib/admin/notifications';
+import { buildAdminDigest } from '@/lib/admin/digest';
 import { AdminNotificationsList } from '@/components/admin/admin-notifications-list';
 
 export const metadata: Metadata = { title: 'Admin · Notifications', robots: { index: false } };
@@ -21,6 +22,13 @@ export default async function AdminNotificationsPage() {
   const notifications = (data ?? []) as AdminNotificationRow[];
   const unread = unreadCount(notifications);
 
+  // Same growth-first rollup the daily digest email sends, computed live over the
+  // last 24h so the super admin gets it in-app too (reuses the tested pure lib).
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const digest = buildAdminDigest(
+    notifications.filter((n) => new Date(n.created_at).getTime() >= dayAgo),
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-3">
@@ -36,6 +44,30 @@ export default async function AdminNotificationsPage() {
           </p>
         </div>
       </div>
+
+      {!digest.isEmpty && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500">
+              <TrendingUp className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Last 24 hours</p>
+              <p className="text-sm font-semibold text-fg">{digest.headline}</p>
+            </div>
+          </div>
+          {digest.byKind.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {digest.byKind.map((k) => (
+                <span key={k.kind} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs">
+                  <span className="font-semibold text-fg">{k.count}</span>
+                  <span className="text-muted">{k.label}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <AdminNotificationsList notifications={notifications} />
     </div>
