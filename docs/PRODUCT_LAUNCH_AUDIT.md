@@ -975,6 +975,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0326 - Scheduled integrations acknowledged secondary persistence failures
+
+- Timestamp: 2026-07-15 14:42 America/New_York
+- Service: Guardian Learning, Network Aggregation, auctions, provider sync, and calendar feed sync
+- Route: `/api/cron/guardian-learning`, `/api/cron/network-aggregate`, `/api/cron/close-auctions`, `/api/cron/provider-sync`, `/api/cron/calendar-feeds`
+- Affected files: `app/api/cron/guardian-learning/route.ts`, `app/api/cron/network-aggregate/route.ts`, `lib/network/aggregate-server.ts`, `app/api/cron/close-auctions/route.ts`, `app/api/cron/provider-sync/route.ts`, `lib/server/calendar-feeds.ts`, `tests/cron-recovery-boundaries.test.ts`
+- Role: family member, network-consenting household, auction participant, connected-provider user, calendar subscriber, and scheduled cron worker
+- Scenario: secondary reads or writes failed after primary batch reads while the job returned success or published incomplete state
+- Severity: P1
+- Launch impact: learning, aggregate privacy, auction notifications, sync observability, or calendar state could be incomplete without a retry signal
+- Root cause: Supabase result errors were discarded in cleanup, source queries, contribution pruning, notifications, audit logs, event upserts, and feed status writes
+- Resolution: required reads and writes are checked; cron errors are sanitized and return 502 on incomplete scheduled work; feed sync fails when event or status persistence fails
+- Supabase impact: no schema change; existing consent, aggregate, marketplace, sync, and calendar scopes remain unchanged
+- Tests run: `tests/cron-recovery-boundaries.test.ts`, `tests/cron-batch-failure-status.test.ts`, `tests/cron-provider-sync.test.ts`, `tests/cron-auth.test.ts`, `tests/marketplace-auction-security.test.ts` (17 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and full local gate pass; live scheduler/provider/privacy/RLS evidence remains open
+- Status: Resolved in code; live scheduled integration evidence remains open
+- Remaining dependencies: execute scheduler, provider outage/retry, duplicate-run, consent/privacy, and live Supabase drills
+
 ### PLA-0325 - Return and model refresh crons acknowledged persistence failures
 
 - Timestamp: 2026-07-15 14:35 America/New_York

@@ -24,14 +24,16 @@ export async function syncFeed(
   let icsText: string;
   const fetched = await fetchPublicCalendarText(feed.url);
   if (!fetched.ok) {
-    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: fetched.error });
+    const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: fetched.error });
+    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
     return { ok: false, error: fetched.error };
   }
   icsText = fetched.text;
 
   if (!icsText.includes('BEGIN:VCALENDAR')) {
     const msg = 'URL is not a valid ICS calendar';
-    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
+    const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
+    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
     return { ok: false, error: msg };
   }
 
@@ -40,7 +42,8 @@ export async function syncFeed(
     rows = buildFeedRows(parseICS(icsText), feed.family_id, feed.id);
   } catch {
     const msg = 'Could not parse the calendar';
-    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
+    const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
+    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
     return { ok: false, error: msg };
   }
 
@@ -50,13 +53,19 @@ export async function syncFeed(
     const { error } = await supabase
       .from('calendar_events')
       .upsert(chunk, { onConflict: 'feed_id,external_uid' });
-    if (!error) imported += chunk.length;
+    if (error) {
+      console.error(`Calendar feed event upsert failed for ${feed.id}:`, error);
+      const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'Could not save calendar events' });
+      return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not save calendar events' };
+    }
+    imported += chunk.length;
   }
 
-  await stampFeed(supabase, feed.id, {
+  const stampError = await stampFeed(supabase, feed.id, {
     last_status: 'ok', last_error: null, event_count: imported,
     last_synced_at: new Date().toISOString(),
   });
+  if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
   return { ok: true, imported };
 }
 
@@ -64,8 +73,13 @@ async function stampFeed(
   supabase: SupabaseClient,
   feedId: string,
   patch: Record<string, unknown>,
-): Promise<void> {
-  await supabase.from('calendar_feeds').update(patch).eq('id', feedId);
+): Promise<Error | null> {
+  const { error } = await supabase.from('calendar_feeds').update(patch).eq('id', feedId);
+  if (error) {
+    console.error(`Calendar feed status update failed for ${feedId}:`, error);
+    return new Error('Calendar feed status update failed');
+  }
+  return null;
 }
 
 /** Re-syncs every feed for a family (used after add, and by cron per-family). */

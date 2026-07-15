@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:35:00 -04:00
+- Last updated: 2026-07-15 14:42:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes Return Reminders and Model Refresh persistence failure boundaries; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes scheduled integration persistence failure boundaries; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0326 - Scheduled integrations acknowledged secondary persistence failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / scheduled jobs / integration state
+- Feature: Guardian Learning, Network Aggregation, auctions, provider sync, and calendar feed sync
+- Route: `/api/cron/guardian-learning`, `/api/cron/network-aggregate`, `/api/cron/close-auctions`, `/api/cron/provider-sync`, `/api/cron/calendar-feeds`
+- File or files: `app/api/cron/guardian-learning/route.ts`, `app/api/cron/network-aggregate/route.ts`, `lib/network/aggregate-server.ts`, `app/api/cron/close-auctions/route.ts`, `app/api/cron/provider-sync/route.ts`, `lib/server/calendar-feeds.ts`, `tests/cron-recovery-boundaries.test.ts`
+- Database objects: Guardian suggestions/communications, network consent/contributions/aggregates, marketplace notifications, sync audit logs, calendar feeds, and calendar events
+- Affected roles: family members, network-consenting households, auction participants, connected-provider users, calendar subscribers, and scheduled cron workers
+- Scenario: secondary reads or writes failed after the primary batch read, while the job returned success or published incomplete state
+- Launch impact: learning, privacy-safe aggregates, auction notifications, sync observability, or imported calendar state could be incomplete without a retry signal
+- Root cause: result errors were discarded in cleanup, source batch queries, contribution pruning, notification, audit, event-upsert, and status-stamp paths
+- Resolution: required reads and writes are checked; cron responses are sanitized and return 502 on incomplete scheduled work; calendar feed sync returns failure when event or status persistence fails
+- Tests performed: `tests/cron-recovery-boundaries.test.ts`, `tests/cron-batch-failure-status.test.ts`, `tests/cron-provider-sync.test.ts`, `tests/cron-auth.test.ts`, `tests/marketplace-auction-security.test.ts` (17 focused tests); typecheck; lint; diff check
+- Evidence: focused validation and final full gate passed with 454 files/3,188 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run scheduler, provider, duplicate-run, privacy/consent, and live Supabase/RLS drills
 
 #### TODO-0325 - Return and model refresh crons acknowledged persistence failures
 

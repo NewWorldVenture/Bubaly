@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
 
     if (result.sold && result.winner_family_id && result.title) {
       const price = `$${(Number(result.current_bid_cents ?? 0) / 100).toFixed(2)}`;
-      await admin.from('notifications').insert([
+      const { error: notificationError } = await admin.from('notifications').insert([
         { family_id: result.winner_family_id, user_id: null, type: 'system' as const,
           title: `You won "${result.title}"`, body: `Final price ${price}. Open your orders to arrange pickup.`,
           related_type: 'marketplace_orders', related_id: result.order_id ?? null },
@@ -67,17 +67,25 @@ export async function GET(req: NextRequest) {
           title: `Auction sold: "${result.title}"`, body: `Sold for ${price}. Confirm pickup in your orders.`,
           related_type: 'marketplace_orders', related_id: result.order_id ?? null }] : []),
       ]).select('id');
+      if (notificationError) {
+        failed++;
+        console.error('Auction winner notification failed:', notificationError);
+      }
       sold++;
       continue;
     }
 
     if (result.had_bids && result.title && result.seller_family_id) {
-      await admin.from('notifications').insert({
+      const { error: notificationError } = await admin.from('notifications').insert({
         family_id: result.seller_family_id, user_id: null, type: 'system' as const,
         title: `Auction ended: "${result.title}"`,
         body: 'The reserve was not met, so it did not sell. Relist it or lower the reserve.',
         related_type: 'marketplace_listings', related_id: listing.id,
       });
+      if (notificationError) {
+        failed++;
+        console.error('Auction seller notification failed:', notificationError);
+      }
     }
     unsold++;
   }

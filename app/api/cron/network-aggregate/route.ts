@@ -16,7 +16,15 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createServiceClient();
     const result = await runNetworkAggregation(supabase, new Date());
-    return NextResponse.json(result);
+    return NextResponse.json(
+      {
+        ok: result.ok,
+        contributors: result.contributors,
+        aggregates: result.aggregates,
+        ...(result.error ? { error: 'Network aggregation failed.' } : {}),
+      },
+      { status: result.ok ? 200 : 502 },
+    );
   } catch (err) {
     console.error('Network-aggregate cron error:', err);
     return NextResponse.json({ error: 'Network-aggregate cron failed' }, { status: 500 });

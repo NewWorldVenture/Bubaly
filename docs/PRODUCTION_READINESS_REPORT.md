@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 14:35 America/New_York
+Audit snapshot: 2026-07-15 14:42 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 453 Vitest files and 3,184 tests pass in the latest full local gate.
+- 454 Vitest files and 3,188 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -130,6 +130,10 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   automation delivery fails, instead of acknowledging a partial recovery run as successful.
 - Return Reminders now checks listing reads, notification inserts, and deduplication-stamp writes; Model Refresh now
   checks dirty-state reads and writes, and both jobs return non-success status when scheduled work is incomplete.
+- Guardian Learning now checks cleanup and activity reads and returns 502 for partial family failures. Network
+  Aggregation now checks all source reads, contribution writes/pruning, sanitizes cron errors, and returns 502 on
+  incomplete publication. Auction notifications, provider audit logs, and calendar-feed event/status writes are now
+  counted and surfaced instead of being silently acknowledged.
 - The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
   inbound and outbound inbox persistence errors are no longer discarded, and SMS, voice, voicemail, and inbound
   email callbacks return retryable 503 responses for database outages. Provider callback, retry, and live RLS

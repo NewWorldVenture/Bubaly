@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Provider synchronization failed.' }, { status: 500 });
   }
 
-  let synced = 0, skipped = 0, failed = 0;
+  let synced = 0, skipped = 0, failed = 0, auditFailed = 0;
   const details: Record<string, unknown>[] = [];
 
   for (const account of accounts ?? []) {
@@ -49,11 +49,15 @@ export async function GET(req: NextRequest) {
         conflicts: result.conflicts,
         ...(result.error ? { error: 'Provider synchronization failed.' } : {}),
       });
-      await admin.from('sync_audit_logs').insert({
+      const { error: auditError } = await admin.from('sync_audit_logs').insert({
         user_id: account.user_id, family_id: account.family_id,
         provider: account.provider, action: 'sync',
         detail: { ...result, scheduled: true } as unknown as Json,
       });
+      if (auditError) {
+        auditFailed++;
+        console.error(`Provider sync audit log failed for account ${account.id}:`, auditError);
+      }
     } catch (e) {
       failed++;
       console.error(`Provider sync failed for account ${account.id}:`, e);
@@ -61,9 +65,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const ok = failed === 0;
+  const ok = failed === 0 && auditFailed === 0;
   return NextResponse.json(
-    { ok, synced, skipped, failed, scanned: accounts?.length ?? 0, details },
+    { ok, synced, skipped, failed, auditFailed, scanned: accounts?.length ?? 0, details },
     { status: ok ? 200 : 502 },
   );
 }

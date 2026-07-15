@@ -49,7 +49,7 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
     sb.from('teams').select('family_id').in('family_id', familyIds).eq('is_active', true),
     sb.from('school_classes').select('family_id').in('family_id', familyIds),
   ]);
-  if (members.error) return null;
+  if (members.error || dinners.error || teams.error || classes.error) return null;
 
   const birthdaysByFam = new Map<string, (string | null)[]>();
   for (const m of members.data ?? []) {
@@ -99,6 +99,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
 
   const contributions: Contribution[] = [];
+  let contributionFailures = 0;
   for (const c of optedIn) {
     // Per-family isolation: one family's bad data or a transient write error must
     // never abort the whole nightly aggregation for everyone else.
@@ -107,7 +108,6 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       if (!contrib) continue;
       const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
       contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
-      contributions.push(contrib);
       const { error: upErr } = await sb.from('network_contributions').upsert({
         family_id: c.family_id,
         cohort_key: cohortKey(contrib.features),
@@ -115,20 +115,29 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
         metrics: contrib.metrics,
         scopes: c.scopes,
       }, { onConflict: 'family_id' });
-      if (upErr) console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
+      if (upErr) {
+        contributionFailures++;
+        console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
+        continue;
+      }
+      contributions.push(contrib);
     } catch (err) {
+      contributionFailures++;
       console.error(`network contribution failed for family ${c.family_id}:`, err);
     }
   }
   // Right-to-be-forgotten: remove contributions for families no longer opted in —
   // in ONE delete rather than a read + N per-row deletes.
   const keepIds = optedIn.map((c) => c.family_id);
+  let contributionDeleteError;
   if (keepIds.length > 0) {
-    await sb.from('network_contributions').delete().not('family_id', 'in', `(${keepIds.join(',')})`);
+    ({ error: contributionDeleteError } = await sb.from('network_contributions').delete().not('family_id', 'in', `(${keepIds.join(',')})`));
   } else {
     // No one opted in → clear every contribution (family_id is NOT NULL).
-    await sb.from('network_contributions').delete().not('family_id', 'is', null);
+    ({ error: contributionDeleteError } = await sb.from('network_contributions').delete().not('family_id', 'is', null));
   }
+  if (contributionDeleteError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
+  if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
   // 3. AGGREGATE — pure k-anonymity + DP noise + launch gate.
   const aggregates = aggregateContributions(contributions, {
