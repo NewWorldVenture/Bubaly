@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:54:00 -04:00
+- Last updated: 2026-07-15 14:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest published source repair `6767d374` includes billing state boundaries and Contact Center baseline; Contact Center persistence repair is currently being verified
@@ -35,13 +35,13 @@
 - File or files: `lib/contact-center/server.ts`, `app/(app)/dashboard/contact-center/page.tsx`, `app/(app)/dashboard/contact-center/actions.ts`, `app/api/contact-center/sms/route.ts`, `app/api/contact-center/voice/route.ts`, `app/api/contact-center/voice/transcription/route.ts`, `tests/contact-center.test.ts`
 - Database objects: `family_contact_channels`, `family_inbox_messages`, `families`, and `notifications`
 - Affected roles: Family+ parents, family members, and inbound communication providers
-- Scenario: channel, family, routing, or inbox persistence reads/writes failed while the UI or Twilio callback could continue with null/empty state; the migration's inbound email capability has no implemented webhook route
-- Launch impact: a family could see an unassigned identity, lose inbound messages, or receive provider success responses while the inbox is unavailable; inbound email is not yet supported despite the schema contract
-- Root cause: Supabase errors were discarded in channel helpers, page loads, routing lookups, provisioning writes, and inbox persistence; email ingress was not implemented
-- Resolution: channel/page/routing reads are explicit; page renders ErrorState; Twilio routing returns 503 on database failure; provisioning and inbox writes are checked; callback escalation failures are logged; focused Contact Center coverage added
-- Tests performed: `tests/contact-center.test.ts` (13 focused tests); typecheck; lint; diff check
-- Evidence: focused validation passes; full merged-tree gate before this repair was 450 files/3,172 tests, dependency audit 0 vulnerabilities, and 250-route build
-- Remaining dependencies: implement or explicitly remove/defer inbound email routing, then run live Twilio test-mode callbacks, provider retries, remote RLS, and multi-role browser verification
+- Scenario: channel, family, routing, or inbox persistence reads/writes failed while the UI or a communications callback could continue with null/empty state; inbound email was recently added but had the same unchecked-boundary pattern
+- Launch impact: a family could see an unassigned identity, lose messages, or receive provider success responses while the inbox is unavailable
+- Root cause: Supabase errors were discarded in channel helpers, page loads, routing lookups, provisioning writes, and inbox persistence; the email callback also parsed unbounded form bodies and hid reply failures
+- Resolution: channel/page/routing reads are explicit; page renders ErrorState; SMS, voice, voicemail, and email routing return 503 on database failure; email form parsing is bounded; provisioning and inbox writes are checked; callback escalation failures are logged; focused Contact Center coverage added
+- Tests performed: `tests/contact-center.test.ts` (15 focused tests); typecheck; lint; diff check
+- Evidence: focused validation passes; final merged-tree gate was 450 files/3,176 tests, dependency audit 0 vulnerabilities, and 250-route build
+- Remaining dependencies: run live Twilio/email test-mode callbacks, provider retries, remote RLS, and multi-role browser verification
 
 #### TODO-0318 - Billing mutations proceeded through unavailable Supabase state
 

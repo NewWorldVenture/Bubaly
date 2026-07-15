@@ -14,6 +14,7 @@ const contactCenterServer = readFileSync('lib/contact-center/server.ts', 'utf8')
 const contactCenterPage = readFileSync('app/(app)/dashboard/contact-center/page.tsx', 'utf8');
 const smsRoute = readFileSync('app/api/contact-center/sms/route.ts', 'utf8');
 const voiceRoute = readFileSync('app/api/contact-center/voice/route.ts', 'utf8');
+const emailRoute = readFileSync('app/api/contact-center/email/route.ts', 'utf8');
 
 describe('bubaly address', () => {
   it('normalizes free text to a valid local-part', () => {
@@ -117,5 +118,12 @@ describe('contact center persistence boundaries', () => {
     expect(voiceRoute).toContain('Routing temporarily unavailable');
     expect(smsRoute).toContain('channelResult.error || familyResult.error');
     expect(voiceRoute).toContain('channelResult.error || familyResult.error');
+  });
+
+  it('bounds and fails email routing closed on database failure', () => {
+    expect(contactCenterServer).toContain('resolveFamilyByEmailLocalResult');
+    expect(emailRoute).toContain('readBoundedRequestFormData');
+    expect(emailRoute).toContain('Routing temporarily unavailable');
+    expect(emailRoute).toContain('channelResult.error || familyResult.error');
   });
 });

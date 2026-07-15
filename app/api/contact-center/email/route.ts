@@ -10,12 +10,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import { sendEmail } from '@/lib/server/email';
 import { sendSms } from '@/lib/guardian/twilio';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
-  resolveFamilyByEmailLocal, getOrCreateChannel, recordInboundMessage, recordOutboundMessage,
+  resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
@@ -52,8 +52,9 @@ export async function POST(req: NextRequest) {
       if (!raw.ok) return new NextResponse('Payload too large', { status: 413 });
       fields = JSON.parse(raw.text) as Record<string, unknown>;
     } else {
-      const form = await req.formData();
-      fields = Object.fromEntries([...form.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : '']));
+      const form = await readBoundedRequestFormData(req, MAX_BODY);
+      if (!form.ok) return new NextResponse('Payload too large', { status: 413 });
+      fields = Object.fromEntries([...form.value.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : '']));
     }
   } catch {
     return new NextResponse('Invalid payload', { status: 400 });
@@ -69,14 +70,24 @@ export async function POST(req: NextRequest) {
   if (!local) return NextResponse.json({ ok: true, skipped: 'no bubaly recipient' });
 
   const admin = createServiceClient();
-  const familyId = await resolveFamilyByEmailLocal(admin, local);
+  const routed = await resolveFamilyByEmailLocalResult(admin, local);
+  if (routed.error) {
+    console.error('[contact-center] email routing read failed', routed.error);
+    return new NextResponse('Routing temporarily unavailable', { status: 503 });
+  }
+  const familyId = routed.familyId;
   if (!familyId) return NextResponse.json({ ok: true, skipped: 'unknown address' });
 
-  const [channel, { data: fam }] = await Promise.all([
-    getOrCreateChannel(admin, familyId),
+  const [channelResult, familyResult] = await Promise.all([
+    getOrCreateChannelResult(admin, familyId),
     admin.from('families').select('name').eq('id', familyId).maybeSingle(),
   ]);
-  const familyLabel = fam?.name || 'the family';
+  if (channelResult.error || familyResult.error) {
+    console.error('[contact-center] email family context read failed', channelResult.error ?? familyResult.error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  const channel = channelResult.data;
+  const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'email', from: from ?? undefined, text: body || subject || '', familyLabel });
   await recordInboundMessage(admin, {
@@ -87,7 +98,7 @@ export async function POST(req: NextRequest) {
 
   // Urgent → ping the human fallback by SMS.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent email at your Bubaly line: ${result.summary}`); } catch { /* best-effort */ }
+    try { await sendSms(channel.forward_to_phone, `🚨 Urgent email at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent email SMS failed', error); }
   }
 
   // Auto-reply (best-effort) unless the concierge is off or it's spam.
@@ -99,7 +110,7 @@ export async function POST(req: NextRequest) {
         html: `<p>${result.reply.replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${buildBubalyAddress(local)}</p>`,
       });
       await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: result.reply });
-    } catch { /* best-effort */ }
+    } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }
 
   return NextResponse.json({ ok: true, intent: result.intent });

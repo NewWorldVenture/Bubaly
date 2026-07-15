@@ -4,13 +4,13 @@ Audit date: 2026-07-15
 
 ## Latest Local Evidence - Contact Center Failure Boundaries
 
-- Focused Contact Center suite: 1 file, 13 tests passed.
+- Focused Contact Center suite: 1 file, 15 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
 - `git diff --check`: passed.
-- Contact Center channel and inbox reads now render retryable failure state; Twilio SMS/voice routing returns 503 on database read failure; provisioning and inbox persistence errors are checked and logged.
-- The post-repair full gate passed with 450 test files, 3,174 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Inbound email routing remains an open product/implementation dependency because migration 0214 defines the channel but no email webhook route exists.
+- Contact Center channel and inbox reads now render retryable failure state; SMS, voice, voicemail, and email routing return 503 on database read failure; provisioning and inbox persistence errors are checked and logged.
+- The final post-repair full gate passed with 450 test files, 3,176 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Inbound email routing exists at `/api/contact-center/email`; provider configuration, signed callback verification, retry behavior, and live RLS/browser verification remain open.
 
 ## Latest Live Evidence Snapshot - Authentication and Supabase
 

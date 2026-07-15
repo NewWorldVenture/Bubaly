@@ -56,13 +56,22 @@ export async function resolveFamilyByNumber(admin: Admin, toNumber: string): Pro
 }
 
 /** Resolve the family that owns a bubaly.com local-part (inbound email routing). */
-export async function resolveFamilyByEmailLocal(admin: Admin, local: string): Promise<string | null> {
-  const { data } = await admin
+export async function resolveFamilyByEmailLocalResult(admin: Admin, local: string): Promise<{
+  familyId: string | null;
+  error: ContactCenterError | null;
+}> {
+  const { data, error } = await admin
     .from('family_contact_channels')
     .select('family_id')
     .ilike('email_local', local)
     .maybeSingle();
-  return data?.family_id ?? null;
+  return { familyId: data?.family_id ?? null, error };
+}
+
+export async function resolveFamilyByEmailLocal(admin: Admin, local: string): Promise<string | null> {
+  const result = await resolveFamilyByEmailLocalResult(admin, local);
+  if (result.error) console.error('[contact-center] email routing read failed', result.error);
+  return result.familyId;
 }
 
 /**
