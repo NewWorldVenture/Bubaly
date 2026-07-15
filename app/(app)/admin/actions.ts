@@ -338,15 +338,26 @@ export async function adminGetDocumentUrlAction(storagePath: string): Promise<Re
 }
 
 /** Deletes a document's storage object and database row. Not reversible — confirmed client-side first. */
-export async function adminDeleteDocumentAction(documentId: string, storagePath: string): Promise<Result> {
+export async function adminDeleteDocumentAction(documentId: string, _storagePath: string): Promise<Result> {
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { data: doc } = await supabase.from('documents').select('family_id, title').eq('id', documentId).maybeSingle();
-  await supabase.storage.from('documents').remove([storagePath]);
-  const { error } = await supabase.from('documents').delete().eq('id', documentId);
+  // Resolve the canonical path from the row instead of trusting a stale or
+  // client-supplied path. Keep the database row when storage removal fails so
+  // the operator can retry rather than silently orphaning the object.
+  const { data: doc, error: docError } = await supabase
+    .from('documents').select('family_id, title, storage_path').eq('id', documentId).maybeSingle();
+  if (docError) return actionFailure(docError, 'Could not load that document.');
+  if (!doc) return { ok: false, error: 'Document not found.' };
+
+  const { error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);
+  if (storageError) return actionFailure(storageError, 'Could not remove the document from storage.');
+
+  const { data: deleted, error } = await supabase
+    .from('documents').delete().eq('id', documentId).select('id').maybeSingle();
   if (error) return actionFailure(error, 'Could not delete that document.');
+  if (!deleted) return { ok: false, error: 'Document was not deleted.' };
 
   await adminAuditLog({ familyId: doc?.family_id ?? null, action: 'delete', resource: 'documents', resourceId: documentId, metadata: { title: doc?.title } });
   revalidatePath('/admin/content');
