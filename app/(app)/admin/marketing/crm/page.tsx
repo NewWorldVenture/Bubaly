@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Users, UserPlus, Building2, Star } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import {
   contactDisplayName, LEAD_STATUSES, LIFECYCLE_STAGES, LIFECYCLE_LABELS,
@@ -19,11 +21,15 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 
 export default async function CrmPage() {
   const supabase = createServiceClient();
-  const { data: contacts } = await supabase
+  const { data: contacts, error: contactsError } = await supabase
     .from('crm_contacts')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(500);
+  if (contactsError) {
+    console.error('[admin-marketing-crm] contact read failed', contactsError);
+    return <AdminCrmReadError />;
+  }
 
   const list = (contacts ?? []) as Contact[];
   const customers = list.filter((c) => c.lifecycle_stage === 'customer').length;
@@ -114,6 +120,19 @@ export default async function CrmPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminCrmReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">CRM Contacts</h1>
+        <p className="mt-1 text-sm text-muted">Manage leads, prospects, and customer contacts.</p>
+      </div>
+      <ErrorState message="Could not load CRM contacts from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/crm" className="text-sm font-medium text-brand-text underline">Refresh CRM</Link>
     </div>
   );
 }

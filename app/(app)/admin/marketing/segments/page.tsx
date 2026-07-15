@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Layers } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { PLANS } from '@/lib/constants/plans';
-import { getMarketingCustomers, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { createSegment, archiveSegment } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Segments', robots: { index: false } };
@@ -16,10 +17,17 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function SegmentsPage() {
   const supabase = createServiceClient();
-  const [{ data: segments }, customers] = await Promise.all([
+  const [segmentsResult, customersResult] = await Promise.all([
     supabase.from('marketing_segments').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    getMarketingCustomers(supabase),
+    getMarketingCustomersWithError(supabase),
   ]);
+  const readError = segmentsResult.error ?? customersResult.error;
+  if (readError) {
+    console.error('[admin-marketing-segments] segment read failed', readError);
+    return <AdminSegmentsReadError />;
+  }
+  const { data: segments } = segmentsResult;
+  const { customers } = customersResult;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -94,6 +102,19 @@ export default async function SegmentsPage() {
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90">Create segment</button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminSegmentsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Segments</h1>
+        <p className="mt-1 text-sm text-muted">Build live audiences from customer attributes and activity.</p>
+      </div>
+      <ErrorState message="Could not load marketing segments from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/segments" className="text-sm font-medium text-brand-text underline">Refresh segments</Link>
     </div>
   );
 }

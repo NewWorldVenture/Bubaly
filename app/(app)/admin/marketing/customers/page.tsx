@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Users } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
-import { getMarketingCustomers, type Lifecycle } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, type Lifecycle } from '@/lib/marketing/customers';
 
 export const metadata: Metadata = { title: 'Marketing · Customers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,12 @@ const FILTERS: (Lifecycle | 'all')[] = ['all', 'new', 'active', 'lapsed', 'churn
 export default async function MarketingCustomersPage({ searchParams }: { searchParams: Promise<{ lifecycle?: string; q?: string }> }) {
   const { lifecycle = 'all', q = '' } = await searchParams;
   const supabase = createServiceClient();
-  let customers = await getMarketingCustomers(supabase);
+  const { customers: loadedCustomers, error: customersError } = await getMarketingCustomersWithError(supabase);
+  if (customersError) {
+    console.error('[admin-marketing-customers] customer read failed', customersError);
+    return <AdminCustomersReadError />;
+  }
+  let customers = loadedCustomers;
 
   if (lifecycle !== 'all') customers = customers.filter((c) => c.lifecycle === lifecycle);
   if (q.trim()) {
@@ -94,6 +100,19 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
           </ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+function AdminCustomersReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Customers</h1>
+        <p className="mt-1 text-sm text-muted">Review customers derived from families and subscriptions.</p>
+      </div>
+      <ErrorState message="Could not load marketing customers from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/customers" className="text-sm font-medium text-brand-text underline">Refresh customers</Link>
     </div>
   );
 }

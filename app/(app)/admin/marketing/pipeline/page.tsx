@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { TrendingUp, DollarSign, Trophy, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import {
   dealsByStage, openPipelineValueCents, weightedPipelineValueCents, wonValueCents, winRate,
@@ -26,10 +28,17 @@ const STAGE_TINT: Record<DealStage, string> = {
 
 export default async function PipelinePage() {
   const supabase = createServiceClient();
-  const [{ data: deals }, { data: contacts }] = await Promise.all([
+  const [dealsResult, contactsResult] = await Promise.all([
     supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
   ]);
+  const readError = dealsResult.error ?? contactsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-pipeline] pipeline read failed', readError);
+    return <AdminPipelineReadError />;
+  }
+  const { data: deals } = dealsResult;
+  const { data: contacts } = contactsResult;
 
   const list = (deals ?? []) as Deal[];
   const contactList = (contacts ?? []) as Pick<Contact, 'id' | 'first_name' | 'last_name' | 'email'>[];
@@ -121,4 +130,17 @@ function nextStage(stage: DealStage): DealStage {
   const i = order.indexOf(stage);
   if (stage === 'won' || stage === 'lost') return 'qualified'; // reopen
   return i >= 0 && i < order.length - 1 ? order[i + 1] : 'won';
+}
+
+function AdminPipelineReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sales Pipeline</h1>
+        <p className="mt-1 text-sm text-muted">Track opportunities from lead to close.</p>
+      </div>
+      <ErrorState message="Could not load the sales pipeline from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/pipeline" className="text-sm font-medium text-brand-text underline">Refresh pipeline</Link>
+    </div>
+  );
 }

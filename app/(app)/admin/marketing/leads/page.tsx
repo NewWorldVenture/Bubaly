@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Flame, Target, Inbox, ThermometerSun } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
-import { getMarketingCustomers } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { scoreLead, summarizeLeads, LEAD_BAND_LABEL, type LeadBand } from '@/lib/marketing/lead-score';
 
 export const metadata: Metadata = { title: 'Lead Scoring', robots: { index: false } };
@@ -18,11 +20,18 @@ const BAND_STYLE: Record<LeadBand, string> = {
 export default async function LeadScoringPage() {
   const supabase = createServiceClient();
 
-  const [{ data: tickets }, customers] = await Promise.all([
+  const [ticketsResult, customersResult] = await Promise.all([
     supabase.from('support_tickets').select('id, subject, description, requester_name, requester_email, status, created_at, family_id')
       .contains('tags', ['contact-form']).order('created_at', { ascending: false }).limit(100),
-    getMarketingCustomers(supabase),
+    getMarketingCustomersWithError(supabase),
   ]);
+  const readError = ticketsResult.error ?? customersResult.error;
+  if (readError) {
+    console.error('[admin-marketing-leads] lead read failed', readError);
+    return <AdminLeadsReadError />;
+  }
+  const { data: tickets } = ticketsResult;
+  const { customers } = customersResult;
 
   const customerEmails = new Set(customers.map((c) => c.ownerEmail?.toLowerCase()).filter(Boolean) as string[]);
 
@@ -86,6 +95,19 @@ export default async function LeadScoringPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminLeadsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Lead Scoring</h1>
+        <p className="mt-1 text-sm text-muted">Prioritize inbound leads using live contact and customer signals.</p>
+      </div>
+      <ErrorState message="Could not load lead scoring data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/leads" className="text-sm font-medium text-brand-text underline">Refresh leads</Link>
     </div>
   );
 }
