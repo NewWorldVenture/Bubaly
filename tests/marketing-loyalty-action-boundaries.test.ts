@@ -14,9 +14,11 @@ describe('marketing loyalty action boundaries', () => {
     expect(actions).not.toContain("await supabase.from('loyalty_redemptions').update({ status: 'cancelled' }).eq('id', id);");
   });
 
-  it('sanitizes failures from the points engine and redemption reads', () => {
+  it('routes points and cancellation failures through stable action errors', () => {
     expect(actions).toContain("marketingActionFailure('adjust loyalty points', error)");
-    expect(actions).toContain("marketingActionFailure('refund loyalty points', error)");
-    expect(actions).toContain('if (readError) marketingActionFailure');
+    expect(actions).toContain("cancelRedemption(supabase, id, actorId)");
+    expect(actions).toContain("marketingActionFailure('cancel the loyalty redemption'");
+    expect(actions).not.toContain("const { data: red");
+    expect(actions).not.toContain('awardPoints(supabase, red.family_id');
   });
 });

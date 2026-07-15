@@ -2,11 +2,24 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Atomic loyalty persistence boundaries
+
+- `npm.cmd exec vitest run tests/loyalty-atomic-persistence.test.ts tests/marketing-loyalty-action-boundaries.test.ts tests/marketing-loyalty.test.ts`:
+  3 files, 11 tests passed.
+- `npm.cmd exec vitest run`: 386 files, 2,945 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 220 numbered SQL files, next version
+  `0205`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Loyalty award, redeem, and cancellation paths now delegate all balance, ledger, redemption, and finite
+  stock mutations to service-role-only row-locking RPCs; cancellation restores finite stock atomically.
+
 ## Latest Audit Update - Social account, workspace, media, and access mutation boundaries
 
 - `npm.cmd exec vitest run tests/social-action-persistence.test.ts tests/social-publish-persistence.test.ts tests/social-roles.test.ts`:
   3 files, 18 tests passed.
-- `npm.cmd exec vitest run`: 385 files, 2,943 tests passed.
+- `npm.cmd exec vitest run`: 386 files, 2,945 tests passed.
 - `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
 - Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
   `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.

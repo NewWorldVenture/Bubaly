@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { awardPoints } from '@/lib/loyalty/server';
+import { awardPoints, cancelRedemption } from '@/lib/loyalty/server';
 import { REWARD_KINDS } from '@/lib/marketing/loyalty';
 
 function s(fd: FormData, k: string): string | null {
@@ -119,25 +119,11 @@ export async function fulfillRedemptionAction(formData: FormData) {
 
 export async function cancelRedemptionAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  // Look up the redemption to refund the points.
-  const { data: red, error: readError } = await supabase.from('loyalty_redemptions')
-    .select('family_id, cost_points, status').eq('id', id).maybeSingle();
-  if (readError) marketingActionFailure('load the loyalty redemption', readError);
-  if (!red || red.status !== 'pending') return;
-  const { data: cancelled, error: cancelError } = await supabase.from('loyalty_redemptions').update({ status: 'cancelled' })
-    .eq('id', id).eq('status', 'pending').select('id').maybeSingle();
-  if (cancelError || !cancelled) marketingActionFailure('cancel the loyalty redemption', cancelError ?? new Error('Redemption was already processed.'));
-  if (red.cost_points > 0) {
-    try {
-      await awardPoints(supabase, red.family_id, red.cost_points, {
-        kind: 'adjust',
-        source: 'redemption_refund',
-        reason: 'Redemption cancelled - points refunded',
-        actorId,
-      });
-    } catch (error) {
-      marketingActionFailure('refund loyalty points', error);
-    }
+  try {
+    const result = await cancelRedemption(supabase, id, actorId);
+    if (!result.ok) marketingActionFailure('cancel the loyalty redemption', new Error(result.error ?? 'Redemption was already processed.'));
+  } catch (error) {
+    marketingActionFailure('cancel the loyalty redemption', error);
   }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'cancel', resource: 'loyalty_redemption', resourceId: id });
   revalidatePath(PATH);

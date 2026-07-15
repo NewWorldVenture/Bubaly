@@ -5,36 +5,57 @@
 // family then calls in here with the service-role client).
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
-import { computeTier, canRedeem, DEFAULT_LOYALTY, type TierThresholds } from '@/lib/marketing/loyalty';
+import type { Database, Json } from '@/lib/database.types';
 
 type DB = SupabaseClient<Database>;
 type Settings = Database['public']['Tables']['loyalty_settings']['Row'];
 type Account = Database['public']['Tables']['loyalty_accounts']['Row'];
 
 export async function getSettings(supabase: DB): Promise<Settings | null> {
-  const { data } = await supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle();
+  const { data, error } = await supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle();
+  if (error) console.error('[loyalty] settings read failed', error);
   return data ?? null;
 }
 
-function thresholds(s: Settings | null): TierThresholds {
-  return { silverAt: s?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at, goldAt: s?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at };
+type LoyaltyRpcResult = {
+  ok?: boolean;
+  reason?: string;
+  needed?: number;
+  account?: Account;
+  redemption_id?: string;
+};
+
+function parseRpcResult(data: Json | null): LoyaltyRpcResult {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  return data as LoyaltyRpcResult;
+}
+
+function stableRpcError(operation: string, error: unknown): Error {
+  console.error(`[loyalty] ${operation} failed`, error);
+  return new Error(`Could not ${operation}.`);
 }
 
 /** Get-or-create the family's loyalty account. */
 export async function ensureAccount(supabase: DB, familyId: string): Promise<Account> {
-  const { data: existing } = await supabase.from('loyalty_accounts').select('*').eq('family_id', familyId).maybeSingle();
+  const { data: existing, error: readError } = await supabase.from('loyalty_accounts').select('*').eq('family_id', familyId).maybeSingle();
+  if (readError) throw stableRpcError('load the loyalty account', readError);
   if (existing) return existing;
   const { data, error } = await supabase
     .from('loyalty_accounts')
     .insert({ family_id: familyId })
     .select('*')
     .single();
-  if (error || !data) throw new Error(error?.message ?? 'Could not create loyalty account');
+  if (error || !data) {
+    // A concurrent first-use request may have won the unique insert. Read it
+    // once more before treating the operation as a failure.
+    const { data: concurrent, error: retryError } = await supabase.from('loyalty_accounts').select('*').eq('family_id', familyId).maybeSingle();
+    if (concurrent) return concurrent;
+    throw stableRpcError('create the loyalty account', retryError ?? error ?? new Error('Account was not returned after creation.'));
+  }
   return data;
 }
 
-export type AwardOpts = { kind?: 'earn' | 'adjust'; reason?: string; source?: string; rewardId?: string | null; actorId?: string | null };
+export type AwardOpts = { kind?: 'earn' | 'redeem' | 'adjust' | 'expire'; reason?: string; source?: string; rewardId?: string | null; actorId?: string | null };
 
 /**
  * Award (or, with a negative amount + kind 'adjust', deduct) points. Updates the
@@ -43,32 +64,23 @@ export type AwardOpts = { kind?: 'earn' | 'adjust'; reason?: string; source?: st
  */
 export async function awardPoints(supabase: DB, familyId: string, points: number, opts: AwardOpts = {}): Promise<Account> {
   if (!Number.isFinite(points) || points === 0) return ensureAccount(supabase, familyId);
-  const settings = await getSettings(supabase);
-  const account = await ensureAccount(supabase, familyId);
-
-  const newBalance = Math.max(0, account.points_balance + points);
-  const newLifetime = account.lifetime_points + Math.max(0, points);
-  const tier = computeTier(newLifetime, thresholds(settings));
-
-  const { data: updated, error } = await supabase
-    .from('loyalty_accounts')
-    .update({ points_balance: newBalance, lifetime_points: newLifetime, tier })
-    .eq('family_id', familyId)
-    .select('*')
-    .single();
-  if (error || !updated) throw new Error(error?.message ?? 'Could not update balance');
-
-  await supabase.from('loyalty_transactions').insert({
-    family_id: familyId,
-    points,
-    kind: opts.kind ?? 'earn',
-    reason: opts.reason ?? null,
-    source: opts.source ?? null,
-    balance_after: newBalance,
-    reward_id: opts.rewardId ?? null,
-    created_by: opts.actorId ?? null,
+  const { data, error } = await supabase.rpc('loyalty_award_points', {
+    p_family_id: familyId,
+    p_points: Math.trunc(points),
+    p_kind: opts.kind ?? 'earn',
+    p_reason: opts.reason ?? null,
+    p_source: opts.source ?? null,
+    p_reward_id: opts.rewardId ?? null,
+    p_actor_id: opts.actorId ?? null,
   });
-  return updated;
+  if (error) throw stableRpcError('update loyalty points', error);
+  const result = parseRpcResult(data);
+  if (!result.ok) {
+    if (result.reason === 'insufficient_points') throw new Error('Insufficient loyalty points.');
+    throw stableRpcError('update loyalty points', new Error(result.reason ?? 'The loyalty engine rejected the update.'));
+  }
+  if (!result.account) throw stableRpcError('update loyalty points', new Error('The updated loyalty account was not returned.'));
+  return result.account;
 }
 
 export type RedeemResult = { ok: boolean; error?: string; redemptionId?: string };
@@ -76,31 +88,36 @@ export type RedeemResult = { ok: boolean; error?: string; redemptionId?: string 
 /** Redeem a catalog reward: validates active/stock/balance, deducts points, and
  *  creates a pending redemption + ledger row. Stock is decremented when finite. */
 export async function redeemReward(supabase: DB, familyId: string, rewardId: string, actorId?: string | null): Promise<RedeemResult> {
-  const { data: reward } = await supabase.from('loyalty_rewards').select('*').eq('id', rewardId).is('deleted_at', null).maybeSingle();
-  if (!reward || !reward.is_active) return { ok: false, error: 'This reward is not available.' };
-  if (reward.stock != null && reward.stock <= 0) return { ok: false, error: 'This reward is out of stock.' };
-
-  const account = await ensureAccount(supabase, familyId);
-  if (!canRedeem(account.points_balance, reward.cost_points)) {
-    return { ok: false, error: `You need ${reward.cost_points - account.points_balance} more points.` };
+  const { data, error } = await supabase.rpc('loyalty_redeem_reward', {
+    p_family_id: familyId,
+    p_reward_id: rewardId,
+    p_actor_id: actorId ?? null,
+  });
+  if (error) {
+    console.error('[loyalty] redeem reward failed', error);
+    return { ok: false, error: 'Could not complete redemption right now.' };
   }
+  const result = parseRpcResult(data);
+  if (result.ok && result.redemption_id) return { ok: true, redemptionId: result.redemption_id };
+  if (result.reason === 'not_available') return { ok: false, error: 'This reward is not available.' };
+  if (result.reason === 'out_of_stock') return { ok: false, error: 'This reward is out of stock.' };
+  if (result.reason === 'insufficient_points') return { ok: false, error: `You need ${result.needed ?? 0} more points.` };
+  console.error('[loyalty] redeem reward rejected', result.reason ?? 'unknown reason');
+  return { ok: false, error: 'Could not complete redemption right now.' };
+}
 
-  // Deduct points (writes the ledger + new balance).
-  await awardPoints(supabase, familyId, -reward.cost_points, { kind: 'adjust', source: 'redemption', reason: `Redeemed: ${reward.name}`, rewardId, actorId });
+export type CancelRedemptionResult = { ok: boolean; error?: string };
 
-  const { data: redemption, error } = await supabase
-    .from('loyalty_redemptions')
-    .insert({ family_id: familyId, reward_id: rewardId, reward_name: reward.name, cost_points: reward.cost_points, status: 'pending', created_by: actorId ?? null })
-    .select('id')
-    .single();
-  if (error || !redemption) {
-    // Best-effort refund if the redemption row failed to write.
-    await awardPoints(supabase, familyId, reward.cost_points, { kind: 'adjust', source: 'redemption_refund', reason: 'Redemption failed — refund' });
-    return { ok: false, error: 'Could not complete redemption. Your points were not charged.' };
-  }
-
-  if (reward.stock != null) {
-    await supabase.from('loyalty_rewards').update({ stock: Math.max(0, reward.stock - 1) }).eq('id', rewardId);
-  }
-  return { ok: true, redemptionId: redemption.id };
+/** Cancel a pending redemption, refund its points, and restore finite stock atomically. */
+export async function cancelRedemption(supabase: DB, redemptionId: string, actorId?: string | null): Promise<CancelRedemptionResult> {
+  const { data, error } = await supabase.rpc('loyalty_cancel_redemption', {
+    p_redemption_id: redemptionId,
+    p_actor_id: actorId ?? null,
+  });
+  if (error) throw stableRpcError('cancel the loyalty redemption', error);
+  const result = parseRpcResult(data);
+  if (result.ok) return { ok: true };
+  if (result.reason === 'not_found') return { ok: false, error: 'Redemption not found.' };
+  if (result.reason === 'already_processed') return { ok: false, error: 'Redemption was already processed.' };
+  throw stableRpcError('cancel the loyalty redemption', new Error(result.reason ?? 'The loyalty engine rejected the cancellation.'));
 }

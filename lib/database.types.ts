@@ -2357,6 +2357,9 @@ export interface Database {
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };
       marketplace_complete_handoff: { Args: { p_order_id: string; p_code: string }; Returns: Json };
+      loyalty_award_points: { Args: { p_family_id: string; p_points: number; p_kind?: string; p_reason?: string | null; p_source?: string | null; p_reward_id?: string | null; p_actor_id?: string | null }; Returns: Json };
+      loyalty_redeem_reward: { Args: { p_family_id: string; p_reward_id: string; p_actor_id?: string | null }; Returns: Json };
+      loyalty_cancel_redemption: { Args: { p_redemption_id: string; p_actor_id?: string | null }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;

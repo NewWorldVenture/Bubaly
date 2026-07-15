@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 219, through `0203_service_descriptions.sql`.
+- Current migration files: 220, through `0204_atomic_loyalty_transactions.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -19,7 +19,8 @@
   `0196_atomic_economy_and_invest_decisions.sql`, and
   `0197_feedback_ideas.sql`, `0198_guardian_suggestion_review_transaction.sql`, and
   `0199_marketplace_handoff_completion.sql`, `0200_display_settings.sql`, `0201_blog_engagement.sql`,
-  `0202_blog_articles.sql`, and `0203_service_descriptions.sql`.
+  `0202_blog_articles.sql`, `0203_service_descriptions.sql`, and
+  `0204_atomic_loyalty_transactions.sql`.
 - SQL files: 338.
 - Static counts: 1,190 policy declarations, 642 RLS enable statements, 100 function declarations,
   417 trigger declarations, and 65 `storage.objects` references. Counts are source-text counts,
@@ -67,6 +68,17 @@ redemption/order state, holding/stock changes, and wallet audit record in one tr
 layer uses the RPCs for approvals and checks errors on all remaining economy/invest reads and writes.
 The functions are revoked from `public` and `anon` and granted only to `authenticated`; isolated
 production verification must still exercise concurrent approvals after applying the migration.
+
+### Loyalty transaction audit
+
+Migration `0204_atomic_loyalty_transactions.sql` adds service-role-only RPCs for points awards,
+reward redemption, and pending-redemption cancellation. Each function locks the family account and,
+where applicable, the reward or redemption row before changing the balance, ledger, redemption state,
+or finite stock. A redemption cannot debit points without its pending redemption row, concurrent
+redemptions cannot oversell finite stock, and cancellation refunds points and restores stock in the same
+transaction. The functions are revoked from `public`, `anon`, and `authenticated` and granted only to
+`service_role`; isolated production verification must still exercise concurrent calls after applying the
+migration.
 
 ### Guardian suggestion review transaction audit
 

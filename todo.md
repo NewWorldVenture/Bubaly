@@ -4263,3 +4263,23 @@ roadmap entries and user worktree changes are preserved.
 - Evidence: `tests/social-action-persistence.test.ts` guards mutation checks, input validation, and the manage-access/current-family boundary.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0273 - Loyalty awards and redemptions could become inconsistent under concurrency
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Loyalty / data integrity / concurrency / Supabase RPC security
+- Feature: Loyalty points, reward redemption, finite stock, and cancellation refunds
+- File or files: `supabase/migrations/0204_atomic_loyalty_transactions.sql`, `lib/loyalty/server.ts`,
+  `app/(app)/admin/marketing/loyalty/actions.ts`, `tests/loyalty-atomic-persistence.test.ts`
+- Description: Points debits, redemption creation, and finite-stock decrements were separate writes;
+  cancellation also marked a redemption cancelled before attempting a best-effort refund.
+- Resolution: Service-role-only row-locking RPCs now commit account, ledger, redemption, and stock changes
+  atomically. The server and admin action consume structured RPC outcomes, and cancellation refunds points
+  and restores finite stock in the same transaction.
+- Tests performed: Focused loyalty persistence tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/loyalty-atomic-persistence.test.ts` guards RPC routing, row locks, service-role grants,
+  stock restoration, and the absence of direct best-effort ledger writes.
+- Verified by: Codex
+- Date completed: 2026-07-14
