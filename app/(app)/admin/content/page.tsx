@@ -3,7 +3,7 @@ import { FileText, Image as ImageIcon, FolderKanban, HardDrive, Clock } from 'lu
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { DocumentRowActions } from '@/components/admin/document-row-actions';
 import { fmtDate } from '@/lib/utils/format';
@@ -41,11 +41,17 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const [{ data: documents }, { data: families }, { data: profiles }] = await Promise.all([
+  const [{ data: documents, error: documentsError }, { data: families, error: familiesError }, { data: profiles, error: profilesError }] = await Promise.all([
     supabase.from('documents').select('*').order('created_at', { ascending: false }),
     supabase.from('families').select('id, name'),
     supabase.from('profiles').select('id, full_name, email'),
   ]);
+
+  const readError = documentsError ?? familiesError ?? profilesError;
+  if (readError) {
+    console.error('[admin-content] content read failed', readError);
+    return <AdminContentReadError />;
+  }
 
   const docs = documents ?? [];
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
@@ -209,6 +215,19 @@ export default async function AdminContentPage({ searchParams }: Params) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminContentReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Content Management</h1>
+        <p className="mt-1 text-sm text-muted">Manage all documents and files across every family on Bubaly.</p>
+      </div>
+      <ErrorState message="Could not load content from Supabase. Refresh and try again." />
+      <a href="/admin/content" className="text-sm font-medium text-brand-text underline">Refresh content</a>
     </div>
   );
 }
