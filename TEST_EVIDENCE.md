@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Notification cron failure status
+
+- `npm.cmd run test -- tests/cron-notification-failure-status.test.ts tests/cron-batch-failure-status.test.ts tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 5 files, 13 tests passed.
+- `npm.cmd run test`: 414 files, 3,071 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- `/api/cron/notifications` and `/api/cron/push-scan` now return sanitized HTTP 502 when notification generation, push dispatch, or push delivery fails.
+- Publication verified at commit `92eb434a`; local and `origin/main` are aligned.
+- Remaining gap: `deliverNotificationEmails` currently returns only a sent count, so email-provider failure detail needs a separate helper contract audit.
+
 ## Latest Audit Update - Batch cron failure status
 
 - `npm.cmd run test -- tests/cron-batch-failure-status.test.ts tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 4 files, 11 tests passed.

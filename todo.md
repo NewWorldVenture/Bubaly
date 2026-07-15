@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:45:32 -04:00
+- Last updated: 2026-07-15 09:50:12 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f8226011` (batch cron failure-status increment)
+- Commit: `92eb434a` (notification cron failure-status increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -4763,3 +4763,23 @@ roadmap entries and user worktree changes are preserved.
 - Commit: `f8226011` (published in merge `59c422ac`)
 - Date completed: 2026-07-15
 - Remaining dependencies: isolated live failure drills, retry behavior, alert routing, and remote deployment verification.
+
+### TODO-0291 - Notification delivery crons hid push and generation failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Notifications / push delivery / cron observability
+- Feature: Daily notification and frequent push-scan jobs
+- File or files: `app/api/cron/notifications/route.ts`, `app/api/cron/push-scan/route.ts`,
+  `tests/cron-notification-failure-status.test.ts`
+- Description: Per-family notification generation errors and push delivery failures were logged but did not
+  change the cron response status, allowing a push outage to look healthy.
+- Resolution: Generation, dispatch, and push-result failures now roll into a sanitized failure count; non-zero
+  failures return `ok: false` with HTTP 502.
+- Tests performed: 13 focused cron/error-boundary tests; full 414-file/3,071-test suite; typecheck; lint;
+  dependency audit; migration audit; diff check; and clean 250-route production build.
+- Evidence: `tests/cron-notification-failure-status.test.ts` guards both notification routes.
+- Verified by: Codex
+- Commit: `92eb434a`
+- Date completed: 2026-07-15
+- Remaining dependencies: give `deliverNotificationEmails` a failure-aware result contract, then run live push/email failure drills and verify alert routing/deployment.

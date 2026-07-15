@@ -368,3 +368,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `f8226011` (published in merge `59c422ac`)
 - Status: Resolved in code; live scheduled invocation and retry/alert routing evidence remain open
 - Remaining dependencies: execute isolated failure drills for each cron, verify retry behavior, alert routing, and remote deployment
+
+### PLA-0291 - Notification delivery crons hid push and generation failures
+
+- Timestamp: 2026-07-15 09:50 America/New_York
+- Service: Notifications, push delivery, and scheduled automation
+- Route: `/api/cron/notifications`, `/api/cron/push-scan`
+- Affected files: `app/api/cron/notifications/route.ts`, `app/api/cron/push-scan/route.ts`, `tests/cron-notification-failure-status.test.ts`
+- Role: scheduled system worker; family notification recipients
+- Scenario: notification generation or push dispatch/delivery failed while the cron endpoint returned HTTP 200 without a failure summary
+- Severity: P1
+- Launch impact: push outages could be recorded as healthy and notification generation failures could remain hidden until users reported missing alerts
+- Root cause: both routes logged per-family/dispatch failures but returned delivery data without deriving endpoint status from those failures
+- Resolution: generation, dispatch, and push result failures now contribute to a sanitized failure count; any non-zero count returns `ok: false` and HTTP 502
+- Supabase impact: no schema change; existing notification delivery markers and retry behavior remain unchanged
+- Tests run: `tests/cron-notification-failure-status.test.ts`, `tests/cron-batch-failure-status.test.ts`, `tests/cron-provider-sync.test.ts`, `tests/cron-auth.test.ts`, and `tests/database-error-boundaries.test.ts` (13 tests), full 414-file/3,071-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: static contracts cover both routes and preserve sanitized errors; 250-route build passes
+- Commit: `92eb434a`
+- Status: Resolved in code; live push/email provider delivery and scheduled retry evidence remain open
+- Remaining dependencies: audit the email helper's sent-count-only contract, run provider failure drills, verify alert routing, and validate remote cron deployment
