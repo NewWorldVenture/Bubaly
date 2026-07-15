@@ -6,8 +6,9 @@
 // written only by the super-admin (service role) — never here.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isValidReason, canReport } from '@/lib/marketplace/reports';
+import { recordAdminNotification } from '@/lib/admin/notify';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -44,6 +45,16 @@ export async function reportListingAction(
     if (error.code === '23505') return { ok: false, error: 'You’ve already reported this — our team is on it.' };
     return actionFailure('submit the report', error);
   }
+
+  // Alert the super admin's Trust & Safety queue (service role — admin_notifications
+  // has no client policy). Best-effort; the report already saved.
+  await recordAdminNotification(createServiceClient(), {
+    kind: 'marketplace_report',
+    title: 'New marketplace report',
+    body: `Reason: ${input.reason}${details ? ` — ${details.slice(0, 160)}` : ''}`,
+    url: '/admin/marketplace/reports',
+    relatedType: 'marketplace_report',
+  });
 
   revalidatePath(`/marketplace/item/${input.listingId}`);
   return { ok: true };

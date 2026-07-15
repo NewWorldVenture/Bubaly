@@ -333,6 +333,17 @@ Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display
 > (`feedbackAdminSummary` + `filterIdeasForAdmin`, **6 tests**); tsc·eslint·2906 tests·build green. No
 > new migration (reuses 0197).
 
+> **+ Super Admin Notification Center SHIPPED (2026-07-14).** The admin-console **bell** is now the whole
+> super-admin front door, not just a static invite count: it surfaces `admin_notifications` across every
+> `/admin/*` page — new feedback + bugs, GitHub sync relays, **new support tickets** (contact form), and
+> **marketplace Trust & Safety reports** — with an unread badge, a deep-linked dropdown, mark-all-read,
+> and pending family invites folded in as a synthetic top item. New event sources write via a shared
+> `lib/admin/notify.ts` (`recordAdminNotification`, service-role, best-effort). Migration
+> **`0207_admin_notification_kinds.sql`** widens the kind CHECK (PG16 ×2). Pure `lib/admin/notifications.ts`
+> (kind meta · unreadCount · badgeText, **4 tests**); 3011 tests + build green. ⚠️ apply `0207`. (Also
+> fixed the stale "next free number" note in `docs/PENDING_PROD_MIGRATIONS.md` → 0208 and documented the
+> GitHub env keys.)
+
 > **+ Bugs + GitHub tracker + super-admin alerts SHIPPED (2026-07-14).** `/feedback` now takes **bug
 > reports** as well as ideas (an Idea/Bug toggle that retunes the form copy). Every submission (a)
 > **notifies the super admin** — an `admin_notifications` platform feed on `/admin/feedback` **plus email**

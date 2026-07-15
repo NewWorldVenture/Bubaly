@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Bell, ChevronDown, Home, LayoutDashboard, LogOut, Search, ShieldCheck } from 'lucide-react';
+import { ChevronDown, Home, LayoutDashboard, LogOut, Search, ShieldCheck } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Avatar } from '@/components/ui/avatar';
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { AdminNotificationBell } from '@/components/admin/admin-notification-bell';
 import { ADMIN_NAV } from '@/lib/constants/navigation';
+import type { AdminNotificationRow } from '@/lib/admin/notifications';
 import { cn } from '@/lib/utils/cn';
 
 function isActive(pathname: string, href: string) {
@@ -42,11 +44,13 @@ export function AdminShell({
   adminName,
   adminEmail,
   pendingInviteCount,
+  notifications = [],
 }: {
   children: React.ReactNode;
   adminName: string;
   adminEmail: string | null;
   pendingInviteCount: number;
+  notifications?: AdminNotificationRow[];
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -110,18 +114,7 @@ export function AdminShell({
           </form>
           <div className="flex-1 md:hidden" />
           <ThemeToggle />
-          <Link
-            href="/admin/users?tab=invitations"
-            className="relative inline-flex h-10 w-10 items-center justify-center rounded-full glass hover:bg-elevated focus-ring"
-            aria-label={`${pendingInviteCount} pending invites`}
-          >
-            <Bell className="h-5 w-5" />
-            {pendingInviteCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
-                {pendingInviteCount > 9 ? '9+' : pendingInviteCount}
-              </span>
-            )}
-          </Link>
+          <AdminNotificationBell notifications={notifications} pendingInviteCount={pendingInviteCount} />
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}

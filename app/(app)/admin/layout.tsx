@@ -12,15 +12,24 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   if (!superAdmin) redirect('/dashboard');
 
   const supabase = createServiceClient();
-  const [{ data: profile }, { count: pendingInviteCount }] = await Promise.all([
+  const [{ data: profile }, { count: pendingInviteCount }, { data: notifications }] = await Promise.all([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
     supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('admin_notifications')
+      .select('id, kind, title, body, url, is_read, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
   const adminName = profile?.full_name || profile?.email || user.email || 'Admin';
 
   return (
-    <AdminShell adminName={adminName} adminEmail={user.email ?? null} pendingInviteCount={pendingInviteCount ?? 0}>
+    <AdminShell
+      adminName={adminName}
+      adminEmail={user.email ?? null}
+      pendingInviteCount={pendingInviteCount ?? 0}
+      notifications={notifications ?? []}
+    >
       {children}
     </AdminShell>
   );

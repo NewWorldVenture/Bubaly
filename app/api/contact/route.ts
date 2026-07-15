@@ -55,6 +55,15 @@ export async function POST(req: Request) {
         requester_email: email,
         tags: ['contact-form'],
       });
+    // Surface it in the Super Admin Notification Center.
+    const { recordAdminNotification } = await import('@/lib/admin/notify');
+    await recordAdminNotification(supabase, {
+      kind: 'support_ticket',
+      title: `New support ticket from ${name}`,
+      body: message.slice(0, 200),
+      url: '/admin/support-tickets',
+      relatedType: 'support_ticket',
+    });
   } catch {
     /* non-fatal: the email below is the primary path */
   }
