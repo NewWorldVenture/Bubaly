@@ -295,7 +295,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ### PLA-0287 - Admin digest cron hid feed and delivery failures
 
-- Timestamp: 2026-07-15 09:18 America/New_York
+- Timestamp: 2026-07-15 09:24 America/New_York
 - Service: Notifications, cron, and operational observability
 - Route: `/api/cron/admin-digest`
 - Affected files: `app/api/cron/admin-digest/route.ts`, `lib/admin/digest.ts`, `tests/admin-digest.test.ts`
@@ -308,6 +308,6 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; operational read failures are now visible to cron monitoring
 - Tests run: `tests/admin-digest.test.ts`, `tests/cron-auth.test.ts`, and `tests/admin-notification-boundary.test.ts` (20 tests), full 411-file/3,061-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
 - Validation evidence: delivery summary tests cover disabled email and partial failure; static route contracts cover feed-error 502 and non-2xx delivery handling; 250-route build passes
-- Commit: pending publication
+- Commit: `50cbbeef`
 - Status: Resolved in code; live cron/provider delivery remains open
 - Remaining dependencies: Resend sandbox delivery, alert routing, scheduled invocation, and remote deployment verification
