@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BUBALY_DOMAIN, normalizeEmailLocal, isValidEmailLocal, suggestEmailLocal,
-  buildBubalyAddress, channelAddress,
+  buildBubalyAddress, channelAddress, parseRecipientLocal,
 } from '@/lib/contact-center/address';
 import { toE164, isE164, formatPhone } from '@/lib/contact-center/phone';
 import {
@@ -35,6 +35,14 @@ describe('bubaly address', () => {
     expect(buildBubalyAddress('smith')).toBe(`smith@${BUBALY_DOMAIN}`);
     expect(channelAddress('smith')).toBe('smith@bubaly.com');
     expect(channelAddress(null)).toBeNull();
+  });
+  it('parses the bubaly recipient from a To header', () => {
+    expect(parseRecipientLocal('smith@bubaly.com')).toBe('smith');
+    expect(parseRecipientLocal('The Smiths <Smith-Family@Bubaly.com>')).toBe('smith-family');
+    expect(parseRecipientLocal('someone@gmail.com, smith@bubaly.com')).toBe('smith');
+    expect(parseRecipientLocal('nobody@example.com')).toBeNull();
+    expect(parseRecipientLocal('')).toBeNull();
+    expect(parseRecipientLocal(null)).toBeNull();
   });
 });
 

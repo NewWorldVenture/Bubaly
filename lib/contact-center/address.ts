@@ -47,3 +47,15 @@ export function buildBubalyAddress(local: string): string {
 export function channelAddress(local: string | null | undefined): string | null {
   return local ? buildBubalyAddress(local) : null;
 }
+
+/**
+ * Extract the bubaly.com local-part from a raw inbound "To" header, which may be
+ * a bare address, a "Name <addr>" form, or a comma-separated list. Returns the
+ * first bubaly.com recipient's local-part (lowercased), or null if none.
+ */
+export function parseRecipientLocal(toHeader: string | null | undefined): string | null {
+  if (!toHeader) return null;
+  const re = new RegExp(`([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)@${BUBALY_DOMAIN.replace('.', '\\.')}`, 'i');
+  const match = toHeader.match(re);
+  return match ? match[1].toLowerCase() : null;
+}

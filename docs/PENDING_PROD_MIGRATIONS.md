@@ -143,6 +143,13 @@ before contacting Supabase and fails if a new or changed collision appears.
 - Optional keys that light up already-built, key-gated paths: **VAPID/FCM** (push),
   **Maps/ETA** (leave-by travel buffer), **Giphy/Tenor** (Messages GIF picker),
   **Stripe Issuing** (real-time Wallet card balances).
+- **`CONTACT_CENTER_INBOUND_SECRET`** — shared secret for the **Family Operations
+  Center** inbound-email webhook (`/api/contact-center/email`). Point an inbound-email
+  provider (SendGrid Inbound Parse, Cloudflare Email Routing → webhook, Mailgun…) for
+  `@bubaly.com` at that route with `?key=<secret>` (or the `x-inbound-secret` header).
+  Fail-closed: with the secret set, mismatches are rejected; without it set, the route
+  rejects in production (never an open relay). SMS/voice for the dedicated number reuse
+  the existing `TWILIO_*` pair (see Guardian).
 - **`GITHUB_TOKEN` + `GITHUB_FEEDBACK_REPO`** (`owner/repo`) — mirror `/feedback`
   submissions (bugs + ideas) to a GitHub issue tracker with two label-driven lists
   (`bug` / `enhancement`), reconciled by the `feedback-github-sync` cron. Fine-grained
