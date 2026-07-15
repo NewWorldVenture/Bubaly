@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:30:00 -04:00
+- Last updated: 2026-07-15 12:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: merged source checkpoint `ed87386f`; auth source repair `2a409b13`; audit evidence is published at the current branch tip
+- Commit: latest source repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0309 - Marketplace overview hid database read failures as an empty board
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace
+- Feature: Marketplace home overview and derived discovery rail
+- Route: `/marketplace`
+- File or files: `app/(app)/marketplace/page.tsx`, `tests/marketplace-home-read-boundary.test.ts`
+- Database objects: `marketplace_listings`, `family_members`, `marketplace_offers`, `marketplace_matches`, `marketplace_saves`, `marketplace_stores`, `marketplace_follows`, `marketplace_reviews`, `marketplace_orders`, `marketplace_collections`, and `marketplace_collection_items`
+- Affected roles: authenticated household members and Super Admin marketplace operators
+- Scenario: one or more overview reads failed or a marketplace migration was unavailable while the page substituted empty arrays and showed an empty marketplace
+- Launch impact: users could mistake an outage, RLS failure, or incomplete migration for an empty marketplace and miss listings, offers, orders, or trusted activity
+- Root cause: the shared `safe` helper discarded Supabase errors and the family-member query discarded its result error
+- Resolution: every independent source now records a labeled failure, logs the boundary, and renders a visible Marketplace data-health warning while preserving unaffected sections
+- Tests performed: `tests/marketplace-home-read-boundary.test.ts`, `tests/marketplace-reports.test.ts`, `tests/marketplace-community.test.ts` (18 focused tests); full 440-file/3,143-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit `b32e7a0f`; live RLS, role, browser, and marketplace workflow evidence remain open
+- Remaining dependencies: test listing/order/auction/dispute workflows across roles and live RLS in an isolated deployed environment
 
 #### TODO-0308 - Auth and middleware boundaries silently misrouted failures and public callbacks
 

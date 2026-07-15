@@ -709,3 +709,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: source commit `2a409b13` in merged checkpoint `ed87386f`; build generated 250 routes; live Auth Admin, deployed callback, browser, and provider smoke evidence remain open
 - Status: Resolved in code; live deployment and provider evidence remain open
 - Remaining dependencies: execute isolated deployed public/callback and authenticated role/device drills
+
+### PLA-0309 - Marketplace overview hid database read failures as an empty board
+
+- Timestamp: 2026-07-15 12:40 America/New_York
+- Service: Marketplace discovery overview
+- Route: `/marketplace`
+- Affected files: `app/(app)/marketplace/page.tsx`, `tests/marketplace-home-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: listing, member, offer, match, save, store, follow, review, order, collection, or collection-item reads failed while the page rendered empty discovery and activity state
+- Severity: P1
+- Launch impact: users could misread an RLS, migration, or database outage as an empty marketplace and make decisions without complete inventory or transaction context
+- Root cause: the page’s best-effort loader discarded query errors and treated all failures as empty arrays
+- Resolution: labeled query errors are logged and surfaced in an accessible Marketplace data-health warning; unaffected data remains available
+- Supabase impact: no schema change; tenant-scoped reads remain scoped by the active family and failures are non-destructive
+- Tests run: `tests/marketplace-home-read-boundary.test.ts`, `tests/marketplace-reports.test.ts`, `tests/marketplace-community.test.ts` (18 focused tests); full 440-file/3,143-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `b32e7a0f`; build generated 250 routes; live RLS, role, browser, and marketplace workflow evidence remain open
+- Status: Resolved in code; live deployment and workflow evidence remain open
+- Remaining dependencies: execute isolated listing/order/auction/dispute and cross-family RLS drills across buyer, seller, and manager roles

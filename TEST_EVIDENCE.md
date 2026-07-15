@@ -1445,3 +1445,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - Shared auth now logs provider/allowlist failures and treats authenticated context failures as unavailable; OAuth callback membership failures no longer route into onboarding; the admin shell exposes profile/invite/notification read warnings; middleware reaches intended public and machine-authenticated route guards.
 - Source commit: `2a409b13`; merged source checkpoint: `ed87386f`; audit evidence is published at the current branch tip.
+
+## Latest Local Evidence - Marketplace Overview Read Failure
+
+- Focused Marketplace home, reports, and community suites: 3 files, 18 tests passed.
+- `npm.cmd test`: 440 files, 3,143 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime compatibility warning remains.
+- `git diff --check`: passed.
+- `/marketplace` now surfaces labeled read failures for all independent discovery, activity, creator, and collection sources rather than rendering an empty healthy board.
+- Source commit: `b32e7a0f`; docs refresh and publication are in progress.
