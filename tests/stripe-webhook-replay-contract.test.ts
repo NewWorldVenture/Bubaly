@@ -37,4 +37,12 @@ describe('Stripe webhook replay contract', () => {
     expect(stripeRoute.indexOf('await recordEvent')).toBeLessThan(stripeRoute.indexOf('await upsertSubscription'));
     expect(moneyRoute.indexOf('await recordEvent')).toBeLessThan(moneyRoute.indexOf('await handleTransactionCreated'));
   });
+
+  it('does not acknowledge failed card money effects or unknown billing prices', () => {
+    expect(helper).toContain("throw new Error('Stripe authorization response failed');");
+    expect(helper).toContain("if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');");
+    expect(helper).toContain("if (error) throw new Error('Stripe card mapping lookup failed');");
+    expect(stripeRoute).toContain("if (!priceId) throw new Error('Subscription price is missing');");
+    expect(stripeRoute).toContain("if (!plan) throw new Error('Unknown Stripe subscription price');");
+  });
 });

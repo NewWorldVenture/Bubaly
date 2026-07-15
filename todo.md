@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:30:00 -04:00
+- Last updated: 2026-07-15 17:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes fail-closed shared ledger and card-hold helpers; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes retry-safe Stripe webhook money effects and unknown-price rejection; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0333 - Stripe webhook money effects could be acknowledged after failed side effects
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Stripe webhooks / wallet ledger / billing entitlement
+- Feature: Issuing authorization, capture, reversal, and subscription webhook processing
+- Route: `/api/webhooks/money`, `/api/webhooks/stripe`, `lib/stripe/webhook.ts`
+- File or files: `app/api/webhooks/money/route.ts`, `app/api/webhooks/stripe/route.ts`, `lib/stripe/webhook.ts`, `tests/stripe-webhook-replay-contract.test.ts`
+- Database objects: `stripe_webhook_events`, `stripe_issuing_cards`, `wallet_transactions`, `subscriptions`, and `billing_customers`
+- Affected roles: Stripe event processor, cardholder household, family manager, and paid subscriber
+- Scenario: a capture debit could fail while the hold was released; Stripe authorization response failures were swallowed; card mapping reads could be treated as unknown-card success; unknown subscription prices could be persisted as Free
+- Launch impact: captured purchases could disappear from the ledger, holds could be mishandled, authorization state could diverge from Stripe, or paid families could be downgraded
+- Root cause: webhook handlers ignored helper failures and billing price mapping used a Free fallback for unrecognized configuration
+- Resolution: capture checks debit result before releasing holds; authorization/card mapping errors throw for retry; subscription webhooks reject missing/unknown prices
+- Tests performed: `tests/stripe-webhook-replay-contract.test.ts`, `tests/stripe-issuing-auth.test.ts`, `tests/wallet-money-action-boundaries.test.ts` (19 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Evidence: latest full gate passed with 455 files/3,198 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run live Stripe signature, authorization, capture, reversal, duplicate-delivery, subscription, refund, connected-account, and Supabase/RLS drills
 
 #### TODO-0332 - Shared wallet ledger helpers hid money-state read and release failures
 

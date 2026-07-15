@@ -108,11 +108,12 @@ export async function markEventError(supabase: DB, eventId: string, message: str
 
 /** Look up the card + family for an authorization, by Stripe card id. */
 async function cardForAuthorization(supabase: DB, stripeCardId: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('stripe_issuing_cards')
     .select('id, family_id, child_wallet_id, is_frozen, blocked_categories, status')
     .eq('stripe_card_id', stripeCardId)
     .maybeSingle();
+  if (error) throw new Error('Stripe card mapping lookup failed');
   return data;
 }
 
@@ -193,6 +194,7 @@ export async function handleAuthorizationRequest(
     else await stripe.issuing.authorizations.decline(auth.id, {}, opts);
   } catch (e) {
     console.error('[money] authorization response failed', e);
+    throw new Error('Stripe authorization response failed');
   }
 
   // Audit row (best-effort).
@@ -217,16 +219,17 @@ export async function handleTransactionCreated(
 ): Promise<void> {
   const cardId = typeof txn.card === 'string' ? txn.card : txn.card?.id;
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
-  if (!card) return;
+  if (!card) throw new Error('Stripe card mapping not found');
   const authId = typeof txn.authorization === 'string' ? txn.authorization : txn.authorization?.id ?? null;
   // Stripe issuing transaction amounts are negative for spends.
   const spend = Math.abs(txn.amount ?? 0);
   if (spend > 0) {
     const merchant = txn.merchant_data?.name ?? 'Card purchase';
-    await debitCardSpend(supabase, {
+    const debit = await debitCardSpend(supabase, {
       familyId: card.family_id, childWalletId: card.child_wallet_id,
       amountCents: spend, description: merchant, stripeRef: txn.id,
     });
+    if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
   }
   // The captured debit now represents the spend; drop the pending hold.
   if (authId) await releaseCardHold(supabase, authId);

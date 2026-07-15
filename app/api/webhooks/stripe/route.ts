@@ -17,7 +17,8 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
   if (!familyId) return;
 
   const item = sub.items.data[0];
-  const priceId = item?.price.id ?? '';
+  const priceId = item?.price.id;
+  if (!priceId) throw new Error('Subscription price is missing');
 
   // Map price → plan slug
   const plan =
@@ -28,7 +29,8 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     // Legacy price IDs (backward-compat with existing subscriptions)
     priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
     priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
-    'free';
+    null;
+  if (!plan) throw new Error('Unknown Stripe subscription price');
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
   // brand-new paid conversion vs. a routine renewal).
@@ -57,7 +59,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
   if (subscriptionError) throw new Error('Subscription persistence failed');
 
   // Credit a pending referral when a referred family first becomes paid.
-  if (plan !== 'free' && (sub.status === 'active' || sub.status === 'trialing')) {
+  if (sub.status === 'active' || sub.status === 'trialing') {
     try { await markReferralConverted(supabase, familyId); }
     catch (e) { console.error('[referral] conversion crediting failed', e); }
   }
@@ -86,7 +88,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
       await recordAdminNotification(supabase, {
         kind: 'subscription_churn',
         title: `Churn: ${fam?.name ?? 'a family'} left ${lost}`,
-        body: plan === 'free' ? `Downgraded to free (${sub.status}).` : `Subscription ${sub.status}.`,
+        body: `Subscription ${sub.status}.`,
         url: '/admin/subscriptions',
         relatedType: 'subscription', relatedId: familyId,
         meta: { from: lost, plan, status: sub.status },

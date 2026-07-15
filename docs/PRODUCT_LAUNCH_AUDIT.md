@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0333 - Stripe webhook money effects could be acknowledged after failed side effects
+
+- Timestamp: 2026-07-15 17:00 America/New_York
+- Service: Stripe Billing and Stripe Issuing webhook processing
+- Route: `/api/webhooks/money`, `/api/webhooks/stripe`, `lib/stripe/webhook.ts`
+- Affected files: `app/api/webhooks/money/route.ts`, `app/api/webhooks/stripe/route.ts`, `lib/stripe/webhook.ts`, `tests/stripe-webhook-replay-contract.test.ts`
+- Role: Stripe event processor, cardholder household, family manager, and paid subscriber
+- Scenario: capture debit failure could be followed by hold release, authorization API failure could return success, card mapping failure could be treated as unknown card, and unknown subscription prices could become Free
+- Severity: P0
+- Launch impact: Stripe and wallet ledger state could diverge, paid entitlement could be lost, or financial events could be acknowledged without durable effects
+- Root cause: webhook handlers ignored helper failures and unknown price mapping used a Free fallback
+- Resolution: capture checks debit persistence before releasing holds; authorization/card mapping failures throw for retry; billing webhooks reject missing/unknown prices
+- Supabase impact: no schema change; event claims remain replay-safe and wallet/subscription writes retain existing scoping and idempotency boundaries
+- Tests run: `tests/stripe-webhook-replay-contract.test.ts`, `tests/stripe-issuing-auth.test.ts`, `tests/wallet-money-action-boundaries.test.ts` (19 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
+- Validation evidence: latest full gate passed with 455 test files, 3,198 tests, 0 production dependency vulnerabilities, and a 250-route build
+- Commit: pending publication
+- Status: Resolved in code; live webhook evidence remains open
+- Remaining dependencies: execute isolated Stripe signature, authorization, capture, reversal, duplicate-delivery, subscription, refund, connected-account, reconciliation, RLS, and browser drills against deployed services
+
 ### PLA-0332 - Shared wallet ledger helpers hid money-state read and release failures
 
 - Timestamp: 2026-07-15 16:30 America/New_York
