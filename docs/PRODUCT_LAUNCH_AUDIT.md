@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; Auth Admin and service-role audit reads now have explicit failure contracts.
 - Tests run: `tests/admin-security-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 458 test files, 3,204 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `f13af1c2`
 - Status: Resolved in code; live Auth Admin, role, browser, RLS, and outage evidence remains open
 - Remaining dependencies: restore healthy Auth Admin users endpoint and execute authenticated security-operation drills
 
