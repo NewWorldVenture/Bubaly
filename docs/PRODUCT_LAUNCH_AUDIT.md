@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; service-role sync operational reads now have explicit failure contracts.
 - Tests run: `tests/admin-sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 460 test files, 3,206 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `6a9d7494`
 - Status: Resolved in code; live callback, retry, RLS, role, browser, and deployed integration evidence remains open
 - Remaining dependencies: provider sandbox callbacks, dead-letter recovery, signature-failure drills, and deployed Admin Sync verification
 
