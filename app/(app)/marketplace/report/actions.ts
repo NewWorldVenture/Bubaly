@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { isValidReason, canReport } from '@/lib/marketplace/reports';
+import { isValidReason, canReport, reasonLabel } from '@/lib/marketplace/reports';
 import { recordAdminNotification } from '@/lib/admin/notify';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -51,8 +51,8 @@ export async function reportListingAction(
   await recordAdminNotification(createServiceClient(), {
     kind: 'marketplace_report',
     title: 'New marketplace report',
-    body: `Reason: ${input.reason}${details ? ` — ${details.slice(0, 160)}` : ''}`,
-    url: '/admin/marketplace/reports',
+    body: `Reason: ${reasonLabel(input.reason)}${details ? ` — ${details.slice(0, 160)}` : ''}`,
+    url: '/admin/marketplace/reports?status=needs_action',
     relatedType: 'marketplace_report',
   });
 
