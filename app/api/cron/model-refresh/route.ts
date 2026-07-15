@@ -66,7 +66,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, ...summarizeSweep(outcomes) });
+    const summary = summarizeSweep(outcomes);
+    const ok = summary.failures === 0;
+    return NextResponse.json({ ok, ...summary }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('Model-refresh cron error:', err);
     return NextResponse.json({ error: 'Model-refresh cron failed' }, { status: 500 });

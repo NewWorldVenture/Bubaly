@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
 
   let sold = 0;
   let unsold = 0;
+  let failed = 0;
   for (const listing of due ?? []) {
     const { data: closed, error: closeError } = await admin.rpc('marketplace_close_auction', {
       p_listing_id: listing.id,
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
       // The RPC transaction rolls back on settlement failure, leaving this
       // listing available for a later retry instead of losing the order.
       console.error('Auction settlement failed; leaving it retryable.', closeError);
+      failed++;
       continue;
     }
 
@@ -80,5 +82,6 @@ export async function GET(req: NextRequest) {
     unsold++;
   }
 
-  return NextResponse.json({ ok: true, closed: sold + unsold, sold, unsold });
+  const ok = failed === 0;
+  return NextResponse.json({ ok, closed: sold + unsold, sold, unsold, failed }, { status: ok ? 200 : 502 });
 }

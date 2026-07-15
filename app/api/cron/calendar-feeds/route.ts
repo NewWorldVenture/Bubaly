@@ -35,5 +35,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ feeds: (feeds ?? []).length, synced, imported, failed });
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, feeds: (feeds ?? []).length, synced, imported, failed },
+    { status: ok ? 200 : 502 },
+  );
 }

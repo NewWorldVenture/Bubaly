@@ -34,7 +34,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, families: (families ?? []).length, scanned, autoExecuted, notified, failures });
+    const ok = failures === 0;
+    return NextResponse.json(
+      { ok, families: (families ?? []).length, scanned, autoExecuted, notified, failures },
+      { status: ok ? 200 : 502 },
+    );
   } catch (err) {
     console.error('Autopilot cron error:', err);
     return NextResponse.json({ error: 'Autopilot cron failed' }, { status: 500 });
