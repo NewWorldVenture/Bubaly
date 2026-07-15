@@ -1360,4 +1360,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `/admin/billing` and `/admin/notifications` now render refreshable error states when their Supabase reads fail instead of reporting empty or zero-valued data.
-- Source commit: `c0bd9ffa`; docs publication commit is pending.
+- Source commit: `c0bd9ffa`; docs and source are published on `origin/main` at `cae8e833`.

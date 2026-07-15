@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 11:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `c0bd9ffa` (published main; source repair `c0bd9ffa`)
+- Commit: `cae8e833` (published main; source repair `c0bd9ffa`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -41,7 +41,7 @@
 - Resolution: preserve read errors, log the boundary, and render refreshable error states before computing or displaying data
 - Tests performed: `tests/admin-billing-notifications-read-boundary.test.ts` (2 focused tests); full 424-file/3,094-test suite; typecheck; lint; dependency audit; production build; diff check
 - Evidence: focused contracts cover billing subscription/customer/family reads, notification history, and visible error-state paths
-- Remaining dependencies: publish docs and run isolated billing/notification read-failure/browser drills
+- Remaining dependencies: run isolated billing/notification read-failure/browser drills
 
 #### TODO-0300 - Admin operational pages hid usage read failures as zero metrics
 
