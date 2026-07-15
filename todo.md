@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 11:35:00 -04:00
+- Last updated: 2026-07-15 11:55:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2276f9d8` (published main; source repair `e727682c`)
+- Commit: `0a4d4533` (source repair published to `origin/codex/world-class-production`; audit docs publication follows this checkpoint)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0307 - Marketing admin list, detail, publishing, and rewards reads silently downgraded on failure
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketing admin
+- Feature: Marketing content, campaigns, assets, CRM, publishing, rewards, and surveys
+- Route: `/admin/marketing/content`, `/admin/marketing/campaigns`, `/admin/marketing/assets`, `/admin/marketing/customers`, `/admin/marketing/crm`, `/admin/marketing/video`, `/admin/marketing/loyalty`, `/admin/marketing/surveys`, and related control-plane pages
+- File or files: marketing admin page boundaries plus focused `tests/admin-marketing-*-read-boundary.test.ts` contracts
+- Database objects: marketing content/campaigns/assets, storage signed previews, families, subscriptions, support tickets, CRM, publishing, rewards, quotes, surveys, and related tables
+- Affected roles: Marketing Admin / Super Admin
+- Scenario: a list, detail, event aggregate, signed preview, provider-device, payout, or response read fails
+- Launch impact: operators can mistake unavailable inventory or financial/feedback metrics for empty or zero-valued state
+- Root cause: many marketing pages discarded Supabase and storage errors while retaining write controls
+- Resolution: preserve read errors, log the boundary, and render refreshable error states across the audited marketing surfaces
+- Tests performed: full 435-file/3,122-test suite; focused content/campaign, asset/messaging, CRM, control-plane, publishing, and rewards/survey boundary suites; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source repair commit `0a4d4533`; live permission, browser, storage, callback, and write-failure drills remain open
+- Remaining dependencies: publish this evidence, complete remaining marketing pages, and run isolated read/write/provider drills
 
 #### TODO-0306 - Marketing dashboard and Analytics hid customer-loader failures as zero metrics
 

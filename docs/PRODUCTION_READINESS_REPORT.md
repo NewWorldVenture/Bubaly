@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 11:35 America/New_York
+Audit snapshot: 2026-07-15 11:55 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 429 Vitest files and 3,104 tests pass in the latest full local gate.
+- 435 Vitest files and 3,122 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -71,6 +71,18 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   planning views; live marketing permissions and browser evidence remain open.
 - The shared marketing customer loader now preserves family, subscription, member, and profile read failures
   for diagnostic pages; the Marketing dashboard and Analytics pages render visible retry states instead of zero-valued metrics.
+- Marketing content and campaign list/detail pages now preserve content, blog, campaign, segment, and audience
+  read failures instead of showing empty pipelines or not-found states; focused boundary coverage is published.
+- Marketing assets, signed image previews, email, SMS, social, and form pages now surface database/storage read
+  failures before showing empty inventories or enabling misleading operational decisions.
+- Marketing customers, lead scoring, segments, CRM contacts, and sales pipeline now preserve derived customer,
+  support-ticket, contact, and deal read failures instead of calculating zero-valued business metrics.
+- Marketing SEO, AEO, landing pages, funnels, settings, and audit pages now show retryable read failures instead
+  of silently substituting empty content or default configuration.
+- Marketing experiments, reputation, reviews, video, and push pages now preserve event, asset, provider-device,
+  and publishing read failures before rendering analytics or publish controls.
+- Marketing affiliates, loyalty, proposals, surveys, and survey detail now preserve payout, redemption, quote,
+  response, and family-label read failures before exposing financial or feedback actions.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

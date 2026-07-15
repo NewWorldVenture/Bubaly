@@ -672,3 +672,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `e727682c`
 - Status: Resolved in code; live marketing permissions, data freshness, and browser evidence remain open
 - Remaining dependencies: audit all remaining marketing customer/list/detail pages and run isolated read/failure drills
+
+### PLA-0307 - Marketing admin surfaces silently downgraded read failures
+
+- Timestamp: 2026-07-15 11:55 America/New_York
+- Service: Marketing content, campaigns, assets, CRM, publishing, rewards, and surveys
+- Routes: `/admin/marketing/content`, `/admin/marketing/campaigns`, `/admin/marketing/assets`, `/admin/marketing/customers`, `/admin/marketing/crm`, `/admin/marketing/video`, `/admin/marketing/loyalty`, `/admin/marketing/surveys`, and related control-plane pages
+- Affected files: audited marketing admin page boundaries and six focused `tests/admin-marketing-*-read-boundary.test.ts` suites
+- Role: Marketing Admin / Super Admin
+- Scenario: list, detail, signed-preview, event aggregate, provider-device, payout, quote, family-label, or survey-response reads failed while the UI substituted empty or zero-valued operational state
+- Severity: P1
+- Launch impact: operators could publish, pay, score, or make growth decisions from incomplete data without a visible outage signal
+- Root cause: many marketing server components discarded Supabase and storage errors while retaining write controls
+- Resolution: pages now preserve read errors, log the boundary, and render refreshable error states before deriving metrics or exposing misleading inventory state
+- Supabase impact: no schema change; marketing read failures are explicit and non-destructive
+- Tests run: six focused files and 18 tests, full 435-file/3,122-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts cover content/campaign, asset/messaging, CRM, SEO/AEO/control-plane, experiment/publishing, affiliate/loyalty/proposal/survey failure paths
+- Commit: `0a4d4533`
+- Status: Resolved in code; live marketing permissions, storage, provider callbacks, write failures, and browser evidence remain open
+- Remaining dependencies: complete remaining marketing pages and run isolated read/write/provider/browser drills
