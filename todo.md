@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:06:55 -04:00
+- Last updated: 2026-07-15 16:12:01 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `709aca24` adds Social read safety after the Admin Security/Auth Admin, command-center, and Sync repairs; live provider and deployment evidence remains open
+- Commit: `3e44cb89` adds Admin Users read safety after the Social, Security/Auth Admin, command-center, and Sync repairs; live role and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0342 - Admin Users rendered partial access data after required reads failed
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Admin access management / Supabase failure handling
+- Feature: Super Admin Users & Families
+- Route: `/admin/users`
+- File or files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
+- Database objects: `profiles`, `family_members`, `families`, `subscriptions`, `invites`, `roles`, `permissions`, and `super_admins`
+- Affected roles: Super Admin and access-management operators
+- Scenario: any required access, family, subscription, invitation, role, permission, or super-admin read could fail while the page rendered partial users, empty filters, or misleading access counts.
+- Launch impact: operators could change access based on incomplete or stale membership and permission data.
+- Root cause: query failures were collected into a warning banner but the page continued to derive metrics and rows from partial results.
+- Required remediation: fail closed at the page boundary, log diagnostics server-side, and render a sanitized retry state before any access data is shown.
+- Implementation notes: the page now returns a retryable error state whenever environment or required read validation fails.
+- Test plan: focused Users read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-users-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 461 files/3,207 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally in commit `3e44cb89`; documentation stamp and push pending.
+- Remaining dependencies: live Super Admin role/RLS, browser, audit-log, backup, and deployed verification.
 
 #### TODO-0341 - Admin Social hid publishing and provider errors as zero metrics
 

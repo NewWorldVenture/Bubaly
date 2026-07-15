@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Users Access Read Boundary
+
+- Focused Users suite: 1 file, 1 test passed.
+- Full `npm.cmd test`: 461 test files, 3,207 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- `/admin/users` now fails closed with a retryable state when environment or required access reads fail, before deriving users, permissions, or access metrics from partial data.
+- Live Super Admin role/RLS, browser, audit-log, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Admin Social Platform Read Boundary
 
 - Focused Social suite: 1 file, 1 test passed.

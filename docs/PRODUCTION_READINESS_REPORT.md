@@ -43,6 +43,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   signatures, or provider catalog reads fail, instead of showing zero operational failures.
 - Super Admin Social now fails visibly when account, post, publish-result, AI-generation, or provider-error
   reads fail, instead of showing zero publishing and provider-health metrics.
+- Super Admin Users now fails visibly when required profile, family, membership, subscription, invite, role,
+  permission, or super-admin reads fail, instead of rendering partial access data and misleading counts.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.

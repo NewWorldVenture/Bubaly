@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0342 - Admin Users rendered partial access data after required reads failed
+
+- Timestamp: 2026-07-15 16:12 America/New_York
+- Service: Super Admin Users & Families access management
+- Route: `/admin/users`
+- Affected files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
+- Role: Super Admin and access-management operators
+- Scenario: any required profile, family, membership, subscription, invitation, role, permission, or super-admin read could fail while the page rendered partial users, empty filters, or misleading access counts.
+- Severity: P1
+- Launch impact: operators could change access based on incomplete or stale membership and permission data.
+- Root cause: query failures were collected into a warning banner but the page continued to derive metrics and rows from partial results.
+- Resolution: the page now logs the failure and renders a sanitized retryable ErrorState before any access data is derived or shown.
+- Supabase impact: no schema change; required service-role access reads now have an explicit fail-closed contract.
+- Tests run: `tests/admin-users-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 461 test files, 3,207 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `3e44cb89`
+- Status: Resolved in code; live Super Admin role/RLS, browser, audit-log, backup, and deployed evidence remains open
+- Remaining dependencies: authenticated access matrix, cross-tenant RLS, audit-log routing, backup, and deployed Users verification
+
 ### PLA-0341 - Admin Social hid publishing and provider errors as zero metrics
 
 - Timestamp: 2026-07-15 16:06 America/New_York
