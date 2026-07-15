@@ -333,6 +333,13 @@ Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display
 > (`feedbackAdminSummary` + `filterIdeasForAdmin`, **6 tests**); tsc·eslint·2906 tests·build green. No
 > new migration (reuses 0197).
 
+> **+ Founder growth alerts SHIPPED (2026-07-14).** The admin bell now also fires on the two events a
+> founder most wants: a **new family completing onboarding** (`finalizeOnboardingAction` → `family_signup`,
+> only for freshly-created families) and a **new paid conversion** (Stripe webhook → `subscription`,
+> detected by the pure tested `isNewPaidConversion` — fires once on trial/free → paid+active, never on
+> renewals). Both best-effort/service-role. Migration **`0209_admin_growth_kinds.sql`** widens the kind
+> CHECK (PG16 ×2). `lib/billing/conversion.ts` (**8 tests**); 3018 tests + build green. ⚠️ apply `0209`.
+
 > **+ Super Admin Notification Center SHIPPED (2026-07-14).** The admin-console **bell** is now the whole
 > super-admin front door, not just a static invite count: it surfaces `admin_notifications` across every
 > `/admin/*` page — new feedback + bugs, GitHub sync relays, **new support tickets** (contact form), and

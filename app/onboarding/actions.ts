@@ -557,6 +557,7 @@ export async function finalizeOnboardingAction(input: {
   //      • anything else (a completed wizard run, an accepted invite) → treat as
   //        an idempotent re-submit and return that family untouched.
   let familyId: string;
+  let newFamily = false; // set when this run creates a brand-new family (a signup)
   const { data: existingMembership, error: membershipLookupError } = await admin
     .from('family_members').select('family_id')
     .eq('user_id', auth.user.id).eq('is_active', true)
@@ -607,6 +608,7 @@ export async function finalizeOnboardingAction(input: {
       ? onboardingFailure('family creation', famErr, 'Could not finish setting up your space.')
       : { ok: false, error: 'Could not finish setting up your space.' };
     familyId = familyRow.id;
+    newFamily = true;
   }
 
   // 2b. Explicitly create (or reconcile) the owner's parent membership — do NOT
@@ -883,6 +885,24 @@ export async function finalizeOnboardingAction(input: {
     });
   } catch (e) {
     console.error('[onboarding] automation event failed', e);
+  }
+
+  // 🎉 Alert the super admin when a NEW family completes onboarding (a signup).
+  // Best-effort; only for freshly-created families (not idempotent re-submits).
+  if (newFamily) {
+    try {
+      const { recordAdminNotification } = await import('@/lib/admin/notify');
+      await recordAdminNotification(admin, {
+        kind: 'family_signup',
+        title: `New family signed up: ${family.name}`,
+        body: `${details.householdAdults} adult(s) · ${details.householdChildren} kid(s)${referralSource ? ` · via ${referralSource}` : ''}.`,
+        url: '/admin/users',
+        relatedType: 'family', relatedId: familyId,
+        meta: { referralSource, goals },
+      });
+    } catch (e) {
+      console.error('[onboarding] signup admin-notify failed', e);
+    }
   }
 
   return { ok: true, data: { familyId, brief: finalBrief } };

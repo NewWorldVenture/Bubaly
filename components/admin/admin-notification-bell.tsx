@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import {
-  Bell, MessageSquare, Bug, Github, LifeBuoy, ShieldAlert, Info, Check, UserPlus,
+  Bell, MessageSquare, Bug, Github, LifeBuoy, ShieldAlert, Info, Check, UserPlus, Sparkles, CreditCard,
 } from 'lucide-react';
 import { adminNoteKindMeta, badgeText, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
@@ -22,6 +22,8 @@ const ICONS: Record<string, typeof Bell> = {
   github_error: Github,
   support_ticket: LifeBuoy,
   marketplace_report: ShieldAlert,
+  family_signup: Sparkles,
+  subscription: CreditCard,
   info: Info,
 };
 

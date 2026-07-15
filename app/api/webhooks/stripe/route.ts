@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { markReferralConverted } from '@/lib/referrals/server';
+import { isNewPaidConversion } from '@/lib/billing/conversion';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -29,12 +30,12 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
     'free';
 
-  // Resolve billing_customer_id
-  const { data: bc, error: billingCustomerError } = await supabase
-    .from('billing_customers')
-    .select('id')
-    .eq('family_id', familyId)
-    .maybeSingle();
+  // Resolve billing_customer_id + the PRIOR subscription state (to detect a
+  // brand-new paid conversion vs. a routine renewal).
+  const [{ data: bc, error: billingCustomerError }, { data: priorSub }] = await Promise.all([
+    supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
+    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).maybeSingle(),
+  ]);
   if (billingCustomerError) throw new Error('Billing customer lookup failed');
 
   const { error: subscriptionError } = await supabase.from('subscriptions').upsert(
@@ -56,6 +57,22 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
   if (plan !== 'free' && (sub.status === 'active' || sub.status === 'trialing')) {
     try { await markReferralConverted(supabase, familyId); }
     catch (e) { console.error('[referral] conversion crediting failed', e); }
+  }
+
+  // 🎉 Alert the super admin on a NEW paid conversion (not renewals). Best-effort.
+  if (isNewPaidConversion(priorSub, { plan, status: sub.status })) {
+    try {
+      const { recordAdminNotification } = await import('@/lib/admin/notify');
+      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
+      await recordAdminNotification(supabase, {
+        kind: 'subscription',
+        title: `New paid conversion: ${fam?.name ?? 'a family'}`,
+        body: `Upgraded to ${plan} (${sub.status}).`,
+        url: '/admin/subscriptions',
+        relatedType: 'subscription', relatedId: familyId,
+        meta: { plan, status: sub.status },
+      });
+    } catch (e) { console.error('[admin-notify] paid-conversion alert failed', e); }
   }
 }
 
