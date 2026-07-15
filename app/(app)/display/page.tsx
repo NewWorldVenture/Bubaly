@@ -3,12 +3,19 @@ import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
-import {
-  DEFAULT_TILES, resolveTiles, resolveDisplaySettings,
-  type DisplayData, type Tile,
-} from '@/components/display/display-grid';
+// ⚠️ RSC boundary rule (this WAS the kiosk's persistent crash): display-grid.tsx
+// is a 'use client' module, so every value imported from it here — even a
+// re-export of a pure helper — arrives as a client-reference proxy, and CALLING
+// one throws on every request ("it's not possible to call a client function
+// from the server"). The first throw was caught, but the catch block called
+// another poisoned helper and THAT throw escaped to the error boundary as an
+// opaque digest. Server code must import these from the pure libs directly;
+// only type-only imports (erased at compile) and rendered components may come
+// from client modules. Guarded by tests/display-server-safety.test.ts.
+import { DEFAULT_TILES, resolveTiles, type Tile } from '@/lib/display/tiles';
+import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
+import type { DisplayData } from '@/components/display/display-grid';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
-import type { DisplaySettings } from '@/lib/display/ambient';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -143,7 +150,7 @@ async function loadDisplay(
   // literal null from a historical sparse-array save) used to crash the whole
   // page during SSR — where widget boundaries can't catch. Normalize BOTH blobs.
   const initialTiles = resolveTiles(layoutRow?.tiles ?? null);
-  const initialSettings = resolveDisplaySettings(layoutRow?.settings ?? null);
+  const initialSettings = normalizeSettings(layoutRow?.settings ?? null);
 
   return { data, initialTiles, initialSettings };
 }
@@ -234,7 +241,7 @@ export default async function KitchenDisplayPage() {
     loaded = {
       data: emptyDisplay(familyName, now),
       initialTiles: DEFAULT_TILES,
-      initialSettings: resolveDisplaySettings(null),
+      initialSettings: normalizeSettings(null),
     };
   }
 
