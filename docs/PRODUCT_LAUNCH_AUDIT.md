@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0348 - Trip itinerary hid failed day and item reads as an empty schedule
+
+- Timestamp: 2026-07-15 17:11 America/New_York
+- Service: Trip Itinerary
+- Route: `/dashboard/vacations/[id]/itinerary`
+- Affected files: `components/vacations/trip-itinerary.tsx`, `tests/trip-itinerary-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: trip, day, or itinerary-item reads could fail while the page rendered no days planned or an incomplete schedule.
+- Severity: P1
+- Launch impact: families could miss planned activities or incorrectly rebuild an itinerary from incomplete data.
+- Root cause: only the itinerary days query exposed loading state; trip and item read failures were ignored.
+- Resolution: Trip Itinerary now tracks all three query handles, waits for complete data, and renders a sanitized retryable ErrorState before showing an empty schedule.
+- Supabase impact: no schema change; existing family-scoped itinerary reads now have an explicit page-level failure contract.
+- Tests run: `tests/trip-itinerary-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 466 test files, 3,216 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `7e6ce831`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Itinerary verification
+
 ### PLA-0347 - Trip overview hid incomplete readiness and itinerary reads
 
 - Timestamp: 2026-07-15 17:05 America/New_York
@@ -209,26 +228,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Root cause: Promise results were destructured without retaining or checking errors.
 - Resolution: all seven result errors are checked before deriving metrics; server diagnostics remain private and the UI renders a retryable ErrorState.
 - Supabase impact: no schema change; existing service-role read path is now fail-visible.
-- Tests run: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-wallet-reconciliation-boundary.test.ts` (2 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 457 test files, 3,203 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `93f3594b`
-- Status: Resolved in code; live Super Admin role/browser/outage evidence remains open
-- Remaining dependencies: isolated Supabase read-failure, role, browser, RLS, and deployed admin smoke drills
-
-### PLA-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
-
-- Timestamp: 2026-07-15 15:45 America/New_York
-- Service: Super Admin wallet reconciliation and ledger observability
-- Route: `/admin/wallet/reconciliation`
-- Affected files: `app/(app)/admin/wallet/reconciliation/page.tsx`, `tests/admin-wallet-reconciliation-boundary.test.ts`
-- Role: Super Admin and financial operator
-- Scenario: a failed bucket or transaction read became an empty array and the page could show a healthy report during a Supabase outage.
-- Severity: P1
-- Launch impact: operators could miss wallet anomalies or act on incomplete financial evidence.
-- Root cause: parallel Supabase result errors were discarded during destructuring.
-- Resolution: both read results are retained and checked; a server-side diagnostic is logged and the page renders a retryable ErrorState before reconciliation.
-- Supabase impact: no schema change; existing service-role read boundary is now fail-visible.
-- Tests run: `tests/admin-wallet-reconciliation-boundary.test.ts`, `tests/w…21458 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Tests run: `tests/admin-wallet-read-boundary.test.ts`, `tests/admin-…21862 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
