@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0346 - Vacation reports hid incomplete financial and travel-score reads
+
+- Timestamp: 2026-07-15 16:58 America/New_York
+- Service: Vacation Reports
+- Route: `/dashboard/vacations/reports`
+- Affected files: `components/vacations/vacations-reports.tsx`, `tests/vacations-reports-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: expense, budget, or travel-score reads could fail while the report rendered trip counts and partial financial totals as if complete.
+- Severity: P1
+- Launch impact: families could make travel budget decisions from incomplete or stale report data.
+- Root cause: only the trips query exposed loading state; secondary report reads ignored their loading and error contracts.
+- Resolution: Vacation Reports now tracks all four required reads, waits for complete data, and renders a sanitized retryable ErrorState before deriving totals or charts.
+- Supabase impact: no schema change; existing family-scoped report reads now have an explicit failure contract.
+- Tests run: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 464 test files, 3,212 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `194e4ecb`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Vacation Reports verification
+
 ### PLA-0345 - Connections hub hid family connection read failures as disconnected providers
 
 - Timestamp: 2026-07-15 16:34 America/New_York
@@ -208,25 +227,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Launch impact: completed billing could produce a failed webhook and leave abandoned-checkout follow-up state unresolved.
 - Root cause: tracking creation was best-effort but completion required a prior row.
 - Resolution: validated plan metadata is attached to Checkout and the signed completion webhook upserts `checkout_sessions` by its unique session ID.
-- Supabase impact: no schema change; the service-role checkout lifecycle now repairs missing tracking rows and preserves the existing service-only table boundary.
-- Tests run: focused billing/webhook boundary suite (8 tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 455 test files, 3,201 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `726a5e57`
-- Status: Resolved in code; live Stripe completion/replay evidence remains open
-- Remaining dependencies: isolated test-mode Checkout completion, duplicate delivery, and abandoned-checkout cron drills
-
-### PLA-0334 - Billing provider mutations could return success after local sync failure
-
-- Timestamp: 2026-07-15 15:40 America/New_York
-- Service: Stripe Billing mutation and portal access
-- Route: `/api/billing/change-plan`, `/api/billing/cancel`, `/api/billing/portal`
-- Affected files: `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
-- Role: family manager, household member, billing administrator, paid subscriber
-- Scenario: Stripe could accept a plan change or cancellation while the local sync failed, while portal access and cancellation input needed explicit server-side boundaries.
-- Severity: P0
-- Launch impact: UI and entitlement state could diverge from Stripe or a non-manager could open billing management.
-- Root cause: provider mutation and local persistence were reported as one full-success state without exposing a partial outcome.
-- Resolution: plan change and cancellation return …20630 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Supabase impact: no schema change; the service-role checkout lifecycle now repairs m…21039 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
