@@ -4,9 +4,10 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 import {
-  DisplayShell, DEFAULT_TILES, resolveTiles, resolveDisplaySettings,
+  DEFAULT_TILES, resolveTiles, resolveDisplaySettings,
   type DisplayData, type Tile,
 } from '@/components/display/display-grid';
+import { DisplayShellClient } from '@/components/display/display-shell-client';
 import type { DisplaySettings } from '@/lib/display/ambient';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
@@ -233,7 +234,10 @@ export default async function KitchenDisplayPage() {
   return (
     <>
       <AutoRefresh seconds={120} />
-      <DisplayShell
+      {/* Client-only: SSR throws bypass every widget boundary (boundaries don't
+          run server-side) — in the browser, a bad widget degrades to "—" instead
+          of taking the kiosk down, and real error messages replace digests. */}
+      <DisplayShellClient
         initialTiles={loaded.initialTiles}
         initialSettings={loaded.initialSettings}
         data={loaded.data}
