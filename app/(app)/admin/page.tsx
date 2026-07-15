@@ -11,7 +11,7 @@ import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/h
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Sparkline, Gauge, Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
@@ -42,18 +42,18 @@ export default async function AdminDashboardPage() {
   const thirtyDaysAgo = new Date(now - 30 * MS_DAY).toISOString();
 
   const [
-    { count: familyCount },
-    { count: activeMemberCount },
-    { count: activeSubCount },
-    { data: families },
-    { data: activeMembers },
-    { data: subscriptions },
-    { data: docs },
-    { data: newMembers },
-    { data: recentLogs },
-    { data: tickets },
-    { data: adminNotes },
-    { count: unreadNoteCount },
+    familyCountResult,
+    activeMemberCountResult,
+    activeSubCountResult,
+    familiesResult,
+    activeMembersResult,
+    subscriptionsResult,
+    docsResult,
+    newMembersResult,
+    recentLogsResult,
+    ticketsResult,
+    adminNotesResult,
+    unreadNoteCountResult,
     dbHealth,
     storageHealth,
   ] = await Promise.all([
@@ -74,6 +74,47 @@ export default async function AdminDashboardPage() {
     checkDatabase(supabase),
     checkStorage(supabase),
   ]);
+
+  const readError = [
+    familyCountResult.error,
+    activeMemberCountResult.error,
+    activeSubCountResult.error,
+    familiesResult.error,
+    activeMembersResult.error,
+    subscriptionsResult.error,
+    docsResult.error,
+    newMembersResult.error,
+    recentLogsResult.error,
+    ticketsResult.error,
+    adminNotesResult.error,
+    unreadNoteCountResult.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[admin-dashboard] dashboard read failed', readError);
+    return (
+      <div className="module-page space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
+          <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
+        </div>
+        <ErrorState message="Could not load the admin dashboard from Supabase. Refresh and try again." />
+        <a href="/admin" className="text-sm font-medium text-brand-text underline">Refresh admin dashboard</a>
+      </div>
+    );
+  }
+
+  const { count: familyCount } = familyCountResult;
+  const { count: activeMemberCount } = activeMemberCountResult;
+  const { count: activeSubCount } = activeSubCountResult;
+  const { data: families } = familiesResult;
+  const { data: activeMembers } = activeMembersResult;
+  const { data: subscriptions } = subscriptionsResult;
+  const { data: docs } = docsResult;
+  const { data: newMembers } = newMembersResult;
+  const { data: recentLogs } = recentLogsResult;
+  const { data: tickets } = ticketsResult;
+  const { data: adminNotes } = adminNotesResult;
+  const { count: unreadNoteCount } = unreadNoteCountResult;
 
   const notifications = (adminNotes ?? []) as AdminNotificationRow[];
   const unreadNotes = unreadNoteCount ?? 0;
@@ -166,9 +207,23 @@ export default async function AdminDashboardPage() {
 
   // ── Recent activity actors ──
   const actorIds = [...new Set((recentLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const { data: actors } = actorIds.length
+  const actorsResult = actorIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+  if ('error' in actorsResult && actorsResult.error) {
+    console.error('[admin-dashboard] actor profile read failed', actorsResult.error);
+    return (
+      <div className="module-page space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
+          <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
+        </div>
+        <ErrorState message="Could not load recent activity details from Supabase. Refresh and try again." />
+        <a href="/admin" className="text-sm font-medium text-brand-text underline">Refresh admin dashboard</a>
+      </div>
+    );
+  }
+  const { data: actors } = actorsResult;
   const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
 
   return (
@@ -417,4 +472,3 @@ function StatCard({ icon: Icon, tint, label, value, sub }: {
     </Card>
   );
 }
-

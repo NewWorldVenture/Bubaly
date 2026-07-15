@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Command Center Read Boundary
+
+- Focused admin overview suite: 1 file, 1 test passed.
+- Full `npm.cmd test`: 459 test files, 3,205 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- `/admin` now preserves all required dashboard query failures and recent-activity actor failures instead of rendering zero/empty command-center metrics.
+- Live Super Admin role/browser, alert-routing, Auth/RLS, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Admin Security/Auth Read Boundary
 
 - Focused security suite: 1 file, 1 test passed.

@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0339 - Admin dashboard hid command-center read failures as zero or empty metrics
+
+- Timestamp: 2026-07-15 16:20 America/New_York
+- Service: Super Admin command center and operational dashboard
+- Route: `/admin`
+- Affected files: `app/(app)/admin/page.tsx`, `tests/admin-overview-read-boundary.test.ts`
+- Role: Super Admin and operational administrator
+- Scenario: required family, member, subscription, storage, audit, ticket, notification, or actor reads could fail while dashboard cards and activity rendered plausible incomplete values.
+- Severity: P1
+- Launch impact: operators could make billing, support, security, or deployment decisions from partial command-center data.
+- Root cause: Promise results and the secondary actor lookup were destructured without preserving error state.
+- Resolution: all required result errors are checked before metrics are derived; actor profile failures have a separate sanitized retry state.
+- Supabase impact: no schema change; service-role dashboard reads now fail visibly instead of substituting empty arrays/zero counts.
+- Tests run: `tests/admin-overview-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 459 test files, 3,205 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: pending source commit
+- Status: Resolved in code; live Super Admin role/browser, alert-routing, RLS, and outage evidence remains open
+- Remaining dependencies: execute authenticated command-center and degraded-Supabase drills against deployed services
+
 ### PLA-0338 - Admin Security hid Auth and audit read failures as empty signals
 
 - Timestamp: 2026-07-15 16:05 America/New_York
