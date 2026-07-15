@@ -4,8 +4,20 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReportModeration } from '@/components/admin/report-moderation';
-import { reasonLabel, STATUS_LABELS, summarizeReports, type ReportStatus } from '@/lib/marketplace/reports';
+import {
+  reasonLabel, STATUS_LABELS, summarizeReports, reportMatchesFilter, isReportFilter,
+  type ReportStatus, type ReportFilter,
+} from '@/lib/marketplace/reports';
 import { cn } from '@/lib/utils/cn';
+
+type Params = { searchParams: Promise<{ status?: string }> };
+
+const FILTERS: { key: ReportFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'needs_action', label: 'Needs action' },
+  { key: 'actioned', label: 'Actioned' },
+  { key: 'dismissed', label: 'Dismissed' },
+];
 
 export const metadata: Metadata = { title: 'Marketplace reports', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -19,7 +31,9 @@ const STATUS_CHIP: Record<string, string> = {
 
 /** Super-admin marketplace safety queue (gated by the /admin layout). Reads via
  *  the service role, oversees every family, open reports first. */
-export default async function AdminMarketplaceReportsPage() {
+export default async function AdminMarketplaceReportsPage({ searchParams }: Params) {
+  const sp = await searchParams;
+  const filter: ReportFilter = isReportFilter(sp.status) ? sp.status : 'all';
   const admin = createServiceClient();
 
   const { data: reports, error: reportsError } = await admin
@@ -49,9 +63,18 @@ export default async function AdminMarketplaceReportsPage() {
   const listingOf = new Map((listings ?? []).map((l) => [l.id, l]));
   const familyOf = new Map((families ?? []).map((f) => [f.id, f.name as string]));
 
-  // Open/reviewing first, then newest.
+  // Open/reviewing first, then newest — then narrow to the selected status filter.
   const rank = (s: string) => (s === 'open' ? 0 : s === 'reviewing' ? 1 : 2);
-  const ordered = [...rows].sort((a, b) => rank(a.status) - rank(b.status));
+  const ordered = [...rows]
+    .sort((a, b) => rank(a.status) - rank(b.status))
+    .filter((r) => reportMatchesFilter(r.status, filter));
+
+  const filterCount: Record<ReportFilter, number> = {
+    all: summary.total,
+    needs_action: summary.open,
+    actioned: summary.byStatus.actioned ?? 0,
+    dismissed: summary.byStatus.dismissed ?? 0,
+  };
 
   return (
     <div className="space-y-5">
@@ -76,8 +99,26 @@ export default async function AdminMarketplaceReportsPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <a
+            key={f.key}
+            href={f.key === 'all' ? '/admin/marketplace/reports' : `/admin/marketplace/reports?status=${f.key}`}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+              filter === f.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
+            )}
+          >
+            {f.label} <span className="opacity-60">{filterCount[f.key]}</span>
+          </a>
+        ))}
+      </div>
+
       {ordered.length === 0 ? (
-        <EmptyState title="No reports" description="Nothing has been flagged. The marketplace is clean." />
+        <EmptyState
+          title={filter === 'all' ? 'No reports' : 'Nothing here'}
+          description={filter === 'all' ? 'Nothing has been flagged. The marketplace is clean.' : 'No reports match this filter.'}
+        />
       ) : (
         <ul className="space-y-2.5">
           {ordered.map((r) => {

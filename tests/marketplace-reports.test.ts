@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   REPORT_REASONS, reasonLabel, STATUS_LABELS, isValidReason, isResolved,
-  canReport, summarizeReports,
+  canReport, summarizeReports, reportMatchesFilter, isReportFilter,
 } from '@/lib/marketplace/reports';
 
 describe('reason vocabulary', () => {
@@ -55,5 +55,31 @@ describe('summarizeReports', () => {
   });
   it('handles empty input', () => {
     expect(summarizeReports([])).toEqual({ total: 0, open: 0, byStatus: {}, byReason: {} });
+  });
+});
+
+describe('moderation queue filter', () => {
+  it('validates the filter vocabulary', () => {
+    expect(isReportFilter('needs_action')).toBe(true);
+    expect(isReportFilter('all')).toBe(true);
+    expect(isReportFilter('bogus')).toBe(false);
+    expect(isReportFilter(undefined)).toBe(false);
+  });
+  it('"all" matches every status', () => {
+    for (const s of ['open', 'reviewing', 'actioned', 'dismissed']) {
+      expect(reportMatchesFilter(s, 'all')).toBe(true);
+    }
+  });
+  it('"needs_action" groups open + reviewing only', () => {
+    expect(reportMatchesFilter('open', 'needs_action')).toBe(true);
+    expect(reportMatchesFilter('reviewing', 'needs_action')).toBe(true);
+    expect(reportMatchesFilter('actioned', 'needs_action')).toBe(false);
+    expect(reportMatchesFilter('dismissed', 'needs_action')).toBe(false);
+  });
+  it('terminal filters match only their own status', () => {
+    expect(reportMatchesFilter('actioned', 'actioned')).toBe(true);
+    expect(reportMatchesFilter('open', 'actioned')).toBe(false);
+    expect(reportMatchesFilter('dismissed', 'dismissed')).toBe(true);
+    expect(reportMatchesFilter('reviewing', 'dismissed')).toBe(false);
   });
 });

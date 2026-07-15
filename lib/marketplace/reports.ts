@@ -38,6 +38,25 @@ export function isResolved(status: ReportStatus): boolean {
   return status === 'actioned' || status === 'dismissed';
 }
 
+// Status filters for the super-admin moderation queue. "Needs action" groups the
+// two live states (open + reviewing) a moderator still has to work.
+export type ReportFilter = 'all' | 'needs_action' | 'actioned' | 'dismissed';
+
+export function isReportFilter(v: unknown): v is ReportFilter {
+  return v === 'all' || v === 'needs_action' || v === 'actioned' || v === 'dismissed';
+}
+
+/** Does a report's status belong in the given queue filter? */
+export function reportMatchesFilter(status: string, filter: ReportFilter): boolean {
+  switch (filter) {
+    case 'all': return true;
+    case 'needs_action': return status === 'open' || status === 'reviewing';
+    case 'actioned': return status === 'actioned';
+    case 'dismissed': return status === 'dismissed';
+    default: return true;
+  }
+}
+
 /** A member may report any listing that isn't their own. */
 export function canReport(listingOwnerMemberId: string | null, viewerMemberId: string): boolean {
   return !!viewerMemberId && listingOwnerMemberId !== viewerMemberId;
