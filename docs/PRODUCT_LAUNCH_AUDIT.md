@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0345 - Connections hub hid family connection read failures as disconnected providers
+
+- Timestamp: 2026-07-15 16:34 America/New_York
+- Service: Family Connections hub and integration directory
+- Route: `/dashboard/connections`
+- Affected files: `components/modules/connections-module.tsx`, `tests/connections-ui-boundary.test.ts`
+- Role: authenticated family members and household integration operators
+- Scenario: the realtime `family_connections` query could fail while the module rendered every provider as disconnected or showed an empty connection summary.
+- Severity: P1
+- Launch impact: families could mistake unavailable connection data for revoked credentials and make incorrect setup decisions.
+- Root cause: the module ignored the `useRealtimeQuery` error state even though the hook preserved real read failures.
+- Resolution: Connections now renders a sanitized retryable ErrorState and wires retry to the query refresh callback before deriving provider statuses.
+- Supabase impact: no schema change; the existing family-scoped realtime read now has visible UI failure handling.
+- Tests run: `tests/connections-ui-boundary.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 463 test files, 3,210 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `299e2608`
+- Status: Resolved in code; live provider callbacks, RLS, role, browser, and deployed evidence remains open
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Connections verification
+
 ### PLA-0344 - Sync conflict and account routes hid required read failures
 
 - Timestamp: 2026-07-15 16:21 America/New_York

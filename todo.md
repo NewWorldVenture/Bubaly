@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:21:58 -04:00
+- Last updated: 2026-07-15 16:34:48 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ec14b828` adds Sync conflict/account route read safety after the family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `299e2608` adds Connections hub read safety after the Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0345 - Connections hub hid family connection read failures as disconnected providers
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family integrations / connections observability / Supabase failure handling
+- Feature: Family Connections hub
+- Route: `/dashboard/connections`
+- File or files: `components/modules/connections-module.tsx`, `tests/connections-ui-boundary.test.ts`
+- Database objects: `family_connections`
+- Affected roles: authenticated family members and household integration operators
+- Scenario: the realtime query could fail while the module rendered every provider as disconnected or showed an empty connection summary.
+- Launch impact: families could mistake unavailable connection data for revoked credentials and make incorrect setup decisions.
+- Root cause: the module ignored the `useRealtimeQuery` error state even though the hook preserved real read failures.
+- Required remediation: surface a sanitized error state and wire retry to the query refresh callback before deriving provider statuses.
+- Implementation notes: Connections now renders a retryable failure state when its family-scoped read fails.
+- Test plan: focused Connections UI boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/connections-ui-boundary.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 463 files/3,210 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `299e2608`; documentation stamp and push pending.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0344 - Sync conflict and account routes hid required read failures
 

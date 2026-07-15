@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 16:21 America/New_York
+Audit snapshot: 2026-07-15 16:34 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 463 Vitest files and 3,209 tests pass in the latest full local gate.
+- 463 Vitest files and 3,210 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -49,6 +49,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   reads fail, instead of presenting zero health or “no runs” states as if synchronization were current.
 - Sync conflicts, connected accounts, and provider detail now fail visibly when their required reads fail,
   instead of presenting no conflicts or disconnected provider states from partial data.
+- The family Connections hub now surfaces its realtime Supabase read error with a retry action instead of
+  rendering every provider as disconnected after a failed connection query.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
