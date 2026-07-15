@@ -1425,11 +1425,11 @@ Audit date: 2026-07-15
 ## Latest Local Evidence - Marketing Admin Read Boundaries
 
 - `npm.cmd exec vitest run tests/admin-marketing-content-campaigns-read-boundary.test.ts tests/admin-marketing-assets-messaging-read-boundary.test.ts tests/admin-marketing-crm-read-boundary.test.ts tests/admin-marketing-control-plane-read-boundary.test.ts tests/admin-marketing-publishing-read-boundary.test.ts tests/admin-marketing-rewards-surveys-read-boundary.test.ts`: 6 files, 18 focused tests passed.
-- `npm.cmd test`: 435 files, 3,122 tests passed.
+- `npm.cmd test`: 436 files, 3,129 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Marketing content/campaign, asset preview/messaging, customer/lead/CRM, SEO/AEO/control-plane, experiment/publishing, affiliate/loyalty/proposal/survey pages now surface Supabase/storage read failures instead of rendering empty or zero-valued operational state.
-- Source commit: `0a4d4533`; docs and source are published on `origin/codex/world-class-production` at `2562c9c0`.
+- Source checkpoint before final docs refresh: `00f07856` (merged concurrent main changes); documentation publication follows this refresh.

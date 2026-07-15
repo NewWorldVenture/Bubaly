@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 11:55:00 -04:00
+- Last updated: 2026-07-15 12:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2562c9c0` (audit evidence published; latest source repair `0a4d4533`)
+- Commit: `00f07856` (merged concurrent main changes; audit docs publication follows this refresh)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -39,7 +39,7 @@
 - Launch impact: operators can mistake unavailable inventory or financial/feedback metrics for empty or zero-valued state
 - Root cause: many marketing pages discarded Supabase and storage errors while retaining write controls
 - Resolution: preserve read errors, log the boundary, and render refreshable error states across the audited marketing surfaces
-- Tests performed: full 435-file/3,122-test suite; focused content/campaign, asset/messaging, CRM, control-plane, publishing, and rewards/survey boundary suites; typecheck; lint; dependency audit; production build; diff check
+- Tests performed: full 436-file/3,129-test suite; focused content/campaign, asset/messaging, CRM, control-plane, publishing, and rewards/survey boundary suites; typecheck; lint; dependency audit; production build; diff check
 - Evidence: source repair commit `0a4d4533`; live permission, browser, storage, callback, and write-failure drills remain open
 - Remaining dependencies: publish this evidence, complete remaining marketing pages, and run isolated read/write/provider drills
 
