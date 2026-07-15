@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, CreditCard, Mail, Calendar, Database, HardDrive,
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail } from '@/lib/server/health';
 
 export const metadata: Metadata = { title: 'Integrations', robots: { index: false } };
@@ -44,7 +45,7 @@ function Row({ integration }: { integration: Integration }) {
 export default async function AdminIntegrationsPage() {
   const supabase = createServiceClient();
 
-  const [dbCheck, storageCheck, authCheck, stripeCheck, emailCheck, { count: googleCalCount }] = await Promise.all([
+  const [dbCheck, storageCheck, authCheck, stripeCheck, emailCheck, googleCalendarResult] = await Promise.all([
     checkDatabase(supabase),
     checkStorage(supabase),
     checkAuth(supabase),
@@ -53,6 +54,11 @@ export default async function AdminIntegrationsPage() {
     supabase.from('user_preferences').select('user_id', { count: 'exact', head: true })
       .not('notification_prefs->googleCalendarToken', 'is', null),
   ]);
+  if (googleCalendarResult.error) {
+    console.error('[admin-integrations] connected-account read failed', googleCalendarResult.error);
+    return <AdminIntegrationsReadError />;
+  }
+  const googleCalCount = googleCalendarResult.count;
 
   const integrations: Integration[] = [
     { name: 'Supabase Database', category: 'Core', icon: Database, connected: dbCheck.ok, detail: dbCheck.ok ? `Responding in ${dbCheck.latencyMs}ms` : dbCheck.detail },
@@ -97,6 +103,19 @@ export default async function AdminIntegrationsPage() {
           {integrations.map((i) => <Row key={i.name} integration={i} />)}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AdminIntegrationsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Integrations</h1>
+        <p className="mt-1 text-sm text-muted">Every third-party service this app actually depends on.</p>
+      </div>
+      <ErrorState message="Could not load connected-account status from Supabase. Refresh and try again." />
+      <a href="/admin/integrations" className="text-sm font-medium text-brand-text underline">Refresh integrations</a>
     </div>
   );
 }

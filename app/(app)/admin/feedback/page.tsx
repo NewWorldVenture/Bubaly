@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import type { IdeaRow } from '@/lib/feedback/board';
 import { githubRepoStatus } from '@/lib/integrations/github';
 import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/components/admin/feedback-admin';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminFeedbackPage() {
   const supabase = createServiceClient();
 
-  const [{ data: ideas }, { data: comments }, { data: notes }, gh] = await Promise.all([
+  const [ideasResult, commentsResult, notesResult, gh] = await Promise.all([
     supabase.from('feedback_ideas')
       .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, github_issue_number, github_issue_url, created_at')
       .order('pinned', { ascending: false })
@@ -28,6 +29,16 @@ export default async function AdminFeedbackPage() {
       .limit(50),
     githubRepoStatus(),
   ]);
+
+  const readError = ideasResult.error ?? commentsResult.error ?? notesResult.error;
+  if (readError) {
+    console.error('[admin-feedback] feedback read failed', readError);
+    return <AdminFeedbackReadError />;
+  }
+
+  const { data: ideas } = ideasResult;
+  const { data: comments } = commentsResult;
+  const { data: notes } = notesResult;
 
   return (
     <div className="space-y-5">
@@ -61,6 +72,19 @@ export default async function AdminFeedbackPage() {
         notifications={(notes ?? []) as AdminNotification[]}
         githubConfigured={gh.ok}
       />
+    </div>
+  );
+}
+
+function AdminFeedbackReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Feedback &amp; Ideas</h1>
+        <p className="mt-1 text-sm text-muted">Ideas and bug reports from the public feedback board.</p>
+      </div>
+      <ErrorState message="Could not load feedback from Supabase. Refresh and try again." />
+      <a href="/admin/feedback" className="text-sm font-medium text-brand-text underline">Refresh feedback</a>
     </div>
   );
 }
