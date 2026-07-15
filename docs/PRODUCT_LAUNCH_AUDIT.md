@@ -760,7 +760,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: storefront failure now renders a retryable ErrorState; dependent failures are logged and shown in an accessible data-health warning
 - Supabase impact: no schema change; storefront and trust reads remain scoped to the active family and existing permissions
 - Tests run: `tests/marketplace-creators-read-boundary.test.ts` (2 focused tests); full suite/build pending
-- Validation evidence: source repair pending commit; live creator/RLS, role, browser, and family-isolation evidence remain open
+- Validation evidence: source commit `dcbe9588`; full branch verification remains green; live creator/RLS, role, browser, and family-isolation evidence remain open
 - Status: Resolved in code; full verification and live workflow evidence remain open
 - Remaining dependencies: execute isolated storefront, follow, review, inventory, and family-isolation drills against deployed Supabase
 

@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:08:00 -04:00
+- Last updated: 2026-07-15 13:11:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -40,7 +40,7 @@
 - Root cause: Promise.all result errors were discarded and all failed reads became empty ranking inputs
 - Resolution: storefront failures now render a retryable error state; dependent follow, review, and listing failures are logged and surfaced in an accessible Marketplace creators data-health warning
 - Tests performed: `tests/marketplace-creators-read-boundary.test.ts` (2 focused tests); full suite/build pending
-- Evidence: source repair currently uncommitted; live creator/RLS/role/browser workflow evidence remains open
+- Evidence: source commit `dcbe9588`; branch publication verified; live creator/RLS/role/browser workflow evidence remains open
 - Remaining dependencies: run isolated storefront, follow/unfollow, review, inventory, and family-isolation drills against deployed Supabase
 
 #### TODO-0313 - Marketplace Alerts hid saved-search and matching-data failures
