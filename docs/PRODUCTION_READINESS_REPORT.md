@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 441 Vitest files and 3,145 tests pass in the latest full local gate.
+- 442 Vitest files and 3,147 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -97,6 +97,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   remain usable while the warning is visible.
 - Marketplace listing detail now distinguishes a failed primary listing read from a genuine missing listing and
   surfaces secondary bid, trust, offer, order, store, price-history, comparable, and negotiation read failures.
+- Community Circles now distinguishes an unapplied circles migration from transient circle/member/share/listing
+  failures and shows labeled read warnings instead of silently emptying the circle picker or own-listing picker.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

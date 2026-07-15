@@ -745,3 +745,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: source commit `d6685cd9`; build generated 250 routes; live RLS, role, browser, and marketplace transaction evidence remain open
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
+
+### PLA-0311 - Community Circles mislabeled transient failures as an unapplied migration
+
+- Timestamp: 2026-07-15 12:52 America/New_York
+- Service: Marketplace Community Circles and cross-family listing sharing
+- Route: `/marketplace/community`
+- Affected files: `app/(app)/marketplace/community/page.tsx`, `components/marketplace/community-module.tsx`, `tests/marketplace-community-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: a transient circle/member/share query failure showed the migration-not-applied message, while own available-listing failures silently emptied the share picker
+- Severity: P1
+- Launch impact: users could misdiagnose a live outage as missing deployment work or lose the ability to share listings across families without an honest error state
+- Root cause: broad catch-based migration detection and discarded per-query Supabase errors
+- Resolution: only missing-relation errors trigger the migration state; other failures are logged, labeled, and rendered in an accessible Community data-health warning
+- Supabase impact: no schema change; cross-family reads and own-family listing reads retain existing RLS/scoping behavior
+- Tests run: `tests/marketplace-community-read-boundary.test.ts` and `tests/marketplace-community.test.ts` (7 focused tests); full 442-file/3,147-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source commit `57e973d3`; build generated 250 routes; live cross-family RLS, role, browser, and invite/share workflow evidence remain open
+- Status: Resolved in code; live deployment and workflow evidence remain open
+- Remaining dependencies: run isolated circle create/join/leave/share/unshare drills across multiple families with live migration 0173/0176 policies

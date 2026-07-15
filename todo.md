@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 12:46:00 -04:00
+- Last updated: 2026-07-15 12:52:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source repair `d6685cd9`; overview repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
+- Commit: latest source repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; merged checkpoint `ed87386f`; audit evidence refresh follows
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0311 - Community Circles mislabeled transient failures as an unapplied migration
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace / tenant boundary
+- Feature: Cross-family Community Circles and listing share picker
+- Route: `/marketplace/community`
+- File or files: `app/(app)/marketplace/community/page.tsx`, `components/marketplace/community-module.tsx`, `tests/marketplace-community-read-boundary.test.ts`
+- Database objects: `marketplace_circles`, `marketplace_circle_members`, `marketplace_listing_shares`, and `marketplace_listings`
+- Affected roles: authenticated household members sharing listings across circles and Super Admin marketplace operators
+- Scenario: any circle/member/share query error set `migrated=false`, showing a migration message; own available-listing read errors were discarded and the share picker appeared empty
+- Launch impact: users could misdiagnose a transient outage as missing deployment work, lose confidence in cross-family sharing, or fail to share an available listing
+- Root cause: the page used one broad catch for migration detection and ignored individual Supabase result errors
+- Resolution: missing-relation errors alone trigger the migration state; transient reads are labeled/logged and rendered in an accessible Community data-health warning
+- Tests performed: `tests/marketplace-community-read-boundary.test.ts` and `tests/marketplace-community.test.ts` (7 focused tests); full 442-file/3,147-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit `57e973d3`; live cross-family RLS, role, browser, and invite/share workflow evidence remain open
+- Remaining dependencies: run isolated circle create/join/leave/share/unshare drills across multiple families with live migration 0173/0176 policies
 
 #### TODO-0310 - Marketplace listing detail hid database failures as not-found or incomplete detail
 
