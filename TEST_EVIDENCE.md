@@ -1299,4 +1299,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - The `/admin/users` page now includes `super_admins` in the visible Supabase load-error aggregation.
-- Source commit: `c8ec95b1`; docs update and remote push verification remain pending.
+- Source commit: `c8ec95b1`; docs and source are published on `origin/main` at `dc4f5bd1`.
