@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:00:00 -04:00
+- Last updated: 2026-07-15 14:08:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest local source repair `32b541d1` hardens Contact Center email ingress; publication to branch and `main` is pending
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0320 - Remaining wallet routes hid financial read failures
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Reliability / money movement / tenant integrity
+- Feature: Wallet Hub, Invest, Babysitters, Gifts, Wallet Settings, and Child Wallet
+- Route: `/wallet`, `/wallet/invest`, `/wallet/babysitters`, `/wallet/gift`, `/wallet/settings`, `/wallet/children/[childId]`
+- File or files: `components/wallet/wallet-hub.tsx`, `app/(app)/wallet/invest/page.tsx`, `app/(app)/wallet/babysitters/page.tsx`, `app/(app)/wallet/gift/page.tsx`, `app/(app)/wallet/settings/page.tsx`, `app/(app)/wallet/children/[childId]/page.tsx`, `tests/wallet-read-boundary.test.ts`
+- Database objects: `financial_accounts`, `transactions`, `wallet_cards`, `wallet_passes`, `wallet_rewards`, `family_wallets`, `invest_assets`, `invest_holdings`, `invest_orders`, `wallet_buckets`, `wallet_transactions`, `babysitter_profiles`, `babysitter_payments`, `gift_links`, `gift_payments`, `pay_handles`, `child_wallets`, `family_members`, `wallet_goals`, and `wallet_rules`
+- Affected roles: household managers, parents, and members with wallet visibility
+- Scenario: failed reads were converted to empty arrays or fallback labels, allowing zero balances, incomplete investment/child context, or missing gift/payment data to look authoritative
+- Launch impact: users could make financial decisions from incomplete balances, pending orders, payment history, or child-wallet state
+- Root cause: server-rendered wallet pages discarded Supabase errors and the client Wallet Hub ignored realtime-query error state
+- Resolution: primary wallet/ledger reads now render retryable ErrorState; secondary failures produce accessible warning status; Wallet Hub distinguishes cached/partial data from a total failure; focused coverage now spans all remaining wallet routes
+- Tests performed: `tests/wallet-read-boundary.test.ts` (3 focused tests); full 450-file/3,177-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: final local gate passed with 0 production dependency vulnerabilities and 250 generated routes; publication pending
+- Remaining dependencies: run manager/member activation, balance, invest, gift, babysitter, child-wallet, concurrency, reconciliation, and tenant-isolation drills against deployed Supabase
 
 #### TODO-0319 - Contact Center collapsed routing and inbox failures into empty state
 

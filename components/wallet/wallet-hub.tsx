@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -47,23 +47,23 @@ export function WalletHub() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: accounts, loading: la, refresh: refreshAccounts } = useRealtimeQuery<Account>({
+  const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
     table: 'financial_accounts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at', { ascending: true }),
   });
-  const { data: txns, loading: lt, refresh: refreshTxns } = useRealtimeQuery<Txn>({
+  const { data: txns, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
-  const { data: cards, refresh: refreshCards } = useRealtimeQuery<Card>({
+  const { data: cards, error: cardsError, refresh: refreshCards } = useRealtimeQuery<Card>({
     table: 'wallet_cards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wallet_cards').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
   });
-  const { data: passes, refresh: refreshPasses } = useRealtimeQuery<Pass>({
+  const { data: passes, error: passesError, refresh: refreshPasses } = useRealtimeQuery<Pass>({
     table: 'wallet_passes', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wallet_passes').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
   });
-  const { data: rewards, refresh: refreshRewards } = useRealtimeQuery<Reward>({
+  const { data: rewards, error: rewardsError, refresh: refreshRewards } = useRealtimeQuery<Reward>({
     table: 'wallet_rewards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wallet_rewards').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
   });
@@ -98,6 +98,16 @@ export function WalletHub() {
   }, [txns, txnSearch]);
 
   const loading = la || lt;
+  const primaryError = accountsError || txnsError;
+  const secondaryErrors = [cardsError && 'Cards', passesError && 'Passes', rewardsError && 'Rewards'].filter(Boolean) as string[];
+
+  if (primaryError && accounts.length === 0 && txns.length === 0) {
+    return (
+      <div className="module-page">
+        <ErrorState message="Could not load your wallet data. Refresh and try again." onRetry={() => { void Promise.all([refreshAccounts(), refreshTxns()]); }} />
+      </div>
+    );
+  }
 
   return (
     <div className="module-page">
@@ -139,6 +149,12 @@ export function WalletHub() {
           </div>
         </div>
       </div>
+
+      {(primaryError || secondaryErrors.length > 0) && (
+        <div role="status" aria-label="Wallet data health" className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Some wallet data is temporarily unavailable{secondaryErrors.length > 0 ? `: ${secondaryErrors.join(', ')}` : '.'} Refresh to try again.
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
         {/* MAIN */}

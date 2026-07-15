@@ -8,6 +8,12 @@ const pages = {
   goals: readFileSync('app/(app)/wallet/goals/page.tsx', 'utf8'),
   allowance: readFileSync('app/(app)/wallet/allowance/page.tsx', 'utf8'),
   cards: readFileSync('app/(app)/wallet/cards/page.tsx', 'utf8'),
+  invest: readFileSync('app/(app)/wallet/invest/page.tsx', 'utf8'),
+  babysitters: readFileSync('app/(app)/wallet/babysitters/page.tsx', 'utf8'),
+  gift: readFileSync('app/(app)/wallet/gift/page.tsx', 'utf8'),
+  settings: readFileSync('app/(app)/wallet/settings/page.tsx', 'utf8'),
+  child: readFileSync('app/(app)/wallet/children/[childId]/page.tsx', 'utf8'),
+  hub: readFileSync('components/wallet/wallet-hub.tsx', 'utf8'),
 };
 
 describe('wallet page read boundaries', () => {
@@ -19,7 +25,7 @@ describe('wallet page read boundaries', () => {
   });
 
   it('surfaces dependent ledger and identity failures', () => {
-    for (const source of Object.values(pages)) {
+    for (const source of [pages.send, pages.activity, pages.treasury, pages.goals, pages.allowance, pages.cards]) {
       expect(source).toContain('role="status"');
       expect(source).toContain('dataWarnings');
     }
@@ -38,5 +44,15 @@ describe('wallet page read boundaries', () => {
     for (const label of ['Connected account', 'Connected account sync', 'Connected account status', 'Issued cards']) {
       expect(pages.cards, label).toContain(`dataWarnings.push('${label}')`);
     }
+  });
+
+  it('fails closed on remaining wallet page reads', () => {
+    for (const key of ['invest', 'babysitters', 'gift', 'settings', 'child'] as const) {
+      expect(pages[key], key).toContain('ErrorState');
+      expect(pages[key], key).toContain('error:');
+    }
+    expect(pages.hub).toContain('accountsError');
+    expect(pages.hub).toContain('txnsError');
+    expect(pages.hub).toContain('Could not load your wallet data. Refresh and try again.');
   });
 });

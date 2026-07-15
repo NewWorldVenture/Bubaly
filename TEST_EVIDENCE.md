@@ -12,6 +12,18 @@ Audit date: 2026-07-15
 - The final post-repair full gate passed with 450 test files, 3,176 tests, 0 production dependency vulnerabilities, and a 250-route build.
 - Inbound email routing exists at `/api/contact-center/email`; provider configuration, signed callback verification, retry behavior, and live RLS/browser verification remain open.
 
+## Latest Local Evidence - Remaining Wallet Read Boundaries
+
+- Focused wallet read-boundary suite: 1 file, 3 tests passed.
+- Full `npm.cmd test -- --run`: 450 files, 3,177 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `git diff --check`: passed.
+- Wallet Invest, Babysitters, Gifts, Wallet Settings, Child Wallet, and Wallet Hub now distinguish primary read failures from empty state and surface secondary identity/order errors.
+- Live wallet activation, role, concurrency, reconciliation, RLS, and browser evidence remain open.
+
 ## Latest Live Evidence Snapshot - Authentication and Supabase
 
 - `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID

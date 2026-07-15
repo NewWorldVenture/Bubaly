@@ -907,3 +907,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; final merged-tree gate passed with 450 files/3,176 tests, 0 production dependency vulnerabilities, and 250 generated routes
 - Status: Resolved in code; live provider/RLS evidence remains open
 - Remaining dependencies: run Twilio/email retry, provider outage, role, RLS, and browser drills
+### PLA-0320 - Remaining wallet routes hid financial read failures
+
+- Timestamp: 2026-07-15 14:08 America/New_York
+- Service: Wallet Hub and secondary family-wallet workflows
+- Routes: `/wallet`, `/wallet/invest`, `/wallet/babysitters`, `/wallet/gift`, `/wallet/settings`, `/wallet/children/[childId]`
+- Affected files: `components/wallet/wallet-hub.tsx`, the five remaining server-rendered wallet pages, `tests/wallet-read-boundary.test.ts`
+- Role: household manager, parent, or family member with wallet visibility
+- Scenario: failed financial reads became empty arrays, fallback names, or zero-valued derived state while the screen looked healthy
+- Severity: P0
+- Launch impact: users could act on incomplete balances, holdings, pending orders, gift payments, babysitter history, or child-wallet details
+- Root cause: Supabase errors were discarded by the remaining wallet pages and `useRealtimeQuery` consumers did not render error state
+- Resolution: primary reads now render retryable ErrorState; secondary failures render accessible health warnings; the Wallet Hub preserves partial/cached data only with an explicit warning
+- Supabase impact: no schema change; family filters and existing RLS scopes remain unchanged
+- Tests run: `tests/wallet-read-boundary.test.ts` (3 focused tests); full 450-file/3,177-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: final local gate passed with 0 production dependency vulnerabilities and 250 generated routes
+- Status: Resolved in code; live wallet/RLS, role, concurrency, and browser evidence remain open
+- Remaining dependencies: execute manager/member wallet, invest, gift, babysitter, child-wallet, reconciliation, and tenant-isolation drills against deployed Supabase

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ErrorState } from '@/components/ui/states';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -13,13 +14,17 @@ export default async function WalletGiftPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: links }, { data: pending }, { data: childWallets }, { data: members }, { data: handles }] = await Promise.all([
+  const [{ data: links, error: linksError }, { data: pending, error: pendingError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: handles, error: handlesError }] = await Promise.all([
     supabase.from('gift_links').select('id, child_wallet_id, token, occasion, is_active, created_at').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('gift_payments').select('id, child_wallet_id, giver_name, amount_cents, message, occasion, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
     supabase.from('pay_handles').select('id, handle, child_wallet_id').eq('family_id', familyId).order('created_at', { ascending: false }),
   ]);
+  if (linksError || pendingError || childWalletsError || membersError || handlesError) {
+    console.error('[wallet-gift] Read failed', linksError ?? pendingError ?? childWalletsError ?? membersError ?? handlesError);
+    return <ErrorState message="Could not load wallet gifts. Refresh and try again." />;
+  }
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const nameByWallet = new Map((childWallets ?? []).map((c) => [c.id, nameByMember.get(c.member_id) ?? 'Child']));

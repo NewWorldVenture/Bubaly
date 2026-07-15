@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ErrorState } from '@/components/ui/states';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -11,7 +12,7 @@ export default async function WalletBabysittersPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: profiles }, { data: payments }] = await Promise.all([
+  const [{ data: profiles, error: profilesError }, { data: payments, error: paymentsError }] = await Promise.all([
     supabase.from('babysitter_profiles')
       .select('id, name, phone, email, rate_cents, notes')
       .eq('family_id', familyId).eq('is_active', true).order('name'),
@@ -19,6 +20,10 @@ export default async function WalletBabysittersPage() {
       .select('id, babysitter_id, hours, rate_cents, tip_cents, amount_cents, status, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
   ]);
+  if (profilesError || paymentsError) {
+    console.error('[wallet-babysitters] Read failed', profilesError ?? paymentsError);
+    return <ErrorState message="Could not load babysitter payments. Refresh and try again." />;
+  }
 
   const sitters: BabysitterRow[] = (profiles ?? []).map((p) => ({
     id: p.id, name: p.name, phone: p.phone, email: p.email, rateCents: p.rate_cents, notes: p.notes,

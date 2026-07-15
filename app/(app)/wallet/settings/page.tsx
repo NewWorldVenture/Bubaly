@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ErrorState } from '@/components/ui/states';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -12,11 +13,15 @@ export default async function WalletSettingsPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: childWallets }, { data: members }, { data: rules }] = await Promise.all([
+  const [{ data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: rules, error: rulesError }] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('wallet_rules').select('child_wallet_id, split, auto_accept_gifts, require_approval_over_cents').eq('family_id', familyId),
   ]);
+  if (childWalletsError || membersError || rulesError) {
+    console.error('[wallet-settings] Read failed', childWalletsError ?? membersError ?? rulesError);
+    return <ErrorState message="Could not load wallet settings. Refresh and try again." />;
+  }
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
   const ruleByWallet = new Map((rules ?? []).map((r) => [r.child_wallet_id, r]));
