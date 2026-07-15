@@ -444,3 +444,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `34a24ddd`
 - Status: Resolved in code; live storage failure drill and Super Admin browser verification remain open
 - Remaining dependencies: run an isolated storage error/delete retry drill and verify object/row parity after success and failure
+
+### PLA-0295 - Admin family creation relied on an optional trigger for owner access
+
+- Timestamp: 2026-07-15 10:24 America/New_York
+- Service: Super Admin user and family management
+- Route: `/admin/users`
+- Affected files: `app/(app)/admin/actions.ts`, `tests/admin-family-create-boundary.test.ts`
+- Role: Super Admin creating a family for an existing account
+- Scenario: the family insert succeeded while the `handle_new_family` trigger was missing, unapplied, or failed to create the owner membership/subscription
+- Severity: P1
+- Launch impact: the new owner could not see the family, and the admin console could report a successful family creation with incomplete tenant state
+- Root cause: `adminCreateFamilyAction` inserted only the family and trusted a non-authoritative trigger
+- Resolution: the action now checks owner lookup failures, explicitly upserts the parent membership, ensures a trial subscription, and rolls back the new family on required-write failure
+- Supabase impact: no schema change; existing trigger-created rows are reconciled idempotently
+- Tests run: `tests/admin-family-create-boundary.test.ts`, `tests/admin-document-delete-boundary.test.ts`, and `tests/admin-auth-boundary.test.ts` (6 tests), full 418-file/3,081-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract covers owner lookup, membership reconciliation, trial creation, and cleanup paths
+- Commit: `46a227b1`
+- Status: Resolved in code; live Super Admin family creation and rollback verification remain open
+- Remaining dependencies: run an isolated trigger-disabled family creation drill and verify owner visibility, subscription state, and rollback parity

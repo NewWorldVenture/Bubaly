@@ -1276,3 +1276,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `adminDeleteDocumentAction` now resolves `storage_path` from the database, returns a sanitized failure when storage removal fails, and confirms the database delete result before reporting success.
 - Source commit: `34a24ddd`; docs and source are published on `origin/main` at `a0b6900e`.
+
+## Latest Local Evidence - Admin Family Creation
+
+- `npm.cmd exec vitest run tests/admin-family-create-boundary.test.ts tests/admin-document-delete-boundary.test.ts tests/admin-auth-boundary.test.ts`: 3 files, 6 tests passed.
+- `npm.cmd test`: 418 files, 3,081 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `adminCreateFamilyAction` now checks owner lookup errors, explicitly upserts the parent membership, ensures a trial subscription when needed, and deletes the newly-created family if a required reconciliation write fails.
+- Source commit: `46a227b1`; docs update and remote push verification remain pending.

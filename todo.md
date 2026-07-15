@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:20:00 -04:00
+- Last updated: 2026-07-15 10:24:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `a0b6900e` (published main; source repair `34a24ddd`)
+- Commit: pending (admin family creation reconciliation increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0295 - Admin family creation relied on an optional trigger for owner access
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / tenant provisioning / admin
+- Feature: Super Admin user and family management
+- Route: `/admin/users`
+- File or files: `app/(app)/admin/actions.ts`, `tests/admin-family-create-boundary.test.ts`
+- Database objects: `families`, `family_members`, `subscriptions`
+- Affected roles: Super Admin; account owners receiving an operator-created family
+- Scenario: a family insert succeeds while the owner membership or trial subscription trigger is missing or fails
+- Launch impact: the owner can be unable to see the new family while the admin console reports success
+- Root cause: the action inserted only the family and assumed `handle_new_family` completed required state
+- Resolution: explicitly upsert the parent membership, ensure a trial subscription, surface owner lookup errors, and clean up the new family on required-write failure
+- Tests performed: `tests/admin-family-create-boundary.test.ts`, `tests/admin-document-delete-boundary.test.ts`, and `tests/admin-auth-boundary.test.ts` (6 tests); full 418-file/3,081-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contract covers trigger-independent membership/subscription reconciliation and rollback
+- Remaining dependencies: publish docs, run trigger-disabled family creation/rollback drill, and verify owner visibility in a live browser
 
 #### TODO-0294 - Admin document deletion could orphan private storage objects
 
