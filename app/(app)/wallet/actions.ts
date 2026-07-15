@@ -55,32 +55,39 @@ export async function activateFamilyWalletAction(): Promise<Result> {
   if (wErr) return actionFailure(wErr, 'Could not activate the Family Wallet.');
 
   // 2) record the disclosure acceptance (immutable audit)
-  await supabase.from('compliance_disclosures').insert({
+  const { error: disclosureError } = await supabase.from('compliance_disclosures').insert({
     family_id: familyId, kind: 'wallet_terms', version: WALLET_TERMS_VERSION, accepted_by: userId,
   });
+  if (disclosureError) return actionFailure(disclosureError, 'Could not record the wallet disclosure.');
 
   // 3) a child wallet + buckets + default rule for each child member
-  const { data: children } = await supabase
+  const { data: children, error: childrenError } = await supabase
     .from('family_members')
     .select('id, role')
     .eq('family_id', familyId).eq('is_active', true);
+  if (childrenError) return actionFailure(childrenError, 'Could not load family members for wallet setup.');
 
   for (const child of (children ?? []).filter((m) => !isManager(m.role))) {
-    const { data: cw } = await supabase
+    const { data: cw, error: childWalletError } = await supabase
       .from('child_wallets')
       .upsert({ family_id: familyId, member_id: child.id, is_active: true, created_by: userId }, { onConflict: 'family_id,member_id' })
       .select('id')
       .single();
-    if (!cw) continue;
+    if (childWalletError || !cw) {
+      return actionFailure(childWalletError ?? new Error('Child wallet setup returned no wallet.'), 'Could not provision a child wallet.');
+    }
 
-    await supabase.from('wallet_buckets').upsert(
+    const { error: bucketError } = await supabase.from('wallet_buckets').upsert(
       BUCKETS.map((b, i) => ({ family_id: familyId, child_wallet_id: cw.id, kind: b.kind, label: b.label, sort_order: i })),
       { onConflict: 'child_wallet_id,kind' },
     );
-    await supabase.from('wallet_rules').upsert(
+    if (bucketError) return actionFailure(bucketError, 'Could not provision wallet buckets.');
+
+    const { error: ruleError } = await supabase.from('wallet_rules').upsert(
       { family_id: familyId, child_wallet_id: cw.id, created_by: userId },
       { onConflict: 'family_id,child_wallet_id' },
     );
+    if (ruleError) return actionFailure(ruleError, 'Could not provision wallet rules.');
   }
 
   await supabase.from('wallet_audit_logs').insert({
@@ -684,10 +691,21 @@ export async function requestSpendAction(input: {
   if (!debit.ok) return { ok: false, error: debit.error };
 
   if (needsApproval) {
-    await supabase.from('parent_approvals').insert({
+    const { error: approvalError } = await supabase.from('parent_approvals').insert({
       family_id: familyId, kind: 'card_spend', ref_type: 'wallet_transactions', ref_id: debit.txnId ?? null,
       amount_cents: amount, status: 'pending', requested_by: ctx.user.id, note: description,
     });
+    if (approvalError) {
+      // A held debit without its approval row can never be resolved. Cancel the
+      // hold before returning the insert failure so it stays out of the ledger.
+      if (debit.txnId) {
+        const { error: rollbackError } = await supabase.from('wallet_transactions')
+          .update({ status: 'cancelled' })
+          .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval');
+        if (rollbackError) console.error('[wallet spend] approval rollback failed', rollbackError);
+      }
+      return actionFailure(approvalError, 'Could not create the spend approval request.');
+    }
     revalidatePath('/wallet');
     return { ok: true, pendingApproval: true };
   }

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:42:00 -04:00
+- Last updated: 2026-07-15 15:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes scheduled integration persistence failure boundaries; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes wallet provisioning and spend-approval failure boundaries; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0330 - Wallet money actions acknowledged incomplete required writes
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Wallet / money movement / persistence safety
+- Feature: Family Wallet activation and spend approval requests
+- Route: `activateFamilyWalletAction`, `requestSpendAction`
+- File or files: `app/(app)/wallet/actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Database objects: `compliance_disclosures`, `family_members`, `child_wallets`, `wallet_buckets`, `wallet_rules`, `wallet_transactions`, and `parent_approvals`
+- Affected roles: family managers provisioning wallets and household members requesting spend approval
+- Scenario: required provisioning writes were ignored, or a held debit remained without its required approval row after an insert failure
+- Launch impact: a wallet could appear active while incomplete, or a spend request could become permanently unresolved
+- Root cause: secondary Supabase errors were discarded and approval creation was not compensated after a held ledger write
+- Resolution: required activation reads/writes now fail closed; failed approval creation cancels the held debit before returning a sanitized failure
+- Tests performed: `tests/wallet-money-action-boundaries.test.ts` (5 focused tests); full Vitest; typecheck; lint; dependency audit; production build; diff check
+- Evidence: latest full gate passed with 455 files/3,195 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run live wallet activation, approval failure, concurrency, RLS, reconciliation, and browser drills
 
 #### TODO-0329 - Wallet hub deletion relied on dynamic ID-only targeting
 

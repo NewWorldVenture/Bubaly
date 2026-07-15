@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0330 - Wallet money actions acknowledged incomplete required writes
+
+- Timestamp: 2026-07-15 15:30 America/New_York
+- Service: Family Wallet provisioning and spend approvals
+- Route: `activateFamilyWalletAction`, `requestSpendAction`
+- Affected files: `app/(app)/wallet/actions.ts`, `tests/wallet-money-action-boundaries.test.ts`
+- Role: family manager provisioning a wallet, or household member requesting a spend approval
+- Scenario: disclosure, member, child-wallet, bucket, or rule writes could fail while activation still returned success; a held debit could remain without a parent-approval row after approval creation failed
+- Severity: P0
+- Launch impact: incomplete wallet setup or unresolved held money movement could create false financial state and support incidents
+- Root cause: required Supabase result errors were discarded and the multi-write spend-approval flow had no compensation path
+- Resolution: activation now checks every required read/write and fails closed; approval-row failure cancels the family-scoped held debit before returning a sanitized error
+- Supabase impact: no schema change; existing family predicates, RLS, and approval status transitions remain in force
+- Tests run: `tests/wallet-money-action-boundaries.test.ts` (5 focused tests); full Vitest; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: latest full gate passed with 455 test files, 3,195 tests, 0 production dependency vulnerabilities, and a 250-route build
+- Commit: pending publication
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated activation, approval-insert failure, concurrency, reconciliation, RLS, and browser drills against deployed Supabase
+
 ### PLA-0275 - Vacation AI persistence could leave partial itinerary state
 
 - Timestamp: 2026-07-14

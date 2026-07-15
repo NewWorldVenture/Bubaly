@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Wallet Provisioning and Approval Failure Boundaries
+
+- Focused wallet money boundary suite: 1 file, 5 tests passed.
+- Full `npm.cmd test`: 455 test files, 3,195 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `git diff --check`: passed.
+- Wallet activation now reports required disclosure, member, child-wallet, bucket, and rule write failures; spend requests cancel held debits when approval-row creation fails.
+- Live wallet RLS, role, concurrency, reconciliation, and browser evidence remain open.
+
 ## Latest Local Evidence - Wallet Hub Tenant-Scoped Deletion
 
 - Focused wallet/tenant suites: 4 files, 22 tests passed.
