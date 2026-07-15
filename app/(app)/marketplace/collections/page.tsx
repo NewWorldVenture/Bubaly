@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FolderHeart, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, FolderHeart, ArrowLeft } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -14,19 +15,29 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { id } = await searchParams;
+  const dataWarnings: string[] = [];
 
-  const { data: collections } = await sb
+  const { data: collections, error: collectionsError } = await sb
     .from('marketplace_collections')
     .select('id, name, emoji, description')
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: true })
     .limit(50);
 
-  const { data: items } = await sb
+  if (collectionsError) {
+    console.error('[marketplace-collections] Collections read failed', collectionsError);
+    return <ErrorState message="Could not load your marketplace collections. Refresh and try again." />;
+  }
+
+  const { data: items, error: itemsError } = await sb
     .from('marketplace_collection_items')
     .select('collection_id, listing_id')
     .eq('family_id', ctx.active.familyId)
     .limit(2000);
+  if (itemsError) {
+    console.error('[marketplace-collections] Collection items read failed', itemsError);
+    dataWarnings.push('Collection items');
+  }
 
   const countOf = new Map<string, number>();
   for (const it of items ?? []) countOf.set(it.collection_id, (countOf.get(it.collection_id) ?? 0) + 1);
@@ -35,15 +46,25 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   if (open) {
     const ids = (items ?? []).filter((i) => i.collection_id === open.id).map((i) => i.listing_id);
-    const { data: listings } = ids.length
+    const { data: listings, error: listingsError } = ids.length
       ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period, photo_url').in('id', ids).limit(200)
-      : { data: [] };
+      : { data: [], error: null };
+    if (listingsError) {
+      console.error('[marketplace-collections] Collection listings read failed', listingsError);
+      dataWarnings.push('Collection listings');
+    }
     return (
       <div>
         <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand-text">
           <ArrowLeft className="h-3 w-3" /> All collections
         </Link>
         <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
+        {dataWarnings.length > 0 && (
+          <div role="status" aria-label="Marketplace collections data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <p>Some collection details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          </div>
+        )}
         {(listings ?? []).length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">Nothing in this collection yet.</div>
         ) : (
@@ -78,6 +99,12 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
   return (
     <div>
       <PageHeader title="Collections" description="Curated sets from the family board — dresses for the wedding, camping season, baby gear." />
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Marketplace collections data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some collection details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
       {(collections ?? []).length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <FolderHeart className="mx-auto mb-2 h-6 w-6" />

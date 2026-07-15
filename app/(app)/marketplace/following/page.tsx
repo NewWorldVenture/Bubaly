@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { UserCheck, Sparkles } from 'lucide-react';
+import { AlertTriangle, UserCheck, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { buildFollowingFeed, newFromFollowingCount, type FeedListing, type StoreRow } from '@/lib/marketplace/following';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Following · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -16,23 +17,41 @@ export default async function MarketplaceFollowingPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const meId = ctx.active.member.id;
+  const dataWarnings: string[] = [];
 
-  const [{ data: follows }, { data: saves }] = await Promise.all([
+  const [{ data: follows, error: followsError }, { data: saves, error: savesError }] = await Promise.all([
     sb.from('marketplace_follows').select('store_id').eq('family_id', familyId).eq('member_id', meId),
     sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).eq('member_id', meId),
   ]);
 
+  if (followsError) {
+    console.error('[marketplace-following] Follows read failed', followsError);
+    return <ErrorState message="Could not load the creators you follow. Refresh and try again." />;
+  }
+  if (savesError) {
+    console.error('[marketplace-following] Saved listings read failed', savesError);
+    dataWarnings.push('Saved listings');
+  }
+
   const storeIds = (follows ?? []).map((f) => f.store_id);
-  const { data: stores } = storeIds.length
+  const { data: stores, error: storesError } = storeIds.length
     ? await sb.from('marketplace_stores').select('id, member_id, name, emoji, is_active').in('id', storeIds)
-    : { data: [] as StoreRow[] };
+    : { data: [] as StoreRow[], error: null };
+  if (storesError) {
+    console.error('[marketplace-following] Stores read failed', storesError);
+    dataWarnings.push('Stores');
+  }
 
   const memberIds = [...new Set((stores ?? []).map((s) => s.member_id))];
-  const { data: listings } = memberIds.length
+  const { data: listings, error: listingsError } = memberIds.length
     ? await sb.from('marketplace_listings')
         .select('id, member_id, title, kind, price_cents, rent_period, status, created_at')
         .eq('family_id', familyId).in('member_id', memberIds).order('created_at', { ascending: false }).limit(200)
-    : { data: [] as FeedListing[] };
+    : { data: [] as FeedListing[], error: null };
+  if (listingsError) {
+    console.error('[marketplace-following] Listings read failed', listingsError);
+    dataWarnings.push('Listings');
+  }
 
   const feed = buildFollowingFeed((follows ?? []), (stores ?? []) as StoreRow[], (listings ?? []) as FeedListing[]);
   const newCount = newFromFollowingCount(feed);
@@ -44,6 +63,13 @@ export default async function MarketplaceFollowingPage() {
         title="Following"
         description="The latest from the creators you follow — all in one feed."
       />
+
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Marketplace following data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some following details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
 
       {storeIds.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">

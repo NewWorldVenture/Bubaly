@@ -1515,3 +1515,15 @@ Audit date: 2026-07-15
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime warning remains when emitted.
 - Source commit: `dcbe9588`; branch publication verified; remote `main` merge is `ed314223` pending final push.
+
+## Latest Local Evidence - Marketplace Following and Collections Read Failures
+
+- Focused Following and Collections read-boundary suites: 2 files, 4 tests passed.
+- Full `npm.cmd test`: 447 files, 3,157 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `git diff --check`: passed.
+- Following now distinguishes a failed follow read from an empty feed and surfaces saved, store, and listing failures; Collections does the same for collections, items, and collection listings in directory and detail views.
+- Source commit: pending publication.

@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:11:00 -04:00
+- Last updated: 2026-07-15 13:16:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -24,6 +24,42 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0316 - Marketplace Collections hid collection and item failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace / discovery integrity
+- Feature: Marketplace collection directory and collection detail views
+- Route: `/marketplace/collections`
+- File or files: `app/(app)/marketplace/collections/page.tsx`, `tests/marketplace-collections-read-boundary.test.ts`
+- Database objects: `marketplace_collections`, `marketplace_collection_items`, and `marketplace_listings`
+- Affected roles: authenticated household members and Super Admin marketplace operators
+- Scenario: collection, item, or collection-listing reads failed while the page rendered an empty collection or incomplete detail view
+- Launch impact: users could lose curated marketplace context or trust an incomplete collection as authoritative
+- Root cause: Supabase result errors were discarded and failed reads became empty arrays
+- Resolution: collection failures now render a retryable error state; item and listing failures are logged and surfaced in accessible collection data-health warnings in both views
+- Tests performed: `tests/marketplace-collections-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit pending publication; live collection/RLS/role/browser workflow evidence remains open
+- Remaining dependencies: run isolated collection create/update/delete, item membership, listing visibility, and family-isolation drills against deployed Supabase
+
+#### TODO-0315 - Marketplace Following hid feed and saved-state failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / marketplace / discovery integrity
+- Feature: Marketplace followed-creator feed and saved-listing state
+- Route: `/marketplace/following`
+- File or files: `app/(app)/marketplace/following/page.tsx`, `tests/marketplace-following-read-boundary.test.ts`
+- Database objects: `marketplace_follows`, `marketplace_saves`, `marketplace_stores`, and `marketplace_listings`
+- Affected roles: authenticated household members and Super Admin marketplace operators
+- Scenario: follow, save, store, or listing reads failed while the page displayed an empty followed feed or incomplete saved controls
+- Launch impact: users could miss creator updates and trust a false empty feed
+- Root cause: independent Supabase result errors were discarded and all failures became empty arrays
+- Resolution: follow failures now render a retryable error state; save, store, and listing failures are logged and surfaced in an accessible Marketplace following data-health warning
+- Tests performed: `tests/marketplace-following-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: source commit pending publication; live following/RLS/role/browser workflow evidence remains open
+- Remaining dependencies: run isolated follow/unfollow, feed refresh, save-state, listing visibility, and family-isolation drills against deployed Supabase
 
 #### TODO-0314 - Marketplace Creators hid storefront and trust-data failures
 

@@ -746,6 +746,42 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: execute isolated buyer/seller/manager listing, bid, offer, negotiation, and dispute drills against deployed Supabase
 
+### PLA-0316 - Marketplace Collections hid collection and item failures
+
+- Timestamp: 2026-07-15 13:16 America/New_York
+- Service: Marketplace collections and curated listing detail
+- Route: `/marketplace/collections`
+- Affected files: `app/(app)/marketplace/collections/page.tsx`, `tests/marketplace-collections-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: collection, item, or collection-listing reads failed while the page displayed an empty or incomplete collection view
+- Severity: P1
+- Launch impact: users could lose curated context or act on incomplete collection detail
+- Root cause: Supabase read errors were discarded and failed reads became empty arrays
+- Resolution: collection failure now renders a retryable ErrorState; item and listing failures are logged and shown in accessible warnings in both directory and detail views
+- Supabase impact: no schema change; reads remain scoped to the active family and listing permissions
+- Tests run: `tests/marketplace-collections-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source repair pending publication; build generated 250 routes; live collection/RLS, role, browser, and family-isolation evidence remain open
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated collection CRUD, item membership, listing visibility, and family-isolation drills against deployed Supabase
+
+### PLA-0315 - Marketplace Following hid feed and saved-state failures
+
+- Timestamp: 2026-07-15 13:16 America/New_York
+- Service: Marketplace followed-creator feed and saved-listing state
+- Route: `/marketplace/following`
+- Affected files: `app/(app)/marketplace/following/page.tsx`, `tests/marketplace-following-read-boundary.test.ts`
+- Role: authenticated household member and Super Admin marketplace operator
+- Scenario: follow, save, store, or listing reads failed while the page displayed an empty or incomplete followed feed
+- Severity: P1
+- Launch impact: users could miss creator updates or trust a false empty feed
+- Root cause: independent Supabase errors were discarded and failures became empty arrays
+- Resolution: follow failure now renders a retryable ErrorState; save, store, and listing failures are logged and shown in an accessible warning
+- Supabase impact: no schema change; feed and saved reads remain family/member scoped
+- Tests run: `tests/marketplace-following-read-boundary.test.ts` (2 focused tests); full 447-file/3,157-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: source repair pending publication; build generated 250 routes; live following/RLS, role, browser, and family-isolation evidence remain open
+- Status: Resolved in code; live workflow evidence remains open
+- Remaining dependencies: execute isolated follow/unfollow, feed refresh, save-state, and family-isolation drills against deployed Supabase
+
 ### PLA-0314 - Marketplace Creators hid storefront and trust-data failures
 
 - Timestamp: 2026-07-15 13:08 America/New_York
