@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:14:17 -04:00
+- Last updated: 2026-07-15 09:23:38 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `6bd8758f` (Connections increment)
+- Commit: pending publication (Admin digest increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -129,6 +129,26 @@
 - Resolution: added explicit live sync-provider metadata, routed implemented providers to `/dashboard/sync/accounts/*`, removed label-only upsert/modal behavior, and made unsupported providers visibly unavailable
 - Verified by: Codex local validation; 410-file/3,048-test suite, lint, typecheck, dependency audit, migration audit, diff check, and 250-route production build pass
 - Remaining dependencies: implement and expose Gmail, banking, grocery, and smart-home provider flows before advertising them as connectable
+
+#### TODO-0287 - Admin digest cron hid feed and delivery failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Notifications / cron / observability
+- Feature: Daily Super Admin digest
+- Route: `/api/cron/admin-digest`
+- File or files: `app/api/cron/admin-digest/route.ts`, `lib/admin/digest.ts`, `tests/admin-digest.test.ts`
+- Database objects: `admin_notifications`, `super_admins`
+- Affected roles: Super Admin recipients and operations owners
+- Scenario: the notification feed query fails, Resend is disabled, or one recipient delivery fails
+- Launch impact: a cron run could report a quiet day when the feed was unavailable, count skipped emails as sent, or return success after partial delivery failure
+- Root cause: the route ignored the Supabase query error and reduced `sendEmail` results to a boolean success count
+- Required remediation: fail closed on feed errors and return explicit sent/skipped/failed counts with a non-2xx status on recipient failure
+- Supabase impact: no schema change; read failures now remain visible to cron monitoring
+- Tests performed: `tests/admin-digest.test.ts`, `tests/cron-auth.test.ts`, and `tests/admin-notification-boundary.test.ts` (20 tests); typecheck; lint; diff check
+- Resolution: added feed-error handling, delivery summarization, skipped-provider accounting, and 502 responses for partial delivery failures
+- Verified by: Codex local validation; 411-file/3,061-test suite, lint, typecheck, dependency audit, migration audit, diff check, and 250-route production build pass
+- Remaining dependencies: live cron invocation, Resend sandbox delivery, alert routing, and remote deployment verification
 
 ## Current Coverage Matrices
 

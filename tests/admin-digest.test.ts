@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
-  buildAdminDigest, buildHeadline, digestSubject, renderAdminDigestHtml,
+  buildAdminDigest, buildHeadline, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery,
 } from '@/lib/admin/digest';
 
 const row = (kind: string, title = 't') => ({ kind, title, created_at: '2026-07-15T00:00:00Z' });
+const routeSource = readFileSync('app/api/cron/admin-digest/route.ts', 'utf8');
 
 describe('buildAdminDigest', () => {
   it('is empty for no rows', () => {
@@ -65,5 +67,30 @@ describe('digestSubject + renderAdminDigestHtml', () => {
     expect(html).toContain('https://www.bubaly.com/admin/notifications');
     expect(html).toContain('&lt;b&gt;bug&lt;/b&gt; &amp; more');
     expect(html).not.toContain('<b>bug</b>');
+  });
+});
+
+describe('summarizeDigestDelivery', () => {
+  it('does not count skipped email delivery as sent', () => {
+    expect(summarizeDigestDelivery([{ ok: true, skipped: true }]))
+      .toEqual({ ok: true, sent: 0, skipped: 1, failed: 0 });
+  });
+
+  it('marks partial provider failures as unsuccessful while preserving counts', () => {
+    expect(summarizeDigestDelivery([{ ok: true }, { ok: false }, { ok: true, skipped: true }]))
+      .toEqual({ ok: false, sent: 1, skipped: 1, failed: 1 });
+  });
+});
+
+describe('admin digest route failure boundary', () => {
+  it('fails closed when the Supabase notification feed read fails', () => {
+    expect(routeSource).toContain('feedError');
+    expect(routeSource).toContain("Notification feed unavailable.");
+    expect(routeSource).toContain('{ status: 502 }');
+  });
+
+  it('uses the delivery summary instead of counting boolean success blindly', () => {
+    expect(routeSource).toContain('summarizeDigestDelivery');
+    expect(routeSource).toContain('summary.ok ? 200 : 502');
   });
 });

@@ -292,3 +292,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `6bd8758f`
 - Status: Resolved in code; full third-party integration audit remains open
 - Remaining dependencies: push verification and real Gmail, banking, grocery, and smart-home provider implementations
+
+### PLA-0287 - Admin digest cron hid feed and delivery failures
+
+- Timestamp: 2026-07-15 09:18 America/New_York
+- Service: Notifications, cron, and operational observability
+- Route: `/api/cron/admin-digest`
+- Affected files: `app/api/cron/admin-digest/route.ts`, `lib/admin/digest.ts`, `tests/admin-digest.test.ts`
+- Role: Super Admin recipients; operations owner
+- Scenario: the `admin_notifications` query fails, Resend is disabled, or one recipient delivery fails
+- Severity: P1
+- Launch impact: the daily digest could claim a quiet day for an unavailable feed, count skipped email as delivered, or return HTTP 200 after partial failure
+- Root cause: the route ignored the Supabase read error and counted only boolean success rather than the email provider's `{ ok, skipped }` result
+- Resolution: fail closed with a sanitized 502 on feed errors; summarize sent/skipped/failed delivery; return 502 when any recipient fails
+- Supabase impact: no schema change; operational read failures are now visible to cron monitoring
+- Tests run: `tests/admin-digest.test.ts`, `tests/cron-auth.test.ts`, and `tests/admin-notification-boundary.test.ts` (20 tests), full 411-file/3,061-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: delivery summary tests cover disabled email and partial failure; static route contracts cover feed-error 502 and non-2xx delivery handling; 250-route build passes
+- Commit: pending publication
+- Status: Resolved in code; live cron/provider delivery remains open
+- Remaining dependencies: Resend sandbox delivery, alert routing, scheduled invocation, and remote deployment verification

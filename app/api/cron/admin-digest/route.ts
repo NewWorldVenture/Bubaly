@@ -4,7 +4,7 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { allSuperAdminEmails } from '@/lib/feedback/notify';
 import { sendEmail } from '@/lib/server/email';
 import {
-  buildAdminDigest, digestSubject, renderAdminDigestHtml, type DigestRow,
+  buildAdminDigest, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery, type DigestRow,
 } from '@/lib/admin/digest';
 
 export const runtime = 'nodejs';
@@ -23,12 +23,17 @@ export async function GET(req: NextRequest) {
   const admin = createServiceClient();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  const { data } = await admin
+  const { data, error: feedError } = await admin
     .from('admin_notifications')
     .select('kind, title, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(500);
+
+  if (feedError) {
+    console.error('[admin-digest] notification feed read failed', feedError);
+    return NextResponse.json({ ok: false, error: 'Notification feed unavailable.' }, { status: 502 });
+  }
 
   const rows = (data ?? []) as DigestRow[];
   const digest = buildAdminDigest(rows);
@@ -48,10 +53,15 @@ export async function GET(req: NextRequest) {
   const html = renderAdminDigestHtml(digest, { appUrl, dateLabel, recent: rows });
   const subject = digestSubject(digest, dateLabel);
 
-  const results = await Promise.all(
-    emails.map((to) => sendEmail({ to, subject, html }).then((r) => r.ok).catch(() => false)),
+  const delivery = await Promise.all(
+    emails.map((to) => sendEmail({ to, subject, html }).catch(() => ({ ok: false }))),
   );
-  const sent = results.filter(Boolean).length;
+  const summary = summarizeDigestDelivery(delivery);
 
-  return NextResponse.json({ ok: true, sent, recipients: emails.length, total: digest.total, headline: digest.headline });
+  return NextResponse.json({
+    ...summary,
+    recipients: emails.length,
+    total: digest.total,
+    headline: digest.headline,
+  }, { status: summary.ok ? 200 : 502 });
 }

@@ -16,6 +16,16 @@ export type AdminDigest = {
   headline: string;
 };
 
+export type DigestDeliveryResult = { ok: boolean; skipped?: boolean };
+
+/** Summarize email delivery without counting a disabled provider as delivered. */
+export function summarizeDigestDelivery(results: readonly DigestDeliveryResult[]) {
+  const sent = results.filter((r) => r.ok && !r.skipped).length;
+  const skipped = results.filter((r) => r.ok && r.skipped).length;
+  const failed = results.filter((r) => !r.ok).length;
+  return { ok: failed === 0, sent, skipped, failed };
+}
+
 // Growth-first ordering: the numbers a founder cares about most come first.
 const KIND_ORDER = [
   'subscription', 'family_signup', 'feedback_new', 'support_ticket',

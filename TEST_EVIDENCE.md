@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Admin digest failure visibility
+
+- `npm.cmd run test -- tests/admin-digest.test.ts tests/cron-auth.test.ts tests/admin-notification-boundary.test.ts`: 3 files, 20 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- The digest route now returns a sanitized 502 when the `admin_notifications` feed cannot be read.
+- Delivery summaries distinguish sent, skipped, and failed recipients; disabled Resend is no longer counted as sent, and partial failures return 502.
+- Full suite: 411 files, 3,061 tests passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- Publication remains pending for this increment.
+
 ## Latest Audit Update - Connections false-success prevention
 
 - `npm.cmd run test -- tests/connections-providers.test.ts tests/connections-adapter.test.ts tests/connections-ui-boundary.test.ts`: 3 files, 23 tests passed.

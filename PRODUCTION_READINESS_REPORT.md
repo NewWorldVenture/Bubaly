@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 3,048 unit tests, builds all 250 static Next.js
+tree compiles, passes lint and type checking, passes 3,061 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -52,6 +52,10 @@ alert-routing, and browser workflow verification remain open.
 Latest repair increment (2026-07-15): the Connections hub no longer treats a typed account label as a
 live integration. Implemented Google, Microsoft, and Apple providers route through their real OAuth/sync
 surfaces; unsupported directory entries are visibly unavailable until their provider flows exist.
+
+Latest repair increment (2026-07-15): the daily Super Admin digest now fails closed when its notification
+feed is unavailable and distinguishes delivered, skipped, and failed recipients. Partial delivery returns
+an observable failure instead of a false success.
 
 Latest repair increment (2026-07-15): onboarding finalization now derives authenticated deterministic
 submission/item keys and uses database-enforced keyed upserts for managed members, invites, imported
