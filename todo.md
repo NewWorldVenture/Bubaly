@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:54:00 -04:00
+- Last updated: 2026-07-15 11:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `8b712349` (published main; source repair `ecfb4f95`)
+- Commit: `c0bd9ffa` (published main; source repair `c0bd9ffa`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0301 - Admin billing and notifications hid read failures as empty views
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin billing and notification center
+- Route: `/admin/billing`, `/admin/notifications`
+- File or files: `app/(app)/admin/billing/page.tsx`, `app/(app)/admin/notifications/page.tsx`, `tests/admin-billing-notifications-read-boundary.test.ts`
+- Database objects: `subscriptions`, `billing_customers`, `families`, `admin_notifications`
+- Affected roles: Super Admin
+- Scenario: a billing or alert-feed read fails
+- Launch impact: an operator can mistake missing revenue state or alerts for an empty healthy view
+- Root cause: Supabase read errors were discarded during page loading
+- Resolution: preserve read errors, log the boundary, and render refreshable error states before computing or displaying data
+- Tests performed: `tests/admin-billing-notifications-read-boundary.test.ts` (2 focused tests); full 424-file/3,094-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover billing subscription/customer/family reads, notification history, and visible error-state paths
+- Remaining dependencies: publish docs and run isolated billing/notification read-failure/browser drills
 
 #### TODO-0300 - Admin operational pages hid usage read failures as zero metrics
 

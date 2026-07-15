@@ -558,3 +558,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `ecfb4f95`; merged remote work is preserved in `4accc171`
 - Status: Resolved in code; live operational outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated usage-read failure drills and verify the operator can distinguish unavailable metrics from zero metrics
+
+### PLA-0301 - Admin billing and notifications hid read failures as empty views
+
+- Timestamp: 2026-07-15 11:00 America/New_York
+- Service: Super Admin billing and notification center
+- Routes: `/admin/billing`, `/admin/notifications`
+- Affected files: `app/(app)/admin/billing/page.tsx`, `app/(app)/admin/notifications/page.tsx`, `tests/admin-billing-notifications-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: subscription, billing-customer, family, or admin-notification queries failed while the page substituted empty arrays or zero counts
+- Severity: P1
+- Launch impact: operators could miss revenue state or operational alerts during a Supabase read outage
+- Root cause: billing and notification read errors were discarded during page loading
+- Resolution: both pages now preserve read errors, log the boundary, and render refreshable error states before computing metrics or digest summaries
+- Supabase impact: no schema change; billing and alert-feed read failures are explicit and non-destructive
+- Tests run: `tests/admin-billing-notifications-read-boundary.test.ts` (2 focused tests), full 424-file/3,094-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify all three billing reads, the notification feed read, and visible retry states
+- Commit: `c0bd9ffa`
+- Status: Resolved in code; live billing/notification outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated billing and notification read-failure drills and verify no empty view is presented as authoritative

@@ -1349,3 +1349,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/admin/system` and `/admin/backup` now render refreshable error states when privileged usage/count reads fail instead of reporting zero metrics.
 - Source commit: `ecfb4f95`; merged remote work and source are published on `origin/main` at `8b712349`.
+
+## Latest Local Evidence - Admin Billing and Notification Read Failure
+
+- `npm.cmd exec vitest run tests/admin-billing-notifications-read-boundary.test.ts`: 1 file, 2 focused tests passed.
+- `npm.cmd test`: 424 files, 3,094 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `/admin/billing` and `/admin/notifications` now render refreshable error states when their Supabase reads fail instead of reporting empty or zero-valued data.
+- Source commit: `c0bd9ffa`; docs publication commit is pending.
