@@ -11,11 +11,15 @@ export async function POST(req: NextRequest) {
     const supabase = await createServer();
     const stripe = getStripe();
 
-    const { data } = await supabase
+    const { data, error: billingCustomerError } = await supabase
       .from('billing_customers')
       .select('customer_ref')
       .eq('family_id', familyId)
       .maybeSingle();
+    if (billingCustomerError) {
+      console.error('[billing-portal] Billing customer read failed', billingCustomerError);
+      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+    }
 
     if (!data?.customer_ref) {
       return NextResponse.json({ error: 'No billing account found' }, { status: 404 });

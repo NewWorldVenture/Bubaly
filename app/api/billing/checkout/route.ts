@@ -41,11 +41,15 @@ export async function POST(req: NextRequest) {
     );
 
     // Get or create Stripe customer
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('billing_customers')
       .select('customer_ref')
       .eq('family_id', familyId)
       .maybeSingle();
+    if (existingError) {
+      console.error('[billing-checkout] Billing customer read failed', existingError);
+      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+    }
 
     let customerId = existing?.customer_ref ?? null;
 
@@ -57,11 +61,15 @@ export async function POST(req: NextRequest) {
       });
       customerId = customer.id;
 
-      await supabase.from('billing_customers').upsert({
+      const { error: customerWriteError } = await supabase.from('billing_customers').upsert({
         family_id: familyId,
         provider: 'stripe',
         customer_ref: customerId,
       });
+      if (customerWriteError) {
+        console.error('[billing-checkout] Billing customer write failed', customerWriteError);
+        return NextResponse.json({ error: 'Could not save the billing account. Please try again.' }, { status: 503 });
+      }
     }
 
     // PAY-5: build success/cancel URLs from the trusted configured base, not the
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
     // Record the open checkout so the abandoned-checkout cron can follow up if
     // it's never completed. Best-effort: never block returning the checkout URL.
     try {
-      await createServiceClient().from('checkout_sessions').insert({
+      const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
         session_id: session.id,
         family_id: familyId,
         email: ctx.user.email ?? null,
@@ -97,8 +105,9 @@ export async function POST(req: NextRequest) {
         plan,
         status: 'pending',
       });
-    } catch {
-      /* non-fatal */
+      if (trackingError) console.error('[billing-checkout] Checkout tracking write failed', trackingError);
+    } catch (error) {
+      console.error('[billing-checkout] Checkout tracking write failed', error);
     }
 
     return NextResponse.json({ url: session.url });

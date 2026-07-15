@@ -872,3 +872,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: source commit `57e973d3`; build generated 250 routes; live cross-family RLS, role, browser, and invite/share workflow evidence remain open
 - Status: Resolved in code; live deployment and workflow evidence remain open
 - Remaining dependencies: run isolated circle create/join/leave/share/unshare drills across multiple families with live migration 0173/0176 policies
+### PLA-0318 - Billing mutations ignored required Supabase state failures
+
+- Timestamp: 2026-07-15 13:42 America/New_York
+- Service: Authenticated Stripe billing and portal operations
+- Routes: `/api/billing/checkout`, `/api/billing/change-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
+- Role: authenticated family manager or billing administrator
+- Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
+- Severity: P0
+- Launch impact: billing state could diverge from Stripe or return an unsafe success response during a Supabase outage
+- Root cause: Supabase result errors were discarded around precondition reads and secondary billing persistence writes
+- Resolution: required reads now fail closed before Stripe mutation or portal creation; customer write failures return 503; checkout tracking and optimistic subscription-sync failures are logged explicitly
+- Supabase impact: no schema change; existing billing and checkout tables remain the source of truth
+- Tests run: `tests/billing-read-boundary.test.ts` (2 focused tests); full 449-file/3,161-test suite; typecheck; lint; dependency audit; production build; diff check
+- Validation evidence: focused read-boundary contracts and full local gate pass; live Stripe test-mode, webhook/idempotency, outage, refund, and remote Supabase evidence remain open
+- Status: Resolved in code; live billing workflow evidence remains open
+- Remaining dependencies: execute non-destructive checkout, plan-change, cancellation, portal, webhook replay, and refund drills against the configured test environment

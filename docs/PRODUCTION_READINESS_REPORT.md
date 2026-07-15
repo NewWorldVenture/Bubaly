@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 13:24 America/New_York
+Audit snapshot: 2026-07-15 13:42 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 448 Vitest files and 3,159 tests pass in the latest full local gate.
+- 449 Vitest files and 3,161 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -111,6 +111,10 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   surface dependent ledger, bucket, goal, rule, child-wallet, and member failures before showing derived balances.
 - Wallet Goals, Allowance, and Cards now apply the same boundary, including connected-account sync/status and
   issued-card failures before exposing financial controls.
+- Authenticated billing checkout, plan changes, cancellation, and portal creation now fail closed when required
+  billing state reads fail; billing-customer writes and checkout tracking/synchronization failures are logged and
+  surfaced without presenting a successful billing state. Focused boundary coverage is green; live Stripe and
+  Supabase failure drills remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

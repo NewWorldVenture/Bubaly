@@ -50,11 +50,15 @@ export async function POST(req: NextRequest) {
     );
     const stripe = getStripe();
 
-    const { data: sub } = await supabase
+    const { data: sub, error: subError } = await supabase
       .from('subscriptions')
       .select('plan, status, provider_ref')
       .eq('family_id', familyId)
       .maybeSingle();
+    if (subError) {
+      console.error('[billing-change-plan] Subscription read failed', subError);
+      return NextResponse.json({ error: 'Subscription status is temporarily unavailable.' }, { status: 503 });
+    }
 
     // No-op guard: already on exactly this plan + interval.
     if (slugToStripePlan(sub?.plan) === plan && !(sub && (sub as { cancel_at_period_end?: boolean }).cancel_at_period_end)) {
@@ -75,20 +79,25 @@ export async function POST(req: NextRequest) {
       });
 
       // Optimistic local sync; the customer.subscription.updated webhook confirms.
-      await createServiceClient()
+      const { error: syncError } = await createServiceClient()
         .from('subscriptions')
         .update({ cancel_at_period_end: false })
         .eq('family_id', familyId);
+      if (syncError) console.error('[billing-change-plan] Subscription sync write failed', syncError);
 
       return NextResponse.json({ ok: true, changed: true, mode: 'updated' });
     }
 
     // No live subscription (Free / canceled) → start Checkout.
-    const { data: bc } = await supabase
+    const { data: bc, error: billingCustomerError } = await supabase
       .from('billing_customers')
       .select('customer_ref')
       .eq('family_id', familyId)
       .maybeSingle();
+    if (billingCustomerError) {
+      console.error('[billing-change-plan] Billing customer read failed', billingCustomerError);
+      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+    }
 
     let customerId = bc?.customer_ref ?? null;
     if (!customerId) {
@@ -98,7 +107,11 @@ export async function POST(req: NextRequest) {
         metadata: { family_id: familyId, user_id: ctx.user.id },
       });
       customerId = customer.id;
-      await supabase.from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
+      const { error: customerWriteError } = await supabase.from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
+      if (customerWriteError) {
+        console.error('[billing-change-plan] Billing customer write failed', customerWriteError);
+        return NextResponse.json({ error: 'Could not save the billing account. Please try again.' }, { status: 503 });
+      }
     }
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
@@ -116,11 +129,12 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      await createServiceClient().from('checkout_sessions').insert({
+      const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
         session_id: session.id, family_id: familyId, email: ctx.user.email ?? null,
         name: ctx.active.family.name ?? null, plan, status: 'pending',
       });
-    } catch { /* non-fatal */ }
+      if (trackingError) console.error('[billing-change-plan] Checkout tracking write failed', trackingError);
+    } catch (error) { console.error('[billing-change-plan] Checkout tracking write failed', error); }
 
     return NextResponse.json({ ok: true, changed: false, mode: 'checkout', url: session.url });
   } catch (err) {

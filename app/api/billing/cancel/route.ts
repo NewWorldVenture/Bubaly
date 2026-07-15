@@ -33,11 +33,15 @@ export async function POST(req: NextRequest) {
     const { resume } = (body.value && typeof body.value === 'object' ? body.value : {}) as { resume?: boolean };
 
     const supabase = await createServer();
-    const { data: sub } = await supabase
+    const { data: sub, error: subError } = await supabase
       .from('subscriptions')
       .select('provider_ref, status')
       .eq('family_id', familyId)
       .maybeSingle();
+    if (subError) {
+      console.error('[billing-cancel] Subscription read failed', subError);
+      return NextResponse.json({ error: 'Subscription status is temporarily unavailable.' }, { status: 503 });
+    }
 
     if (!sub?.provider_ref) {
       return NextResponse.json({ error: 'No active subscription to change.' }, { status: 404 });
@@ -51,10 +55,11 @@ export async function POST(req: NextRequest) {
     );
     await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
 
-    await createServiceClient()
+    const { error: syncError } = await createServiceClient()
       .from('subscriptions')
       .update({ cancel_at_period_end: cancelAtPeriodEnd })
       .eq('family_id', familyId);
+    if (syncError) console.error('[billing-cancel] Subscription sync write failed', syncError);
 
     return NextResponse.json({ ok: true, cancel_at_period_end: cancelAtPeriodEnd });
   } catch (err) {

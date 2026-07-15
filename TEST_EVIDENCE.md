@@ -1552,3 +1552,14 @@ Audit date: 2026-07-15
 - Deployment status: source publication follows this snapshot; live Auth Admin HTTP 500 and local Docker/Supabase unavailability remain open blockers.
 - Latest verified commit: `24467c76` before the wallet source increment.
 - Next: publish the wallet increment, then continue the remaining wallet routes and money/webhook/cron integration audit.
+## Latest Local Evidence - Billing State Read Boundaries
+
+- Focused billing read-boundary suite: 1 file, 2 tests passed.
+- Full `npm.cmd test -- --run`: 449 files, 3,161 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing Supabase Edge-runtime compatibility warning remains when emitted.
+- `git diff --check`: passed.
+- Checkout, change-plan, cancel, and portal now fail closed on required billing state-read errors; billing-customer write failures return 503 and tracking/optimistic-sync failures are logged.
+- Source changes are currently uncommitted pending publication; live Stripe test-mode, webhook/idempotency, outage, refund, and remote Supabase evidence remain open.

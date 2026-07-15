@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:30:00 -04:00
+- Last updated: 2026-07-15 13:42:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
+- Commit: latest published source repair `b8e085d0` for wallet read boundaries; billing state-boundary repair is currently being verified
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0318 - Billing mutations proceeded through unavailable Supabase state
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Reliability / billing / payment state integrity
+- Feature: Authenticated Stripe checkout, plan changes, cancellation, and billing portal
+- Route: `/api/billing/checkout`, `/api/billing/change-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- File or files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
+- Database objects: `billing_customers`, `subscriptions`, and `checkout_sessions`
+- Affected roles: authenticated family managers and billing administrators
+- Scenario: a required billing customer or subscription read failed, but a route could continue toward a Stripe mutation or portal creation as if no billing state existed; customer writes, tracking writes, and optimistic sync failures were also not visible enough to operators
+- Launch impact: billing state could diverge from Stripe or an operator could receive a false-success response during a database outage
+- Root cause: Supabase result errors were discarded at required precondition reads and secondary persistence writes
+- Resolution: checkout, change-plan, and cancel now stop before Stripe mutation when required reads fail; portal creation stops when the billing customer read fails; customer persistence failures return 503; tracking and optimistic-sync failures are logged explicitly
+- Tests performed: `tests/billing-read-boundary.test.ts` (2 focused tests); full 449-file/3,161-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused boundary tests and local production gate pass; live Stripe webhook, idempotency, outage, refund, and remote Supabase evidence remain open
+- Remaining dependencies: run non-destructive Stripe test-mode checkout/plan/cancel/portal drills and verify remote migration/RLS state before marking resolved
 
 #### TODO-0317 - Wallet pages hid wallet and ledger read failures as inactive or zero data
 
