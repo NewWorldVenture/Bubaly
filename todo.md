@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 11:04:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `9f4c6fa9` (published main; source repair `9f4c6fa9`)
+- Commit: `c4c6da16` (published main; source repair `9f4c6fa9`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -41,7 +41,7 @@
 - Resolution: preserve read errors, log the boundary, and render refreshable error states before displaying queue or integration status
 - Tests performed: `tests/admin-feedback-integrations-read-boundary.test.ts` (2 focused tests); full 425-file/3,096-test suite; typecheck; lint; dependency audit; production build; diff check
 - Evidence: focused contracts cover feedback ideas/comments/notification reads, connected-account status, and visible error-state paths
-- Remaining dependencies: publish docs and run isolated feedback/integration read-failure/browser drills
+- Remaining dependencies: run isolated feedback/integration read-failure/browser drills
 
 #### TODO-0301 - Admin billing and notifications hid read failures as empty views
 
