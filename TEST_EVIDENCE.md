@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Trip Emergency Summary Read Boundary
+
+- Focused emergency summary suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 468 test files, 3,220 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Trip Emergency Summary now waits for emergency contacts and medical information reads, and renders a retryable failure state instead of returning null after a read error.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Vacation CRUD and Budget Read Boundaries
 
 - Focused CRUD/budget suite: 1 file, 2 assertions passed.
@@ -273,18 +287,7 @@ Audit date: 2026-07-15
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
 - `git diff --check`: passed.
-- Wallet hub deletion now uses explicit table branches and an active-family predicate for every supported wallet table; dynamic ID-only deletion was removed.
-- Final full gate after this increment: 455 test files, 3,193 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
-- Live wallet RLS, role, concurrency, and browser evidence remain open.
-
-## Latest Local Evidence - Onboarding Provisioning Boundaries
-
-- Focused onboarding/provisioning suites: 4 files, 11 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `git diff --check`: passed.
-- Profile onboarding now checks membership and preference reads and scopes member color updates to the resolved family. Compatibility family provisioning now fails when subscription or active-family persistence fails.
-- Final full gate after this increment: 455 test files, 3,192 tests; 0 production dependency vulnerabilities; typecheck, lint, dif…24567 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Wallet hub dele…24830 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
