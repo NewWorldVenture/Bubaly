@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:35:00 -04:00
+- Last updated: 2026-07-15 16:06:55 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `6a9d7494` adds Admin Security/Auth Admin, command-center, and Sync read safety; live provider and deployment evidence remains open
+- Commit: `709aca24` adds Social read safety after the Admin Security/Auth Admin, command-center, and Sync repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0341 - Admin Social hid publishing and provider errors as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Social integrations / publishing operations / Supabase failure handling
+- Feature: Super Admin Social platform
+- Route: `/admin/social`
+- File or files: `app/(app)/admin/social/page.tsx`, `tests/admin-social-read-boundary.test.ts`
+- Database objects: `social_accounts`, `social_posts`, `social_publish_results`, `social_ai_generations`, and `social_provider_errors`
+- Affected roles: Super Admin, social operators, and families using social publishing
+- Scenario: any of six count queries could fail while the page rendered zero accounts, posts, failed publishes, AI generations, or provider errors.
+- Launch impact: operators could miss failed publishing and provider incidents and assume social distribution was healthy.
+- Root cause: Promise results were used without checking their error fields.
+- Required remediation: check all six reads, log diagnostics server-side, and render a retryable failure state before metrics or credential readiness.
+- Implementation notes: the page now fails visibly on any required read failure while preserving provider credential checks.
+- Test plan: focused Social read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-social-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 461 files/3,207 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally in commit `709aca24`; documentation stamp and push pending.
+- Remaining dependencies: live social provider callbacks, publish/retry drills, role/RLS, browser, and deployed Social evidence.
 
 #### TODO-0340 - Admin Sync hid provider and queue read failures as healthy metrics
 

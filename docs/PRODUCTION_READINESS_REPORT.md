@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 15:40 America/New_York
+Audit snapshot: 2026-07-15 16:06 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 460 Vitest files and 3,206 tests pass in the latest full local gate.
+- 461 Vitest files and 3,207 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -41,6 +41,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   and activity actor reads before rendering operational metrics, with a retryable page-level failure state.
 - Super Admin Sync now fails visibly when connections, provider errors, dead-letter jobs, webhook
   signatures, or provider catalog reads fail, instead of showing zero operational failures.
+- Super Admin Social now fails visibly when account, post, publish-result, AI-generation, or provider-error
+  reads fail, instead of showing zero publishing and provider-health metrics.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.

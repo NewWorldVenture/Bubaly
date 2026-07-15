@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0341 - Admin Social hid publishing and provider errors as zero metrics
+
+- Timestamp: 2026-07-15 16:06 America/New_York
+- Service: Super Admin Social Platform and publishing operations
+- Route: `/admin/social`
+- Affected files: `app/(app)/admin/social/page.tsx`, `tests/admin-social-read-boundary.test.ts`
+- Role: Super Admin, social operators, and families using social publishing
+- Scenario: any of six account, post, publish-result, AI-generation, or provider-error reads could fail while the page rendered zero operational metrics and appeared healthy.
+- Severity: P1
+- Launch impact: operators could miss failed publishing, AI generation failures, and provider incidents.
+- Root cause: Promise query results were used without checking their error fields.
+- Resolution: all six required reads now fail visibly with a retryable sanitized ErrorState before metrics or credential readiness are rendered.
+- Supabase impact: no schema change; service-role Social operational reads now have explicit failure contracts.
+- Tests run: `tests/admin-social-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 461 test files, 3,207 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `709aca24`
+- Status: Resolved in code; live social callbacks, publish/retry, RLS, role, browser, and deployed evidence remains open
+- Remaining dependencies: provider sandbox callbacks, publish/retry drills, credential/secret rotation, role/RLS, browser, backup, and deployed Social verification
+
 ### PLA-0340 - Admin Sync hid provider and queue read failures as healthy metrics
 
 - Timestamp: 2026-07-15 16:35 America/New_York
