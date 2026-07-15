@@ -15,4 +15,11 @@ describe('connections UI integration boundary', () => {
     expect(source).toContain('Open secure setup');
     expect(source).toContain('Live connection setup unavailable');
   });
+
+  it('surfaces connection read failures instead of rendering every provider as disconnected', () => {
+    expect(source).toContain('data: rows, loading, error, refresh');
+    expect(source).toContain('Could not load your connections. Refresh and try again.');
+    expect(source).toContain('onRetry={refresh}');
+  });
 });
+
