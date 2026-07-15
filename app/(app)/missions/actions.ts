@@ -43,6 +43,39 @@ async function cleanupSubmission(
   await cleanupProofMedia(supabase, paths);
 }
 
+async function restoreAssignmentState(
+  supabase: ChoreSupabase,
+  familyId: string,
+  assignment: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.from('chore_assignments').update({
+    status: assignment.status,
+    ai_score: assignment.ai_score,
+    submitted_at: assignment.submitted_at,
+    disputed: assignment.disputed,
+    approved_at: assignment.approved_at,
+    approved_by: assignment.approved_by,
+    points_awarded: assignment.points_awarded,
+    cash_awarded_cents: assignment.cash_awarded_cents,
+  } as never).eq('id', assignment.id as string).eq('family_id', familyId);
+  if (error) console.error('[chore state] assignment rollback failed', error);
+}
+
+async function setSubmissionStatus(
+  supabase: ChoreSupabase,
+  familyId: string,
+  submissionId: string,
+  status: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.from('chore_submissions').update({ status: status as never })
+    .eq('id', submissionId).eq('family_id', familyId).select('id').single();
+  if (error || !data) {
+    console.error('[chore state] submission transition failed', error ?? new Error('No submission row updated'));
+    return false;
+  }
+  return true;
+}
+
 /** Resolve a chore's reward config into the pure ChoreReward shape. */
 function rewardConfig(c: Record<string, unknown>): ChoreReward {
   return {
@@ -163,13 +196,33 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   });
 
   if (autoOk && verdict.status === 'approved') {
-    await finalizeApproval(supabase, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
-    await supabase.from('chore_submissions').update({ status: 'approved' }).eq('id', submission.id);
+    if (!await setSubmissionStatus(supabase, familyId, submission.id, 'approved')) {
+      await restoreAssignmentState(supabase, familyId, assignment);
+      return { ok: false, error: 'Could not finish the chore approval.' };
+    }
+    try {
+      await finalizeApproval(supabase, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+    } catch {
+      await setSubmissionStatus(supabase, familyId, submission.id, 'parent_review');
+      const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
+        .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
+      if (fallbackAssignmentError) console.error('[chore state] parent-review fallback failed', fallbackAssignmentError);
+      return { ok: false, error: 'Could not finish the chore approval. It was sent for parent review.' };
+    }
   } else {
     const subStatus = verdict.status === 'needs_improvement' ? 'needs_improvement'
       : verdict.status === 'rejected' ? 'rejected' : verdict.status === 'approved' ? 'parent_review' : 'parent_review';
-    await supabase.from('chore_submissions').update({ status: subStatus }).eq('id', submission.id);
-    await supabase.from('chore_assignments').update({ status: 'submitted' }).eq('id', assignmentId);
+    if (!await setSubmissionStatus(supabase, familyId, submission.id, subStatus)) {
+      await restoreAssignmentState(supabase, familyId, assignment);
+      return { ok: false, error: 'Could not finish the proof review.' };
+    }
+    const { data: submittedAssignment, error: submittedAssignmentError } = await supabase.from('chore_assignments')
+      .update({ status: 'submitted' }).eq('id', assignmentId).eq('family_id', familyId).select('id').single();
+    if (submittedAssignmentError || !submittedAssignment) {
+      await setSubmissionStatus(supabase, familyId, submission.id, 'pending');
+      await restoreAssignmentState(supabase, familyId, assignment);
+      return { ok: false, error: 'Could not finish the proof review.' };
+    }
   }
 
   revalidatePath('/kids');
@@ -230,12 +283,24 @@ export async function approveSubmissionAction(formData: FormData): Promise<void>
   if (!assignment || !chore) return;
 
   const score = intVal(formData, 'score') ?? assignment.ai_score ?? 100;
-  await finalizeApproval(supabase, {
-    familyId, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
-    pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
-  });
-  await supabase.from('chore_submissions').update({ status: 'approved' }).eq('id', submissionId);
-  await supabase.from('chore_disputes').update({ status: 'resolved', resolution: 'Approved by parent', resolved_by: ctx.active.member.id, resolved_at: new Date().toISOString() }).eq('submission_id', submissionId).eq('status', 'open');
+  if (!await setSubmissionStatus(supabase, familyId, submissionId, 'approved')) return;
+  const { error: disputeError } = await supabase.from('chore_disputes').update({ status: 'resolved', resolution: 'Approved by parent', resolved_by: ctx.active.member.id, resolved_at: new Date().toISOString() }).eq('submission_id', submissionId).eq('status', 'open').select('id');
+  if (disputeError) {
+    await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
+    return;
+  }
+  try {
+    await finalizeApproval(supabase, {
+      familyId, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
+    });
+  } catch {
+    await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
+    const { error: disputeRestoreError } = await supabase.from('chore_disputes').update({ status: 'open', resolution: null, resolved_by: null, resolved_at: null })
+      .eq('submission_id', submissionId).eq('status', 'resolved');
+    if (disputeRestoreError) console.error('[chore state] dispute rollback failed', disputeRestoreError);
+    return;
+  }
   revalidatePath('/missions');
   revalidatePath('/kids');
 }
@@ -251,8 +316,13 @@ export async function rejectSubmissionAction(formData: FormData): Promise<void> 
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
   if (!submission) return;
 
-  await supabase.from('chore_submissions').update({ status: redo ? 'needs_improvement' : 'rejected' }).eq('id', submissionId);
-  await supabase.from('chore_assignments').update({ status: redo ? 'in_progress' : 'rejected', disputed: false }).eq('id', submission.assignment_id);
+  if (!await setSubmissionStatus(supabase, familyId, submissionId, redo ? 'needs_improvement' : 'rejected')) return;
+  const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments').update({ status: redo ? 'in_progress' : 'rejected', disputed: false })
+    .eq('id', submission.assignment_id).eq('family_id', familyId).select('id').single();
+  if (assignmentError || !updatedAssignment) {
+    await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
+    return;
+  }
   await logChoreEvent(supabase, { familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: redo ? 'redo' : 'reject', note: str(formData, 'note') });
   revalidatePath('/missions');
   revalidatePath('/kids');
@@ -268,9 +338,21 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
   if (!submission) return;
 
-  await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' });
-  await supabase.from('chore_submissions').update({ status: 'disputed' }).eq('id', submissionId);
-  await supabase.from('chore_assignments').update({ status: 'submitted', disputed: true }).eq('id', submission.assignment_id);
+  const { data: dispute, error: disputeError } = await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' }).select('id').single();
+  if (disputeError || !dispute) return;
+  if (!await setSubmissionStatus(supabase, familyId, submissionId, 'disputed')) {
+    const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
+    if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
+    return;
+  }
+  const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted', disputed: true })
+    .eq('id', submission.assignment_id).eq('family_id', familyId).select('id').single();
+  if (assignmentError || !updatedAssignment) {
+    await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
+    const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
+    if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
+    return;
+  }
   await logChoreEvent(supabase, { familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
@@ -285,7 +367,7 @@ export async function createChoreAction(formData: FormData): Promise<void> {
   if (!title) return;
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 
-  const { data: chore } = await supabase.from('chores').insert({
+  const { data: chore, error: choreError } = await supabase.from('chores').insert({
     family_id: familyId, title,
     description: str(formData, 'description'),
     instructions: str(formData, 'instructions'),
@@ -308,12 +390,17 @@ export async function createChoreAction(formData: FormData): Promise<void> {
     icon: str(formData, 'icon'),
     created_by: ctx.user.id,
   }).select('id').single();
-  if (!chore) return;
+  if (choreError || !chore) return;
 
   if (memberIds.length) {
-    await supabase.from('chore_assignments').insert(memberIds.map((member_id) => ({
+    const { error: assignmentError } = await supabase.from('chore_assignments').insert(memberIds.map((member_id) => ({
       family_id: familyId, chore_id: chore.id, member_id, due_at: str(formData, 'due_at'),
     })));
+    if (assignmentError) {
+      const { error: cleanupError } = await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId);
+      if (cleanupError) console.error('[chore create] cleanup failed', cleanupError);
+      return;
+    }
   }
   revalidatePath('/missions');
   revalidatePath('/kids');

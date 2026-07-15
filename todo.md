@@ -4362,3 +4362,22 @@ roadmap entries and user worktree changes are preserved.
   when ownership validation fails.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0278 - Chore state transitions could silently diverge
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Missions / data integrity / rewards
+- Feature: Chore proof review, approval, rejection, dispute, and creation flows
+- File or files: `app/(app)/missions/actions.ts`, `tests/chore-state-transition-persistence.test.ts`
+- Description: Submission, assignment, dispute, and assignment-creation writes were not consistently checked;
+  auto-approval and parent approval could leave related rows out of sync after a later write failed.
+- Resolution: Checked transition helpers now require updated rows, restore prior submission/assignment state on
+  failure, send failed auto-approval to parent review, clean up dispute rows on failed transitions, and remove
+  newly created chores when assignment creation fails.
+- Tests performed: Focused chore state/proof/reward tests, full Vitest, typecheck, lint, dependency audit, and
+  clean production build.
+- Evidence: `tests/chore-state-transition-persistence.test.ts` guards transition checks, rollback paths, dispute
+  cleanup, and chore creation compensation.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Chore state transition persistence
+
+- `npm.cmd exec vitest run tests/chore-state-transition-persistence.test.ts tests/chore-proof-persistence.test.ts tests/chore-reward-persistence.test.ts`:
+  3 files, 14 tests passed.
+- `npm.cmd exec vitest run`: 394 files, 2,978 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, and clean `npm.cmd run build`: passed; 250 static pages generated.
+- Dependency audit: 0 vulnerabilities. No migration changed in this increment; the published migration audit
+  remains 221 numbered SQL files with next version `0206`.
+- Chore submission status transitions now require updated rows, failed follow-up writes restore prior state,
+  dispute rows are removed when later transitions fail, auto-approval falls back to parent review, and failed
+  assignment creation removes the newly created chore.
+
 ## Latest Audit Update - AI chat conversation ownership
 
 - `npm.cmd exec vitest run tests/ai-chat-ownership.test.ts tests/database-error-boundaries.test.ts`:
