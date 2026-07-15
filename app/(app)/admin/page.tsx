@@ -3,9 +3,10 @@ import Link from 'next/link';
 import {
   Users, UsersRound, CreditCard, Home, Activity, DollarSign, TrendingUp,
   HardDrive, Server, Database, Mail, Cloud, Cpu, LifeBuoy, ShieldCheck,
-  BarChart3, Plug, ArrowUpRight,
+  BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +52,8 @@ export default async function AdminDashboardPage() {
     { data: newMembers },
     { data: recentLogs },
     { data: tickets },
+    { data: adminNotes },
+    { count: unreadNoteCount },
     dbHealth,
     storageHealth,
   ] = await Promise.all([
@@ -65,9 +68,15 @@ export default async function AdminDashboardPage() {
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, created_at')
       .order('created_at', { ascending: false }).limit(8),
     supabase.from('support_tickets').select('status'),
+    supabase.from('admin_notifications').select('id, kind, title, body, url, is_read, created_at')
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
     checkDatabase(supabase),
     checkStorage(supabase),
   ]);
+
+  const notifications = (adminNotes ?? []) as AdminNotificationRow[];
+  const unreadNotes = unreadNoteCount ?? 0;
 
   // ── Stat cards ──
   // "Users" here means the real population of the product — family members,
@@ -254,6 +263,45 @@ export default async function AdminDashboardPage() {
                 </li>
               ))}
             </ul>
+          </Card>
+
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Bell className="h-4 w-4 text-muted" /> Notifications
+                {unreadNotes > 0 && (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                    {unreadNotes > 99 ? '99+' : unreadNotes}
+                  </span>
+                )}
+              </h2>
+              <Link href="/admin/notifications" className="text-xs font-medium text-brand-text hover:underline">See all</Link>
+            </div>
+            {notifications.length === 0 ? (
+              <EmptyState icon={Bell} title="You’re all caught up" />
+            ) : (
+              <ul className="space-y-1.5">
+                {notifications.map((n) => {
+                  const meta = adminNoteKindMeta(n.kind);
+                  const row = (
+                    <>
+                      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${n.is_read ? 'bg-transparent' : 'bg-brand'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wide ${meta.tone}`}>{meta.label}</span>
+                          <span className="ml-auto shrink-0 text-[11px] text-muted">{fmtDate(n.created_at, 'MMM d')}</span>
+                        </div>
+                        <p className="truncate text-sm font-medium">{n.title}</p>
+                      </div>
+                    </>
+                  );
+                  const cls = `flex items-start gap-2 rounded-lg border border-border bg-surface/40 px-3 py-2 transition ${n.url ? 'hover:border-brand/40 hover:bg-elevated' : ''}`;
+                  return n.url
+                    ? <li key={n.id}><Link href={n.url} className={cls}>{row}</Link></li>
+                    : <li key={n.id} className={cls}>{row}</li>;
+                })}
+              </ul>
+            )}
           </Card>
 
           <Card>
