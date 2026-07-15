@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
 
 export const metadata: Metadata = { title: 'Sync history' };
@@ -21,6 +22,18 @@ export default async function SyncHistoryPage() {
       .select('id, provider, action, item_type, created_at')
       .eq('family_id', ctx.active.familyId).order('created_at', { ascending: false }).limit(50),
   ]);
+
+  const readError = runsRes.error ?? auditRes.error;
+  if (readError) {
+    console.error('[sync-history] family sync history read failed', readError);
+    return (
+      <div className="module-page">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync history</h1>
+        <ErrorState message="Could not load your sync history from Supabase. Refresh and try again." />
+        <a href="/dashboard/sync/history" className="text-sm font-medium text-brand-text underline">Refresh sync history</a>
+      </div>
+    );
+  }
 
   const runs = runsRes.data ?? [];
   const audit = auditRes.data ?? [];

@@ -8,6 +8,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
@@ -48,6 +49,18 @@ export default async function SyncHubPage() {
     supabase.from('sync_conflicts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'open'),
     supabase.from('sync_job_runs').select('id, provider, status, items_imported, items_exported, conflicts_found, finished_at').eq('family_id', familyId).order('started_at', { ascending: false }).limit(5),
   ]);
+
+  const readError = connections.error ?? calendars.error ?? openConflicts.error ?? recentRuns.error;
+  if (readError) {
+    console.error('[sync-hub] family sync read failed', readError);
+    return (
+      <div className="module-page">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync</h1>
+        <ErrorState message="Could not load your sync status from Supabase. Refresh and try again." />
+        <a href="/dashboard/sync" className="text-sm font-medium text-brand-text underline">Refresh sync status</a>
+      </div>
+    );
+  }
 
   const conns = connections.data ?? [];
   const healthy = conns.filter((c) => c.health === 'healthy').length;
