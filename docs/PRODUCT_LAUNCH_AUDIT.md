@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; existing service-role read boundary is now fail-visible.
 - Tests run: `tests/admin-wallet-reconciliation-boundary.test.ts`, `tests/wallet-reconcile.test.ts` (12 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 456 test files, 3,202 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `712ee9b3`
 - Status: Resolved in code; live Super Admin role/browser/outage evidence remains open
 - Remaining dependencies: isolated Supabase read-failure, role, browser, RLS, and deployed admin smoke drills
 
