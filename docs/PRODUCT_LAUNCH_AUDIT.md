@@ -422,5 +422,6 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: adds `ensure_family_for_user` in migration `0212`; no destructive data changes; the RPC only creates a family when no active membership exists
 - Tests run: `tests/ensure-family-concurrency.test.ts` and `tests/onboarding-idempotency.test.ts` (5 tests), typecheck, migration audit, and diff check
 - Validation evidence: migration audit passes for 228 numbered SQL files with next version `0213`; the regression contract verifies the lock, service-role grant, and primary RPC path
+- Commit: `e0674b15`
 - Status: Resolved in code; remote migration application and authenticated concurrent onboarding verification remain open
 - Remaining dependencies: apply `0212`, run an isolated two-request first-login drill, and verify the resulting account has exactly one active family and one active-family preference

@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 415 Vitest files and 3,073 tests pass in the latest full local gate.
+- 416 Vitest files and 3,075 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
 - Migration filename audit passes for 228 numbered migrations; next version is `0213`.
