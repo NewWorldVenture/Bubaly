@@ -1323,4 +1323,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - The `/admin/reports` page now aggregates all eight Supabase read errors and renders a refreshable error state before deriving metrics.
-- Source commit: `5353c8ce`; docs update and remote push verification remain pending.
+- Source commit: `5353c8ce`; docs and source are published on `origin/main` at `8c2f3740`.
