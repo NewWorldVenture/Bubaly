@@ -1,5 +1,116 @@
 # FamilyOS — Roadmap Build TODO
 
+## Production Readiness Audit Control Plane
+
+- Audit started: 2026-07-15 08:04:04 -04:00
+- Last updated: 2026-07-15 08:18:00 -04:00
+- Repository: NewWorldVenture/FamilyOS
+- Branch: `codex/world-class-production`
+- Commit: `f464ac9e` (validated audit increment; push pending)
+- Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
+- Supabase project: configured through `.env.local` (secrets intentionally omitted)
+- Auditor: Codex production-readiness audit
+- Overall status: `[!]` NO-GO pending live Supabase, account, browser, backup, and deployment evidence
+- Critical blockers remaining: Auth Admin HTTP 500; remote migration ledger and credential rotation are unverified
+- High-priority issues remaining: authenticated E2E; third-party callback smoke tests; full route/workflow audit
+- Medium-priority issues remaining: accessibility, mobile, performance, observability, and backup evidence
+- Low-priority issues remaining: final polish findings from the continuing audit
+
+### Audit rules
+
+- Every finding receives a permanent issue ID and remains in this ledger after resolution.
+- An item is completed only after the repair is tested, documented, committed, and pushed.
+- Production data is never mutated destructively; destructive tests require an isolated environment.
+- The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+### Active audit issue
+
+#### TODO-0282 — Onboarding replay can duplicate household records
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / data integrity / onboarding
+- Feature: Guided onboarding finalization
+- Route: `/onboarding`
+- File or files: `app/onboarding/actions.ts`, `lib/onboarding/idempotency.ts`, `supabase/migrations/0210_onboarding_idempotency.sql`
+- Database objects: `family_members`, `invites`, `calendar_events`, `onboarding_imports`
+- Affected roles: New account owner; family administrators
+- Affected accounts: Any account whose finalization request is retried after a partial required write or during a duplicate submit
+- Description: Finalization resumed an in-progress wizard but used blind inserts for managed members, invitations, imported calendar events, and the import marker. A retry could create duplicate household data and duplicate invite delivery.
+- User impact: Repeated submissions could show duplicate people/events and send repeated join emails.
+- Security or privacy impact: Duplicate invitations increase unintended notification exposure; family scope remains server-side but integrity is compromised.
+- Root cause: No stable submission/item key or database uniqueness boundary existed for the multi-table finalization pipeline.
+- Required remediation: Derive a stable server-side key from the authenticated user and normalized wizard payload; add nullable unique idempotency columns; upsert keyed rows; send an invite email only when the invite row is newly created.
+- Dependencies: Migration `0210_onboarding_idempotency.sql` must be applied before the repaired action is deployed.
+- Implementation notes: Keep legacy rows valid with nullable keys; use deterministic item keys so partial retries reconcile already-written rows.
+- Test plan: Static regression test must assert key derivation, keyed upserts, conflict targets, and no blind finalization inserts; focused tests and full suite must pass.
+- Tests performed: `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts`, and `tests/migration-version-safety.test.ts` (8 tests); full Vitest (406 files, 3,033 tests); typecheck; lint; dependency audit; production build; migration audit; diff check.
+- Evidence: `onboardingRunKey` and `onboardingItemKey` are stable/different by user, row, and kind; finalization uses keyed upserts and the family claim uses a per-user advisory lock; migration audit reports 226 numbered SQL files and next version `0211`.
+- Resolution: Added `lib/onboarding/idempotency.ts`, migration `0210_onboarding_idempotency.sql`, generated type fields, keyed member/invite/calendar/import upserts, duplicate-email suppression for replayed invites, and typed `onboarding_claim_family` first-family serialization.
+- Verified by: Codex local validation; commit `f464ac9e`; remote migration application remains required for launch closure.
+- Date completed: 2026-07-15 (code repair verified locally; issue remains open for deployment evidence)
+
+## Current Coverage Matrices
+
+These matrices are intentionally conservative: `Verified` means the specific boundary has local
+test evidence and is not a claim that the entire service is launch-complete. The detailed companion
+matrices remain authoritative and are updated with each increment.
+
+### Route and feature matrix
+
+| Route family | Feature | Audience | Auth/role boundary | Supabase objects | Current status | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/login`, `/signup`, middleware | Authentication and redirects | anonymous, authenticated | session and route guards | `auth.users`, profiles, family membership | In progress | `tests/admin-auth-boundary.test.ts`; live Auth Admin/RLS open |
+| `/onboarding`, `/join` | Family provisioning and invitations | new owner, invited user | authenticated owner/manager | families, family_members, invites, onboarding_progress | In progress | `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts` |
+| `/dashboard/*` | Family operating surfaces | family roles | active-family context | family-scoped domain tables | In progress | route inventory and feature tests; page-by-page traversal open |
+| `/wallet/*`, `/dashboard/payments` | Money movement | parent/guardian/child | manager RPCs and entitlements | wallet ledger, goals, allowances, subscriptions | In progress | atomic wallet tests; remote migrations and live concurrency open |
+| `/admin/*` | Site administration | Super Admin/support | explicit privileged server guards | admin/content/marketing tables | In progress | 38 service-role action guard scan; live role matrix open |
+| `/api/webhooks/*`, `/api/cron/*` | Integrations and jobs | providers/system | signature/cron secrets | webhook ledgers and integration tables | In progress | provider contract tests; live callback and retry smoke open |
+
+### Supabase table matrix
+
+| Table group | Purpose | Application usage | RLS reviewed | CRUD/RLS test status | Index review | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| families and family_members | household tenant boundary | dashboard/onboarding/auth | source reviewed | live cross-tenant denial pending | family/user indexes present | In progress |
+| invites and onboarding_progress | invite lifecycle and onboarding state | `/join`, `/onboarding`, admin analytics | source reviewed | replay contract local; live role tests pending | email/family and user unique indexes present | In progress |
+| calendar_events and onboarding_imports | imported household schedule | onboarding/calendar | source reviewed | keyed replay local; live RLS pending | family/time plus onboarding keys | In progress |
+| wallet, billing, marketplace | financial and commerce state | wallet/billing/marketplace | RPC/RLS repairs present | local contracts; live concurrency pending | atomic RPC indexes reviewed | In progress |
+| files, media, provider sync | private assets and integrations | uploads/sync | source reviewed | storage and provider live tests pending | bucket/path review pending | In progress |
+
+### Supabase function matrix
+
+| Function class | Called by | Authorization | Input validation | Return/error status | Tests |
+| --- | --- | --- | --- | --- | --- |
+| manager-checked wallet RPCs | wallet server actions | `can_manage_family` and row locks | server payload schemas | structured outcomes | focused atomic tests; live deployment pending |
+| onboarding keyed writes | onboarding server action | authenticated service-role server path | Zod + deterministic keys | sanitized action failures | 8 focused tests; live migration pending |
+| provider/webhook claim RPCs | callbacks and cron | signature/secret plus service-only grants | bounded payloads | retry-safe contracts | focused tests; provider sandbox pending |
+
+### Storage matrix
+
+| Bucket class | Purpose | Visibility | Policy/file validation | Cross-user test | Status |
+| --- | --- | --- | --- | --- | --- |
+| family media/documents | household uploads | private/signed where applicable | family policy and bounded upload paths | live isolated test pending | In progress |
+| marketplace/media | listing and social media | policy-dependent | ownership checks and cleanup | live isolated test pending | In progress |
+
+### Account and role matrix
+
+| Account/role | Tenant scope | Login/navigation | CRUD | Isolation/entitlements | Mobile | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| anonymous | none/public | public routes and login redirect | public-only | public data only | baseline E2E | Partial |
+| parent/owner | one active family | authenticated dashboard | manager workflows | live RLS probe pending | baseline only | In progress |
+| adult/guardian/member | invited family | role-filtered navigation | scoped workflows | live cross-role probe pending | baseline only | In progress |
+| child/teen | assigned family member | child surfaces/PIN | limited submit/read | live escalation probe pending | baseline only | In progress |
+| Super Admin/support | cross-family operational | `/admin/*` | privileged admin actions | guard scan local; live role test pending | baseline only | In progress |
+
+### Integration matrix
+
+| Integration | Environment | Authentication | Webhook/callback | Failure/retry/idempotency | Production status |
+| --- | --- | --- | --- | --- | --- |
+| Supabase Auth/DB/Storage | local config + live project | session/service role | Auth callbacks | local contracts; live ledger/RLS pending | Blocked |
+| Stripe | configured by env | signed webhooks | billing and money endpoints | focused claim tests; sandbox pending | In progress |
+| Google/Microsoft sync | optional env | OAuth state + encrypted tokens | callback routes | focused OAuth tests; provider sandbox pending | In progress |
+| Resend/Twilio/push | optional env | provider signatures/secrets | webhooks/callbacks | bounded/idempotent contracts; live rotation pending | In progress |
+
 **Goal:** Ship every roadmap feature below at **100% fully developed** and **100% wired to
 Supabase** (real family-scoped tables + RLS, no mock data). This file is the single source of
 truth for the build — work top to bottom, keep it in sync, and don't mark a feature `DONE`

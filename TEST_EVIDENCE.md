@@ -2,6 +2,21 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Onboarding replay integrity
+
+- `npm.cmd run test -- tests/onboarding-failure-safety.test.ts tests/onboarding-idempotency.test.ts tests/migration-version-safety.test.ts`: 3 files, 8 tests passed.
+- `npm.cmd run test`: 406 files, 3,033 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; Next.js deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 226 numbered SQL files; next available version `0211`; passed.
+- `npm.cmd run build`: passed; 250 static routes generated.
+- Onboarding finalization now derives authenticated deterministic keys and reconciles members, invites,
+  imported events, and import markers through database-enforced conflict targets. Replayed invite rows
+  reuse their token without sending a duplicate email. First-family creation is serialized per user by
+  the `onboarding_claim_family` RPC and a transactional advisory lock.
+- Live application of migration `0210`, authenticated E2E, and cross-tenant RLS verification remain open.
+
 ## Latest Audit Update - Atomic wallet goal funding
 
 - `npm.cmd exec vitest run tests/wallet-goal-persistence.test.ts tests/wallet-atomic-persistence.test.ts`:

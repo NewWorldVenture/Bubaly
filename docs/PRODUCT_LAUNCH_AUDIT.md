@@ -156,7 +156,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: protects service-role access to cross-family tables; it does not replace live RLS verification
 - Tests run: `tests/admin-auth-boundary.test.ts`, full 405-file/3,030-test suite, typecheck, lint, dependency audit
 - Validation evidence: all 38 service-role admin action files passed the guard scan
-- Commit: pending publication
+- Commit: `f464ac9e`
 - Status: Resolved in code; auth unit remains in progress
 - Remaining dependencies: live Auth Admin health, cross-tenant RLS probes, authenticated E2E roles
 
@@ -197,3 +197,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: n/a
 - Status: Open
 - Remaining dependencies: Supabase access and secret-manager operation
+
+### PLA-0282 - Onboarding finalization could duplicate records on replay
+
+- Timestamp: 2026-07-15 08:10 America/New_York
+- Service: Onboarding and household provisioning
+- Route: `/onboarding`
+- Affected files: `app/onboarding/actions.ts`, `lib/onboarding/idempotency.ts`, `lib/database.types.ts`, `supabase/migrations/0210_onboarding_idempotency.sql`, `tests/onboarding-idempotency.test.ts`
+- Role: new account owner; family administrator
+- Scenario: browser timeout, double-submit, or partial required write followed by a resumed wizard submission
+- Severity: P1
+- Launch impact: duplicate managed members, invitations, calendar events, import markers, and repeated invite email delivery
+- Root cause: multi-table finalization used blind inserts without a stable submission/item identity
+- Resolution: authenticated deterministic SHA-256 submission/item keys, nullable database columns with family-scoped unique indexes, keyed upserts, existing-invite token reuse without duplicate delivery, and a service-only `onboarding_claim_family` RPC with a per-user transactional advisory lock
+- Supabase impact: migration `0210_onboarding_idempotency.sql` adds four nullable columns and four unique indexes; no destructive data operation
+- Tests run: focused onboarding safety/idempotency/migration tests, full Vitest, typecheck, lint, dependency audit, migration audit, diff check, production build
+- Validation evidence: 8 focused tests; 406 files/3,033 tests; 226 numbered migrations with next `0211`; 250-route build; 0 dependency vulnerabilities
+- Commit: pending publication
+- Status: Resolved in code; remote migration application, live RLS, and authenticated E2E remain open dependencies
+- Remaining dependencies: apply `0210`, exercise partial-failure replay in isolated Supabase, verify invite/email behavior and cross-tenant denial

@@ -10,14 +10,14 @@
 ## Database and Supabase
 
 - [ ] Back up the target database and confirm a tested restore path.
-- [ ] Run `npm run db:audit:migrations`, then apply migrations in order through `0199_marketplace_handoff_completion.sql`.
+- [ ] Run `npm run db:audit:migrations`, then reconcile and apply migrations in order through the validated current set, including `0208_atomic_wallet_goal_funding.sql` and `0210_onboarding_idempotency.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
 - [ ] Inspect and resolve the current Auth Admin `Database error finding users` before launch.
 - [ ] Exercise onboarding with a forced failure in an isolated environment; confirm the required write
       returns a sanitized failure and the retry resumes the `wizard/in_progress` run without duplicate
-      family provisioning.
+      family provisioning, managed members, invitations, imported events, or import markers.
 - [ ] Exercise an isolated marketing-admin mutation failure; confirm the UI receives a stable failure
       and no success audit/revalidation/redirect is emitted after the Supabase write fails.
 - [ ] Exercise account closure/reopen, family switching, dashboard preference, profile, and App Lock

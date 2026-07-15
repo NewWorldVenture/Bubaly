@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 221, through `0205_atomic_wallet_money_actions.sql`.
+- Current migration files: 226, through `0210_onboarding_idempotency.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -20,7 +20,8 @@
   `0197_feedback_ideas.sql`, `0198_guardian_suggestion_review_transaction.sql`, and
   `0199_marketplace_handoff_completion.sql`, `0200_display_settings.sql`, `0201_blog_engagement.sql`,
   `0202_blog_articles.sql`, `0203_service_descriptions.sql`, `0204_atomic_loyalty_transactions.sql`,
-  and `0205_atomic_wallet_money_actions.sql`.
+  and `0205_atomic_wallet_money_actions.sql`, `0206`-`0209` admin/notification updates, and
+  `0210_onboarding_idempotency.sql`.
 - SQL files: 338.
 - Static counts: 1,190 policy declarations, 642 RLS enable statements, 100 function declarations,
   417 trigger declarations, and 65 `storage.objects` references. Counts are source-text counts,
@@ -37,6 +38,19 @@ CRM contact, and automation writes remain best-effort by product decision and ar
 core family state was committed. The action still performs sequential writes rather than a database
 transaction; launch verification should exercise retry behavior and inspect for any duplicate imported
 rows in an isolated environment.
+
+### Onboarding replay repair - migration 0210
+
+`family_members`, `invites`, `calendar_events`, and `onboarding_imports` now carry a nullable
+`onboarding_key` with a family-scoped unique index. `app/onboarding/actions.ts` derives a SHA-256
+submission key from the authenticated user and normalized payload, then derives per-row keys for
+managed members, invitations, imported events, and the import marker. The action uses keyed upserts;
+an invite conflict reuses the existing token and skips a second email. Nullable columns preserve
+historical data and the migration does not delete or rewrite production rows. `tests/onboarding-idempotency.test.ts`
+proves deterministic separation and the conflict-target contract. First-family creation now uses the
+service-only `onboarding_claim_family` function with a per-user transactional advisory lock, preventing
+simultaneous first submissions from minting two families. Migration application and live RLS tests remain
+launch dependencies.
 
 ### Privileged marketing write-path audit
 

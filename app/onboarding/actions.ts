@@ -25,6 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import { describeActionError } from '@/lib/supabase/errors';
+import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotency';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -533,6 +534,7 @@ export async function finalizeOnboardingAction(input: {
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
   const { profile, family, details, members, appearance, calendarImport } = parsed.data;
+  const runKey = onboardingRunKey(auth.user.id, parsed.data);
 
   // 1. Save profile (name, phone, email, optional avatar)
   const profileRes = await saveUserProfile(auth.user.id, {
@@ -583,32 +585,20 @@ export async function finalizeOnboardingAction(input: {
       .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
     if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, 'Could not finish setting up your space.');
   } else {
-    // Create the family — DB trigger creates parent member + trial subscription.
-    // Use the service-role client for the insert: the families_select RLS policy
-    // (is_family_member, STABLE) would otherwise filter the RETURNING row before
-    // the trigger's membership is visible to the statement snapshot, so the
-    // insert would come back empty. See lib/server/ensure-family.ts for the full
-    // explanation of this trigger + RLS + RETURNING race.
-    // Mark this request before creating any family rows. If a later required
-    // write fails after the family exists, the next submission can resume the
-    // same run instead of being mistaken for a completed account.
-    await recordOnboardingProgress(admin, {
-      userId: auth.user.id,
-      source: 'wizard',
-      status: 'in_progress',
-      stepsCompleted: [],
+    // Claim first-family creation under a per-user database lock. This keeps
+    // double-submit/retry requests on one family even before the membership
+    // trigger is visible to a later request.
+    const { data: familyClaims, error: claimErr } = await admin.rpc('onboarding_claim_family', {
+      p_user_id: auth.user.id,
+      p_name: family.name,
+      p_timezone: family.timezone,
     });
-
-    const { data: familyRow, error: famErr } = await admin
-      .from('families')
-      .insert({ name: family.name, timezone: family.timezone, created_by: auth.user.id })
-      .select()
-      .single();
-    if (famErr || !familyRow) return famErr
-      ? onboardingFailure('family creation', famErr, 'Could not finish setting up your space.')
+    const familyClaim = familyClaims?.[0];
+    if (claimErr || !familyClaim) return claimErr
+      ? onboardingFailure('family claim', claimErr, 'Could not finish setting up your space.')
       : { ok: false, error: 'Could not finish setting up your space.' };
-    familyId = familyRow.id;
-    newFamily = true;
+    familyId = familyClaim.family_id;
+    newFamily = familyClaim.created;
   }
 
   // 2b. Explicitly create (or reconcile) the owner's parent membership — do NOT
@@ -678,36 +668,60 @@ export async function finalizeOnboardingAction(input: {
   );
   if (detailsErr) return onboardingFailure('family details save', detailsErr, 'Could not save your family details.');
 
-  // 5. Insert local (managed) members — no user_id, no login (service-role +
-  //    logged so a member the user added never silently vanishes).
-  for (const m of members) {
+  // 5. Upsert local (managed) members — no user_id, no login. The stable key
+  // makes a retry reconcile the same row after a partial finalization.
+  for (const [index, m] of members.entries()) {
     if (m.kind !== 'local') continue;
-    const { error: memberErr } = await admin.from('family_members').insert({
+    const { error: memberErr } = await admin.from('family_members').upsert({
       family_id: familyId,
       role: m.role,
       display_name: m.name,
       color: m.color ?? null,
       birthday: m.birthday || null,
-    });
+      onboarding_key: onboardingItemKey(runKey, 'member', index, m),
+    }, { onConflict: 'family_id,onboarding_key' });
     if (memberErr) return onboardingFailure(`member "${m.name}" creation`, memberErr, 'Could not add all household members.');
   }
 
-  // 6. Create invites and send email join links (invite row via service role +
-  //    logged; the email itself is best-effort and never throws).
+  // 6. Create invites and send email join links. A keyed upsert returns a row
+  // only when this request created it; existing rows are reused without
+  // sending a duplicate email on replay.
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
-  for (const m of members) {
+  for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
       .from('invites')
-      .insert({ family_id: familyId, email: m.email, role: m.role, invited_by: auth.user.id })
+      .upsert({
+        family_id: familyId,
+        email: m.email,
+        role: m.role,
+        invited_by: auth.user.id,
+        onboarding_key: onboardingItemKey(runKey, 'invite', index, m),
+      }, { onConflict: 'family_id,onboarding_key', ignoreDuplicates: true })
       .select('token')
-      .single();
-    if (inviteErr || !invite) {
+      .maybeSingle();
+    if (inviteErr) {
       return inviteErr
         ? onboardingFailure(`invite for ${m.email}`, inviteErr, 'Could not create all household invitations.')
         : { ok: false, error: 'Could not create all household invitations.' };
     }
-    const link = `${origin}/join?token=${invite.token}`;
+    let token = invite?.token;
+    if (!token) {
+      const { data: existingInvite, error: existingInviteErr } = await admin
+        .from('invites')
+        .select('token')
+        .eq('family_id', familyId)
+        .eq('onboarding_key', onboardingItemKey(runKey, 'invite', index, m))
+        .maybeSingle();
+      if (existingInviteErr || !existingInvite) {
+        return existingInviteErr
+          ? onboardingFailure(`invite for ${m.email} lookup`, existingInviteErr, 'Could not create all household invitations.')
+          : { ok: false, error: 'Could not create all household invitations.' };
+      }
+      token = existingInvite.token;
+    }
+    if (!invite) continue;
+    const link = `${origin}/join?token=${token}`;
     await sendEmail({
       to: m.email,
       subject: 'You’re invited to a family on Bubaly',
@@ -728,7 +742,7 @@ export async function finalizeOnboardingAction(input: {
   const finalBrief = buildFirstBrief(importEvents, new Date(), dinnerCandidates);
 
   if (importEvents.length > 0) {
-    const eventRows = importEvents.map((e) => ({
+    const eventRows = importEvents.map((e, index) => ({
       family_id: familyId,
       title: (e.title || 'Untitled').slice(0, 200),
       description: '[Imported during onboarding]',
@@ -739,17 +753,20 @@ export async function finalizeOnboardingAction(input: {
       recurrence: 'none' as const,
       category: 'general' as const,
       created_by: auth.user.id,
+      onboarding_key: onboardingItemKey(runKey, 'calendar-event', index, e),
     }));
     let importedCount = 0;
     for (let i = 0; i < eventRows.length; i += 200) {
       const chunk = eventRows.slice(i, i + 200);
-      const { error: evErr } = await admin.from('calendar_events').insert(chunk);
+      const { error: evErr } = await admin.from('calendar_events').upsert(chunk, {
+        onConflict: 'family_id,onboarding_key',
+      });
       if (evErr) return onboardingFailure('calendar import', evErr, 'Could not import your calendar.');
       importedCount += chunk.length;
     }
 
     try {
-      const { error: impErr } = await admin.from('onboarding_imports').insert({
+      const { error: impErr } = await admin.from('onboarding_imports').upsert({
         family_id: familyId,
         source: (calendarImport?.source as 'ics' | 'paste' | 'url' | 'demo') || 'paste',
         event_count: importedCount,
@@ -759,7 +776,11 @@ export async function finalizeOnboardingAction(input: {
         time_saved_minutes: finalBrief.timeSavedMinutes,
         brief: briefSummary(finalBrief) as never,
         created_by: auth.user.id,
-      });
+        onboarding_key: onboardingItemKey(runKey, 'calendar-import', 0, {
+          source: calendarImport?.source || 'paste',
+          events: importEvents,
+        }),
+      }, { onConflict: 'family_id,onboarding_key' });
       if (impErr) return onboardingFailure('calendar import record', impErr, 'Could not finish importing your calendar.');
     } catch (e) {
       return onboardingFailure('calendar import record', e, 'Could not finish importing your calendar.');

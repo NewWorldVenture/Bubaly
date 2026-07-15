@@ -159,9 +159,9 @@ export interface Database {
         Partial<{ name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string; trial_ends_at: string | null; closed_at: string | null }>
       >;
       family_members: T<
-        { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean } & Stamps,
-        { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; email?: string | null; phone?: string | null; avatar_url?: string | null; is_active?: boolean },
-        Partial<{ user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean }>
+        { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean; onboarding_key: string | null } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; email?: string | null; phone?: string | null; avatar_url?: string | null; is_active?: boolean; onboarding_key?: string | null },
+        Partial<{ user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean; onboarding_key: string | null }>
       >;
       roles: T<
         { role: MemberRole; label: string; description: string | null },
@@ -174,14 +174,14 @@ export interface Database {
         Partial<{ can_create: boolean; can_read: boolean; can_update: boolean; can_delete: boolean }>
       >;
       invites: T<
-        { id: string; family_id: string; email: string; role: MemberRole; token: string; status: InviteStatus; invited_by: string | null; expires_at: string; accepted_by: string | null } & Stamps,
-        { id?: string; family_id: string; email: string; role?: MemberRole; token?: string; status?: InviteStatus; invited_by?: string | null; expires_at?: string },
-        Partial<{ status: InviteStatus; role: MemberRole; accepted_by: string | null }>
+        { id: string; family_id: string; email: string; role: MemberRole; token: string; status: InviteStatus; invited_by: string | null; expires_at: string; accepted_by: string | null; onboarding_key: string | null } & Stamps,
+        { id?: string; family_id: string; email: string; role?: MemberRole; token?: string; status?: InviteStatus; invited_by?: string | null; expires_at?: string; onboarding_key?: string | null },
+        Partial<{ status: InviteStatus; role: MemberRole; accepted_by: string | null; onboarding_key: string | null }>
       >;
       calendar_events: T<
-        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null },
-        Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null }>
+        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null; onboarding_key: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null; onboarding_key?: string | null },
+        Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; onboarding_key: string | null }>
       >;
       routine_templates: T<
         { id: string; family_id: string; name: string; icon: string | null; color: string | null; weekday_mask: number; is_active: boolean; source: string; created_by: string | null } & Stamps,
@@ -504,9 +504,9 @@ export interface Database {
         Partial<{ user_id: string | null; session_id: string; step: string; phase: string; duration_ms: number | null; meta: Json }>
       >;
       onboarding_imports: T<
-        { id: string; family_id: string; source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json; created_by: string | null; created_at: string },
-        { id?: string; family_id: string; source?: string; event_count?: number; today_count?: number; conflict_count?: number; action_count?: number; time_saved_minutes?: number; brief?: Json; created_by?: string | null },
-        Partial<{ source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json }>
+        { id: string; family_id: string; source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json; created_by: string | null; created_at: string; onboarding_key: string | null },
+        { id?: string; family_id: string; source?: string; event_count?: number; today_count?: number; conflict_count?: number; action_count?: number; time_saved_minutes?: number; brief?: Json; created_by?: string | null; onboarding_key?: string | null },
+        Partial<{ source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json; onboarding_key: string | null }>
       >;
       meal_ideas: T<
         { id: string; title: string; cuisine: string; effort: string; prep_minutes: number; tags: string[]; description: string | null; is_active: boolean; created_at: string },
@@ -2331,6 +2331,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      onboarding_claim_family: {
+        Args: { p_user_id: string; p_name: string; p_timezone: string };
+        Returns: { family_id: string; created: boolean }[];
+      };
       accept_invite: { Args: { p_token: string }; Returns: string };
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
