@@ -230,6 +230,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
   { href: '/admin/feedback', label: 'Feedback & Ideas', icon: MessagesSquare },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
   { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];

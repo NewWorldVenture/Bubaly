@@ -41,3 +41,22 @@ export function badgeText(n: number): string {
   if (n <= 0) return '';
   return n > 9 ? '9+' : String(n);
 }
+
+/** Filter a notification list for the history page (by kind + unread-only). */
+export function filterAdminNotes<T extends { kind: string; is_read: boolean }>(
+  rows: readonly T[],
+  opts: { kind?: 'all' | string; unreadOnly?: boolean },
+): T[] {
+  return rows.filter((r) => {
+    if (opts.kind && opts.kind !== 'all' && r.kind !== opts.kind) return false;
+    if (opts.unreadOnly && r.is_read) return false;
+    return true;
+  });
+}
+
+/** Per-kind counts for the history filter chips. */
+export function countByKind(rows: readonly { kind: string }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.kind] = (out[r.kind] ?? 0) + 1;
+  return out;
+}
