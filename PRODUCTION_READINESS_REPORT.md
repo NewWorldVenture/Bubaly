@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 3,014 unit tests, builds all 250 static Next.js
+The tree compiles, passes lint and type checking, passes 3,021 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -34,10 +34,14 @@ Latest repair increment (2026-07-15): the allowance cron now checks its schedule
 wallet ledger, restores the previous schedule after a failed credit, and fails the run visibly instead of
 silently ignoring either persistence failure.
 
+Latest repair increment (2026-07-15): savings-goal funding now uses a manager-checked, row-locking RPC so
+the Save-bucket debit, goal progress update, and audit event commit together without a partial financial state.
+
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
-checkout contains 221 numbered migration files and 17 known historical duplicate prefixes; new or
+checkout contains 224 numbered migration files and 17 known historical duplicate prefixes; new or
 changed collisions fail CI and `db:push` before any database connection is attempted. The remote
-migration ledger remains unverified because this checkout is not linked to a Supabase project.
+migration ledger remains unverified because this checkout is not linked to a Supabase project. The next
+available migration version is `0209`.
 
 Latest repair increment (2026-07-14): Wallet transfers, gift approvals, spend approvals, and allowance
 decisions now use authenticated manager-checked row-locking RPCs. Ledger credits, debits, approval state,

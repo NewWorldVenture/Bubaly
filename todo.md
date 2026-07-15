@@ -4465,3 +4465,22 @@ roadmap entries and user worktree changes are preserved.
   checked failures, and success-only counters.
 - Verified by: Codex
 - Date completed: 2026-07-15
+
+### TODO-0281 - Goal funding could debit without updating goal progress
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Wallet / financial data integrity / concurrency / Supabase RPC security
+- Feature: Savings goal funding from a child's Save bucket
+- File or files: `supabase/migrations/0208_atomic_wallet_goal_funding.sql`, `lib/wallet/server.ts`,
+  `app/(app)/wallet/actions.ts`, `tests/wallet-goal-persistence.test.ts`
+- Description: The action calculated a Save balance, inserted an immutable debit, and then ignored the goal
+  update result. Concurrent funding could also race on the same Save balance.
+- Resolution: A manager-checked row-locking RPC now rechecks the Save balance, inserts the debit, updates goal
+  progress/status, and writes the audit event in one transaction. The server action uses the typed RPC wrapper.
+- Tests performed: Focused goal/atomic wallet persistence contracts, full Vitest, typecheck, lint, dependency
+  audit, migration audit, and clean production build.
+- Evidence: `tests/wallet-goal-persistence.test.ts` guards authorization, row locks, atomic write ordering,
+  and removal of direct best-effort money writes from the action.
+- Verified by: Codex
+- Date completed: 2026-07-15

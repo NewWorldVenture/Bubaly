@@ -2,14 +2,27 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Atomic wallet goal funding
+
+- `npm.cmd exec vitest run tests/wallet-goal-persistence.test.ts tests/wallet-atomic-persistence.test.ts`:
+  2 files, 5 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run db:audit:migrations`: passed. The migration
+  audit reports 224 numbered SQL files with next version `0209`.
+- `npm.cmd exec vitest run`: 402 files, 3,021 tests passed. Clean `npm.cmd run build` generated all 250
+  static pages; dependency audit reported 0 vulnerabilities.
+- `npm.cmd run db:audit:schema`: all 11 required live schema checks passed. The 600-record production seed
+  invariant passed.
+- Goal funding now performs the Save-bucket balance check, immutable debit, goal progress update, and audit
+  insert inside one manager-checked row-locking RPC.
+
 ## Latest Audit Update - Wallet allowance failure recovery
 
 - `npm.cmd exec vitest run tests/wallet-allowance-persistence.test.ts tests/wallet-atomic-persistence.test.ts tests/server-action-error-boundaries.test.ts`:
   3 files, 7 tests passed.
-- `npm.cmd exec vitest run`: 400 files, 3,014 tests passed.
+- `npm.cmd exec vitest run`: 402 files, 3,021 tests passed.
 - `npm.cmd run typecheck`, `npm.cmd run lint`, and clean `npm.cmd run build`: passed; 250 static pages generated.
-- Dependency audit: 0 vulnerabilities. No migration changed in this increment; the published migration audit
-  remains 221 numbered SQL files with next version `0206`.
+- Dependency audit: 0 vulnerabilities. No migration changed in the manual allowance increment; the current
+  migration audit now reports 224 numbered SQL files with next version `0209`.
 - Due allowance reads and schedule advances now check database results. A failed wallet credit restores the
   prior schedule so the allowance remains due, and `ranCount`/`paidCents` include only successful credits.
 

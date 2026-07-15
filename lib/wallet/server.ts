@@ -30,6 +30,9 @@ function walletRpcReason(result: WalletRpcResult, fallback: string): string {
     case 'already_processed': return 'This wallet request was already processed.';
     case 'insufficient_funds': return `Only ${((result.available ?? 0) / 100).toFixed(2)} is available.`;
     case 'spend_bucket_missing': return 'The wallet Spend bucket is unavailable.';
+    case 'save_bucket_missing': return 'The wallet Save bucket is unavailable.';
+    case 'goal_not_found': return 'The savings goal was not found.';
+    case 'goal_wallet_required': return 'That goal needs a child wallet before it can be funded.';
     case 'wallet_buckets_missing': return 'The recipient wallet is not fully provisioned.';
     default: return fallback;
   }
@@ -86,6 +89,21 @@ export async function decideAllowance(supabase: DB, params: {
   const result = walletRpcResult(data);
   if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not decide that allowance request.') };
   return { ok: true };
+}
+
+export async function fundGoal(supabase: DB, params: {
+  familyId: string; goalId: string; amountCents: number; actorId: string;
+}): Promise<{ ok: boolean; error?: string; txnId?: string }> {
+  const { data, error } = await supabase.rpc('wallet_fund_goal', {
+    p_family_id: params.familyId,
+    p_goal_id: params.goalId,
+    p_amount: Math.trunc(params.amountCents),
+    p_actor_id: params.actorId,
+  });
+  if (error) return { ok: false, error: walletFailure(error, 'Could not fund that goal.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) return { ok: false, error: walletRpcReason(result, 'Could not fund that goal.') };
+  return { ok: true, txnId: result.transaction_id };
 }
 
 export type CreditResult = { ok: boolean; error?: string; credited: number };

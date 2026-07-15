@@ -2369,6 +2369,7 @@ export interface Database {
       wallet_approve_gift: { Args: { p_family_id: string; p_gift_payment_id: string; p_actor_id: string }; Returns: Json };
       wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
+      wallet_fund_goal: { Args: { p_family_id: string; p_goal_id: string; p_amount: number; p_actor_id: string }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;

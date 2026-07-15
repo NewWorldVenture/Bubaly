@@ -5,7 +5,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
-import { approveGift, bucketBalanceCents, creditChildWallet, decideAllowance, decideSpend, debitSpendBucket, transferWallets } from '@/lib/wallet/server';
+import { approveGift, bucketBalanceCents, creditChildWallet, decideAllowance, decideSpend, debitSpendBucket, fundGoal, transferWallets } from '@/lib/wallet/server';
 import { nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -355,19 +355,8 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
   const supabase = await createServer();
 
   const { data: goal } = await supabase
-    .from('wallet_goals').select('id, child_wallet_id, title, target_cents, saved_cents, status')
-    .eq('id', input.goalId).eq('family_id', familyId).maybeSingle();
+    .from('wallet_goals').select('title').eq('id', input.goalId).eq('family_id', familyId).maybeSingle();
   if (!goal) return { ok: false, error: 'Goal not found.' };
-  if (!goal.child_wallet_id) return { ok: false, error: 'Family goals are funded by contributions, not a single wallet.' };
-
-  // available Save-bucket balance for this child (derived from the ledger)
-  const { data: saveBucket } = await supabase
-    .from('wallet_buckets').select('id').eq('family_id', familyId).eq('child_wallet_id', goal.child_wallet_id).eq('kind', 'save').maybeSingle();
-  const { data: saveTxns } = await supabase
-    .from('wallet_transactions').select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', saveBucket?.id ?? '00000000-0000-0000-0000-000000000000');
-  const available = (saveTxns ?? []).reduce((s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0);
-  if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Save.` };
 
   const { decision } = await evaluateTrust(supabase, familyId, {
     actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
@@ -377,21 +366,10 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
   });
   if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-  const { error: txErr } = await supabase.from('wallet_transactions').insert({
-    family_id: familyId, child_wallet_id: goal.child_wallet_id, bucket_id: saveBucket?.id ?? null,
-    type: 'goal_transfer', status: 'completed', direction: 'debit', amount_cents: amount,
-    description: `Into goal: ${goal.title}`, related_type: 'wallet_goals', related_id: goal.id, created_by: ctx.user.id, approved_by: ctx.user.id,
+  const result = await fundGoal(supabase, {
+    familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
   });
-  if (txErr) return actionFailure(txErr, 'Could not fund that goal.');
-
-  const newSaved = goal.saved_cents + amount;
-  await supabase.from('wallet_goals').update({
-    saved_cents: newSaved, status: newSaved >= goal.target_cents ? 'reached' : goal.status,
-  }).eq('id', goal.id);
-  await supabase.from('wallet_audit_logs').insert({
-    family_id: familyId, actor_user_id: ctx.user.id, action: 'goal_funded', entity_type: 'wallet_goals', entity_id: goal.id,
-    detail: `Funded ${amount}c into ${goal.title}`,
-  });
+  if (!result.ok) return { ok: false, error: result.error };
 
   revalidatePath('/wallet/goals');
   return { ok: true };
