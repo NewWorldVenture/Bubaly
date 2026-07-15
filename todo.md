@@ -6,7 +6,7 @@
 - Last updated: 2026-07-15 15:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes billing mutation consistency and self-healing Stripe Checkout tracking; source publication follows this evidence update
+- Commit: `726a5e57` includes billing mutation consistency and self-healing Stripe Checkout tracking; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -43,7 +43,7 @@
 - Test plan: focused route contract, full Vitest, typecheck, lint, build, migration, schema, and dependency gates; live Stripe test-mode completion and duplicate-delivery drills remain required.
 - Tests performed: `tests/billing-read-boundary.test.ts`, `tests/webhook-persistence-boundaries.test.ts` (8 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Evidence: latest local gate passed with 455 files/3,201 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally; commit and push verification pending.
+- Resolution: source repair validated locally in commit `726a5e57`; push and post-push ref verification pending.
 - Remaining dependencies: execute isolated Stripe Checkout completion, replay, idempotency, and abandoned-checkout cron drills against deployed services.
 
 #### TODO-0334 - Billing provider mutations could return success after local sync failure
@@ -64,7 +64,7 @@
 - Test plan: focused billing boundary suite, full Vitest, typecheck, lint, build, migration, schema, dependency, and diff gates; live Stripe mutation/reconciliation drills remain required.
 - Tests performed: `tests/billing-read-boundary.test.ts`, `tests/webhook-persistence-boundaries.test.ts` (8 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Evidence: latest local gate passed with 455 files/3,201 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally; commit and push verification pending.
+- Resolution: source repair validated locally in commit `726a5e57`; push and post-push ref verification pending.
 - Remaining dependencies: run non-destructive Stripe test-mode change-plan, cancel, portal, retry, and local/provider reconciliation drills.
 
 #### TODO-0333 - Stripe webhook money effects could be acknowledged after failed side effects

@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; the service-role checkout lifecycle now repairs missing tracking rows and preserves the existing service-only table boundary.
 - Tests run: focused billing/webhook boundary suite (8 tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 455 test files, 3,201 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `726a5e57`
 - Status: Resolved in code; live Stripe completion/replay evidence remains open
 - Remaining dependencies: isolated test-mode Checkout completion, duplicate delivery, and abandoned-checkout cron drills
 
@@ -40,7 +40,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; local subscription updates remain family-scoped and now expose persistence failure to the caller.
 - Tests run: focused billing/webhook boundary suite (8 tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
 - Validation evidence: 455 test files, 3,201 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: pending source commit
+- Commit: `726a5e57`
 - Status: Resolved in code; live Stripe mutation/reconciliation evidence remains open
 - Remaining dependencies: isolated test-mode change-plan, cancellation, portal, retry, and provider/local reconciliation drills
 
