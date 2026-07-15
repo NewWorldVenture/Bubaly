@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { unreadCount, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { buildAdminDigest } from '@/lib/admin/digest';
 import { AdminNotificationsList } from '@/components/admin/admin-notifications-list';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Admin · Notifications', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -13,11 +14,15 @@ export const dynamic = 'force-dynamic';
 // feed with the service role (the table has no client policy).
 export default async function AdminNotificationsPage() {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('admin_notifications')
     .select('id, kind, title, body, url, is_read, created_at')
     .order('created_at', { ascending: false })
     .limit(300);
+  if (error) {
+    console.error('[admin-notifications] notification read failed', error);
+    return <AdminNotificationsReadError />;
+  }
 
   const notifications = (data ?? []) as AdminNotificationRow[];
   const unread = unreadCount(notifications);
@@ -70,6 +75,19 @@ export default async function AdminNotificationsPage() {
       )}
 
       <AdminNotificationsList notifications={notifications} />
+    </div>
+  );
+}
+
+function AdminNotificationsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Notifications</h1>
+        <p className="mt-1 text-sm text-muted">Every super-admin alert in one place.</p>
+      </div>
+      <ErrorState message="Could not load admin notifications from Supabase. Refresh and try again." />
+      <a href="/admin/notifications" className="text-sm font-medium text-brand-text underline">Refresh notifications</a>
     </div>
   );
 }

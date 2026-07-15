@@ -4,7 +4,7 @@ import { DollarSign, CreditCard, Users, RefreshCw, AlertCircle } from 'lucide-re
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
@@ -21,11 +21,21 @@ const PLAN_COLORS = ['#7c5dff', '#22c55e', '#60a5fa', '#fbbf24', '#f87171', '#64
 
 export default async function AdminBillingPage() {
   const supabase = createServiceClient();
-  const [{ data: subs }, { count: billingCustomers }, { data: families }] = await Promise.all([
+  const [subscriptionsResult, billingCustomersResult, familiesResult] = await Promise.all([
     supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
     supabase.from('billing_customers').select('id', { count: 'exact', head: true }),
     supabase.from('families').select('id, name'),
   ]);
+
+  const readError = subscriptionsResult.error ?? billingCustomersResult.error ?? familiesResult.error;
+  if (readError) {
+    console.error('[admin-billing] billing read failed', readError);
+    return <AdminBillingReadError />;
+  }
+
+  const { data: subs } = subscriptionsResult;
+  const { count: billingCustomers } = billingCustomersResult;
+  const { data: families } = familiesResult;
 
   const rows = subs ?? [];
   const familyName = new Map((families ?? []).map((f) => [f.id, f.name]));
@@ -142,6 +152,19 @@ export default async function AdminBillingPage() {
         Manage plans &amp; processor settings in <Link href="/admin/subscriptions" className="text-brand-text hover:underline">Subscriptions</Link>.
         Refunds, disputes, and individual charges are handled in the Stripe dashboard.
       </p>
+    </div>
+  );
+}
+
+function AdminBillingReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Billing &amp; Payments</h1>
+        <p className="mt-1 text-sm text-muted">Live subscription revenue across every family.</p>
+      </div>
+      <ErrorState message="Could not load billing data from Supabase. Refresh and try again." />
+      <a href="/admin/billing" className="text-sm font-medium text-brand-text underline">Refresh billing</a>
     </div>
   );
 }
