@@ -14,7 +14,9 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed; 250 routes generated.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
 - `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
-- Publication remains pending for this increment.
+- Publication verified: local and `origin/main` both point to `f3e72542802bd07a7632b80b68e0f4e444b7a5fd`.
+- Latest live probes: schema audit passed all 11 checks; Auth Admin users returned HTTP 500 with request ID
+  `019f65f5-6fc8-7530-9c7e-5e8688441c29`; `supabase status` could not connect to the Docker Desktop Linux engine.
 
 ## Latest Audit Update - Connections false-success prevention
 
@@ -28,7 +30,7 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed; 250 routes generated.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
 - `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
-- Push verification remains pending for this increment.
+- Publication verified in the same audit window; the current remote head also includes the later Admin digest repair.
 
 ## Latest Audit Update - Admin notification failure visibility
 
@@ -42,7 +44,7 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed; 250 routes generated.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public health passed; Auth Admin users returned HTTP 500 with request ID
-  `019f65db-10f5-7cfd-92bf-085293f40a5a`.
+  `019f65f5-6fc8-7530-9c7e-5e8688441c29`.
 - `supabase status`: unavailable because the Docker Desktop Linux engine is not running.
 - `recordAdminNotification` now checks and logs Supabase's returned insert error while preserving its intentional best-effort contract.
 - The Admin Notifications history and bell now display sanitized `role=alert` failures and only refresh after a successful mark-read action.

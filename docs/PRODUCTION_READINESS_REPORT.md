@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 08:30 America/New_York
+Audit snapshot: 2026-07-15 09:27 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 407 Vitest files and 3,035 tests pass.
+- 411 Vitest files and 3,061 tests pass.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
 - Migration filename audit passes for 227 numbered migrations; next version is `0212`.
@@ -23,7 +23,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   direct membership UPDATE path that could change role, activation state, or family assignment. Remote
   application and authenticated cross-tenant probes remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f65db-10f5-7cfd-92bf-085293f40a5a`); local Docker/Supabase status is unavailable.
+  `019f65f5-6fc8-7530-9c7e-5e8688441c29`); local Docker/Supabase status is unavailable.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
 - The Connections hub no longer creates label-only “connected” records for providers without a real OAuth
