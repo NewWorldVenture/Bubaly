@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { addAeoQuestion } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · AEO', robots: { index: false } };
@@ -18,7 +19,11 @@ const STATUS_TONE: Record<string, 'neutral' | 'warning' | 'brand' | 'success'> =
 
 export default async function AeoPage() {
   const supabase = createServiceClient();
-  const { data: questions } = await supabase.from('marketing_aeo_questions').select('*').order('created_at', { ascending: false });
+  const { data: questions, error: questionsError } = await supabase.from('marketing_aeo_questions').select('*').order('created_at', { ascending: false });
+  if (questionsError) {
+    console.error('[admin-marketing-aeo] question read failed', questionsError);
+    return <AdminAeoReadError />;
+  }
 
   const rows = questions ?? [];
   const answered = rows.filter((q) => q.status === 'answered' || q.status === 'published').length;
@@ -68,6 +73,19 @@ export default async function AeoPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminAeoReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing AEO</h1>
+        <p className="mt-1 text-sm text-muted">Track customer questions and structured answers.</p>
+      </div>
+      <ErrorState message="Could not load AEO questions from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/aeo" className="text-sm font-medium text-brand-text underline">Refresh AEO</Link>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Layout, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createLandingPage, setLandingPublished } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Landing Pages', robots: { index: false } };
@@ -13,7 +14,11 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function LandingPagesPage() {
   const supabase = createServiceClient();
-  const { data: pages } = await supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: pages, error: pagesError } = await supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  if (pagesError) {
+    console.error('[admin-marketing-landing-pages] landing page read failed', pagesError);
+    return <AdminLandingPagesReadError />;
+  }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -69,6 +74,19 @@ export default async function LandingPagesPage() {
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create page</button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminLandingPagesReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Landing Pages</h1>
+        <p className="mt-1 text-sm text-muted">Draft and publish conversion-focused landing pages.</p>
+      </div>
+      <ErrorState message="Could not load landing pages from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/landing-pages" className="text-sm font-medium text-brand-text underline">Refresh landing pages</Link>
     </div>
   );
 }

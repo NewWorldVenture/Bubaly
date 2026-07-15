@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { saveSetting } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Settings', robots: { index: false } };
@@ -27,7 +29,11 @@ const KNOWN_SETTINGS = [
 
 export default async function MarketingSettingsPage() {
   const supabase = createServiceClient();
-  const { data: settings } = await supabase.from('marketing_settings').select('*');
+  const { data: settings, error: settingsError } = await supabase.from('marketing_settings').select('*');
+  if (settingsError) {
+    console.error('[admin-marketing-settings] settings read failed', settingsError);
+    return <AdminMarketingSettingsReadError />;
+  }
   const byKey = new Map((settings ?? []).map((s) => [s.key, s.value]));
 
   return (
@@ -64,6 +70,19 @@ export default async function MarketingSettingsPage() {
           })}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AdminMarketingSettingsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Settings</h1>
+        <p className="mt-1 text-sm text-muted">Configure provider status and marketing defaults.</p>
+      </div>
+      <ErrorState message="Could not load marketing settings from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/settings" className="text-sm font-medium text-brand-text underline">Refresh settings</Link>
     </div>
   );
 }

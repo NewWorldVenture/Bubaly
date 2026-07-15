@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Filter } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createFunnel } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Funnels', robots: { index: false } };
@@ -12,7 +13,11 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function FunnelsPage() {
   const supabase = createServiceClient();
-  const { data: funnels } = await supabase.from('marketing_funnels').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: funnels, error: funnelsError } = await supabase.from('marketing_funnels').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  if (funnelsError) {
+    console.error('[admin-marketing-funnels] funnel read failed', funnelsError);
+    return <AdminFunnelsReadError />;
+  }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -46,6 +51,19 @@ export default async function FunnelsPage() {
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create funnel</button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminFunnelsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Funnels</h1>
+        <p className="mt-1 text-sm text-muted">Define and review the customer journey.</p>
+      </div>
+      <ErrorState message="Could not load marketing funnels from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/funnels" className="text-sm font-medium text-brand-text underline">Refresh funnels</Link>
     </div>
   );
 }

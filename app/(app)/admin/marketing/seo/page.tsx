@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Search, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { addKeyword } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · SEO', robots: { index: false } };
@@ -19,7 +20,11 @@ const INTENTS = ['informational', 'navigational', 'commercial', 'transactional']
 
 export default async function SeoPage() {
   const supabase = createServiceClient();
-  const { data: keywords } = await supabase.from('marketing_seo_keywords').select('*').order('created_at', { ascending: false });
+  const { data: keywords, error: keywordsError } = await supabase.from('marketing_seo_keywords').select('*').order('created_at', { ascending: false });
+  if (keywordsError) {
+    console.error('[admin-marketing-seo] keyword read failed', keywordsError);
+    return <AdminSeoReadError />;
+  }
 
   return (
     <div className="space-y-5">
@@ -81,6 +86,19 @@ export default async function SeoPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminSeoReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SEO</h1>
+        <p className="mt-1 text-sm text-muted">Track search intent and indexable marketing pages.</p>
+      </div>
+      <ErrorState message="Could not load SEO keywords from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text underline">Refresh SEO</Link>
     </div>
   );
 }

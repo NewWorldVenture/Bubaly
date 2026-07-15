@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { ScrollText } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDateTime } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Marketing · Audit', robots: { index: false } };
@@ -10,7 +11,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function MarketingAuditPage() {
   const supabase = createServiceClient();
-  const { data: logs } = await supabase.from('marketing_audit_logs').select('*').order('created_at', { ascending: false }).limit(200);
+  const { data: logs, error: logsError } = await supabase.from('marketing_audit_logs').select('*').order('created_at', { ascending: false }).limit(200);
+  if (logsError) {
+    console.error('[admin-marketing-audit] audit log read failed', logsError);
+    return <AdminMarketingAuditReadError />;
+  }
 
   return (
     <div className="space-y-4">
@@ -32,6 +37,19 @@ export default async function MarketingAuditPage() {
           </ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+function AdminMarketingAuditReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Audit Log</h1>
+        <p className="mt-1 text-sm text-muted">Review recorded marketing actions and status changes.</p>
+      </div>
+      <ErrorState message="Could not load marketing audit logs from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/audit" className="text-sm font-medium text-brand-text underline">Refresh audit log</Link>
     </div>
   );
 }
