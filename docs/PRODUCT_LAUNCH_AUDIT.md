@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0350 - Emergency summary hid contact and medical read failures as no emergency data
+
+- Timestamp: 2026-07-15 17:23 America/New_York
+- Service: Trip Emergency Summary
+- Route: `/dashboard/vacations/[id]/emergency`
+- Affected files: `components/vacations/trip-emergency.tsx`, `tests/trip-emergency-boundary.test.ts`
+- Role: authenticated family members and household trip planners
+- Scenario: contact or medical reads could fail while the emergency summary returned null, indistinguishable from having no safety information.
+- Severity: P1
+- Launch impact: travelers could miss emergency contacts or medical details during a time-sensitive situation.
+- Root cause: the summary checked only array lengths and ignored both query loading and error state.
+- Resolution: Emergency Summary now tracks both required reads, distinguishes loading from empty, and renders a sanitized retryable ErrorState before returning no summary.
+- Supabase impact: no schema change; existing family-scoped safety reads now have an explicit failure contract.
+- Tests run: `tests/trip-emergency-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 468 test files, 3,220 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `da83e4b`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Emergency verification
+
 ### PLA-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
 
 - Timestamp: 2026-07-15 17:17 America/New_York
