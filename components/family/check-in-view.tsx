@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { CHECK_IN_STATUS, relTime } from '@/lib/family/safety';
@@ -24,7 +24,7 @@ export function CheckInView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading } = useRealtimeQuery<CheckIn>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<CheckIn>({
     table: 'safety_check_ins', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('safety_check_ins').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100),
   });
@@ -87,7 +87,7 @@ export function CheckInView() {
       </div>
 
       {/* Feed */}
-      {loading ? <SkeletonList /> : (rows ?? []).length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load family check-ins. Refresh and try again." onRetry={refresh} /> : (rows ?? []).length === 0 ? (
         <EmptyState icon={ShieldCheck} title="No check-ins yet" description="Tap a status above to post your first check-in." />
       ) : (
         <div className="space-y-2">
@@ -104,8 +104,8 @@ export function CheckInView() {
                     <span className={cn('rounded-full px-1.5 py-0.5 text-[11px] font-semibold', meta.tint)}>{meta.emoji} {meta.label}</span>
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {[c.place_label, c.note].filter(Boolean).join(' · ')}
-                    {(c.place_label || c.note) ? ' · ' : ''}{relTime(c.created_at)}
+                    {[c.place_label, c.note].filter(Boolean).join(' Â· ')}
+                    {(c.place_label || c.note) ? ' Â· ' : ''}{relTime(c.created_at)}
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>
@@ -118,3 +118,4 @@ export function CheckInView() {
     </div>
   );
 }
+
