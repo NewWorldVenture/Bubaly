@@ -17,17 +17,26 @@ export async function GET(req: NextRequest) {
   const weekStart = new Date().toISOString();
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: families } = await supabase.from('families').select('id, name');
+  const { data: families, error: familiesError } = await supabase.from('families').select('id, name');
+  if (familiesError) {
+    console.error('Weekly digest family read error:', familiesError);
+    return NextResponse.json({ error: 'Weekly digest processing failed.' }, { status: 500 });
+  }
   if (!families?.length) return NextResponse.json({ sent: 0 });
 
-  const { data: authUsers } = await supabase.auth.admin.listUsers();
+  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  if (authUsersError) {
+    console.error('Weekly digest user read error:', authUsersError);
+    return NextResponse.json({ error: 'Weekly digest processing failed.' }, { status: 500 });
+  }
   const emailByUserId = new Map(
     (authUsers?.users ?? []).map((u) => [u.id, u.email ?? null]),
   );
 
   let sent = 0;
+  let failed = 0;
   for (const family of families) {
-    const [{ data: events }, { data: chores }, { data: meals }, { data: members }] = await Promise.all([
+    const [{ data: events, error: eventsError }, { data: chores, error: choresError }, { data: meals, error: mealsError }, { data: members, error: membersError }] = await Promise.all([
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
         .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('chores').select('title, points, assignee_id').eq('family_id', family.id)
@@ -37,16 +46,29 @@ export async function GET(req: NextRequest) {
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 
+    const familyDataError = eventsError ?? choresError ?? mealsError ?? membersError;
+    if (familyDataError) {
+      console.error(`[weekly-digest] Family data read failed for ${family.id}:`, familyDataError);
+      failed++;
+      continue;
+    }
+
     if (!members?.length) continue;
 
-    const { data: adminMember } = await supabase
+    const { data: adminMember, error: adminMemberError } = await supabase
       .from('family_members')
       .select('user_id, display_name')
       .eq('family_id', family.id)
       .eq('is_active', true)
       .in('role', ['parent', 'adult'])
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    if (adminMemberError) {
+      console.error(`[weekly-digest] Admin member read failed for ${family.id}:`, adminMemberError);
+      failed++;
+      continue;
+    }
 
     if (!adminMember?.user_id) continue;
     const adminEmail = emailByUserId.get(adminMember.user_id);
@@ -65,7 +87,8 @@ export async function GET(req: NextRequest) {
       }),
     });
     if (ok) sent++;
+    else failed++;
   }
 
-  return NextResponse.json({ sent });
+  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
 }

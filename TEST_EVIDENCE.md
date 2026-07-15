@@ -43,6 +43,16 @@ Audit date: 2026-07-15
 - Live cron scheduling, duplicate-run, outage, ledger, and RLS evidence remain open.
 - Final full gate after this increment: 450 test files, 3,178 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
 
+## Latest Local Evidence - Digest Cron Failure Boundaries
+
+- Focused digest/auth cron suites: 2 files, 6 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- Chore Reminders and Weekly Digest now surface family/Auth Admin/feature read failures and return 502 after partial email delivery failures.
+- Full gate and live scheduler/Resend delivery evidence remain open for this increment.
+- Final full gate after this increment: 451 test files, 3,180 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
+
 ## Latest Live Evidence Snapshot - Authentication and Supabase
 
 - `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID

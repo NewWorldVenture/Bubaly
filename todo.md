@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:16:00 -04:00
+- Last updated: 2026-07-15 14:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes allowance plan-gating; publication to branch and `main` is pending
+- Commit: latest local source repair includes digest cron failure boundaries; publication to branch and `main` is pending
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0323 - Digest crons hid family and delivery failures as zero sends
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / notifications / scheduled jobs
+- Feature: Chore Reminders and Weekly Digest email workflows
+- Route: `/api/cron/chore-reminders`, `/api/cron/weekly-digest`
+- File or files: `app/api/cron/chore-reminders/route.ts`, `app/api/cron/weekly-digest/route.ts`, `tests/digest-cron-read-boundary.test.ts`
+- Database objects: `chore_assignments`, `families`, `calendar_events`, `chores`, `meal_plans`, `family_members`, and Supabase Auth Admin users
+- Affected roles: family members receiving reminders, family admins receiving digests, and scheduled cron workers
+- Scenario: failed family, Auth Admin, feature, or admin-member reads were converted to empty recipient/data sets; failed email sends were not reported as a failed run
+- Launch impact: users could miss time-sensitive chore/digest emails while monitoring saw a successful or zero-send cron
+- Root cause: several Supabase result errors were discarded and send failures were not counted
+- Resolution: required reads now fail with 500, per-family digest reads are counted as failures, and partial email delivery returns 502 with sent/failed counts
+- Tests performed: `tests/digest-cron-read-boundary.test.ts`, `tests/cron-auth.test.ts` (6 focused tests); typecheck; lint; diff check
+- Evidence: focused validation passes; final full gate pending publication
+- Remaining dependencies: run isolated scheduler, Resend outage/retry, recipient, and duplicate-run drills
+
 #### TODO-0322 - Allowance cron skipped credits when subscription gating read failed
 
 - Status: `[~]` In progress
@@ -40,7 +58,7 @@
 - Root cause: the subscriptions query error was discarded
 - Resolution: subscription plan-gating errors now throw through the cron failure path; existing schedule claim rollback protects against partial credit failures
 - Tests performed: `tests/cron-wallet-allowance-persistence.test.ts`, `tests/cron-auth.test.ts` (9 focused tests); typecheck; lint; diff check
-- Evidence: focused validation passes; final full gate passed with 450 files/3,178 tests, 0 production dependency vulnerabilities, and 250-route build
+- Evidence: focused validation passes; final full gate passed with 451 files/3,180 tests, 0 production dependency vulnerabilities, and 250-route build
 - Remaining dependencies: run isolated cron test-mode execution with subscription outages, duplicate invocations, and ledger/RLS verification
 
 #### TODO-0321 - Stripe subscription webhook ignored prior billing state failures

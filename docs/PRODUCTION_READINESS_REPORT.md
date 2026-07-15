@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 450 Vitest files and 3,178 tests pass in the latest full local gate.
+- 451 Vitest files and 3,180 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -124,6 +124,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   test-mode evidence remain open.
 - The allowance cron now fails the run when subscription plan-gating reads fail instead of silently treating every
   family as ineligible and skipping wallet credits; schedule rollback and credit recovery remain covered locally.
+- Chore Reminders and Weekly Digest now fail on family/Auth Admin/feature read failures and return 502 when email
+  delivery partially fails, instead of reporting a healthy zero-send result; live scheduler and Resend evidence remain open.
 - The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
   inbound and outbound inbox persistence errors are no longer discarded, and SMS, voice, voicemail, and inbound
   email callbacks return retryable 503 responses for database outages. Provider callback, retry, and live RLS

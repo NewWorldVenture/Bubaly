@@ -65,7 +65,11 @@ export async function GET(req: NextRequest) {
 
   // Fetch family names
   const familyIds = [...new Set((assignments ?? []).map((a) => a.family_id))];
-  const { data: families } = await supabase.from('families').select('id, name').in('id', familyIds);
+  const { data: families, error: familiesError } = await supabase.from('families').select('id, name').in('id', familyIds);
+  if (familiesError) {
+    console.error('Cron chore family read error:', familiesError);
+    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
+  }
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
 
   // Patch family names back in
@@ -76,7 +80,11 @@ export async function GET(req: NextRequest) {
 
   // Fetch emails
   const userIds = [...byMember.values()].map((v) => v.userId);
-  const { data: authUsers } = await supabase.auth.admin.listUsers();
+  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  if (authUsersError) {
+    console.error('Cron chore user read error:', authUsersError);
+    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
+  }
   const emailByUserId = new Map(
     (authUsers?.users ?? [])
       .filter((u) => userIds.includes(u.id))
@@ -84,6 +92,7 @@ export async function GET(req: NextRequest) {
   );
 
   let sent = 0;
+  let failed = 0;
   for (const [, { userId, memberName, familyName, chores }] of byMember) {
     const email = emailByUserId.get(userId);
     if (!email) continue;
@@ -93,7 +102,8 @@ export async function GET(req: NextRequest) {
       react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
     });
     if (ok) sent++;
+    else failed++;
   }
 
-  return NextResponse.json({ sent });
+  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
 }

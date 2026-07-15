@@ -958,3 +958,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live cron/RLS evidence remain open
 - Status: Resolved in code; live scheduled execution remains open
 - Remaining dependencies: execute isolated outage, duplicate-run, and ledger/RLS drills
+### PLA-0323 - Digest crons hid family and delivery failures as zero sends
+
+- Timestamp: 2026-07-15 14:18 America/New_York
+- Service: Chore reminder and weekly digest scheduled email workflows
+- Routes: `/api/cron/chore-reminders`, `/api/cron/weekly-digest`
+- Affected files: `app/api/cron/chore-reminders/route.ts`, `app/api/cron/weekly-digest/route.ts`, `tests/digest-cron-read-boundary.test.ts`
+- Role: family member, family admin, and scheduled cron worker
+- Scenario: family/Auth Admin/feature reads failed but the cron assembled empty data or recipients; failed email delivery did not change the response status
+- Severity: P1
+- Launch impact: reminders and digests could be missed while operations saw an apparently successful zero-send run
+- Root cause: Supabase result errors were discarded and email send failures were not counted
+- Resolution: required reads now fail with 500, per-family read failures are counted, and partial email delivery returns 502 with sent/failed counts
+- Supabase impact: no schema change; existing family-scoped queries remain unchanged
+- Tests run: `tests/digest-cron-read-boundary.test.ts`, `tests/cron-auth.test.ts` (6 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
+- Status: Resolved in code; live delivery evidence remains open
+- Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
