@@ -3,7 +3,7 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 13:24:00 -04:00
+- Last updated: 2026-07-15 13:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
 - Commit: latest source repair `f1e2ef12` for marketplace orders; community repair `57e973d3`; detail repair `d6685cd9`; overview repair `b32e7a0f`; published to branch and `main`
@@ -31,14 +31,14 @@
 - Severity: P0
 - Category: Reliability / money movement / tenant integrity
 - Feature: Wallet Send Money, Activity, and Family Treasury views
-- Route: `/wallet/send`, `/wallet/activity`, `/wallet/treasury`
-- File or files: `app/(app)/wallet/send/page.tsx`, `app/(app)/wallet/activity/page.tsx`, `app/(app)/wallet/treasury/page.tsx`, `tests/wallet-read-boundary.test.ts`
+- Route: `/wallet/send`, `/wallet/activity`, `/wallet/treasury`, `/wallet/goals`, `/wallet/allowance`, `/wallet/cards`
+- File or files: `app/(app)/wallet/send/page.tsx`, `app/(app)/wallet/activity/page.tsx`, `app/(app)/wallet/treasury/page.tsx`, `app/(app)/wallet/goals/page.tsx`, `app/(app)/wallet/allowance/page.tsx`, `app/(app)/wallet/cards/page.tsx`, `tests/wallet-read-boundary.test.ts`
 - Database objects: `family_wallets`, `child_wallets`, `wallet_buckets`, `wallet_transactions`, `family_members`, `wallet_goals`, and `wallet_rules`
 - Affected roles: household managers, parents, and members with wallet visibility
-- Scenario: a failed wallet read looked like an inactive wallet, while failed ledger, bucket, goal, rule, child-wallet, or member reads silently produced activation prompts, zero balances, incomplete history, or fallback names
+- Scenario: a failed wallet read looked like an inactive wallet, while failed ledger, bucket, goal, rule, card, connected-account, child-wallet, or member reads silently produced activation prompts, zero balances, incomplete history, fallback names, or incomplete card controls
 - Launch impact: users could make financial decisions from incomplete balances or be offered activation flows during a data outage
 - Root cause: Supabase result errors were discarded across all three server-rendered wallet pages
-- Resolution: wallet failures now render a retryable error state; dependent failures are logged and surfaced in accessible page-specific data-health warnings while unaffected data remains visible
+- Resolution: wallet failures now render a retryable error state; dependent failures are logged and surfaced in accessible page-specific data-health warnings across Send Money, Activity, Treasury, Goals, Allowance, and Cards while unaffected data remains visible
 - Tests performed: `tests/wallet-read-boundary.test.ts` (2 focused tests); full 448-file/3,159-test suite; typecheck; lint; dependency audit; production build; diff check
 - Evidence: source commit `d3147d0e`; branch and `main` publication verified; live wallet/RLS/role/concurrency/payment workflow evidence remains open
 - Remaining dependencies: run isolated manager/member wallet activation, balance, send, ledger, goal, rule, concurrency, and tenant-isolation drills against deployed Supabase

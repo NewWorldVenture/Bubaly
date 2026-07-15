@@ -1537,5 +1537,18 @@ Audit date: 2026-07-15
 - `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
-- Wallet Send Money, Activity, and Treasury now fail clearly on primary wallet reads and surface dependent ledger/identity/configuration failures instead of silently deriving zero or incomplete financial views.
-- Source commit: `d3147d0e`; branch and `main` publication verified.
+- Wallet Send Money, Activity, Treasury, Goals, Allowance, and Cards now fail clearly on primary wallet reads and surface dependent ledger, identity, configuration, connected-account, sync, and issued-card failures instead of silently deriving zero or incomplete financial views.
+- Source commit: pending publication.
+
+## Progress Snapshot - 2026-07-15 13:30
+
+- Overall decision: **NO-GO**.
+- Verified completion: `10 / 100 * 100 = 10.0%`.
+- Current service: Wallet, money movement, and connected-card read boundaries.
+- Completed this interval: Send Money, Activity, Treasury, Goals, Allowance, and Cards now distinguish primary failures from inactive/empty state and surface dependent read/sync failures.
+- Tests added/updated: `tests/wallet-read-boundary.test.ts` (2 focused tests).
+- Full verification: 448 test files, 3,159 tests; typecheck; lint; dependency audit (0 vulnerabilities); production build (250 routes); diff check all passed.
+- Supabase status: existing 11 schema probes remain green; remote migration application and live wallet/RLS/role/concurrency evidence remain unverified.
+- Deployment status: source publication follows this snapshot; live Auth Admin HTTP 500 and local Docker/Supabase unavailability remain open blockers.
+- Latest verified commit: `24467c76` before the wallet source increment.
+- Next: publish the wallet increment, then continue the remaining wallet routes and money/webhook/cron integration audit.

@@ -109,6 +109,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   collection-listing read failures instead of presenting healthy empty discovery views.
 - Wallet Send Money, Activity, and Treasury now distinguish failed wallet reads from inactive wallets and
   surface dependent ledger, bucket, goal, rule, child-wallet, and member failures before showing derived balances.
+- Wallet Goals, Allowance, and Cards now apply the same boundary, including connected-account sync/status and
+  issued-card failures before exposing financial controls.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

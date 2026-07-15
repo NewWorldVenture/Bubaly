@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { weeksToGoal } from '@/lib/wallet/ledger';
 import { GoalsView, type GoalView, type ChildOption } from '@/components/wallet/goals-view';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Wallet Goals' };
 
@@ -11,17 +13,26 @@ export default async function WalletGoalsPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  const dataWarnings: string[] = [];
 
   // Fetch goals, wallets, members, and recent save-bucket credits (last 8 weeks)
   // to compute a per-child weekly save rate for goal forecasts.
   const since = new Date(Date.now() - 56 * 86400000).toISOString();
-  const [{ data: goals }, { data: childWallets }, { data: members }, { data: walletBuckets }, { data: recentTxns }] = await Promise.all([
+  const [{ data: goals, error: goalsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: walletBuckets, error: walletBucketsError }, { data: recentTxns, error: recentTxnsError }] = await Promise.all([
     supabase.from('wallet_goals').select('id, child_wallet_id, title, kind, target_cents, saved_cents, target_date, status').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
     supabase.from('wallet_buckets').select('id, kind, child_wallet_id').eq('family_id', familyId).eq('kind', 'save'),
     supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, amount_cents').eq('family_id', familyId).eq('direction', 'credit').eq('status', 'completed').gte('created_at', since),
   ]);
+  if (goalsError) {
+    console.error('[wallet-goals] Goals read failed', goalsError);
+    return <ErrorState message="Could not load wallet goals. Refresh and try again." />;
+  }
+  if (childWalletsError) { console.error('[wallet-goals] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
+  if (membersError) { console.error('[wallet-goals] Family members read failed', membersError); dataWarnings.push('Family members'); }
+  if (walletBucketsError) { console.error('[wallet-goals] Wallet buckets read failed', walletBucketsError); dataWarnings.push('Wallet buckets'); }
+  if (recentTxnsError) { console.error('[wallet-goals] Recent transactions read failed', recentTxnsError); dataWarnings.push('Recent transactions'); }
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const nameByWallet = new Map((childWallets ?? []).map((c) => [c.id, nameByMember.get(c.member_id) ?? 'Child']));
@@ -53,5 +64,15 @@ export default async function WalletGoalsPage() {
   });
   const childOptions: ChildOption[] = (childWallets ?? []).map((c) => ({ id: c.id, name: nameByMember.get(c.member_id) ?? 'Child' }));
 
-  return <GoalsView goals={goalViews} childOptions={childOptions} canManage={isManager(ctx.active.role)} />;
+  return (
+    <div>
+      {dataWarnings.length > 0 && (
+        <div role="status" aria-label="Wallet goals data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>Some goal details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+        </div>
+      )}
+      <GoalsView goals={goalViews} childOptions={childOptions} canManage={isManager(ctx.active.role)} />
+    </div>
+  );
 }

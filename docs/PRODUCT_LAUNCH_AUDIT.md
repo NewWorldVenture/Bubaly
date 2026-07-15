@@ -750,14 +750,14 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 - Timestamp: 2026-07-15 13:24 America/New_York
 - Service: Wallet Send Money, Activity, and Family Treasury read boundaries
-- Route: `/wallet/send`, `/wallet/activity`, `/wallet/treasury`
-- Affected files: `app/(app)/wallet/send/page.tsx`, `app/(app)/wallet/activity/page.tsx`, `app/(app)/wallet/treasury/page.tsx`, `tests/wallet-read-boundary.test.ts`
+- Route: `/wallet/send`, `/wallet/activity`, `/wallet/treasury`, `/wallet/goals`, `/wallet/allowance`, `/wallet/cards`
+- Affected files: `app/(app)/wallet/send/page.tsx`, `app/(app)/wallet/activity/page.tsx`, `app/(app)/wallet/treasury/page.tsx`, `app/(app)/wallet/goals/page.tsx`, `app/(app)/wallet/allowance/page.tsx`, `app/(app)/wallet/cards/page.tsx`, `tests/wallet-read-boundary.test.ts`
 - Role: household manager, parent, and member with wallet visibility
-- Scenario: failed wallet or dependent ledger reads rendered activation prompts, zero balances, incomplete history, or fallback identity data
+- Scenario: failed wallet or dependent ledger/card/connected-account reads rendered activation prompts, zero balances, incomplete history, fallback identity data, or incomplete card controls
 - Severity: P0
 - Launch impact: users could make financial decisions from incomplete data or be offered an unsafe activation path during an outage
 - Root cause: Supabase result errors were discarded by all three server-rendered wallet pages
-- Resolution: primary wallet failure now renders a retryable ErrorState; dependent failures are logged and shown in accessible page-specific data-health warnings
+- Resolution: primary wallet failure now renders a retryable ErrorState; dependent failures are logged and shown in accessible page-specific data-health warnings across six wallet pages
 - Supabase impact: no schema change; all reads remain family scoped and preserve existing wallet permissions
 - Tests run: `tests/wallet-read-boundary.test.ts` (2 focused tests); full 448-file/3,159-test suite; typecheck; lint; dependency audit; production build; diff check
 - Validation evidence: source commit `d3147d0e`; build generated 250 routes; branch and `main` publication verified; live wallet/RLS, role, concurrency, and payment workflow evidence remain open
