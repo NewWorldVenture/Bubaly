@@ -272,10 +272,11 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const { data: rules } = await supabase
+  const { data: rules, error: rulesError } = await supabase
     .from('allowance_rules')
-    .select('id, child_wallet_id, amount_cents, cadence, split, next_run_on')
+    .select('id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')
     .eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today);
+  if (rulesError) return actionFailure(rulesError, 'Could not load due allowances.');
   if ((rules ?? []).length === 0) return { ok: true, ranCount: 0, paidCents: 0 };
 
   const totalDue = (rules ?? []).reduce((s, r) => s + r.amount_cents, 0);
@@ -292,6 +293,10 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   let paidCents = 0;
   for (const rule of rules ?? []) {
     const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
+    const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
+      .update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId).select('id').single();
+    if (advanceError || !advancedRule) return actionFailure(advanceError ?? new Error('Allowance schedule was not updated.'), 'Could not update an allowance schedule.');
+
     if (runs > 0) {
       const res = await creditChildWallet(supabase, {
         familyId, childWalletId: rule.child_wallet_id, amountCents: rule.amount_cents, type: 'allowance',
@@ -299,9 +304,15 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
         relatedType: 'allowance_rules', relatedId: rule.id,
         splitOverride: rule.split as Partial<Split> | null,
       });
-      if (res.ok) { ranCount++; paidCents += rule.amount_cents; }
+      if (!res.ok) {
+        const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
+          .eq('id', rule.id).eq('family_id', familyId);
+        if (rollbackError) console.error('[wallet allowances] schedule rollback failed', rollbackError);
+        return { ok: false, error: res.error, ranCount, paidCents };
+      }
+      ranCount++;
+      paidCents += rule.amount_cents;
     }
-    await supabase.from('allowance_rules').update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId);
   }
 
   revalidatePath('/wallet/allowance');

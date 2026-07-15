@@ -4418,3 +4418,21 @@ roadmap entries and user worktree changes are preserved.
   cleanup, and chore creation compensation.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0279 - Failed allowance credits could be marked as paid
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family Wallet / financial data integrity / recovery
+- Feature: Manual due-allowance execution
+- File or files: `app/(app)/wallet/actions.ts`, `tests/wallet-allowance-persistence.test.ts`
+- Description: The manual allowance runner ignored rule-read and schedule-write failures, and advanced
+  `next_run_on` even when the child-wallet credit failed, potentially skipping an allowance permanently.
+- Resolution: Rule reads and schedule advances now fail closed. Each schedule advance is rolled back if its
+  wallet credit fails, and the action reports only successfully credited rules and cents.
+- Tests performed: Focused wallet allowance/atomic/error-boundary tests, full Vitest, typecheck, lint, dependency
+  audit, and clean production build.
+- Evidence: `tests/wallet-allowance-persistence.test.ts` guards checked reads, schedule updates, rollback, and
+  success counters.
+- Verified by: Codex
+- Date completed: 2026-07-15
