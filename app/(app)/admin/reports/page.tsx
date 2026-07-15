@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
@@ -37,16 +37,7 @@ export default async function AdminReportsPage() {
   const supabase = createServiceClient();
   const fourteenDaysAgo = new Date(Date.now() - 14 * MS_DAY).toISOString();
 
-  const [
-    { count: familyCount },
-    { count: userCount },
-    { count: activeSubCount },
-    { data: families },
-    { data: profiles },
-    { data: subscriptions },
-    { data: docs },
-    { data: activity },
-  ] = await Promise.all([
+  const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await Promise.all([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
@@ -56,6 +47,24 @@ export default async function AdminReportsPage() {
     supabase.from('documents').select('size_bytes'),
     supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo),
   ]);
+
+  const familyCount = familyCountResult.count;
+  const userCount = userCountResult.count;
+  const activeSubCount = activeSubCountResult.count;
+  const families = familiesResult.data;
+  const profiles = profilesResult.data;
+  const subscriptions = subscriptionsResult.data;
+  const docs = docsResult.data;
+  const activity = activityResult.data;
+  const readError = [
+    familyCountResult.error, userCountResult.error, activeSubCountResult.error,
+    familiesResult.error, profilesResult.error, subscriptionsResult.error,
+    docsResult.error, activityResult.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[admin-reports] report read failed', readError);
+    return <AdminReportsReadError />;
+  }
 
   const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
   const mrrCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
@@ -159,6 +168,19 @@ export default async function AdminReportsPage() {
           <p className="mt-2 text-xs text-muted">Audited actions per day · last 14 days</p>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminReportsReadError() {
+  return (
+    <div className="module-page space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reports &amp; Analytics</h1>
+        <p className="mt-1 text-sm text-muted">Growth, revenue, and engagement across every family on Bubaly.</p>
+      </div>
+      <ErrorState message="Could not load reports from Supabase. Refresh and try again." />
+      <a href="/admin/reports" className="text-sm font-medium text-brand-text underline">Refresh reports</a>
     </div>
   );
 }
