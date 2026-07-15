@@ -1287,4 +1287,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - `adminCreateFamilyAction` now checks owner lookup errors, explicitly upserts the parent membership, ensures a trial subscription when needed, and deletes the newly-created family if a required reconciliation write fails.
-- Source commit: `46a227b1`; docs update and remote push verification remain pending.
+- Source commit: `46a227b1`; docs and source are published on `origin/main` at `b7cd416a`.
