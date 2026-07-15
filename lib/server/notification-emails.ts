@@ -10,17 +10,20 @@ import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 
 type DB = SupabaseClient<Database>;
+export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
+
+const emptyResult = (): NotificationEmailResult => ({ sent: 0, failed: 0, skipped: 0 });
 
 /**
  * Emails each member a digest of their unsent, user-targeted notifications that
- * are due (send_at <= now). Returns the number of emails sent. Whole-family
- * (null user_id) rows stay in-app only.
+ * are due (send_at <= now). Whole-family (null user_id) rows stay in-app only.
+ * Database and provider failures remain visible so cron monitoring can retry.
  */
-export async function deliverNotificationEmails(supabase: DB): Promise<number> {
-  if (!emailEnabled()) return 0;
+export async function deliverNotificationEmails(supabase: DB): Promise<NotificationEmailResult> {
+  if (!emailEnabled()) return emptyResult();
 
   const nowIso = new Date().toISOString();
-  const { data: pending } = await supabase
+  const { data: pending, error: pendingError } = await supabase
     .from('notifications')
     .select('id, user_id, type, title, body')
     .is('sent_at', null)
@@ -28,21 +31,33 @@ export async function deliverNotificationEmails(supabase: DB): Promise<number> {
     .lte('send_at', nowIso)
     .order('created_at', { ascending: true })
     .limit(500);
+  if (pendingError) {
+    console.error('[notification-email] pending notification read failed', pendingError);
+    return { sent: 0, failed: 1, skipped: 0 };
+  }
 
-  if (!pending?.length) return 0;
+  if (!pending?.length) return emptyResult();
 
   const byUser = groupByUser(pending);
   const userIds = [...byUser.keys()];
 
   // Respect the per-user email toggle (default on).
-  const { data: prefs } = await supabase
+  const { data: prefs, error: prefsError } = await supabase
     .from('user_preferences')
     .select('user_id, email_enabled')
     .in('user_id', userIds);
+  if (prefsError) {
+    console.error('[notification-email] preference read failed', prefsError);
+    return { sent: 0, failed: 1, skipped: 0 };
+  }
   const emailOff = new Set((prefs ?? []).filter((p) => !p.email_enabled).map((p) => p.user_id));
 
   // Resolve recipient emails + names. Mirrors the weekly-digest cron's approach.
-  const { data: authUsers } = await supabase.auth.admin.listUsers();
+  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  if (authUsersError) {
+    console.error('[notification-email] recipient lookup failed', authUsersError);
+    return { sent: 0, failed: 1, skipped: 0 };
+  }
   const userMeta = new Map(
     (authUsers?.users ?? []).map((u) => [
       u.id,
@@ -56,6 +71,8 @@ export async function deliverNotificationEmails(supabase: DB): Promise<number> {
   );
 
   let sent = 0;
+  let failed = 0;
+  let skipped = 0;
   const resolvedIds: string[] = []; // emailed OR intentionally skipped → mark sent_at
 
   for (const [userId, notifs] of byUser) {
@@ -64,6 +81,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<number> {
 
     // No email on file, or the member opted out → resolve without sending.
     if (emailOff.has(userId) || !meta?.email) {
+      skipped += 1;
       resolvedIds.push(...ids);
       continue;
     }
@@ -77,12 +95,18 @@ export async function deliverNotificationEmails(supabase: DB): Promise<number> {
     if (ok) {
       sent++;
       resolvedIds.push(...ids);
+    } else {
+      failed++;
     }
     // On send failure we leave sent_at null so the next run retries.
   }
 
   if (resolvedIds.length) {
-    await supabase.from('notifications').update({ sent_at: nowIso }).in('id', resolvedIds);
+    const { error: resolveError } = await supabase.from('notifications').update({ sent_at: nowIso }).in('id', resolvedIds);
+    if (resolveError) {
+      console.error('[notification-email] notification resolve update failed', resolveError);
+      failed++;
+    }
   }
-  return sent;
+  return { sent, failed, skipped };
 }

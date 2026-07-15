@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   // Email digests across all families (respects the per-user email toggle and
   // marks rows sent so they aren't re-emailed).
-  let emailed = 0;
+  let emailed = { sent: 0, failed: 0, skipped: 0 };
   let emailDeliveryFailures = 0;
   try {
     emailed = await deliverNotificationEmails(supabase);
@@ -57,10 +57,10 @@ export async function GET(req: NextRequest) {
     console.error('Notification email delivery failed:', e);
   }
 
-  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures;
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures + emailed.failed;
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, families: families?.length ?? 0, created: total, pushed, emailed, failed },
+    { ok, families: families?.length ?? 0, created: total, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
     { status: ok ? 200 : 502 },
   );
 }

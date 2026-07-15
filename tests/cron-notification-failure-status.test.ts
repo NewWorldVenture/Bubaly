@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 
 const routes = [
-  ['notifications', 'app/api/cron/notifications/route.ts', 'generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures'],
+  ['notifications', 'app/api/cron/notifications/route.ts', 'generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures + emailed.failed'],
   ['push-scan', 'app/api/cron/push-scan/route.ts', 'generationFailures + pushDispatchFailures + pushed.result.failed'],
 ] as const;
 
