@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0387 - Admin Settings hid administrator-count read failures as zero access holders
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/settings`.
+- Finding: the `super_admins` count could fail while the page rendered zero administrators and presented the system as readable.
+- Repair: the Supabase error is checked before building system status; failures return a retryable page state.
+- Evidence: focused Admin Settings boundary suite (1 assertion), full 493 test files/3,253 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `0f91564a`.
+- Remaining launch gate: validate live Super Admin authorization, settings table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0386 - Admin Management hid administrator read failures as zero admins
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -220,14 +230,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Timestamp: 2026-07-16 08:13 America/New_York
 - Service: Tax Vault, Subscriptions, Trip Memories, and Routines
 - Route: corresponding family module routes under `/dashboard`
-- Affected files: `components/modules/tax-vault-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/trip-memories-module.tsx`, `components/modules/routines-panel.tsx`, `tests/household-read-boundaries.test.ts`
-- Role: authenticated family members and household managers
-- Scenario: failed reads either rendered a healthy empty state or allowed trip and routine summaries to derive from partial query results.
-- Severity: P1
-- Launch impact: families could miss tax records, recurring charges, travel memories, or saved routines while the UI appeared usable.
-- Root cause: modules ignored realtime query errors; Trip Memories and Routines also lacked coordinated loading and retry behavior across dependent reads.
-- Resolution: all four surfaces now expose retryable ErrorState UI; Trip Memories and Routines coordinate every required read before rendering derived state.
-- Supabase impact: no schema change; existing family-scoped record, trave…34493 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Affected files: `components/modules/tax-vault-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/trip-memories-module…34699 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
