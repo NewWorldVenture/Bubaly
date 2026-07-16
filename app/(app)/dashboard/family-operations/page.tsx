@@ -5,9 +5,10 @@ import {
   Trophy, CreditCard, Activity, Sparkles, ArrowRight, ShieldAlert,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { gatherSignals } from '@/lib/family/signals';
+import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Operations' };
 export const dynamic = 'force-dynamic';
@@ -16,9 +17,24 @@ const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500',
 };
 
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <h1 className="text-2xl font-bold tracking-tight">Family Operations</h1>
+      <ErrorState message="Could not load family operations data from Supabase. Refresh and try again." />
+      <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">Refresh family operations</Link>
+    </div>
+  );
+}
+
 export default async function FamilyOperationsPage() {
   const ctx = await requireUserContext();
-  const { stress, completion, actions, counts } = await gatherSignals(ctx.active.familyId);
+  const result = await gatherSignalsResult(ctx.active.familyId);
+  if (result.error || !result.data) {
+    console.error('[dashboard-family-operations] required read failed', result.error);
+    return <ReadFailure />;
+  }
+  const { stress, completion, actions, counts } = result.data;
 
   return (
     <div className="space-y-5">
