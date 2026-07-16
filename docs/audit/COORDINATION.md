@@ -46,7 +46,7 @@ Last board update: **2026-07-16 20:45 UTC** · by `agent-01`
 |--------|-----------------|------------------|----------------------|
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
-| `agent-02` | _free — claim me_ | | |
+| `agent-02` | Opus 4.8 — display service-tiles (shipped `375e97ec`), now A-10 meals/food | 2026-07-16 20:55 | 2026-07-16 20:55 |
 | `agent-03` | _free — claim me_ | | |
 | `agent-04` | _free — claim me_ | | |
 
@@ -98,7 +98,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-07 | — | OPEN | | | | |
 | A-08 | — | OPEN | | | | Codex did PAY-1/PAY-2; full flow open |
 | A-09 | — | OPEN | | | | |
-| A-10 | — | OPEN | | | | |
+| A-10 | `agent-02` | CLAIMED | 2026-07-16 20:55 | 2026-07-16 20:55 | — | Meals/groceries/food: silent-read + write-boundary sweep |
 | A-11 | — | OPEN | | | | |
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |
