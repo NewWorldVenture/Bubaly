@@ -63,27 +63,28 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const { title, desc, provider: providerWord, Icon } = COPY[kind];
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: providers, loading: pLoading, error: pError } = useRealtimeQuery<Provider>({
+  const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
     table: 'health_providers', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('health_providers').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }).order('name'),
   });
-  const { data: policies, loading: polLoading, error: polError } = useRealtimeQuery<Policy>({
+  const { data: policies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
     table: 'insurance_policies', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('insurance_policies').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }),
   });
-  const { data: profiles, loading: profLoading, error: profError } = useRealtimeQuery<Profile>({
+  const { data: profiles, loading: profLoading, error: profError, refresh: refreshProfiles } = useRealtimeQuery<Profile>({
     table: 'medical_profiles', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medical_profiles').select('*').eq('family_id', familyId),
   });
-  const { data: medications } = useRealtimeQuery<Tables<'medications'>>({
+  const { data: medications, loading: medsLoading, error: medsError, refresh: refreshMeds } = useRealtimeQuery<Tables<'medications'>>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const profileByMember = useMemo(() => new Map(profiles.map((p) => [p.member_id, p])), [profiles]);
-  const loading = pLoading || polLoading || profLoading;
-  const error = pError || polError || profError;
+  const loading = pLoading || polLoading || profLoading || medsLoading;
+  const error = pError || polError || profError || medsError;
+  const refresh = () => { void refreshProviders(); void refreshPolicies(); void refreshProfiles(); void refreshMeds(); };
 
   // Providers grouped: whole-family first, then per member.
   const providerGroups = useMemo(() => {

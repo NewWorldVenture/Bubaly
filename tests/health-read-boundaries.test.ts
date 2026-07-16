@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const healthSource = readFileSync('components/modules/health-module.tsx', 'utf8');
 const medicationsSource = readFileSync('components/modules/medications-module.tsx', 'utf8');
+const recordsSource = readFileSync('components/modules/medical-records-module.tsx', 'utf8');
 
 describe('health read boundaries', () => {
   it('coordinates health metrics, activity, appointments, reminders, symptoms, and goals', () => {
@@ -17,5 +18,12 @@ describe('health read boundaries', () => {
     expect(medicationsSource).toContain('error: dosesError, refresh: refreshDoses');
     expect(medicationsSource).toContain('Could not load medication data. Refresh and try again.');
     expect(medicationsSource).toContain('void refreshMeds(); void refreshSchedules(); void refreshDoses();');
+  });
+
+  it('coordinates active-medication reads with Medical Records data', () => {
+    expect(recordsSource).toContain('error: medsError, refresh: refreshMeds');
+    expect(recordsSource).toContain('const loading = pLoading || polLoading || profLoading || medsLoading;');
+    expect(recordsSource).toContain('const error = pError || polError || profError || medsError;');
+    expect(recordsSource).toContain('const refresh = () => { void refreshProviders(); void refreshPolicies(); void refreshProfiles(); void refreshMeds(); };');
   });
 });
