@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:20:00 -04:00
+- Last updated: 2026-07-16 12:25:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `dd3c2929` makes Family Operations and Family Reports fail closed on shared-signal read failures after `c4c3cb5f` repaired Family Stress; live provider and deployment evidence remains open
+- Commit: `49a5ec33` makes Dashboard Home fail closed on saved preference read failures after `dd3c2929` repaired Family Operations and Reports; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0401 - Dashboard Home hid preference read failures as the wrong dashboard
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / default view selection / Supabase read boundary
+- Feature: Dashboard Home
+- Route: `/dashboard` without an explicit `view` query
+- File or files: `app/(app)/dashboard/page.tsx`, `tests/dashboard-home-read-boundary.test.ts`
+- Database objects: `user_preferences`
+- Affected roles: authenticated family members
+- Scenario: the saved dashboard preference query could fail while the route silently selected the AI dashboard.
+- Launch impact: users could be shown the wrong home experience and lose confidence that their saved preference was honored.
+- Root cause: the route discarded the preference read error and treated a failed read as an absent preference.
+- Required remediation: preserve the preference error and render a retryable failure before selecting the saved/default dashboard; keep explicit query-based views independent.
+- Implementation notes: added a route-level ReadFailure state, checked the preference query error, and added a focused regression test.
+- Test plan: focused Dashboard Home boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (507 files/3,267 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `49a5ec33`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Dashboard Home no longer silently selects the wrong view after a failed preference read.
+- Remaining dependencies: verify authenticated preference RLS, saved-view persistence, explicit view routing, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0400 - Family Operations and Reports hid shared-signal read failures as healthy summaries
 

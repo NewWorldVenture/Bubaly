@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Dashboard Home Preference Read Boundary
+
+- Focused Dashboard Home boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run`: 507 test files, 3,267 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Dashboard Home now fails visibly when the saved default dashboard preference cannot be read instead of silently choosing the AI dashboard.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `49a5ec33`.
+
 ## Latest Local Evidence - Family Summary Read Boundaries
 
 - Focused Family Summary boundary suite: 1 file, 1 assertion passed.

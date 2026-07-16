@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0401 - Dashboard Home hid preference read failures as the wrong dashboard
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard` without an explicit `view` query.
+- Finding: a failed `user_preferences` read silently selected the AI dashboard, hiding the user's saved default view state.
+- Repair: the default dashboard route now preserves the preference error and returns a retryable page failure; explicit `?view=family` and `?view=personal` routes remain independent.
+- Evidence: focused Dashboard Home boundary suite (1 assertion), full 507 test files/3,267 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `49a5ec33`.
+- Remaining launch gate: validate authenticated preference RLS, saved-view persistence, explicit view routing, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0400 - Family Operations and Reports hid shared-signal read failures as healthy summaries
 
 - Status: Resolved in source; live and deployed verification remain open.
