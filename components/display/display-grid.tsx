@@ -83,6 +83,10 @@ const sizeClass = (s: TileSize) => SIZES.find((x) => x.key === s)?.cls ?? SIZES[
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+/** First name from a possibly-null display_name — a null column value once
+ *  crashed the whole kiosk via `.split` on null. Never throws. */
+const firstName = (name: string | null | undefined) => (name ?? '').trim().split(/\s+/)[0] || 'Member';
+
 // ── Rotating featured hero ───────────────────────────────────────────────────
 function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName: string }) {
   const [i, setI] = useState(0);
@@ -207,7 +211,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
               <li key={c.id} className="flex items-center gap-2.5">
                 <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', c.status === 'submitted' ? 'bg-amber-400' : 'bg-white/25')} />
                 <span className="min-w-0 flex-1 truncate text-white">{c.title}</span>
-                {who && <span className="shrink-0 text-xs text-white/50">{who.display_name.split(' ')[0]}</span>}
+                {who && <span className="shrink-0 text-xs text-white/50">{firstName(who.display_name)}</span>}
               </li>
             );
           })}
@@ -248,7 +252,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
           {data.members.map((m) => (
             <div key={m.id} className="flex flex-col items-center gap-1.5">
               <Avatar name={m.display_name} color={m.color} size={52} />
-              <span className="text-xs text-white/80">{m.display_name.split(' ')[0]}</span>
+              <span className="text-xs text-white/80">{firstName(m.display_name)}</span>
             </div>
           ))}
         </div>
