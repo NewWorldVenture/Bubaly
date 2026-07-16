@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0359 - Health and Medications hid required clinical reads as partial history
+
+- Timestamp: 2026-07-16 07:14 America/New_York
+- Service: Health Dashboard and Medications
+- Route: `/dashboard/health`, `/dashboard/medications`
+- Affected files: `components/modules/health-module.tsx`, `components/modules/medications-module.tsx`, `tests/health-read-boundaries.test.ts`
+- Role: authenticated family members, household managers, and health-history users
+- Scenario: symptom/goal reads and medication schedule/dose reads could fail while the UI derived health summaries, adherence, or empty states from partial arrays.
+- Severity: P1
+- Launch impact: families could miss symptoms, goals, medication schedules, dose history, or clinical follow-up context.
+- Root cause: both modules ignored secondary realtime query loading/error state; Medications only guarded the medication list.
+- Resolution: Health now coordinates six reads; Medications coordinates medication, schedule, and dose reads. Both render sanitized retryable ErrorState UI before derived clinical states.
+- Supabase impact: no schema change; existing family-scoped clinical reads now have explicit failure contracts.
+- Tests run: `tests/health-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 476 test files, 3,233 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `32dc4248`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed health verification
+
 ### PLA-0358 - Finances summary hid account and planning read failures as zero metrics
 
 - Timestamp: 2026-07-16 07:09 America/New_York
@@ -210,28 +229,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: Trip Itinerary now tracks all three query handles, waits for complete data, and renders a sanitized retryable ErrorState before showing an empty schedule.
 - Supabase impact: no schema change; existing family-scoped itinerary reads now have an explicit page-level failure contract.
 - Tests run: `tests/trip-itinerary-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Validation evidence: 466 test files, 3,216 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `7e6ce831`
-- Status: Resolved in code; documentation and remote publication pending for this increment
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Itinerary verification
-
-### PLA-0347 - Trip overview hid incomplete readiness and itinerary reads
-
-- Timestamp: 2026-07-15 17:05 America/New_York
-- Service: Trip Overview
-- Route: `/dashboard/vacations/[id]/overview`
-- Affected files: `components/vacations/trip-overview.tsx`, `tests/trip-overview-boundary.test.ts`
-- Role: authenticated family members and household trip planners
-- Scenario: any secondary overview read could fail while readiness, budget, transport, weather, or recommendation summaries rendered from partial arrays.
-- Severity: P1
-- Launch impact: families could treat an incomplete trip overview as current and act on an inaccurate readiness score or financial summary.
-- Root cause: only the trip query exposed loading state; the other 16 required reads ignored loading and error state.
-- Resolution: Trip Overview now centralizes all 17 query handles, waits for complete data, and renders a sanitized retryable ErrorState before deriving readiness or summaries.
-- Supabase impact: no schema change; existing family-scoped trip reads now have an explicit page-level failure contract.
-- Tests run: `tests/trip-overview-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Validation evidence: 465 test files, 3,214 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `f36ea6c5`
-- Status: Resolved in…26001 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Validation evidence: 466 test files, 3,216 tests, 0 production dependency vulnerabilities, 250-route…26444 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
