@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Wallet Card Availability Contract
+
+- Focused wallet card contract and Stripe capability suite: 2 files, 21 assertions passed.
+- Full `npm.cmd test -- --run`: 478 test files, 3,246 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Disabled wallet card mode now states that spending cards are unavailable until the family card program is configured; the child wallet shows a non-issued preview with real ledger balance and no payment-card number/brand simulation.
+- Live Stripe Issuing capability, RLS/feature-flag state, browser, backup, and deployment evidence remain open.
+- Source commit: `faf75b75`.
+
 ## Latest Local Evidence - Intelligence and Briefing Read Boundaries
 
 - Focused household boundary suite: 1 file, 9 assertions passed.

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:22:36 -04:00
+- Last updated: 2026-07-16 08:33:41 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `9682ff06` adds fail-closed Intelligence preferences and Briefing Kitchen Mode context reads after Tax Vault, Subscriptions, Trip Memories, Routines, Concierge Plans, Voice History, Next Actions, Group Voting, Weekend Planner, Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `faf75b75` makes wallet card availability explicit and removes the Visa-like non-issued child-card art after `9682ff06` added fail-closed Intelligence preferences and Briefing Kitchen Mode context reads; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0368 - Wallet card surfaces implied an issued payment card before provider setup
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Wallet / financial UX integrity / provider capability gating
+- Feature: Wallet Cards and Child Wallet
+- Route: `/wallet/cards`, `/wallet/children/[childId]`
+- File or files: `components/wallet/money-cards-view.tsx`, `components/wallet/child-detail-view.tsx`, `tests/wallet-card-availability.test.ts`
+- Database objects: `feature_flags`, `stripe_connected_accounts`, and `stripe_issuing_cards`
+- Affected roles: authenticated family members and household managers
+- Scenario: when Stripe Issuing was not configured, the Cards page said “coming soon,” while the child wallet rendered Visa-like card art and masked card digits despite no payment card being issued.
+- Launch impact: families could mistake a ledger balance or visual preview for an active payment instrument, creating financial expectation and support risk.
+- Root cause: the provider-disabled mode used roadmap copy, and the child detail surface was a visual placeholder without an explicit non-issued status.
+- Required remediation: state that cards are unavailable until the family card program is configured; label the child surface as a preview, remove payment-card branding/number art, and preserve the real ledger balance as ledger-only data.
+- Implementation notes: the disabled Cards mode now uses explicit unavailable/configuration copy; the child surface now says “No payment card issued,” “Preview,” and “Ledger only,” with a link to card setup.
+- Test plan: focused wallet capability contract, Stripe capability suite, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused wallet/Stripe suites (21 assertions); full Vitest (478 files/3,246 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source repair validated in commit `faf75b75`; local branch pushed; known build warnings remain; live Stripe Issuing configuration and deployed browser verification remain open.
+- Resolution: code no longer promises or visually simulates an issued card when provider capability is absent.
+- Remaining dependencies: live Stripe account capability, feature-flag/RLS verification, deployed browser smoke test, and production launch evidence.
 
 #### TODO-0367 - Intelligence and Briefing context reads hid failures as safe-looking defaults
 

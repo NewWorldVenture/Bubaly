@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0368 - Wallet card surfaces implied an issued payment card before provider setup
+
+- Status: Resolved in source; live provider and deployed verification remain open.
+- Severity: P1.
+- Surface: `/wallet/cards` and `/wallet/children/[childId]`.
+- Finding: provider-disabled card mode used “coming soon” copy, and child detail rendered Visa-like preview art without explicitly stating that no card had been issued.
+- Repair: provider-disabled mode now says spending cards are unavailable until configured; child detail now renders a clearly labeled non-issued preview with ledger-only language and no payment-card number/brand simulation.
+- Evidence: `tests/wallet-card-availability.test.ts`, Stripe capability suite, 478 test files/3,246 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `faf75b75`.
+- Remaining launch gate: verify real Stripe Issuing account capability, feature-flag/RLS state, and deployed browser behavior before enabling or advertising card issuance.
+
 ### PLA-0367 - Intelligence and Briefing context reads hid failures as safe-looking defaults
 
 - Timestamp: 2026-07-16 08:22 America/New_York
