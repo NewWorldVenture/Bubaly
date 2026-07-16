@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
@@ -54,12 +54,12 @@ export function PhotosModule() {
   const [tab, setTab] = useState<'albums' | 'all' | 'favorites' | 'recents'>('albums');
   const dropRef = useRef<HTMLDivElement>(null);
 
-  const { data: albums, loading: albumsLoading, refresh: refreshAlbums } = useRealtimeQuery<Album>({
+  const { data: albums, loading: albumsLoading, error: albumsError, refresh: refreshAlbums } = useRealtimeQuery<Album>({
     table: 'family_albums', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_albums').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
 
-  const { data: allPhotos, loading: photosLoading, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
+  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
     table: 'family_photos', familyId, deps: [familyId, activeAlbum?.id],
     fetcher: (sb) => {
       let q = sb.from('family_photos').select('*').eq('family_id', familyId);
@@ -74,7 +74,7 @@ export function PhotosModule() {
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // ── Upload handler ────────────────────────────────────────
+  // â”€â”€ Upload handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
     const media = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
@@ -131,7 +131,7 @@ export function PhotosModule() {
     setUploadOpen(false);
   }
 
-  // ── Drag & drop ───────────────────────────────────────────
+  // â”€â”€ Drag & drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
@@ -171,8 +171,10 @@ export function PhotosModule() {
   }
 
   const loading = albumsLoading || photosLoading;
+  const error = albumsError || photosError;
+  const refresh = () => { void refreshAlbums(); void refreshPhotos(); };
 
-  // ── Album stats ───────────────────────────────────────────
+  // â”€â”€ Album stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const albumStats = albums.map((a) => ({
     ...a,
     count: allPhotos.filter((p) => p.album_id === a.id).length,
@@ -180,6 +182,7 @@ export function PhotosModule() {
   }));
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family photos. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">
@@ -193,7 +196,7 @@ export function PhotosModule() {
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search photos…"
+                placeholder="Search photosâ€¦"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
             <Button variant="outline" size="sm" onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
@@ -372,7 +375,7 @@ export function PhotosModule() {
         </div>
       )}
 
-      {/* ── Lightbox ──────────────────────────────────────────── */}
+      {/* â”€â”€ Lightbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
           onClick={() => setLightboxIdx(null)}>
@@ -485,7 +488,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title="New Album">
       <form onSubmit={create} className="space-y-4">
         <Field label="Album name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthday…" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthdayâ€¦" autoFocus />}
         </Field>
         <Field label="Category">
           {(id) => (
@@ -567,7 +570,7 @@ function UploadModal({ onClose, onUpload, progress }: {
           </div>
         )}
 
-        {/* Live upload progress — honest per-file bar so multi-file uploads aren't a blind wait. */}
+        {/* Live upload progress â€” honest per-file bar so multi-file uploads aren't a blind wait. */}
         {busy && progress && (
           <div aria-live="polite">
             <div className="h-1.5 overflow-hidden rounded-full bg-border"
@@ -587,7 +590,7 @@ function UploadModal({ onClose, onUpload, progress }: {
             onUpload(dt.files);
           }}>
             {busy && progress
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}â€¦</>
               : <><Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
           </Button>
         </div>
@@ -604,7 +607,7 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
         <Field label="Caption">
-          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a caption…" autoFocus />}
+          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a captionâ€¦" autoFocus />}
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
