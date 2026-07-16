@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0392 - Selling hid listing and seller-signal read failures as zero activity
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/marketplace/selling`.
+- Finding: the listing query and six seller-signal queries could fail while the seller cockpit rendered zero listings, offers, questions, or handoffs.
+- Repair: all required listing and signal results are checked before deriving attention rankings or rendering the empty seller state; failures return a retryable page state.
+- Evidence: focused Selling boundary suite (1 assertion), full 498 test files/3,258 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `db158e01`.
+- Remaining launch gate: validate authenticated seller RLS, signal-table availability, buyer/seller workflows, and deployed retry behavior; broader payment and deployment gates remain open.
+
 ### PLA-0391 - Live Auctions hid listing read failures as an empty marketplace
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -222,17 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1.
 - Surface: `/dashboard/app-store`.
 - Finding: catalog entries with `coming_soon` status rendered a roadmap label in the install-control position instead of a clear unavailable state.
-- Repair: renamed the control prop to `available` and changed the non-installable label to `Unavailable`; available entries retain the real install/uninstall action.
-- Evidence: `tests/appstore-availability.test.ts`, full 480 test files/3,249 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `916ee059`.
-- Remaining launch gate: verify live catalog status policy and deployed App Store behavior.
-
-### PLA-0369 - Documents exposed cloud-import buttons without provider adapters
-
-- Status: Resolved in source; provider implementation and deployed verification remain open.
-- Severity: P1.
-- Surface: Family Documents quick actions.
-- Finding: Google Drive and Dropbox buttons were clickable but only fired a â€œnot connectedâ€ toast because no provider adapters existed.
-- Repair: removed both disconnected actions, unused icons, and the dead `comingSoon` helper; supported upload, fold…35594 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Repair: renamed the …35822 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
