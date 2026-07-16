@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 08:26 America/New_York
+Audit snapshot: 2026-07-16 09:24 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 477 Vitest files and 3,244 tests pass in the latest full local gate.
+- 481 Vitest files and 3,240 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -51,6 +51,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   instead of presenting no conflicts or disconnected provider states from partial data.
 - The family Connections hub now surfaces its realtime Supabase read error with a retry action instead of
   rendering every provider as disconnected after a failed connection query.
+- Sync account setup exposes only providers with real account adapters, and Apple Reminders is explicitly
+  unavailable because the Apple adapter does not implement VTODO sync; Apple Calendar remains available over
+  CalDAV. Live Auth Admin, OAuth, provider sync, RLS, browser, backup, and deployment evidence remains open.
 - Announcements now coordinates announcement and read-receipt failures; Contacts, Screen Time, Celebrations,
   and the Household Binder now surface retryable read failures instead of rendering healthy empty or partial
   household states. Live provider, RLS, browser, backup, and deployment evidence remains open.

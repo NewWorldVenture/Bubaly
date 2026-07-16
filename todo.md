@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:16:24 -04:00
+- Last updated: 2026-07-16 09:24:05 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `05bc83e4` removes Amazon/Alexa from the Sync account setup surface after `23cd749b` removed the unreachable planned Connections adapter layer; live provider and deployment evidence remains open
+- Commit: `ada8107c` removes the unsupported Apple Reminders claim after `05bc83e4` removed Amazon/Alexa from the Sync account setup surface; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit

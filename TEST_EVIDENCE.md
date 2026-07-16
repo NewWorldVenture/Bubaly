@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Apple Reminders Capability Honesty
+
+- Focused Apple sync and capability suites: 2 files, 34 assertions passed.
+- Full `npm.cmd test -- --run`: 481 test files, 3,240 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Apple Reminders is now explicitly marked unsupported because the adapter drops VTODO collections; Apple Calendar remains available over CalDAV.
+- Live Auth Admin, OAuth callbacks, provider sync, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `ada8107c`.
+
 ## Latest Local Evidence - Sync Account Provider Surface
 
 - Focused Sync surface, route-boundary, and capability suites: 3 files, 14 assertions passed.
