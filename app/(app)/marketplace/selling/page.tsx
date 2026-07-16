@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import { auctionStatus } from '@/lib/marketplace/auction';
 import {
   attentionItems, rankListings, sellerTotals, needsAttention,
@@ -22,6 +23,16 @@ const CHIP_TONE: Record<AttentionTone, string> = {
   muted: 'bg-border/60 text-muted',
 };
 
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <PageHeader title="Selling" description="Your seller cockpit is temporarily unavailable." />
+      <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
+      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">Refresh selling</Link>
+    </div>
+  );
+}
+
 /** Seller cockpit — every listing you're selling, ranked by what needs your
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
@@ -32,7 +43,7 @@ export default async function SellingPage() {
   const selfId = ctx.active.member.id;
   const now = new Date();
 
-  const { data: listings } = await sb
+  const { data: listings, error: listingsError } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, kind, status, price_cents, sale_format, bid_count, auction_starts_at, auction_ends_at')
     .eq('family_id', familyId).eq('member_id', selfId)
@@ -49,7 +60,7 @@ export default async function SellingPage() {
     return m;
   };
 
-  const [savesRes, offersRes, negRes, qRes, handoffRes, overdueRes] = ids.length
+  const signalResults = ids.length
     ? await Promise.all([
         sb.from('marketplace_saves').select('listing_id').in('listing_id', ids),
         sb.from('marketplace_offers').select('listing_id').eq('status', 'open').in('listing_id', ids),
@@ -59,6 +70,14 @@ export default async function SellingPage() {
         sb.from('marketplace_orders').select('listing_id, ends_on, returned_at, status, kind')
           .eq('seller_member', selfId).in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active']).in('listing_id', ids),
       ])
+    : [];
+  const signalError = signalResults.find((result) => result.error)?.error;
+  if (listingsError || signalError) {
+    console.error('[marketplace-selling] seller read failed', listingsError ?? signalError);
+    return <ReadFailure />;
+  }
+  const [savesRes, offersRes, negRes, qRes, handoffRes, overdueRes] = signalResults.length
+    ? signalResults
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
   const watchers = tally(savesRes.data);
