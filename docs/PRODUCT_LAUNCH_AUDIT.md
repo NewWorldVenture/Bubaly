@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0354 - Play Dates hid family scheduling read failures as no play dates
+
+- Timestamp: 2026-07-16 06:45 America/New_York
+- Service: Play Dates
+- Route: `/dashboard/family/play-dates`
+- Affected files: `components/family/play-dates-view.tsx`, `tests/family-safety-read-boundaries.test.ts`
+- Role: authenticated family members and household planners
+- Scenario: a failed `play_dates` read could render “No play dates yet,” indistinguishable from a household with no scheduled social activity.
+- Severity: P1
+- Launch impact: families could miss upcoming child-safety and pickup coordination details.
+- Root cause: the view ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Resolution: Play Dates now renders sanitized retryable ErrorState UI before the empty schedule on any read failure.
+- Supabase impact: no schema change; the existing family-scoped schedule read now has an explicit failure contract.
+- Tests run: `tests/family-safety-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 471 test files, 3,226 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `4f5edc92`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed family-safety verification
+
 ### PLA-0353 - Driving Safety and Find Phone hid family location read failures
 
 - Timestamp: 2026-07-16 06:37 America/New_York

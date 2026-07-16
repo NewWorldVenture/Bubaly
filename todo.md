@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 06:37:56 -04:00
+- Last updated: 2026-07-16 06:45:16 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `00128cc4` adds driving-safety and Find Phone read failure handling after Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `4f5edc92` adds Play Dates read failure handling after Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0354 - Play Dates hid family scheduling read failures as no play dates
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Play Dates
+- Route: `/dashboard/family/play-dates`
+- File or files: `components/family/play-dates-view.tsx`, `tests/family-safety-read-boundaries.test.ts`
+- Database objects: `play_dates`
+- Affected roles: authenticated family members and household planners
+- Scenario: a failed play-date read could render “No play dates yet,” indistinguishable from a household with no scheduled social activity.
+- Launch impact: families could miss upcoming child-safety and pickup coordination details.
+- Root cause: the view ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Required remediation: surface a sanitized retryable error before rendering the empty schedule.
+- Implementation notes: Play Dates now renders an ErrorState with the realtime refresh callback on read failure.
+- Test plan: focused family-safety boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-safety-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 471 files/3,226 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `4f5edc92`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0353 - Driving safety and Find Phone hid family location reads as empty or partial data
 
