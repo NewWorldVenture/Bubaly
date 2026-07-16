@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:05:00 -04:00
+- Last updated: 2026-07-16 11:10:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f86dd8a2` makes Marketplace Live Auctions fail closed on listing read failures after `2b06e789` repaired Referrals; live provider and deployment evidence remains open
+- Commit: `db158e01` makes Marketplace Selling fail closed on listing/signal read failures after `f86dd8a2` repaired Live Auctions; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0392 - Selling hid listing and seller-signal read failures as zero activity
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Marketplace / seller cockpit / Supabase read boundary
+- Feature: Selling
+- Route: `/marketplace/selling`
+- File or files: `app/(app)/marketplace/selling/page.tsx`, `tests/marketplace-selling-read-boundary.test.ts`
+- Database objects: `marketplace_listings`, `marketplace_saves`, `marketplace_offers`, `marketplace_negotiations`, `marketplace_questions`, `marketplace_handoffs`, `marketplace_orders`
+- Affected roles: authenticated seller family members
+- Scenario: any required listing or seller-signal read could fail while the cockpit showed zero listings or activity.
+- Launch impact: sellers could miss offers, questions, handoffs, bids, or overdue returns while the page appeared healthy.
+- Root cause: the route discarded all query errors and derived rankings from empty fallbacks.
+- Required remediation: preserve the listing and signal results, fail visibly on any required error, and only derive seller signals after a successful batch.
+- Implementation notes: coordinated the listing and six dependent signal reads and added a ReadFailure state.
+- Test plan: focused Selling boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (498 files/3,258 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `db158e01`; local branch pushed; known build warnings remain; live Auth, RLS, browser, payment, and deployment evidence remain open.
+- Resolution: Selling no longer presents zero seller activity after a failed listing or signal read.
+- Remaining dependencies: verify authenticated seller RLS, buyer/seller workflows, and deployed retry behavior; continue the Marketplace audit.
 
 #### TODO-0391 - Live Auctions hid listing read failures as an empty marketplace
 
@@ -210,30 +231,7 @@
 - Tests performed: focused suite (1 assertion); full Vitest (489 files/3,249 tests); typecheck; lint; clean 250-route build; diff check.
 - Evidence: source repair validated in commit `03012c8c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
 - Resolution: Exit-Intent no longer exposes CRUD controls over a failed or fabricated empty dataset.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and marketing audit.
-
-#### TODO-0382 - Personalization hid rule read failures as an empty editor
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / marketing personalization / Supabase read boundary
-- Feature: Personalization
-- Route: `/admin/marketing/personalization`
-- File or files: `app/(app)/admin/marketing/personalization/page.tsx`, `tests/admin-personalization-read-boundary.test.ts`
-- Database objects: `marketing_personalization_rules`
-- Affected roles: Super Admin
-- Scenario: the rule query could fail while the page rendered no rules with create, activate, pause, and delete controls.
-- Launch impact: operators could manage targeting rules against incomplete state or mistake a backend outage for a clean default.
-- Root cause: the route discarded the Supabase error object and used an empty fallback for a required CRUD read.
-- Required remediation: preserve the query error, fail visibly, and only render slot groupings and controls after a successful read.
-- Implementation notes: added a retryable ReadFailure state and explicit error logging before rules are grouped by slot.
-- Test plan: focused Personalization boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (489 files/3,249 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `03012c8c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Personalization no longer exposes CRUD controls over a failed or fabricated empty dataset.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and marketing audit.
-
-#### TODO-0381 - Competitive Intelligence hid CRUD read failures …132650 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the…133148 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
