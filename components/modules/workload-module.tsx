@@ -43,7 +43,7 @@ export function WorkloadModule({
         choreTitle: c?.title ?? 'Chore', estMinutes: c?.est_minutes ?? null, points: c?.points ?? 10,
       };
     });
-    // calendar_events.created_by is an auth user id — map to member ids.
+    // calendar_events.created_by is an auth user id â€” map to member ids.
     const memberByUser = new Map(members.filter(m => m.user_id).map(m => [m.user_id as string, m.id]));
     const engineEvents = events.map(e => ({ createdBy: e.created_by ? memberByUser.get(e.created_by) ?? null : null }));
     return computeWorkload(
@@ -63,8 +63,10 @@ export function WorkloadModule({
     void saveWorkloadSnapshotAction(report.loads.map(l => ({
       memberId: l.memberId, weekStart, choreMinutes: l.choreMinutes, choreCount: l.choreCount,
       taskCount: l.taskCount, eventCount: l.eventCount, loadScore: l.loadScore, sharePct: l.sharePct,
-    })));
-  }, [report]);
+    }))).then((res) => {
+      if (!res.ok) toastError(res.error);
+    });
+  }, [report, toastError]);
 
   const trend = useMemo(() => shareTrend(
     snapshots.map(s => ({ memberId: s.member_id, weekStart: s.week_start, sharePct: Number(s.share_pct) })),
@@ -80,7 +82,7 @@ export function WorkloadModule({
       setApplying(null);
       if (!res.ok) { toastError(res.error); return; }
       setApplied(prev => new Set(prev).add(s.assignmentId));
-      success(`“${s.choreTitle}” moved to ${s.toName}.`);
+      success(`â€œ${s.choreTitle}â€ moved to ${s.toName}.`);
       router.refresh();
     });
   }
@@ -89,7 +91,7 @@ export function WorkloadModule({
     <div className="module-page">
       <PageHeader
         title="Workload Balance"
-        description="Who's carrying the household — measured, made visible, and one tap to fix."
+        description="Who's carrying the household â€” measured, made visible, and one tap to fix."
       />
 
       {/* AI headline */}
@@ -108,21 +110,21 @@ export function WorkloadModule({
       {/* Stats */}
       <div className="grid-stats">
         <div className="stat-card">
-          <span className="text-2xl">⚖️</span>
+          <span className="text-2xl">âš–ï¸</span>
           <div>
             <div className={cn('text-2xl font-bold', fairnessTone)}>{report.fairness}</div>
             <div className="text-[11px] text-muted">Fairness score</div>
           </div>
         </div>
         <div className="stat-card">
-          <span className="text-2xl">🏋️</span>
+          <span className="text-2xl">ðŸ‹ï¸</span>
           <div>
             <div className="text-2xl font-bold">{report.loads[0]?.sharePct ?? 0}%</div>
             <div className="text-[11px] text-muted">{report.loads[0] ? `${report.loads[0].name}'s share` : 'Heaviest share'}</div>
           </div>
         </div>
         <div className="stat-card">
-          <span className="text-2xl">⏱️</span>
+          <span className="text-2xl">â±ï¸</span>
           <div>
             <div className="text-2xl font-bold">
               {Math.round(report.loads.reduce((s, l) => s + l.choreMinutes, 0) / 60 * 10) / 10}h
@@ -131,7 +133,7 @@ export function WorkloadModule({
           </div>
         </div>
         <div className="stat-card">
-          <span className="text-2xl">🔁</span>
+          <span className="text-2xl">ðŸ”</span>
           <div>
             <div className="text-2xl font-bold">{report.suggestions.length}</div>
             <div className="text-[11px] text-muted">Rebalance moves ready</div>
@@ -151,7 +153,7 @@ export function WorkloadModule({
                   {l.overloaded && <span className="ml-2 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-400">carrying too much</span>}
                 </span>
                 <span className="flex-shrink-0 text-xs text-muted">
-                  {l.sharePct}% · {Math.round(l.choreMinutes / 6) / 10}h chores · {l.taskCount} tasks · {l.eventCount} organized
+                  {l.sharePct}% Â· {Math.round(l.choreMinutes / 6) / 10}h chores Â· {l.taskCount} tasks Â· {l.eventCount} organized
                 </span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-elevated">
@@ -181,7 +183,7 @@ export function WorkloadModule({
                 <div key={s.assignmentId} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">
-                      Move “{s.choreTitle}” → {s.toName}
+                      Move â€œ{s.choreTitle}â€ â†’ {s.toName}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
                   </div>
@@ -208,7 +210,7 @@ export function WorkloadModule({
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><TrendingUp className="h-4 w-4 text-brand-text" /> Share of load, week over week</h2>
         {trend.size === 0 ? (
           <p className="py-4 text-center text-sm text-muted">
-            History builds automatically each week you visit — check back after a few weeks.
+            History builds automatically each week you visit â€” check back after a few weeks.
           </p>
         ) : (
           <div className="space-y-4">
