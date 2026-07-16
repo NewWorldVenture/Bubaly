@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:48:14 -04:00
+- Last updated: 2026-07-16 08:54:07 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `916ee059` replaces the App Store's â€œComing soonâ€ install label with an explicit â€œUnavailableâ€ state after `2c474f5a` removed disconnected Google Drive and Dropbox document-import actions; live provider and deployment evidence remains open
+- Commit: `14f0d14b` replaces the Independence empty-state â€œcoming soonâ€ phrase with â€œNo badges yetâ€ after `916ee059` made App Store unavailable entries explicit; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0371 - Independence empty state used roadmap language
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P2
+- Category: Independence / empty-state integrity / user-facing copy
+- Feature: Independence badge collection
+- Route: dashboard Independence module
+- File or files: `components/modules/independence-module.tsx`, `tests/independence-empty-state.test.ts`
+- Database objects: Independence progress and badge data sources
+- Affected roles: authenticated family members
+- Scenario: an empty badge collection said â€œFirst badge coming soon,â€ which described a future product milestone instead of the actual current state.
+- Launch impact: users could misread the empty state as a delayed system capability rather than an invitation to complete a skill.
+- Root cause: roadmap wording was used for a normal empty collection.
+- Required remediation: describe the current empty collection and the next available action without roadmap language.
+- Implementation notes: changed the copy to â€œNo badges yet â€” start a skill above.â€
+- Test plan: focused Independence empty-state contract, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused Independence contract (1 assertion); full Vitest (481 files/3,250 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source repair validated in commit `14f0d14b`; local branch pushed; known build warnings remain; deployed browser evidence remains open.
+- Resolution: the empty state now reflects current data and points to the available skill action.
+- Remaining dependencies: validate live progress reads and deployed copy.
 
 #### TODO-0370 - App Store advertised unavailable catalog entries as â€œComing soonâ€
 
