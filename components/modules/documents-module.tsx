@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, Cloud, Download, File, FileArchive, FileText, Folder, FolderPlus,
-  HardDrive, Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
+  ChevronLeft, ChevronRight, Download, File, FileArchive, FileText, Folder, FolderPlus,
+  Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
   Search, Sparkles, Star, Table as TableIcon, Trash2, Upload, Video,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -280,10 +280,6 @@ export function DocumentsModule() {
     setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
   }
 
-  function comingSoon(what: string) {
-    toastError(`${what} isn't connected yet — connect it in Settings → Integrations.`);
-  }
-
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
@@ -549,8 +545,6 @@ export function DocumentsModule() {
               { icon: Upload, label: 'Upload Files', onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
               { icon: FolderPlus, label: 'Create New Folder', onClick: () => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); } },
               { icon: ScanLine, label: 'Scan Document', onClick: () => scanInputRef.current?.click() },
-              { icon: HardDrive, label: 'Add from Google Drive', onClick: () => comingSoon('Google Drive') },
-              { icon: Cloud, label: 'Add from Dropbox', onClick: () => comingSoon('Dropbox') },
             ].map(({ icon: Icon, label, onClick }) => (
               <button key={label} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-elevated">
                 <Icon className="h-4 w-4 text-muted" /> {label}
