@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0372 - Connections hub exposed providers without live setup routes
+
+- Status: Resolved in source; live provider and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/connections`.
+- Finding: the user-facing directory included Gmail, Plaid, grocery, and smart-home services without live setup/sync routes.
+- Repair: added `CONNECTABLE_PROVIDERS`, made the runtime merge use it, and updated the hub copy to supported calendar services only. Future providers remain internal until their full integration path exists.
+- Evidence: focused connection suites, full 481 test files/3,252 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `9eb160b0`.
+- Remaining launch gate: live OAuth callbacks, provider sync, RLS/role, and deployed browser verification for the supported calendar routes; implement remaining providers before exposing them.
+
 ### PLA-0371 - Independence empty state used roadmap language
 
 - Status: Resolved in source; live and deployed verification remain open.
