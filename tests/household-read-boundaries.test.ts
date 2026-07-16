@@ -22,6 +22,11 @@ const remindersSource = readFileSync('components/modules/reminders-module.tsx', 
 const shoppingSource = readFileSync('components/modules/shopping-module.tsx', 'utf8');
 const todosSource = readFileSync('components/modules/todos-module.tsx', 'utf8');
 const utilitiesSource = readFileSync('components/modules/utilities-module.tsx', 'utf8');
+const conciergeSource = readFileSync('components/modules/concierge-module.tsx', 'utf8');
+const voiceSource = readFileSync('components/modules/voice-module.tsx', 'utf8');
+const nextActionsSource = readFileSync('components/modules/next-actions-module.tsx', 'utf8');
+const votingSource = readFileSync('components/modules/voting-module.tsx', 'utf8');
+const weekendSource = readFileSync('components/modules/weekend-module.tsx', 'utf8');
 
 describe('household read boundaries', () => {
   it('coordinates decision and option failures before the Decision Engine empty state', () => {
@@ -76,5 +81,15 @@ describe('household read boundaries', () => {
     expect(shoppingSource).toContain('Could not load shopping lists. Refresh and try again.');
     expect(todosSource).toContain('Could not load tasks. Refresh and try again.');
     expect(utilitiesSource).toContain('Could not load utility bills. Refresh and try again.');
+  });
+
+  it('fails closed on concierge, voice, next-action, voting, and weekend reads', () => {
+    expect(conciergeSource).toContain('Could not load concierge plans. Refresh and try again.');
+    expect(voiceSource).toContain('Could not load voice history. Refresh and try again.');
+    expect(nextActionsSource).toContain('void refreshEvents(); void refreshTasks(); void refreshOpps();');
+    expect(nextActionsSource).toContain('Could not load next actions. Refresh and try again.');
+    expect(votingSource).toContain('void refreshPolls(); void refreshOptions(); void refreshVotes(); void refreshVacations(); void refreshBudgets();');
+    expect(votingSource).toContain('Could not load family voting data. Refresh and try again.');
+    expect(weekendSource).toContain('Could not load weekend planner data. Refresh and try again.');
   });
 });
