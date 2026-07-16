@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:45:00 -04:00
+- Last updated: 2026-07-16 10:50:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0f91564a` makes Super Admin Admin Settings fail closed on read failures after `b465cf71` repaired Admin Management; live provider and deployment evidence remains open
+- Commit: `51423350` makes Super Admin Social Providers fail closed on read failures after `0f91564a` repaired Admin Settings; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0388 - Social Providers hid provider-catalog read failures as enabled defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / social integrations / Supabase read boundary
+- Feature: Social Providers
+- Route: `/admin/social/providers`
+- File or files: `app/(app)/admin/social/providers/page.tsx`, `tests/admin-social-providers-read-boundary.test.ts`
+- Database objects: `social_providers`
+- Affected roles: Super Admin
+- Scenario: the provider catalog query could fail while capability cards defaulted every provider to enabled.
+- Launch impact: operators could interpret an unavailable catalog as a healthy provider configuration.
+- Root cause: the route discarded the Supabase error object and defaulted the enabled map from an empty array.
+- Required remediation: preserve the query error and render a retryable page-level failure before building capability cards.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Social Providers boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (494 files/3,254 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `51423350`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Social Providers no longer presents enabled defaults after a failed provider-catalog read.
+- Remaining dependencies: verify live Super Admin permissions and deployed provider-catalog behavior; continue the integration audit.
 
 #### TODO-0387 - Admin Settings hid administrator-count read failures as zero access holders
 
@@ -209,27 +230,7 @@
 - Test plan: focused Onboarding Audit boundary suite; full Vitest, typecheck, lint, production build, and diff check.
 - Tests performed: focused suite (1 assertion); full Vitest (485 files/3,245 tests); typecheck; lint; clean 250-route build; diff check.
 - Evidence: source repair validated in commit `1c028718`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Onboarding Audit now fails visibly on a required progress read failure instead of presenting a fabricated empty funnel.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the onboarding workflow and role audit.
-
-#### TODO-0378 - Lead Scores hid score and contact failures as an empty leaderboard
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / marketing CRM / Supabase read boundary
-- Feature: Lead Scores
-- Route: `/admin/marketing/lead-scores`
-- File or files: `app/(app)/admin/marketing/lead-scores/page.tsx`, `tests/admin-lead-scores-read-boundary.test.ts`
-- Database objects: `crm_lead_scores` and `crm_contacts`
-- Affected roles: Super Admin
-- Scenario: a failed score or contact join query was caught and rendered as no scores, allowing operators to confuse backend failure with an empty CRM.
-- Launch impact: lead prioritization and recompute decisions could be made from incomplete or missing data.
-- Root cause: the page discarded Supabase error objects and used an empty fallback for required reads.
-- Required remediation: check both score and joined-contact reads, preserve failures, and render a retryable error state.
-- Implementation notes: added an explicit ReadFailure state, validated the score query before deriving rows, and validated the contact join before rendering lifecycle and identity fields.
-- Test plan: focused Lead Scores boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (484 files/3,244 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `deb07a24`; local branch pushed; known build warnings remai…130814 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Resolution: Onboarding Audit now fails visibly on a required progress read failure instead of…131259 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
