@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0460 - A-14 marketplace ownership/trust RPCs verified caller-gated (guarded)
+
+- Timestamp: 2026-07-16 21:31 UTC
+- Service: Marketplace / offers / auctions (A-14)
+- Route: SECURITY DEFINER RPCs `marketplace_accept_offer` / `decline_offer` / `set_listing_status` / `place_bid` / `buy_now`
+- Affected files: `tests/marketplace-authz.test.ts` (new guard); audited `supabase/migrations/0154_marketplace_ownership.sql`, `0184_marketplace_auction_authorization.sql`
+- Role: any family member acting on another family's / member's listing
+- Scenario: confirm ownership and money-moving RPCs cannot be driven by a non-owner or a spoofed member/family
+- Severity: (verification of CRITICAL trust invariants — no defect found)
+- Launch impact: marketplace moves ownership and money between families; these RPCs are the trust boundary. Verified: `accept_offer`/`decline_offer` reject anyone but the listing's owning member (`marketplace_member_id(listing.family_id)` + `member_id` match -> "Only the listing owner"); `set_listing_status` is owner-checked; `place_bid`/`buy_now` require the acting member to belong to `auth.uid()` and match the claimed family (else `unauthorized`), take a `FOR UPDATE` lock on the listing, and `buy_now` rejects buying your own listing (`own_listing`); both are revoked from `public`
+- Root cause: n/a (verification + regression guard)
+- Resolution: added `tests/marketplace-authz.test.ts` pinning each ownership/authorization check to its migration so a refactor cannot silently drop them. Complements the A-03 live proof that `marketplace_create_circle` rejects cross-family callers
+- Supabase impact: none (read/verify only)
+- Tests run: `tests/marketplace-authz.test.ts` (6 passing); eslint clean
+- Validation evidence: 6/6 green asserting owner-check strings + auth.uid() member binding + own_listing/for-update guards
+- Commit: (this increment)
+- Status: A-14 core ownership/trust Verified + guarded; unit remains In-progress (order/dispute/handoff flows, live RLS, media/storage, buyer/seller matrix)
+- Remaining dependencies: live harness proof of cross-family accept/bid rejection; disputes + returns flows
+
 ### PLA-0451 - Recipes module dropped every Supabase write error — "Marked as made" toasted on failure, delete closed the viewer on failure (A-10)
 
 - Timestamp: 2026-07-16 21:29 UTC

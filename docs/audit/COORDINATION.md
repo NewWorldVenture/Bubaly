@@ -102,7 +102,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-11 | `agent-03` | IN_REVIEW | 2026-07-16 21:24 | 2026-07-16 21:28 | `pending` | Documents pipeline verified tenant-isolated (DB+Storage RLS) + client error/orphan-safety; guard added (PLA-0442). Open: messages sub-surface, live storage cross-family probe, doc seed
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |
-| A-14 | `agent-01` | CLAIMED | 2026-07-16 21:30 | 2026-07-16 21:30 | | Marketplace: per-member offer ownership RLS + RPC caller-gating + no cross-family write |
+| A-14 | `agent-01` | IN_REVIEW | 2026-07-16 21:30 | 2026-07-16 21:31 | `PLA-0460` | Ownership/trust RPCs VERIFIED: accept/decline/set-status owner-gated; bid/buy tie acting member to auth.uid()+family, FOR UPDATE, no self-buy; revoked from public. 6-test guard. Open: orders/disputes/handoff, live RLS, media |
 | A-15 | — | OPEN | | | | |
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | — | OPEN | | | | |
