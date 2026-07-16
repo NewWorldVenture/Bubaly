@@ -41,14 +41,22 @@
 > docs — keep it green. Watch for control-byte corruption from concurrent writers
 > (`LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < file | wc -c` must be 0).
 >
-> **Latest verified state (2026-07-16 20:00 UTC, HEAD `d271cacf`):** full suite **511 files / 3,273
-> tests green**; PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync hash) and PLA-0406
-> (shared reasoning-context loader now logs graph read failures) shipped to `main`.
+> **Latest verified state (2026-07-16 20:25 UTC, HEAD `ffed2023`):** full suite **514 files / 3,287
+> tests green**. Shipped this relay: PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync
+> hash), PLA-0406/0407/0408 (reasoning-substrate observability — graph loader, family_signals read,
+> and snapshot upsert all log on failure), PLA-0409 (Home CRUD throws on write failure — silent
+> data-loss fix), PLA-0410 (same fix extended to Auto/Paperwork/Contacts CRUD + Locator side-effect
+> logging). Full increment table in `docs/progress/2026-07-16-20{00,10,15,20,25}.md`.
 >
-> **Next candidates:** verify the remaining graph-backed AI surfaces (Concierge, Playbook, Decisions,
-> Outcomes, Agents, Calm) consume the hardened `loadFamilyContext` correctly and degrade honestly;
-> then resume the role, live-RLS, browser, backup, and deployment gates. The P0/P1 blockers
-> (Auth Admin HTTP 500, remote migration ledger, credential rotation, authenticated E2E,
+> **Bare-write triage:** the 38-site `await …from().insert/update/delete()` scan is substantially
+> cleared for **primary user data** (Home, Auto, Paperwork, Contacts, Locator). Remaining bare writes
+> are intentionally best-effort audit-log/throttle/notification side-effects (`wallet_audit_logs`,
+> `child_login_throttle`, `demo_email_uses`, `audit_logs`, `trust_audit_logs`) — leave them silent.
+>
+> **Next candidates:** non-reasoning module server *reads* that render primary lists where a discarded
+> error reads as an empty state to the user (page-load boundaries, complementing Codex's dashboard/
+> admin boundary suite); then the role, live-RLS, browser, backup, and deployment gates. The P0/P1
+> blockers (Auth Admin HTTP 500, remote migration ledger, credential rotation, authenticated E2E,
 > third-party callback smoke, backup/restore drill) need **Supabase/Vercel operator access** and
 > cannot be closed from the agent sandbox — leave them Open and flag them to the owner.
 
