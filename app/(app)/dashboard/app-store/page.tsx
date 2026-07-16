@@ -121,7 +121,7 @@ function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
         <span className="inline-flex items-center gap-1 text-[11px] text-muted">
           {app.rating != null && <><Star className="h-3 w-3 fill-amber-400 text-amber-400" />{app.rating.toFixed(1)}</>}
         </span>
-        <InstallButton appId={app.id} installed={installed} comingSoon={app.status === 'coming_soon'} />
+        <InstallButton appId={app.id} installed={installed} available={app.status !== 'coming_soon'} />
       </div>
     </article>
   );
