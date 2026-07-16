@@ -14,6 +14,14 @@ const scorecardSource = readFileSync('components/modules/experience-scorecard-mo
 const expensesSource = readFileSync('components/modules/expenses-module.tsx', 'utf8');
 const insuranceSource = readFileSync('components/modules/insurance-module.tsx', 'utf8');
 const lifeEventsSource = readFileSync('components/modules/life-events-module.tsx', 'utf8');
+const planningSource = readFileSync('components/modules/planning-module.tsx', 'utf8');
+const photosSource = readFileSync('components/modules/photos-module.tsx', 'utf8');
+const petsSource = readFileSync('components/modules/pets-module.tsx', 'utf8');
+const recipesSource = readFileSync('components/modules/recipes-module.tsx', 'utf8');
+const remindersSource = readFileSync('components/modules/reminders-module.tsx', 'utf8');
+const shoppingSource = readFileSync('components/modules/shopping-module.tsx', 'utf8');
+const todosSource = readFileSync('components/modules/todos-module.tsx', 'utf8');
+const utilitiesSource = readFileSync('components/modules/utilities-module.tsx', 'utf8');
 
 describe('household read boundaries', () => {
   it('coordinates decision and option failures before the Decision Engine empty state', () => {
@@ -56,5 +64,17 @@ describe('household read boundaries', () => {
     expect(insuranceSource).toContain('onRetry={policies.refresh}');
     expect(lifeEventsSource).toContain('void refreshFacts(); void refreshPlans(); void refreshItems();');
     expect(lifeEventsSource).toContain('Could not load life and milestones data. Refresh and try again.');
+  });
+
+  it('fails closed on planning, media, pet, recipe, reminder, shopping, task, and utility reads', () => {
+    expect(planningSource).toContain('void refreshPlans(); void refreshSteps();');
+    expect(planningSource).toContain('Could not load prep plans. Refresh and try again.');
+    expect(photosSource).toContain('Could not load family photos. Refresh and try again.');
+    expect(petsSource).toContain('Could not load pet care data. Refresh and try again.');
+    expect(recipesSource).toContain('Could not load family recipes. Refresh and try again.');
+    expect(remindersSource).toContain('Could not load reminders. Refresh and try again.');
+    expect(shoppingSource).toContain('Could not load shopping lists. Refresh and try again.');
+    expect(todosSource).toContain('Could not load tasks. Refresh and try again.');
+    expect(utilitiesSource).toContain('Could not load utility bills. Refresh and try again.');
   });
 });
