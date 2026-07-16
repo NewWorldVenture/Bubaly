@@ -15,7 +15,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -65,6 +65,7 @@ export function InsuranceModule() {
   const memberName = (id: string | null) => (id ? members.find((m) => m.id === id)?.display_name ?? null : null);
 
   if (policies.loading) return <SkeletonList />;
+  if (policies.error) return <ErrorState message="Could not load insurance policies. Refresh and try again." onRetry={policies.refresh} />;
 
   return (
     <div className="space-y-6">
@@ -82,7 +83,7 @@ export function InsuranceModule() {
               <Wallet className="h-4 w-4 text-brand-text" /> Annual premiums
             </div>
             <p className="mt-2 text-2xl font-bold">{fmtMoney(summary.annualPremium)}</p>
-            <p className="mt-1 text-xs text-muted">≈ {fmtMoney(summary.monthlyPremium)}/mo across {summary.count} {summary.count === 1 ? 'policy' : 'policies'}</p>
+            <p className="mt-1 text-xs text-muted">â‰ˆ {fmtMoney(summary.monthlyPremium)}/mo across {summary.count} {summary.count === 1 ? 'policy' : 'policies'}</p>
             {byType.length > 0 && (
               <ul className="mt-3 space-y-1.5">
                 {byType.map((b) => (
@@ -110,7 +111,7 @@ export function InsuranceModule() {
                 <div className="text-xs text-amber-200">
                   <span className="font-medium">Possible coverage gaps: </span>
                   {summary.gaps.map((g) => `${policyTypeMeta(g).emoji} ${policyTypeMeta(g).label}`).join(', ')}.
-                  <span className="text-amber-200/70"> No active policy on file — add one if you&apos;re covered elsewhere.</span>
+                  <span className="text-amber-200/70"> No active policy on file â€” add one if you&apos;re covered elsewhere.</span>
                 </div>
               </div>
             )}
@@ -121,7 +122,7 @@ export function InsuranceModule() {
                   <li key={r.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', URGENCY_STYLE[r.urgency])}>
                     <CalendarClock className="h-4 w-4 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-fg">{policyTypeMeta(r.policyType).label} · {r.insurer}</p>
+                      <p className="truncate text-sm font-medium text-fg">{policyTypeMeta(r.policyType).label} Â· {r.insurer}</p>
                       <p className="text-xs opacity-90">
                         {r.urgency === 'lapsed' ? `Lapsed ${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} ago` : `Renews in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'} (${fmtDate(r.renewalDate)})`}
                       </p>
@@ -154,7 +155,7 @@ export function InsuranceModule() {
                 <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand/10 text-3xl">{meta.emoji}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{meta.label}</p>
-                  <p className="truncate text-xs text-muted">{p.insurer}{covers ? ` · ${covers}` : ''}</p>
+                  <p className="truncate text-xs text-muted">{p.insurer}{covers ? ` Â· ${covers}` : ''}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {p.premium_amount != null && (
                       <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-[10px] text-muted">
@@ -259,7 +260,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Agent phone">{(id) => <Input id={id} name="agent_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
         </div>
         <Field label="Claims phone">{(id) => <Input id={id} name="claim_phone" type="tel" placeholder="Optional" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Coverage details, riders…" />}</Field>
+        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Coverage details, ridersâ€¦" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>Add policy</Button>
@@ -296,7 +297,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
             <p className="font-semibold">{policy.insurer}</p>
             {policy.renewal_date && u !== 'upcoming' && (
               <span className={cn('mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs', URGENCY_STYLE[u])}>
-                {u === 'lapsed' ? 'Lapsed' : 'Renewing soon'} · {fmtDate(policy.renewal_date)}
+                {u === 'lapsed' ? 'Lapsed' : 'Renewing soon'} Â· {fmtDate(policy.renewal_date)}
               </span>
             )}
           </div>
