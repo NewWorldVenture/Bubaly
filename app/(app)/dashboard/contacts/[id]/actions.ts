@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import {
   buildContactTimeline, contactHealth,
@@ -22,7 +23,7 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  await supabase.from('contact_interactions').insert({
+  const { error } = await supabase.from('contact_interactions').insert({
     family_id: ctx.active.familyId,
     contact_id: contactId,
     kind: ['visit', 'call', 'message', 'gift', 'favor', 'note'].includes(kind) ? kind : 'note',
@@ -32,6 +33,7 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
     amount: Number.isFinite(amount as number) ? amount : null,
     created_by: ctx.user.id,
   });
+  if (error) throw new Error(describeActionError(error, 'Could not log that interaction.'));
   revalidatePath(`/dashboard/contacts/${contactId}`);
 }
 
@@ -39,8 +41,9 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
 export async function deleteInteractionAction(input: { id: string; contactId: string }): Promise<void> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  await supabase.from('contact_interactions')
+  const { error } = await supabase.from('contact_interactions')
     .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  if (error) throw new Error(describeActionError(error, 'Could not delete that interaction.'));
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
 }
 

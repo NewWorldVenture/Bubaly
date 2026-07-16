@@ -53,10 +53,13 @@ export async function updateMyLocation(input: {
     if (transition === 'left' || transition === 'moved') events.push({ event_type: 'left', place_id: prevPlaceId, place_name: oldName });
 
     if (events.length) {
-      await supabase.from('location_events').insert(events.map((e) => ({
+      // Secondary to the location upsert (already persisted) — but a dropped
+      // arrival/departure event silently loses the safety timeline, so log it.
+      const { error: evErr } = await supabase.from('location_events').insert(events.map((e) => ({
         family_id: familyId, member_id: member.id, place_id: e.place_id, place_name: e.place_name,
         event_type: e.event_type, latitude: input.latitude, longitude: input.longitude, occurred_at: nowIso,
       })));
+      if (evErr) console.error('[locator] location_events insert failed', { familyId, memberId: member.id, error: evErr });
     }
 
     // Place alerts → notify the rest of the family.
@@ -66,11 +69,14 @@ export async function updateMyLocation(input: {
     if (recipients.length) {
       const verb = transition === 'left' ? 'left' : 'arrived at';
       const placeName = transition === 'left' ? (oldName ?? 'a place') : current!.name;
-      await supabase.from('notifications').insert(recipients.map((r) => ({
+      // Best-effort family alert — log a failure so a silently dropped place
+      // notification (a safety signal) is observable rather than invisible.
+      const { error: notifyErr } = await supabase.from('notifications').insert(recipients.map((r) => ({
         family_id: familyId, user_id: r.user_id, type: 'system' as const,
         title: `${member.display_name} ${verb} ${placeName}`, body: null,
         related_type: 'location_events', related_id: null,
       })));
+      if (notifyErr) console.error('[locator] place-alert notifications insert failed', { familyId, error: notifyErr });
     }
   }
 

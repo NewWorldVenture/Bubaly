@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0410 - Auto, Paperwork, and Contacts CRUD reported success while silently losing user data
+
+- Timestamp: 2026-07-16 20:23 UTC
+- Service: Auto/Vehicles, Paperwork Inbox, Contacts (Relationship Timeline), Family Locator
+- Route: `/dashboard/auto/*`, `/dashboard/paperwork`, `/dashboard/contacts/[id]`, `/dashboard/locator`
+- Affected files: `app/(app)/dashboard/auto/actions.ts`, `app/(app)/dashboard/paperwork/actions.ts`, `app/(app)/dashboard/contacts/[id]/actions.ts`, `app/(app)/dashboard/locator/actions.ts`, `tests/module-actions-write-boundary.test.ts`
+- Role: any family member who can edit these records
+- Scenario: an insert/update/delete fails (RLS denial, constraint, outage) while the user saves/deletes a vehicle, license, registration, inspection, policy, rental, auto-service record, paperwork item, or contact interaction
+- Severity: P1 (continuation of the PLA-0409 silent-data-loss class)
+- Launch impact: the same defect PLA-0409 fixed in Home was present across three more modules — `void`-returning form actions discarded the PostgREST write result, then called `revalidatePath` and returned normally, so a failed write reported success while the record was silently lost. Auto alone had 14 unchecked writes (7 entity types × save+delete); Paperwork's `addPaperworkAction`/`setPaperworkStatusAction` and the one-tap materialization; Contacts' `logInteractionAction`/`deleteInteractionAction`. Locator's two flagged sites were secondary side-effects (arrival-event log, family place-alert) whose primary write already checked its error
+- Root cause: `await supabase.from(...).insert/update/delete(...)` results were never inspected; a PostgREST failure returns `{ error }` without throwing
+- Resolution: added a throwing `saveRow` helper in Auto (mirrors the existing `softDelete` cast) and made `softDelete` throw; every Auto/Paperwork/Contacts primary write now captures `{ error }` and throws `describeActionError(...)`; the Paperwork materialization inserts throw and the stamp-back logs; best-effort side-effects (Auto odometer refresh, Paperwork draft persist, Locator event/notification inserts) now `console.error` on failure instead of silently dropping
+- Supabase impact: none; writes unchanged, only their failures are now surfaced/observable
+- Tests run: `tests/module-actions-write-boundary.test.ts` (7 — auto save/delete throw + success, paperwork add/status throw, contacts log/delete throw), full suite 514 files / 3,287 tests, eslint clean, typecheck clean
+- Validation evidence: boundary tests drive a mocked failing client and assert each action rejects; the auto success path resolves
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live per-role RLS verification of the surfaced errors remains a standing dependency
+- Remaining dependencies: authenticated per-role write verification (LB-005 adjacent); the remaining best-effort audit-log/throttle bare writes are intentionally silent and were left as-is
+
 ### PLA-0409 - Home module CRUD reported success while silently losing warranties, contractors, and service records
 
 - Timestamp: 2026-07-16 20:15 UTC

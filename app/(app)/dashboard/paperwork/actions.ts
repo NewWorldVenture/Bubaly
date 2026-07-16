@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const PATH = '/dashboard/paperwork';
 
@@ -18,7 +19,7 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
   const supabase = await createServer();
   const t = triagePaperwork(text);
 
-  await supabase.from('paperwork_items').insert({
+  const { error } = await supabase.from('paperwork_items').insert({
     family_id: ctx.active.familyId,
     kind: t.kind,
     title: t.title,
@@ -32,6 +33,7 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
     actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
     created_by: ctx.user.id,
   });
+  if (error) throw new Error(describeActionError(error, 'Could not save that paperwork.'));
   revalidatePath(PATH);
 }
 
@@ -68,7 +70,7 @@ export async function materializePaperworkActionAction(input: {
     const startsAt = dueOn
       ? `${dueOn}T09:00:00`
       : new Date(Date.now() + 7 * 86_400_000).toISOString();
-    const { data } = await supabase.from('calendar_events').insert({
+    const { data, error } = await supabase.from('calendar_events').insert({
       family_id: ctx.active.familyId,
       title: `${item.title}`.slice(0, 200),
       description: `From Paperwork Inbox — ${action.label}. ${item.summary ?? ''}`.trim().slice(0, 500),
@@ -77,11 +79,12 @@ export async function materializePaperworkActionAction(input: {
       all_day: Boolean(dueOn),
       created_by: ctx.user.id,
     }).select('id').single();
+    if (error) throw new Error(describeActionError(error, 'Could not add that to your calendar.'));
     materializedAs = 'calendar_event';
     materializedId = data?.id ?? null;
   } else {
     const amountBit = action.amount != null ? ` ($${action.amount})` : '';
-    const { data } = await supabase.from('family_reminders').insert({
+    const { data, error } = await supabase.from('family_reminders').insert({
       family_id: ctx.active.familyId,
       created_by: ctx.user.id,
       title: `${action.label}${amountBit} — ${item.title}`.slice(0, 200),
@@ -91,6 +94,7 @@ export async function materializePaperworkActionAction(input: {
       status: 'pending',
       ai_suggested: true,
     }).select('id').single();
+    if (error) throw new Error(describeActionError(error, 'Could not create that reminder.'));
     materializedAs = 'reminder';
     materializedId = data?.id ?? null;
   }
@@ -99,9 +103,12 @@ export async function materializePaperworkActionAction(input: {
     const next = actions.map((a, i) =>
       i === input.actionIndex ? { ...a, materialized_as: materializedAs, materialized_id: materializedId } : a);
     const allDone = next.every((a) => a.materialized_id);
-    await supabase.from('paperwork_items')
+    // The record was already created above — if this stamp-back fails, log it so a
+    // future tap doesn't silently double-create against an un-stamped item.
+    const { error: stampError } = await supabase.from('paperwork_items')
       .update({ actions: next as never, status: allDone ? 'done' : 'in_progress' })
       .eq('id', item.id);
+    if (stampError) console.error('[paperwork] materialization stamp-back failed', { itemId: item.id, error: stampError });
   }
   revalidatePath(PATH);
 }
@@ -154,7 +161,10 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   if (!draft) return { ok: false, error: 'Could not draft a reply. Please try again.' };
 
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
-  await supabase.from('paperwork_items').update({ meta: meta as never }).eq('id', item.id);
+  // Persisting the draft is best-effort — it is returned to the caller regardless —
+  // but log a failure so a broken write isn't invisible.
+  const { error: metaError } = await supabase.from('paperwork_items').update({ meta: meta as never }).eq('id', item.id);
+  if (metaError) console.error('[paperwork] draft_reply persist failed', { itemId: item.id, error: metaError });
   revalidatePath(PATH);
   return { ok: true, draft };
 }
@@ -166,8 +176,9 @@ export async function setPaperworkStatusAction(input: {
 }): Promise<void> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  await supabase.from('paperwork_items')
+  const { error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId);
+  if (error) throw new Error(describeActionError(error, 'Could not update that paperwork.'));
   revalidatePath(PATH);
 }
