@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Behavior Read Boundary
+
+- Focused behavior boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test`: 473 test files, 3,228 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Behavior and Parenting Insights now surfaces a retryable behavior-log error before its empty history and derived insight cards.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Family Location Read Boundary
 
 - Focused location boundary suite: 1 file, 1 assertion passed.
@@ -270,21 +284,7 @@ Audit date: 2026-07-15
 
 ## Latest Local Evidence - Admin Wallet Reconciliation Read Boundary
 
-- Focused reconciliation suites: 2 files, 12 tests passed.
-- Full `npm.cmd test`: 456 test files, 3,202 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `git diff --check`: passed.
-- `/admin/wallet/reconciliation` now preserves bucket and transaction read errors and renders a retryable ErrorState before running ledger reconciliation.
-- Live Super Admin role/browser outage drills, remote RLS, backup/restore, and deployment evidence remain open.
-
-## Latest Local Evidence - Billing Mutation Consistency and Checkout Recovery
-
-- Focused billing/webhook suites: 2 files,…26106 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+-…26355 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
