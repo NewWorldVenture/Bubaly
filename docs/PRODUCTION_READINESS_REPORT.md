@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 17:33 America/New_York
+Audit snapshot: 2026-07-16 06:37 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 470 Vitest files and 3,223 tests pass in the latest full local gate.
+- 471 Vitest files and 3,225 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -65,6 +65,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   dependencies cannot be read, instead of rendering empty plans from partial data.
 - Family Check In now surfaces a retryable safety-feed read error instead of presenting â€œNo check-ins yetâ€
   after a failed `safety_check_ins` query.
+- Driving Safety now surfaces a retryable trip-read error instead of presenting no trips or zeroed summary
+  metrics after a failed `driving_trips` query. Find Phone now treats both `member_locations` and
+  `family_places` as required reads and retries them together before presenting device data.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
