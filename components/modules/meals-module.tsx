@@ -87,7 +87,13 @@ export function MealsModule() {
 
   const reloadLibrary = useCallback(() => {
     createClient().from('meals').select('*').eq('family_id', familyId).order('name')
-      .then(({ data }) => setLibrary(data ?? []));
+      .then(({ data, error }) => {
+        // Secondary/enhancement read (the "add from your meals" library). Degrade
+        // to empty on failure, but LOG it — a silent [] made the library
+        // mysteriously empty with no signal when the read hit RLS/an outage.
+        if (error) console.error('[meals] library read failed', { message: error.message });
+        setLibrary(data ?? []);
+      });
   }, [familyId]);
   useEffect(() => { reloadLibrary(); }, [reloadLibrary]);
 
@@ -122,14 +128,18 @@ export function MealsModule() {
   const [voteData, setVoteData] = useState<{ vote: Vote; options: VoteOption[]; ballots: Ballot[] } | null>(null);
   const loadVote = useCallback(async () => {
     const sb = createClient();
-    const { data: votes } = await sb.from('meal_votes').select('*').eq('family_id', familyId)
+    const { data: votes, error: voteErr } = await sb.from('meal_votes').select('*').eq('family_id', familyId)
       .order('created_at', { ascending: false }).limit(1);
+    // Enhancement panel (this week's "what's for dinner" vote). Degrade to no
+    // panel on failure, but log it rather than silently hiding an active vote.
+    if (voteErr) { console.error('[meals] vote read failed', { message: voteErr.message }); setVoteData(null); return; }
     const v = votes?.[0];
     if (!v) { setVoteData(null); return; }
-    const [{ data: options }, { data: ballots }] = await Promise.all([
+    const [{ data: options, error: optErr }, { data: ballots, error: balErr }] = await Promise.all([
       sb.from('meal_vote_options').select('*').eq('vote_id', v.id),
       sb.from('meal_vote_ballots').select('option_id, member_id, choice').eq('vote_id', v.id),
     ]);
+    if (optErr || balErr) console.error('[meals] vote detail read failed', { options: optErr?.message, ballots: balErr?.message });
     setVoteData({ vote: v, options: options ?? [], ballots: ballots ?? [] });
   }, [familyId]);
   useEffect(() => { void loadVote(); }, [loadVote]);
