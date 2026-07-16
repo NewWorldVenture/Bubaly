@@ -1,12 +1,12 @@
-# FamilyOS â€” Roadmap Build TODO
+# FamilyOS — Roadmap Build TODO
 
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:30:00 -04:00
+- Last updated: 2026-07-16 11:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `d43b15c4` makes Family Assistant fail closed on context/count read failures after `384acfbd` repaired Family Intelligence; live provider and deployment evidence remains open
+- Commit: `f04895cd` makes Autonomous Family Management fail closed on signal and automation read failures after `d43b15c4` repaired Family Assistant; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0396 - Autonomous Family Management hid signal and automation read failures as healthy defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Autonomous Family Management / Supabase read boundary
+- Feature: Autonomous Family Management
+- Route: `/dashboard/autonomous-family-management`
+- File or files: `app/(app)/dashboard/autonomous-family-management/page.tsx`, `lib/family/signals.ts`, `tests/autonomous-family-management-read-boundary.test.ts`
+- Database objects: `calendar_events`, `appointments`, `chore_assignments`, `bills`, `school_events`, `sports_events`, `family_routines`, `meal_plans`, `grocery_items`, `family_ai_recommendations`, `family_automation_rules`, `family_automation_runs`
+- Affected roles: authenticated family members; manager-only approval controls
+- Scenario: required signal, recommendation, rule, and automation-run reads could fail while the dashboard rendered healthy monitoring, zero metrics, or incomplete approvals.
+- Launch impact: families could miss risk signals or act on an incomplete automation queue while the assistant appeared healthy.
+- Root cause: the shared signal collector converted failed reads to empty-derived counts, and the page discarded errors from its recommendation and automation queries.
+- Required remediation: preserve all required read errors and render a retryable page-level failure before deriving monitoring, recommendations, risk metrics, or approval controls.
+- Implementation notes: added `gatherSignalsResult`, fail-closed compatibility for existing callers, coordinated page-level error handling, and a focused regression test.
+- Test plan: focused Autonomous Family Management boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (502 files/3,262 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `f04895cd`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Autonomous Family Management no longer presents healthy defaults after a failed required signal or automation read.
+- Remaining dependencies: verify authenticated family RLS, signal availability, approval behavior, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0395 - Family Assistant hid context and count failures as zero signals
 
@@ -144,382 +165,10 @@
 - Required remediation: preserve both read statuses and render a retryable page-level failure before metrics, settings, or rows.
 - Implementation notes: added `getReferralConfigResult` and coordinated settings/activity reads in the admin page.
 - Test plan: focused Referrals boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (496 files/3,256 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `2b06e789`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Admin Referrals no longer presents defaults or no activity after a failed settings/activity read.
-- Remaining dependencies: verify live Super Admin permissions and deployed referral behavior; continue the marketing workflow audit.
-
-#### TODO-0389 - New Campaign hid segment read failures as an unfiltered audience selector
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / marketing campaigns / Supabase read boundary
-- Feature: New Campaign
-- Route: `/admin/marketing/campaigns/new`
-- File or files: `app/(app)/admin/marketing/campaigns/new/page.tsx`, `tests/admin-campaign-new-read-boundary.test.ts`
-- Database objects: `marketing_segments`
-- Affected roles: Super Admin
-- Scenario: the segment query could fail while the form rendered a â€œNo segmentâ€ fallback and allowed an unfiltered campaign.
-- Launch impact: operators could create campaigns without intended audience targeting after a silent backend failure.
-- Root cause: the route discarded the Supabase error object and used an empty fallback for a required campaign dependency.
-- Required remediation: preserve the query error and render a retryable page-level failure before rendering the campaign form.
-- Implementation notes: added a ReadFailure state, refresh links, and explicit error logging.
-- Test plan: focused New Campaign boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (495 files/3,255 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `d600ad7c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: New Campaign no longer silently permits an unfiltered audience after a failed segment read.
-- Remaining dependencies: verify live Super Admin permissions and deployed campaign-segment behavior; continue the marketing workflow audit.
-
-#### TODO-0388 - Social Providers hid provider-catalog read failures as enabled defaults
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / social integrations / Supabase read boundary
-- Feature: Social Providers
-- Route: `/admin/social/providers`
-- File or files: `app/(app)/admin/social/providers/page.tsx`, `tests/admin-social-providers-read-boundary.test.ts`
-- Database objects: `social_providers`
-- Affected roles: Super Admin
-- Scenario: the provider catalog query could fail while capability cards defaulted every provider to enabled.
-- Launch impact: operators could interpret an unavailable catalog as a healthy provider configuration.
-- Root cause: the route discarded the Supabase error object and defaulted the enabled map from an empty array.
-- Required remediation: preserve the query error and render a retryable page-level failure before building capability cards.
-- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
-- Test plan: focused Social Providers boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (494 files/3,254 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `51423350`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Social Providers no longer presents enabled defaults after a failed provider-catalog read.
-- Remaining dependencies: verify live Super Admin permissions and deployed provider-catalog behavior; continue the integration audit.
-
-#### TODO-0387 - Admin Settings hid administrator-count read failures as zero access holders
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / system settings / Supabase read boundary
-- Feature: Admin Settings
-- Route: `/admin/settings`
-- File or files: `app/(app)/admin/settings/page.tsx`, `tests/admin-settings-read-boundary.test.ts`
-- Database objects: `super_admins`
-- Affected roles: Super Admin
-- Scenario: the administrator-count query could fail while the page rendered zero access holders and system status as readable.
-- Launch impact: operators could mistake an authorization backend outage for an empty administrator roster.
-- Root cause: the route discarded the Supabase error object and used a zero fallback for a required access read.
-- Required remediation: preserve the query error and render a retryable page-level failure before building system status.
-- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
-- Test plan: focused Admin Settings boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (493 files/3,253 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `0f91564a`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Admin Settings no longer presents zero access holders after a failed `super_admins` read.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the authorization workflow audit.
-
-#### TODO-0386 - Admin Management hid administrator read failures as zero admins
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / authorization management / Supabase read boundary
-- Feature: Admin Management
-- Route: `/admin/admins`
-- File or files: `app/(app)/admin/admins/page.tsx`, `tests/admin-admins-read-boundary.test.ts`
-- Database objects: `admin_users`
-- Affected roles: Super Admin
-- Scenario: the administrator query could fail while the page rendered zero admins and retained access-management controls.
-- Launch impact: operators could mistake an authorization backend outage for no administrators and make unsafe access decisions.
-- Root cause: the route discarded the Supabase error object and used an empty fallback for a required access read.
-- Required remediation: preserve the query error and render a retryable page-level failure before calculating access metrics or controls.
-- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
-- Test plan: focused Admin Management boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (492 files/3,252 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `b465cf71`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and …134573 tokens truncated…n posts, and provider exceptions could expose raw details.
-- Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
-- Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
-- Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0272 - Social ancillary mutations could report success after ignored writes or over-broad access checks
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Social access control / data integrity / input validation
-- Feature: Social account, inbox, media-library, settings, and access-management actions
-- File or files: `app/(app)/dashboard/social/actions.ts`, `tests/social-action-persistence.test.ts`
-- Description: Disconnect, resolve, media, settings, and role-grant writes ignored returned errors; role grants used `manage_settings`, accepted arbitrary users/roles, and media URLs/text had no server-side bounds.
-- Resolution: Required mutations now check returned rows and errors, form actions fail with stable messages, role grants require `manage_access` plus an active current-family member and valid role, and media input is bounded with HTTP(S)-only URLs.
-- Tests performed: Focused social action/publish/role tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
-- Evidence: `tests/social-action-persistence.test.ts` guards mutation checks, input validation, and the manage-access/current-family boundary.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0273 - Loyalty awards and redemptions could become inconsistent under concurrency
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Loyalty / data integrity / concurrency / Supabase RPC security
-- Feature: Loyalty points, reward redemption, finite stock, and cancellation refunds
-- File or files: `supabase/migrations/0204_atomic_loyalty_transactions.sql`, `lib/loyalty/server.ts`,
-  `app/(app)/admin/marketing/loyalty/actions.ts`, `tests/loyalty-atomic-persistence.test.ts`
-- Description: Points debits, redemption creation, and finite-stock decrements were separate writes;
-  cancellation also marked a redemption cancelled before attempting a best-effort refund.
-- Resolution: Service-role-only row-locking RPCs now commit account, ledger, redemption, and stock changes
-  atomically. The server and admin action consume structured RPC outcomes, and cancellation refunds points
-  and restores finite stock in the same transaction.
-- Tests performed: Focused loyalty persistence tests, full Vitest, typecheck, lint, dependency audit,
-  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
-- Evidence: `tests/loyalty-atomic-persistence.test.ts` guards RPC routing, row locks, service-role grants,
-  stock restoration, and the absence of direct best-effort ledger writes.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0274 - Wallet money actions could leave ledger and approval state partial
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Wallet / financial data integrity / concurrency / Supabase RPC security
-- Feature: Wallet transfers, gift approvals, spend approvals, and allowance approvals
-- File or files: `supabase/migrations/0205_atomic_wallet_money_actions.sql`, `lib/wallet/server.ts`,
-  `app/(app)/wallet/actions.ts`, `tests/wallet-atomic-persistence.test.ts`
-- Description: Transfers debited and credited in separate writes, gift approvals credited before gift
-  state was updated, and parent approvals updated their ledger and approval/audit rows independently.
-- Resolution: Authenticated manager-checked RPCs now lock the affected wallet, bucket, gift, approval, and
-  transaction rows; server-side split allocation preserves every cent, and ledger/state/audit writes
-  commit atomically. Typed wrappers map domain failures to stable action messages.
-- Tests performed: Focused Wallet persistence tests, full Vitest, typecheck, lint, dependency audit,
-  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
-- Evidence: `tests/wallet-atomic-persistence.test.ts` guards row locks, authenticated grants, split-credit
-  helper use, typed RPC routing, and removal of direct partial state transitions.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0275 - Vacation AI could report success after partial persistence failures
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Vacation AI / data integrity / authorization
-- Feature: AI vacation builder, recommendations, and concierge conversations
-- File or files: `app/api/vacations/ai/route.ts`, `tests/vacation-ai-persistence-boundaries.test.ts`
-- Description: Trip context reads, recommendation replacement writes, generated itinerary/activity/budget/
-  packing writes, and chat message writes ignored returned database errors. Existing conversation IDs were
-  also accepted without confirming they belonged to the active family and vacation.
-- Resolution: Context and mutation errors now fail closed with stable responses; generated rows are tracked
-  and compensated on failure, existing budgets are restored when needed, and conversation ownership is
-  checked before messages are persisted.
-- Tests performed: Focused Vacation AI and database-boundary tests, full Vitest, typecheck, lint, dependency
-  audit, migration audit, live schema probes, production build, seed invariants, and public Playwright/axe/
-  overflow E2E.
-- Evidence: `tests/vacation-ai-persistence-boundaries.test.ts` guards fail-closed reads, checked writes,
-  rollback tracking, and family/vacation conversation scoping.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0276 - AI meal planning could replace slots after a partial save
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: AI meal planning / data integrity / recovery
-- Feature: One-click AI meal planner with meal and pantry context
-- File or files: `app/api/ai/meals/plan/route.ts`, `tests/ai-meal-plan-persistence.test.ts`
-- Description: Candidate and pantry read errors were ignored, targeted slots were deleted without checking,
-  newly mirrored meals could remain orphaned, and a failed or incomplete plan insert could still leave the
-  planner reporting a successful write.
-- Resolution: Context reads and replacement mutations now fail closed. Existing targeted slots are captured
-  and restored on failure, generated meal rows are removed when they cannot be used, and the success response
-  requires every model assignment to be persisted.
-- Tests performed: Focused AI meal planner and database-boundary tests, full Vitest, typecheck, lint, and
-  dependency audit.
-- Evidence: `tests/ai-meal-plan-persistence.test.ts` guards read failures, generated-meal cleanup, slot
-  restoration, and checked replacement writes.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0277 - AI chat accepted unverified conversation ownership
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family AI / authorization / privacy
-- Feature: Streaming family assistant conversations
-- File or files: `app/api/ai/chat/route.ts`, `tests/ai-chat-ownership.test.ts`
-- Description: The client generated the conversation UUID and the endpoint used it after an ignore-duplicate
-  upsert without explicitly confirming that the existing conversation belonged to the active family and user.
-- Resolution: Every conversation ID is re-read through active `family_id` and `user_id` ownership filters before
-  history is loaded or messages are persisted. Read failures and missing ownership now stop with stable responses.
-- Tests performed: Focused AI chat ownership and database-boundary tests, full Vitest, typecheck, lint, and clean
-  production build.
-- Evidence: `tests/ai-chat-ownership.test.ts` guards the ownership filters and the no-history/no-message path
-  when ownership validation fails.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0278 - Chore state transitions could silently diverge
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Missions / data integrity / rewards
-- Feature: Chore proof review, approval, rejection, dispute, and creation flows
-- File or files: `app/(app)/missions/actions.ts`, `tests/chore-state-transition-persistence.test.ts`
-- Description: Submission, assignment, dispute, and assignment-creation writes were not consistently checked;
-  auto-approval and parent approval could leave related rows out of sync after a later write failed.
-- Resolution: Checked transition helpers now require updated rows, restore prior submission/assignment state on
-  failure, send failed auto-approval to parent review, clean up dispute rows on failed transitions, and remove
-  newly created chores when assignment creation fails.
-- Tests performed: Focused chore state/proof/reward tests, full Vitest, typecheck, lint, dependency audit, and
-  clean production build.
-- Evidence: `tests/chore-state-transition-persistence.test.ts` guards transition checks, rollback paths, dispute
-  cleanup, and chore creation compensation.
-- Verified by: Codex
-- Date completed: 2026-07-14
-
-### TODO-0279 - Failed allowance credits could be marked as paid
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Wallet / financial data integrity / recovery
-- Feature: Manual due-allowance execution
-- File or files: `app/(app)/wallet/actions.ts`, `tests/wallet-allowance-persistence.test.ts`
-- Description: The manual allowance runner ignored rule-read and schedule-write failures, and advanced
-  `next_run_on` even when the child-wallet credit failed, potentially skipping an allowance permanently.
-- Resolution: Rule reads and schedule advances now fail closed. Each schedule advance is rolled back if its
-  wallet credit fails, and the action reports only successfully credited rules and cents.
-- Tests performed: Focused wallet allowance/atomic/error-boundary tests, full Vitest, typecheck, lint, dependency
-  audit, and clean production build.
-- Evidence: `tests/wallet-allowance-persistence.test.ts` guards checked reads, schedule updates, rollback, and
-  success counters.
-- Verified by: Codex
-- Date completed: 2026-07-15
-
-### TODO-0280 - Allowance cron ignored schedule and credit failures
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Wallet / financial data integrity / scheduled automation
-- Feature: Cron-driven due allowances
-- File or files: `app/api/cron/wallet-allowance/route.ts`, `tests/cron-wallet-allowance-persistence.test.ts`
-- Description: The cron ignored its schedule update result and could advance a rule after a failed wallet
-  credit, making retries unsafe and hiding persistence failures from monitoring.
-- Resolution: The cron now checks the schedule claim before crediting, restores the prior schedule after a
-  failed credit, counts only successful credits, and fails visibly when the run cannot persist safely.
-- Tests performed: Focused cron allowance persistence contract, full Vitest, typecheck, lint, dependency audit,
-  and clean production build.
-- Evidence: `tests/cron-wallet-allowance-persistence.test.ts` guards schedule-before-credit ordering, rollback,
-  checked failures, and success-only counters.
-- Verified by: Codex
-- Date completed: 2026-07-15
-
-### TODO-0281 - Goal funding could debit without updating goal progress
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Wallet / financial data integrity / concurrency / Supabase RPC security
-- Feature: Savings goal funding from a child's Save bucket
-- File or files: `supabase/migrations/0208_atomic_wallet_goal_funding.sql`, `lib/wallet/server.ts`,
-  `app/(app)/wallet/actions.ts`, `tests/wallet-goal-persistence.test.ts`
-- Description: The action calculated a Save balance, inserted an immutable debit, and then ignored the goal
-  update result. Concurrent funding could also race on the same Save balance.
-- Resolution: A manager-checked row-locking RPC now rechecks the Save balance, inserts the debit, updates goal
-  progress/status, and writes the audit event in one transaction. The server action uses the typed RPC wrapper.
-- Tests performed: Focused goal/atomic wallet persistence contracts, full Vitest, typecheck, lint, dependency
-  audit, migration audit, and clean production build.
-- Evidence: `tests/wallet-goal-persistence.test.ts` guards authorization, row locks, atomic write ordering,
-  and removal of direct best-effort money writes from the action.
-- Verified by: Codex
-- Date completed: 2026-07-15
-
-### TODO-0288 - Legacy connection adapters reported planned sync as runnable
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Family Connections / third-party integrations / sync correctness
-- Feature: Legacy Google Calendar and Gmail adapter registry
-- File or files: `lib/connections/adapter.ts`, `lib/connections/adapters/google-calendar.ts`,
-  `lib/connections/adapters/gmail.ts`, `lib/connections/adapters/index.ts`, `tests/connections-adapter.test.ts`
-- Description: OAuth key presence and a saved connection made planned adapters appear runnable even though
-  their provider methods returned empty success without real API I/O.
-- Resolution: Added explicit implementation readiness, blocked planned adapters in `planSync`, returned
-  unavailable errors from credentialed methods, and filtered `syncableProviderIds()` to implemented adapters.
-- Tests performed: 25 focused Connections tests; full 411-file/3,063-test suite; typecheck; lint; dependency
-  audit; migration audit; diff check; and clean 250-route production build.
-- Evidence: `tests/connections-adapter.test.ts` covers planned-adapter blocking and credentialed failure paths.
-- Verified by: Codex
-- Commit: `0ae5cdb0`
-- Date completed: 2026-07-15
-- Remaining dependencies: implement and expose Gmail, banking, grocery, and smart-home provider flows with
-  real OAuth, token, retry, callback, and sandbox evidence before advertising them as live integrations.
-
-### TODO-0289 - Provider sync cron returned success after account failures
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Notifications / cron / provider synchronization / observability
-- Feature: Scheduled provider synchronization
-- File or files: `app/api/cron/provider-sync/route.ts`, `tests/cron-provider-sync.test.ts`
-- Description: The cron counted failed account runs but returned HTTP 200 and `ok: true`, which could hide
-  provider outages from scheduler monitoring and delay recovery.
-- Resolution: Final response status and `ok` now derive from the failure count; any account failure returns
-  sanitized HTTP 502 while retaining per-account diagnostic counts and details.
-- Tests performed: 7 focused cron/error-boundary tests; full 412-file/3,065-test suite; typecheck; lint;
-  dependency audit; migration audit; diff check; and clean 250-route production build.
-- Evidence: `tests/cron-provider-sync.test.ts` guards non-2xx failure status and raw-error sanitization.
-- Verified by: Codex
-- Commit: `24e0b64d`
-- Date completed: 2026-07-15
-- Remaining dependencies: authenticated provider failure/retry drill, alert routing, and remote cron deployment verification.
-
-### TODO-0290 - Batch crons hid partial failures behind success responses
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Scheduled automation / reliability / observability
-- Feature: Calendar-feed, Autopilot, model-refresh, and auction-settlement crons
-- File or files: `app/api/cron/calendar-feeds/route.ts`, `app/api/cron/autopilot-scan/route.ts`,
-  `app/api/cron/model-refresh/route.ts`, `app/api/cron/close-auctions/route.ts`,
-  `tests/cron-batch-failure-status.test.ts`
-- Description: Several batch routes returned success after per-item failures, and auction RPC failures were
-  not included in the response summary.
-- Resolution: Failure counters now drive `ok` and HTTP status; partial failures return sanitized HTTP 502 and
-  auction settlement failures are counted for retry/monitoring visibility.
-- Tests performed: 11 focused cron/error-boundary tests; full 413-file/3,069-test suite; typecheck; lint;
-  dependency audit; migration audit; diff check; and clean 250-route production build.
-- Evidence: `tests/cron-batch-failure-status.test.ts` guards all four route contracts.
-- Verified by: Codex
-- Commit: `f8226011` (published in merge `59c422ac`)
-- Date completed: 2026-07-15
-- Remaining dependencies: isolated live failure drills, retry behavior, alert routing, and remote deployment verification.
-
-### TODO-0291 - Notification delivery crons hid push and generation failures
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Notifications / push delivery / cron observability
-- Feature: Daily notification and frequent push-scan jobs
-- File or files: `app/api/cron/notifications/route.ts`, `app/api/cron/push-scan/route.ts`,
-  `tests/cron-notification-failure-status.test.ts`
-- Description: Per-family notification generation errors and push delivery failures were logged but did not
-  change the cron response status, allowing a push outage to look healthy.
-- Resolution: Generation, dispatch, and push-result failures now roll into a sanitized failure count; non-zero
-  failures return `ok: false` with HTTP 502.
-- Tests performed: 13 focused cron/error-boundary tests; full 414-file/3,071-test suite; typecheck; lint;
-  dependency audit; migration audit; diff check; and clean 250-route production build.
-- Evidence: `tests/cron-notification-failure-status.test.ts` guards both notification routes.
-- Verified by: Codex
-- Commit: `92eb434a`
-- Date completed: 2026-07-15
-- Remaining dependencies: run live push/email failure drills and verify alert routing/deployment.
-
-### TODO-0292 - Notification email delivery hid provider and persistence failures
-
-- Status: [x] Completed in code and covered by regression tests.
-- Severity: P1
-- Category: Notifications / email delivery / Supabase persistence / cron observability
-- Feature: Per-recipient notification email digests
-- File or files: `lib/server/notification-emails.ts`, `app/api/cron/notifications/route.ts`,
-  `tests/notification-email-boundary.test.ts`, `tests/cron-notification-failure-status.test.ts`
-- Description: The helper ignored Supabase read/update errors and returned only a sent count, so provider
-  failures and unresolved `sent_at` writes were invisible to the notification cron.
-- Resolution: Added a sent/failed/skipped result, checked pending/prefs/recipient/resolve boundaries, left
-  failed sends retryable, and included email failures in the cron's HTTP 502 status.
-- Tests performed: 9 focused notification/error-boundary tests; full 415-file/3,073-test suite; typecheck;
-  lint; dependency audit; migration audit; diff check; and clean 250-route production build.
-- Evidence: `tests/notification-email-boundary.test.ts` guards helper results and route consumption.
-- Verified by: Codex
-- Commit: `a704a41f`
-- Date completed: 2026-07-15
-- Remaining dependencies: live Resend failure/duplicate/retry drills, alert routing, and remote cron deployment verification.
+- Tests performed: ��=�{h��춻�q�^u[��H�Z[\�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��X�][ۈRH�]H[�Yܚ]H�]]ܚ^�][ۂ�H�X]\�N�RH�X�][ۈ�Z[\��X��[Y[�][ۜ�[��ۘ�Y\��H�۝�\��][ۜH�[H܈�[\Έ\�\KݘX�][ۜ��ZKܛ�]K��\��ݘX�][ۋXZK\\��\�[��KX��[�\�Y\˝\����H\�ܚ\[ێ��\�۝^�XY��X��[Y[�][ۈ�\X�[Y[�ܚ]\��[�\�]Y][�\�\�K�X�]�]K؝Y�]X��[��ܚ]\�[��]Y\��Y�Hܚ]\�YۛܙY�]\��Y]X�\�H\��ܜˈ^\�[���۝�\��][ۈQ��\�B�[��X��\Y�]�]�ۙ�\�Z[��^H�[ۙ�Y�HX�]�H�[Z[H[��X�][ۋ��H�\��][ێ��۝^[�]]][ۈ\��ܜ�����Z[���Y�]�X�H�\�ۜ�\���[�\�]Y����\�H�X��Y�[���\[��]Yۈ�Z[\�K^\�[���Y�]�\�H�\�ܙY�[��YYY[��۝�\��][ۈ�ۙ\��\\�X��Y�Y�ܙHY\��Y�\�\�H\��\�Y��H\��\��ܛYY����\�Y�X�][ۈRH[�]X�\�KX��[�\�H\���[�]\�\X�X��[�\[�[��B�]Y]ZYܘ][ۈ]Y]]�H��[XH�ؙ\���X�[ۈ�Z[�YY[��\�X[��[�X�X�^]ܚY��^Kݙ\����L�K��H]�Y[��N�\��ݘX�][ۋXZK\\��\�[��KX��[�\�Y\˝\����X\���Z[X���Y�XY��X��Yܚ]\�����X���X��[��[��[Z[KݘX�][ۈ�۝�\��][ۈ���[�˂�H�\�Y�YY�N���^�H]H��\]Y����L�LM�������L�͈HRHYX[[��[����[�\X�H���Y�\�H\�X[�]�B��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN�RHYX[[��[���]H[�Yܚ]H��X�ݙ\�B�H�X]\�N�ۙKX�X��RHYX[[��\��]YX[[�[��H�۝^�H�[H܈�[\Έ\�\K�ZK�YX[��[�ܛ�]K��\���ZK[YX[\[�\\��\�[��K�\����H\�ܚ\[ێ��[�Y]H[�[��H�XY\��ܜ��\�HYۛܙY\��]Y����\�H[]Y�]�]�X��[����]�HZ\��ܙYYX[���[�[XZ[�ܜ[�Y[�H�Z[Y܈[���\]H[�[��\���[�[X]�HB�[��\��\ܝ[��H�X��\�ٝ[ܚ]K��H�\��][ێ��۝^�XY�[��\X�[Y[�]]][ۜ�����Z[���Y�^\�[��\��]Y���\�H�\\�Y�[��\�ܙYۈ�Z[\�K�[�\�]YYX[����\�H�[[ݙY�[�^H�[����H\�Y[�H�X��\���\�ۜ�B��\]Z\�\�]�\�H[�[\��YۛY[���H\��\�Y��H\��\��ܛYY����\�YRHYX[[��\�[�]X�\�KX��[�\�H\���[�]\�\X�X��[�[��\[�[��H]Y]��H]�Y[��N�\���ZK[YX[\[�\\��\�[��K�\����X\���XY�Z[\�\��[�\�]Y[YX[�X[�\����\�ܘ][ۋ[��X��Y�\X�[Y[�ܚ]\˂�H�\�Y�YY�N���^�H]H��\]Y����L�LM�������L���HRH�]X��\Y[��\�Y�YY�۝�\��][ۈ�ۙ\��\��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[HRH�]]ܚ^�][ۈ��]�X�B�H�X]\�N���X[Z[���[Z[H\��\�[��۝�\��][ۜH�[H܈�[\Έ\�\K�ZK��]ܛ�]K��\���ZKX�][�ۙ\��\�\����H\�ܚ\[ێ�H�Y[��[�\�]YH�۝�\��][ۈURQ[�H[��[�\�Y]Y�\�[�YۛܙKY\X�]B�\�\��]�]^X�]H�ۙ�\�Z[��]H^\�[���۝�\��][ۈ�[ۙ�Y�HX�]�H�[Z[H[�\�\���H�\��][ێ�]�\�H�۝�\��][ۈQ\��K\�XY��Y�X�]�H�[Z[W�Y[�\�\��Y�ۙ\��\�[\���Y�ܙB�\�ܞH\��YY܈Y\��Y�\�\�H\��\�Y��XY�Z[\�\�[�Z\��[���ۙ\��\������]�X�H�\�ۜ�\˂�H\��\��ܛYY����\�YRH�]�ۙ\��\[�]X�\�KX��[�\�H\���[�]\�\X�X��[�[��X[����X�[ۈ�Z[��H]�Y[��N�\���ZKX�][�ۙ\��\�\����X\��H�ۙ\��\�[\��[�H��Z\�ܞKۛ�[Y\��Y�H]��[��ۙ\��\�[Y][ۈ�Z[˂�H�\�Y�YY�N���^�H]H��\]Y����L�LM�������L��H�ܙH�]H�[��][ۜ���[�[[�H]�\��B��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[HZ\��[ۜ��]H[�Yܚ]H��]�\�H�X]\�N��ܙH��و�]�Y]�\�ݘ[�Z�X�[ۋ\�]K[�ܙX][ۈ���H�[H܈�[\Έ\�\
+K�Z\��[ۜ��X�[ۜ˝�\����ܙK\�]K]�[��][ۋ\\��\�[��K�\����H\�ܚ\[ێ��X�Z\��[ۋ\��YۛY[�\�]K[�\��YۛY[�XܙX][ۈܚ]\��\�H���ۜ�\�[�H�X��Y]]�X\�ݘ[[�\�[�\�ݘ[��[X]�H�[]Y�����]و�[��Y�\�H]\�ܚ]H�Z[Y��H�\��][ێ��X��Y�[��][ۈ[\������\]Z\�H\]Y�����\�ܙH�[܈�X�Z\��[ۋ�\��YۛY[��]Hۂ��Z[\�K�[��Z[Y]]�X\�ݘ[�\�[��]�Y]��X[�\\�]H����ۈ�Z[Y�[��][ۜ�[��[[ݙB��]�HܙX]Y�ܙ\��[�\��YۛY[�ܙX][ۈ�Z[˂�H\��\��ܛYY����\�Y�ܙH�]K���ًܙ]�\�\���[�]\�\X�X��[�\[�[��H]Y][���X[���X�[ۈ�Z[��H]�Y[��N�\����ܙK\�]K]�[��][ۋ\\��\�[��K�\����X\���[��][ۈ�X������X��]�\�]B��X[�\[��ܙHܙX][ۈ��\[��][ۋ��H�\�Y�YY�N���^�H]H��\]Y����L�LM�������L��HH�Z[Y[��[��HܙY]���[�HX\��Y\�ZY��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[H�[]��[�[��X[]H[�Yܚ]H��X�ݙ\�B�H�X]\�N�X[�X[YKX[��[��H^X�][ۂ�H�[H܈�[\Έ\�\
+K��[]�X�[ۜ˝�\����[]X[��[��K\\��\�[��K�\����H\�ܚ\[ێ�HX[�X[[��[��H�[��\�YۛܙY�[K\�XY[���Y[K]ܚ]H�Z[\�\�[�Y�[��Y��^ܝ[��ۘ]�[��[�H�[]�[]ܙY]�Z[Y�[�X[H��\[��[�[��[��H\�X[�[�K��H�\��][ێ��[H�XY�[���Y[HY�[��\�����Z[���Y�XX���Y[HY�[��H\���Y�X��Y�]�[]ܙY]�Z[�[�HX�[ۈ�\ܝ�ۛH�X��\�ٝ[HܙY]Y�[\�[��[�˂�H\��\��ܛYY����\�Y�[][��[��K�]�ZX��\��܋X��[�\�H\���[�]\�\X�X��[�\[�[��B�]Y][��X[���X�[ۈ�Z[��H]�Y[��N�\����[]X[��[��K\\��\�[��K�\����X\���X��Y�XY���Y[H\]\����X��[���X��\����[�\�˂�H�\�Y�YY�N���^�H]H��\]Y����L�LMB�������L�H[��[��HܛۈYۛܙY��Y[H[�ܙY]�Z[\�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[H�[]��[�[��X[]H[�Yܚ]H���Y[Y]]�X][ۂ�H�X]\�N�ܛۋY�]�[�YH[��[��\H�[H܈�[\Έ\�\K�ܛۋ��[]X[��[��Kܛ�]K��\���ܛۋ]�[]X[��[��K\\��\�[��K�\����H\�ܚ\[ێ�HܛۈYۛܙY]���Y[H\]H�\�[[���[Y�[��HH�[HY�\�H�Z[Y�[]�ܙY]XZ�[���]�Y\�[��Y�H[�Y[��\��\�[��H�Z[\�\����H[ۚ]ܚ[�˂�H�\��][ێ�Hܛۈ����X���H��Y[H�Z[H�Y�ܙHܙY][���\�ܙ\�H�[܈��Y[HY�\�B��Z[YܙY]��[��ۛH�X��\�ٝ[ܙY]�[��Z[��\�X�H�[�H�[��[���\��\��Y�[K��H\��\��ܛYY����\�Yܛۈ[��[��H\��\�[��H�۝�X��[�]\�\X�X��[�\[�[��H]Y]�[��X[���X�[ۈ�Z[��H]�Y[��N�\���ܛۋ]�[]X[��[��K\\��\�[��K�\����X\����Y[KX�Y�ܙKXܙY]ܙ\�[�����X����X��Y�Z[\�\�[��X��\��[ۛH��[�\�˂�H�\�Y�YY�N���^�H]H��\]Y����L�LMB�������L�HH��[�[�[����[X�]�]�]\][����[��ܙ\��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[H�[]��[�[��X[]H[�Yܚ]H��ۘ�\��[��H��\X�\�H���X�\�]B�H�X]\�N��]�[�����[�[�[�����HH�[	���]�H�X��]�H�[H܈�[\Έ�\X�\�K�ZYܘ][ۜ����]�ZX���[]���[ٝ[�[�˜�[X���[]��\��\����\�\
+K��[]�X�[ۜ˝�\����[]Y��[\\��\�[��K�\����H\�ܚ\[ێ�HX�[ۈ�[�[]YH�]�H�[[��K[��\�Y[�[[]]X�HX�][�[�YۛܙYH��[�\]H�\�[��ۘ�\��[��[�[����[[���X�HۈH�[YH�]�H�[[��K��H�\��][ێ�HX[�Y�\�X�X��Y���[���[��������X�X���H�]�H�[[��K[��\��HX�]\]\���[���ܙ\����]\�[�ܚ]\�H]Y]]�[�[�ۙH�[��X�[ۋ�H�\��\�X�[ۈ\�\�H\Y��ܘ\\���H\��\��ܛYY����\�Y��[�]�ZX��[]\��\�[��H�۝�X���[�]\�\X�X��[�\[�[��B�]Y]ZYܘ][ۈ]Y][��X[���X�[ۈ�Z[��H]�Y[��N�\����[]Y��[\\��\�[��K�\����X\��]]ܚ^�][ۋ�������]�ZX�ܚ]Hܙ\�[���[��[[ݘ[و\�X��\�YY��ܝ[ۙ^Hܚ]\����HHX�[ۋ��H�\�Y�YY�N���^�H]H��\]Y����L�LMB�������L�HY�X�H�ۛ�X�[ۈY\\���\ܝY[��Y�[��\��[��X�B��H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN��[Z[H�ۛ�X�[ۜ��\�\\�H[�Yܘ][ۜ���[���ܜ�X��\�H�X]\�N�Y�X�H����H�[[�\�[��XZ[Y\\��Y�\��B�H�[H܈�[\ΈX���ۛ�X�[ۜ��Y\\���X���ۛ�X�[ۜ��Y\\�������KX�[[�\����X���ۛ�X�[ۜ��Y\\����XZ[��X���ۛ�X�[ۜ��Y\\���[�^��\����ۛ�X�[ۜ�XY\\��\����H\�ܚ\[ێ��]]�^H�\�[��H[�H�]�Y�ۛ�X�[ۈXYH[��YY\\��\X\��[��X�H]�[��Y��Z\��ݚY\�Y]���]\��Y[\H�X��\���]�]�X[THK�˂�H�\��][ێ�YY^X�][\[Y[�][ۈ�XY[�\������Y[��YY\\��[�[��[���]\��Y�[�]�Z[X�H\��ܜ����HܙY[�X[YY]��[��[\�Y�[��X�T�ݚY\�Y�
+X�[\[Y[�YY\\�˂�H\��\��ܛYY��H���\�Y�ۛ�X�[ۜ�\����[LKY�[K����]\��Z]N�\X�X���[��\[�[��B�]Y]�ZYܘ][ۈ]Y]�Y���X���[��X[��L\��]H��X�[ۈ�Z[��H]�Y[��N�\����ۛ�X�[ۜ�XY\\��\����ݙ\��[��YXY\\�����[��[�ܙY[�X[Y�Z[\�H]˂�H�\�Y�YY�N���^�H��[Z]�YMX���H]H��\]Y����L�LMB�H�[XZ[�[��\[�[��Y\Έ[\[Y[�[�^��H�XZ[�[��[��ܛ��\�K[��X\�Z�YH�ݚY\������]��X[�]]��[��]�K�[�X��[��[���]�Y[��H�Y�ܙHY�\�\�[��[H\�]�H[�Yܘ][ۜ˂�������L�HH�ݚY\��[��ܛۈ�]\��Y�X��\��Y�\�X���[��Z[\�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN���Y�X�][ۜ��ܛۈ��ݚY\��[���ۚ^�][ۈ�؜�\��X�[]B�H�X]\�N���Y[Y�ݚY\��[���ۚ^�][ۂ�H�[H܈�[\Έ\�\K�ܛۋ��ݚY\�\�[��ܛ�]K��\���ܛۋ\�ݚY\�\�[�˝\����H\�ܚ\[ێ�Hܛۈ��[�Y�Z[YX���[��[���]�]\��Y�[��Έ�YX�X���[YB��ݚY\��]Y�\����H��Y[\�[ۚ]ܚ[��[�[^H�X�ݙ\�K��H�\��][ێ��[�[�\�ۜ�H�]\�[������\�]�H���HH�Z[\�H��[��[�HX���[��Z[\�H�]\���[�]^�YL��[H�]Z[�[��\�XX���[�XYۛ��X���[��[�]Z[˂�H\��\��ܛYY�����\�Yܛۋ�\��܋X��[�\�H\����[L�Y�[K���K]\��Z]N�\X�X���[�\[�[��H]Y]�ZYܘ][ۈ]Y]�Y���X���[��X[��L\��]H��X�[ۈ�Z[��H]�Y[��N�\���ܛۋ\�ݚY\�\�[�˝\����X\���ۋL��Z[\�H�]\�[��]�Y\��܈�[�]^�][ۋ��H�\�Y�YY�N���^�H��[Z]��L���H]H��\]Y����L�LMB�H�[XZ[�[��\[�[��Y\Έ]][�X�]Y�ݚY\��Z[\�Kܙ]�H�[[\���][��[��[[�Hܛۈ\�[Y[��\�Y�X�][ۋ��������L�LH�]�ܛۜ�Y\�X[�Z[\�\��Z[��X��\���\�ۜ�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN���Y[Y]]�X][ۈ��[XX�[]H�؜�\��X�[]B�H�X]\�N��[[�\�Y�YY]]�[�[�[\�Y��\�[�]X�[ۋ\�][Y[�ܛۜH�[H܈�[\Έ\�\K�ܛۋ��[[�\�Y�YY�ܛ�]K��\�\K�ܛۋ�]]�[�\��[�ܛ�]K���\�\K�ܛۋ�[�[\�Y��\�ܛ�]K��\�\K�ܛۋ����KX]X�[ۜ�ܛ�]K���\���ܛۋX�]�Y�Z[\�K\�]\˝\����H\�ܚ\[ێ��]�\�[�]���]\��]\��Y�X��\��Y�\�\�Z][H�Z[\�\�[�]X�[ۈ���Z[\�\��\�B���[��YY[�H�\�ۜ�H�[[X\�K��H�\��][ێ��Z[\�H��[�\������]�H��[��]\��\�X[�Z[\�\��]\���[�]^�YL�[��]X�[ۈ�][Y[��Z[\�\�\�H��[�Y�܈�]�K�[ۚ]ܚ[���\�X�[]K��H\��\��ܛYY�LH���\�Yܛۋ�\��܋X��[�\�H\����[L�Y�[K���K]\��Z]N�\X�X���[�\[�[��H]Y]�ZYܘ][ۈ]Y]�Y���X���[��X[��L\��]H��X�[ۈ�Z[��H]�Y[��N�\���ܛۋX�]�Y�Z[\�K\�]\˝\����X\��[��\���]H�۝�X�˂�H�\�Y�YY�N���^�H��[Z]�����LX
+X�\�Y[�Y\��HNX���X�
+B�H]H��\]Y����L�LMB�H�[XZ[�[��\[�[��Y\Έ\��]Y]�H�Z[\�H�[��]�H�Z]�[܋[\���][��[��[[�H\�[Y[��\�Y�X�][ۋ��������L�LHH��Y�X�][ۈ[]�\�Hܛۜ�Y\�[��[�\�][ۈ�Z[\�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN���Y�X�][ۜ��\�[]�\�H�ܛۈ؜�\��X�[]B�H�X]\�N�Z[H��Y�X�][ۈ[���\]Y[�\�\��[��؜H�[H܈�[\Έ\�\K�ܛۋۛ�Y�X�][ۜ�ܛ�]K��\�\K�ܛۋ�\�\��[�ܛ�]K���\���ܛۋ[��Y�X�][ۋY�Z[\�K\�]\˝\����H\�ܚ\[ێ�\�Y�[Z[H��Y�X�][ۈ�[�\�][ۈ\��ܜ�[�\�[]�\�H�Z[\�\��\�H���Y�]Y����[��HHܛۈ�\�ۜ�H�]\�[��[��H\��]Y�H����X[K��H�\��][ێ��[�\�][ۋ\�]�[�\�\�\�[�Z[\�\������[��H�[�]^�Y�Z[\�H��[���ۋ^�\��Z[\�\��]\���Έ�[�X�]L���H\��\��ܛYY�L����\�Yܛۋ�\��܋X��[�\�H\����[MY�[K���K]\��Z]N�\X�X���[�\[�[��H]Y]�ZYܘ][ۈ]Y]�Y���X���[��X[��L\��]H��X�[ۈ�Z[��H]�Y[��N�\���ܛۋ[��Y�X�][ۋY�Z[\�K\�]\˝\����X\������Y�X�][ۈ��]\˂�H�\�Y�YY�N���^�H��[Z]�L�X��X�H]H��\]Y����L�LMB�H�[XZ[�[��\[�[��Y\Έ�[�]�H\��[XZ[�Z[\�H�[�[��\�Y�H[\���][���\�[Y[���������L�L�H��Y�X�][ۈ[XZ[[]�\�HY�ݚY\�[�\��\�[��H�Z[\�\�H�]\Έ�H��\]Y[���H[��ݙ\�Y�H�Yܙ\��[ۈ\�˂�H�]�\�]N�B�H�]Y�ܞN���Y�X�][ۜ��[XZ[[]�\�H��\X�\�H\��\�[��H�ܛۈ؜�\��X�[]B�H�X]\�N�\�\�X�\Y[���Y�X�][ۈ[XZ[Y�\�H�[H܈�[\ΈX���\��\�ۛ�Y�X�][ۋY[XZ[˝�\�\K�ܛۋۛ�Y�X�][ۜ�ܛ�]K���\��ۛ�Y�X�][ۋY[XZ[X��[�\�K�\���\���ܛۋ[��Y�X�][ۋY�Z[\�K\�]\˝\����H\�ܚ\[ێ�H[\�YۛܙY�\X�\�H�XY�\]H\��ܜ�[��]\��YۛHH�[���[����ݚY\���Z[\�\�[�[��\���Y�[��]ܚ]\��\�H[��\�X�H�H��Y�X�][ۈܛۋ��H�\��][ێ�YYH�[�٘Z[Y���\Y�\�[�X��Y[�[����Y��ܙX�\Y[�ܙ\���H��[�\�Y\�Y���Z[Y�[���]�XX�K[�[��YY[XZ[�Z[\�\�[�Hܛۉ��L��]\˂�H\��\��ܛYY�H���\�Y��Y�X�][ۋ�\��܋X��[�\�H\����[MKY�[K����]\��Z]N�\X�X��[��\[�[��H]Y]�ZYܘ][ۈ]Y]�Y���X���[��X[��L\��]H��X�[ۈ�Z[��H]�Y[��N�\��ۛ�Y�X�][ۋY[XZ[X��[�\�K�\����X\��[\��\�[�[���]H�ۜ�[\[ۋ��H�\�Y�YY�N���^�H��[Z]�M�MY��H]H��\]Y����L�LMB�H�[XZ[�[��\[�[��Y\Έ]�H�\�[��Z[\�K�\X�]Kܙ]�H�[�[\���][��[��[[�Hܛۈ\�[Y[��\�Y�X�][ۋ�
