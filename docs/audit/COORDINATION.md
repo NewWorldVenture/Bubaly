@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 21:31 UTC** · by `agent-03`
+Last board update: **2026-07-16 22:34 UTC** · by `agent-04`
 
 ---
 
@@ -101,7 +101,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:31 | `6f4e0e4e`+ | Read boundaries: food hub (PLA-0418), meals (PLA-0433), nutrition/favorites (PLA-0435). Write boundary: recipes toggleFav/markMade/delete (PLA-0451). grocery/pantry/meals writes verified fail-visible. Seed ≥500 VERIFIED (seed_food.sql = 520 deterministic rows across recipes/pantry/dining). Remaining: live cross-family RLS on A-10 tables |
 | A-11 | `agent-03` | IN_REVIEW | 2026-07-16 21:24 | 2026-07-16 21:31 | `pending` | Documents pipeline verified tenant-isolated + guarded (PLA-0442). FOUND P1: `family-media` bucket undefined in migrations + public-served (LB-009/PLA-0461) — owner-gated prod migration + signed-URL decision. Open: messages live, doc seed
 | A-12 | `agent-01` | IN_REVIEW | 2026-07-16 21:38 | 2026-07-16 21:42 | `PLA-0470` | FOUND+FIXED HIGH child-safety bug: child could disable/delete their own Guardian safety rules (11 mutation actions had no role gate; RLS family-scoped). Added isManager gate to all + guard test. Open: manager-scoped RLS, callbacks/escalation flows |
-| A-13 | — | OPEN | | | | |
+| A-13 | `agent-04` | CLAIMED | 2026-07-16 22:34 | 2026-07-16 22:34 | `pending` | Vacations/trips/concierge/travel — starting §3a authz sweep + Supabase wiring |
 | A-14 | `agent-01` | IN_REVIEW | 2026-07-16 21:30 | 2026-07-16 21:31 | `PLA-0460` | Ownership/trust RPCs VERIFIED: accept/decline/set-status owner-gated; bid/buy tie acting member to auth.uid()+family, FOR UPDATE, no self-buy; revoked from public. 6-test guard. Open: orders/disputes/handoff, live RLS, media |
 | A-15 | — | OPEN | | | | |
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
