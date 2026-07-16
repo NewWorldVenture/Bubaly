@@ -63,8 +63,10 @@ export function WorkloadModule({
     void saveWorkloadSnapshotAction(report.loads.map(l => ({
       memberId: l.memberId, weekStart, choreMinutes: l.choreMinutes, choreCount: l.choreCount,
       taskCount: l.taskCount, eventCount: l.eventCount, loadScore: l.loadScore, sharePct: l.sharePct,
-    })));
-  }, [report]);
+    }))).then((res) => {
+      if (!res.ok) toastError(res.error);
+    });
+  }, [report, toastError]);
 
   const trend = useMemo(() => shareTrend(
     snapshots.map(s => ({ memberId: s.member_id, weekStart: s.week_start, sharePct: Number(s.share_pct) })),

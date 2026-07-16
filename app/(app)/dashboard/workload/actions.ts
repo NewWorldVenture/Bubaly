@@ -38,7 +38,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
 /**
  * Persist this week's computed loads as snapshots (upsert on member+week) so
  * the analytics trend survives source-row churn. Called from the module after
- * it computes the live report. Degrades safely before migration 0174.
+ * it computes the live report.
  */
 export async function saveWorkloadSnapshotAction(rows: {
   memberId: string; weekStart: string; choreMinutes: number; choreCount: number;
@@ -66,6 +66,6 @@ export async function saveWorkloadSnapshotAction(rows: {
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Workload history is not available yet.' };
+    return { ok: false, error: 'Could not save workload history. Refresh and try again.' };
   }
 }
