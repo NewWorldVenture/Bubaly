@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:20:00 -04:00
+- Last updated: 2026-07-16 10:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `03012c8c` makes Super Admin Personalization and Exit-Intent fail closed on read failures after `9c5edb3e` repaired Competitive Intelligence; live provider and deployment evidence remains open
+- Commit: `80a790c6` makes Super Admin Social Audit fail closed on read failures after `03012c8c` repaired Personalization and Exit-Intent; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0384 - Social Audit hid audit-log read failures as an empty history
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / social operations / Supabase read boundary
+- Feature: Social Audit
+- Route: `/admin/social/audit`
+- File or files: `app/(app)/admin/social/audit/page.tsx`, `tests/admin-social-audit-read-boundary.test.ts`
+- Database objects: `social_audit_logs`
+- Affected roles: Super Admin
+- Scenario: the audit-log query could fail while the page rendered no audit entries, masking an unavailable operational history.
+- Launch impact: operators could mistake an audit backend outage for an empty history and lose confidence in mutation traceability.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required audit read.
+- Required remediation: preserve the query error and render a retryable page-level failure before the empty state or rows.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Social Audit boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (490 files/3,250 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `80a790c6`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Social Audit no longer presents a fabricated empty history after a failed audit-log read.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and social audit.
 
 #### TODO-0383 - Exit-Intent hid offer read failures as an empty editor
 
@@ -201,25 +222,7 @@
 - File or files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-connectable-surface.test.ts`
 - Database objects: `sync_accounts`, `sync_connections`, `sync_calendars`, `sync_conflicts`, and `sync_job_runs`
 - Affected roles: authenticated family members
-- Scenario: Amazon/Alexa was listed as a connectable account even though the production sync registry has no Amazon adapter; only export-only ICS capability exists.
-- Launch impact: users could open an account setup route for a provider that cannot authenticate or run account sync.
-- Root cause: account-page provider arrays were broader than the authoritative `lib/sync/registry.ts`.
-- Required remediation: expose only Google, Microsoft, and Apple in account setup pages; retain Amazon only in the capability matrix with its true export-only limitation.
-- Implementation notes: removed Amazon from the three setup arrays and updated the Sync hub copy; capability tests and ICS semantics remain unchanged.
-- Test plan: focused Sync surface, route-read-boundary, and capability suites; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused Sync suites (14 assertions); full Vitest (481 files/3,240 tests); typecheck; lint; clean production build; diff check.
-- Evidence: source repair validated in commit `05bc83e4`; local branch pushed; known build warnings remain; live OAuth, RLS, browser, and deployment evidence remain open.
-- Resolution: Amazon/Alexa is no longer advertised as an account-sync setup path.
-- Remaining dependencies: implement a real Amazon adapter before exposing account setup; validate Google/Microsoft/Apple live flows.
-
-#### TODO-0373 - Dead Connections adapter layer duplicated the real sync registry
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Connections / integration architecture / dead code
-- Feature: Provider adapter registry
-- Route: internal `lib/connections` layer; user-facing runtime is `/dashboard/connections`
-- File o…129026 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Scenario: Amazon/Alexa was listed …129473 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
