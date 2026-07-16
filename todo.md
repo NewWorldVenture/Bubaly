@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:09:24 -04:00
+- Last updated: 2026-07-16 07:14:58 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `541c1a40` adds Finance read failure handling after Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `32dc4248` adds Health and Medications read failure handling after Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0359 - Health and Medications hid required clinical reads as partial history
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Health / Supabase failure handling
+- Feature: Health Dashboard and Medications
+- Route: `/dashboard/health`, `/dashboard/medications`
+- File or files: `components/modules/health-module.tsx`, `components/modules/medications-module.tsx`, `tests/health-read-boundaries.test.ts`
+- Database objects: `health_metrics`, `workout_logs`, `appointments`, `reminders`, `symptom_logs`, `health_goals`, `medications`, `medication_schedules`, and `medication_doses`
+- Affected roles: authenticated family members, household managers, and health-history users
+- Scenario: symptom/goal reads and medication schedule/dose reads could fail while the UI derived health summaries, adherence, or empty states from partial arrays.
+- Launch impact: families could miss symptoms, goals, medication schedules, dose history, or clinical follow-up context.
+- Root cause: both modules ignored secondary realtime query loading/error state; Medications only guarded the medication list.
+- Required remediation: coordinate all required clinical reads and render sanitized retryable errors before derived health or adherence metrics.
+- Implementation notes: Health now tracks six reads and retries them together; Medications tracks medication, schedule, and dose reads and retries them together.
+- Test plan: focused health boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/health-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 476 files/3,233 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `32dc4248`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0358 - Finances summary hid account and planning read failures as zero metrics
 
@@ -201,30 +222,7 @@
 - File or files: `components/vacations/trip-emergency.tsx`, `tests/trip-emergency-boundary.test.ts`
 - Database objects: `vacation_emergency_contacts` and `vacation_medical_information`
 - Affected roles: authenticated family members and household trip planners
-- Scenario: contact or medical reads could fail while the emergency summary returned null, indistinguishable from having no safety information.
-- Launch impact: travelers could miss emergency contacts or medical details during a time-sensitive situation.
-- Root cause: the summary checked only array lengths and ignored both query loading and error state.
-- Required remediation: track both safety reads, distinguish loading from empty, and render a sanitized retry state before returning no summary.
-- Implementation notes: Emergency Summary now waits for both reads and retries them together when either fails.
-- Test plan: focused emergency boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/trip-emergency-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 468 files/3,220 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
-- Resolution: source repair validated locally in commit `da83e4b`; documentation and remote publication remain pending for this increment.
-- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
-
-#### TODO-0349 - Vacation CRUD and budget views hid failed financial and trip-detail reads
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Vacation CRUD and budget / Supabase failure handling
-- Feature: Vacation shared CRUD sections and Trip Budget
-- Route: `/dashboard/vacations/[id]/budget` plus shared lodging, travel, activity, document, family, and emergency sections
-- File or files: `components/vacations/shared.tsx`, `components/vacations/trip-budget.tsx`, `tests/vacation-crud-read-boundary.test.ts`
-- Database objects: family-scoped vacation child tables, `vacation_budgets`, and `vacation_expenses`
-- Affected roles: authenticated family members and household trip planners
-- Scenario: shared CRUD list reads or budget/expense reads could fail while sections rendered empty lists or zero financial totals.
-- Launch impact: families could miss trip records or make budget decisions from incomplete data.
-- Root cause: `TripCrudSection` igno…116139 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Scenario: contact or medical reads could fail while the emergency summary returned null, indistinguishable from having no safety information…116676 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
