@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0373 - Dead Connections adapter layer duplicated the real sync registry
+
+- Status: Resolved in source; live provider and deployed verification remain open.
+- Severity: P1.
+- Surface: internal `lib/connections` adapter layer and `/dashboard/connections` integration boundary.
+- Finding: planned adapters returned â€œnot available yet,â€ had no production callers, and duplicated the authoritative `lib/sync` registry.
+- Repair: deleted the dead contract, planned Google/Gmail adapters, registry, and their tests; stale-reference scan is clean. The real `lib/sync` path remains unchanged.
+- Evidence: remaining Connections provider suite, full 480 test files/3,238 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `23cd749b`.
+- Remaining launch gate: validate the real Google/Microsoft/Apple OAuth and sync flows in live sandbox/deployed environments; implement future providers before exposing them.
+
 ### PLA-0372 - Connections hub exposed providers without live setup routes
 
 - Status: Resolved in source; live provider and deployed verification remain open.
