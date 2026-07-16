@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
   CONSENT_SCOPES, K_ANONYMITY_FLOOR, visibleInsights, isContributing,
@@ -28,7 +29,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
 
-  const { data: rows } = useRealtimeQuery<Consent>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Consent>({
     table: 'network_consent', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('network_consent').select('*').eq('family_id', familyId),
   });
@@ -62,6 +63,9 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
   const toggleMaster = () => persist({ enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes });
   const toggleScope = (k: ConsentScope) =>
     persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
+
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading intelligence preferences...</div>;
+  if (error) return <ErrorState message="Could not load intelligence preferences. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-6">

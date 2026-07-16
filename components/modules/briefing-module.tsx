@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { ErrorState } from '@/components/ui/states';
 import {
   Sun, Moon, CalendarDays, RefreshCw, Sparkles, AlertTriangle,
   CheckCircle2, Clock, X, Loader2, TrendingUp,
@@ -683,12 +684,12 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
   }, [hydrated, tab, briefings, loading, error, generate]);
 
   // Live data for kitchen mode
-  const { data: rawEvents } = useRealtimeQuery<CalEvent>({
+  const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
     familyId,
     fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId) as never,
   });
-  const { data: rawReminders } = useRealtimeQuery<ReminderRow>({
+  const { data: rawReminders, error: remindersError, refresh: refreshReminders } = useRealtimeQuery<ReminderRow>({
     table: 'reminders',
     familyId,
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false) as never,
@@ -702,6 +703,8 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
     const list = (rawReminders ?? []) as ReminderRow[];
     return list.filter(r => r.remind_at && r.remind_at.slice(0, 10) <= today).slice(0, 6);
   }, [rawReminders, today]);
+  const kitchenError = eventsError || remindersError;
+  const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };
 
   const currentBriefing = tab !== 'kitchen' ? briefings[tab] ?? null : null;
 
@@ -716,6 +719,7 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
 
   // Kitchen mode renders fullscreen
   if (tab === 'kitchen') {
+    if (kitchenError) return <ErrorState message="Could not load Kitchen Mode context. Refresh and try again." onRetry={refreshKitchen} />;
     return (
       <KitchenMode
         onExit={() => setTab('morning')}
