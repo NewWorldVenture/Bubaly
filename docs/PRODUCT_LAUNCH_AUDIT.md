@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/family-signals`.
+- Finding: the family-signal query could fail while the route rendered no active or hidden intelligence signals.
+- Repair: the Supabase error is checked before deriving active/hidden signal views; failures return a retryable page state.
+- Evidence: focused Family Intelligence boundary suite (1 assertion), full 500 test files/3,260 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `384acfbd`.
+- Remaining launch gate: validate authenticated family RLS, signal availability, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0393 - Deals hid listing read failures as no standout deals
 
 - Status: Resolved in source; live and deployed verification remain open.

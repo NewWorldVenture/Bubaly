@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:15:00 -04:00
+- Last updated: 2026-07-16 11:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `071bfd7c` makes Marketplace Deals fail closed on listing read failures after `db158e01` repaired Selling; live provider and deployment evidence remains open
+- Commit: `384acfbd` makes Family Intelligence fail closed on signal read failures after `071bfd7c` repaired Marketplace Deals; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / family intelligence / Supabase read boundary
+- Feature: Family Intelligence
+- Route: `/dashboard/family-signals`
+- File or files: `app/(app)/dashboard/family-signals/page.tsx`, `tests/family-signals-read-boundary.test.ts`
+- Database objects: `family_signals`
+- Affected roles: authenticated family members
+- Scenario: the family-signal query could fail while the page rendered no active or hidden signals.
+- Launch impact: families could miss important intelligence while the dashboard appeared healthy and empty.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required family read.
+- Required remediation: preserve the query error and render a retryable page-level failure before deriving signal views.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Family Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (500 files/3,260 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `384acfbd`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Family Intelligence no longer presents a fabricated empty screen after a failed signal read.
+- Remaining dependencies: verify authenticated family RLS, signal availability, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0393 - Deals hid listing read failures as no standout deals
 

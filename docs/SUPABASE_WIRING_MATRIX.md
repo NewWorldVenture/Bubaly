@@ -11,6 +11,7 @@ contract is not yet verified.
 | Wallet | wallet tables, goals, buckets, immutable transactions | family RLS plus manager-checked RPCs | `0205`, `0208`, typed RPC wrappers | Partial | Goal RPC is published; remote migration ledger/deployment still needs proof |
 | Billing | subscriptions, checkout/session records, Stripe refs | family/owner/admin boundaries | Stripe checkout, webhooks, portal | Partial | Live idempotency/refund and secret validation pending |
 | Calendar/planning | events, routines, tasks, provider accounts | family member policies | Google/provider sync, cron | Partial | Conflict and callback verification pending |
+| Home/dashboard intelligence | `family_signals` and related family-scoped context | family membership and family-scoped RLS | dashboard server reads and retryable error state | Partial | Family Intelligence signal reads now fail visibly; authenticated RLS, migration, and full dashboard workflow verification remain |
 | Chores/rewards | chores, assignments, submissions, rewards | child submit vs parent review | server actions, notifications | Partial | Transition repairs covered; full UI and role traversal pending |
 | Food/meals | meals, pantry, grocery lists, recipes | family-scoped policies | AI routes, CRUD actions | Partial | AI persistence fixed; complete seed and import paths pending |
 | Messages/files | messages, threads, files, documents | family policies and storage policies | Storage buckets, signed URLs, realtime | Partial | Bucket policy and delete/replace audit pending |

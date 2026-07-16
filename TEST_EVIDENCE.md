@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Intelligence Read Boundary
+
+- Focused Family Intelligence boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 500 test files, 3,260 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Family Intelligence now fails visibly when `family_signals` cannot be read instead of presenting an empty intelligence screen.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `384acfbd`.
+
 ## Latest Local Evidence - Marketplace Deals Read Boundary
 
 - Focused Deals boundary suite: 1 file, 1 assertion passed.
