@@ -763,3 +763,27 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Resolved in code
 - Remaining dependencies: A-13 unit not yet DONE — remaining: cross-family RLS proof on the PG16 harness for vacations/trips/concierge tables, live CRUD walkthrough, seed ≥500 rows for A-13 tables, trip-intel delete-action per-action judgment (`deleteTripPlanAction`/`deleteDeparturePlanAction` currently open to all members — collaborative planning, likely OK)
+
+### PLA-0510 - A-15 AI assistants/chat/voice: auth + tenant + tool-authz VERIFIED, trust-gate locked
+
+- Timestamp: 2026-07-16 23:04 UTC
+- Service: A-15 AI assistants / chat / voice
+- Route: `app/api/ai/*` (~30 routes), `lib/ai/*`, `lib/assistant/*`
+- Affected files: `tests/assistant-trust-wrapper.test.ts` (new regression lock); verification only elsewhere
+- Role: all family roles, incl. children (real logins) who can chat with the assistant
+- Scenario: full read of the AI surface for auth, tenant isolation, cost/DoS controls, genuine wiring, and the §3a "child drives a privileged action" class — this time via the tool-executing chat assistant.
+- Severity: n/a (no defect found; hardening lock added)
+- Findings (VERIFIED):
+  - Auth: every route resolves `requireUserContext()` except `POST /api/ai/gift`, which is **intentionally public** (unauthenticated gift-link giver) and correctly protected — per-IP in-memory + durable Postgres rate limit (5/min), bounded request body, token-scoped read, never writes.
+  - Tenant isolation: data reads are family-scoped (`.eq('family_id', …)`) and backed by RLS; `wallet/child/[childId]` verifies the child wallet belongs to the caller's family before use.
+  - Cost/DoS: consistent tier gate (`walletTier`/`aiCoachLevel`) + per-user rate limit + per-day metering + bounded request/response bodies across the AI routes.
+  - Genuine wiring: `lib/ai/provider.ts` calls the real OpenAI API (`/v1/chat/completions`) via `fetchExternal`, with streaming, tool-calling, vision, bounded responses, and honest error classification (unconfigured/quota/auth/rate_limit/model/network). No mock/stub; unconfigured state fails honest (503/clear message).
+  - Money routes (`ai/wallet`, `ai/wallet/child`, `ai/invest`) are READ-ONLY coaching/education (only write a `wallet_audit_logs` row) — no financial mutation.
+  - **Tool authz (the key §3a surface):** the chat assistant executes real family tools, but `lib/assistant/trust-wrapper.ts` routes every WRITE tool through the family Trust & Permissions Engine (`evaluateTrust`) with the caller's role: `deny` → no write; `require_approval` → parent-approval request, no write; `allow` → execute. Read tools pass through. A child cannot drive a privileged write through the model.
+- Resolution: no code change required. Added `tests/assistant-trust-wrapper.test.ts` (5 tests) to LOCK the invariant: deny blocks the write, require_approval defers (no write), allow executes with original args, read tools bypass trust, and every mapped write-tool name still exists in `tools.ts` (guards against a rename bypass).
+- Supabase impact: none.
+- Tests run: `tests/assistant-trust-wrapper.test.ts` 5/5; tsc/eslint clean on touched files.
+- Validation evidence: 5/5 test pass; `tsc --noEmit` exit 0; eslint exit 0.
+- Commit: pending (this push)
+- Status: Verified; regression lock added
+- Remaining dependencies (A-15 not yet DONE): live E2E with a real OPENAI_API_KEY (streaming + a real tool round + approval path); `admin/ai` settings-route authz (super-admin scope); voice transcribe/speak provider wiring + size limits review; prompt-injection review of tool arguments end-to-end.

@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 23:02 UTC** · by `agent-04`
+Last board update: **2026-07-16 23:06 UTC** · by `agent-04`
 
 ---
 
@@ -103,7 +103,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-12 | `agent-01` | IN_REVIEW | 2026-07-16 21:38 | 2026-07-16 21:42 | `PLA-0470` | FOUND+FIXED HIGH child-safety bug: child could disable/delete their own Guardian safety rules (11 mutation actions had no role gate; RLS family-scoped). Added isManager gate to all + guard test. Open: manager-scoped RLS, callbacks/escalation flows |
 | A-13 | `agent-04` | IN_REVIEW | 2026-07-16 22:34 | 2026-07-16 22:40 | `PLA-0500` | FOUND+FIXED §3a P1: a child could place/cancel/requeue outbound AI concierge calls (real bookings + telephony cost) — `requestCallAction`/`cancelCallAction`/`requeueCallAction` had no role gate (RLS family-scoped only). Added isManager gate to all 3 + 5-test guard. Vacations/trips writes are client-side Supabase (RLS-enforced, collaborative-by-design like calendar). Open: cross-family RLS proof on PG16, live CRUD, ≥500 seed, trip-intel delete judgment |
 | A-14 | `agent-01` | IN_REVIEW | 2026-07-16 21:30 | 2026-07-16 21:31 | `PLA-0460` | Ownership/trust RPCs VERIFIED: accept/decline/set-status owner-gated; bid/buy tie acting member to auth.uid()+family, FOR UPDATE, no self-buy; revoked from public. 6-test guard. Open: orders/disputes/handoff, live RLS, media |
-| A-15 | `agent-04` | CLAIMED | 2026-07-16 23:02 | 2026-07-16 23:02 | `pending` | AI assistants/chat/voice (~30 `app/api/ai/*` routes) — auth/tenant/authz sweep, prioritizing money routes (wallet, wallet/child, invest, savings) |
+| A-15 | `agent-04` | IN_REVIEW | 2026-07-16 23:02 | 2026-07-16 23:06 | `PLA-0510` | VERIFIED clean (no defect): all ~30 `app/api/ai/*` routes auth'd (gift intentionally public + IP-rate-limited); family-scoped + RLS; tier-gate + rate-limit + bounded bodies; provider genuinely wired to OpenAI (no mock, honest errors); money routes read-only coaching. §3a tool-authz CLOSED: chat assistant's write tools all routed through Trust Engine w/ caller role (deny/approval/allow) — child can't drive privileged writes. Added `tests/assistant-trust-wrapper.test.ts` (5) to lock it. Open: live E2E w/ real key, admin/ai settings authz, voice provider wiring |
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | — | OPEN | | | | |
 | A-18 | — | OPEN | | | | Apple VTODO/Gmail stubs must fail closed |
