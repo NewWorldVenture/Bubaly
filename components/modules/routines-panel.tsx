@@ -1,6 +1,6 @@
 'use client';
 
-// Recurring-routine templates (Friction #10) — the "Moments" home for detected
+// Recurring-routine templates (Friction #10) â€” the "Moments" home for detected
 // routines, surfaced in the calendar right rail. Detects repeating events from
 // history and lets a family save them as reusable routines, then apply a
 // routine to a week (materializing concrete calendar_events). 100% Supabase.
@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/states';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
@@ -30,10 +31,10 @@ type Item = Tables<'routine_template_items'>;
 const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const CATEGORIES: EventCategory[] = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
 const CATEGORY_EMOJI: Record<string, string> = {
-  general: '📌', school: '🏫', sports: '🏀', appointment: '🩺', medication: '💊',
-  maintenance: '🔧', birthday: '🎂', holiday: '🎉', other: '📎',
+  general: 'ðŸ“Œ', school: 'ðŸ«', sports: 'ðŸ€', appointment: 'ðŸ©º', medication: 'ðŸ’Š',
+  maintenance: 'ðŸ”§', birthday: 'ðŸŽ‚', holiday: 'ðŸŽ‰', other: 'ðŸ“Ž',
 };
-const ROUTINE_ICONS = ['🔁', '☀️', '🌙', '🏫', '🏀', '🍽️', '🛏️', '📚', '🧹', '🚗'];
+const ROUTINE_ICONS = ['ðŸ”', 'â˜€ï¸', 'ðŸŒ™', 'ðŸ«', 'ðŸ€', 'ðŸ½ï¸', 'ðŸ›ï¸', 'ðŸ“š', 'ðŸ§¹', 'ðŸš—'];
 
 function minutesToTimeValue(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
@@ -58,11 +59,11 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: templates, refresh: refreshTemplates } = useRealtimeQuery<Template>({
+  const { data: templates, loading: templatesLoading, error: templatesError, refresh: refreshTemplates } = useRealtimeQuery<Template>({
     table: 'routine_templates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('routine_templates').select('*').eq('family_id', familyId).order('created_at'),
   });
-  const { data: items, refresh: refreshItems } = useRealtimeQuery<Item>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<Item>({
     table: 'routine_template_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('routine_template_items').select('*').eq('family_id', familyId).order('sort_order').order('start_minutes'),
   });
@@ -72,6 +73,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     for (const it of items) { if (!m.has(it.template_id)) m.set(it.template_id, []); m.get(it.template_id)!.push(it); }
     return m;
   }, [items]);
+
+  const loading = templatesLoading || itemsLoading;
+  const error = templatesError || itemsError;
 
   // Detected routines the family hasn't already saved (dedupe by title+weekday).
   const savedKeys = useMemo(() => {
@@ -94,7 +98,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     return run(`save:${sig}`, async () => {
       const sb = createClient();
       const { data: tpl, error } = await sb.from('routine_templates').insert({
-        family_id: familyId, name: s.title, icon: CATEGORY_EMOJI[s.category] ?? '🔁',
+        family_id: familyId, name: s.title, icon: CATEGORY_EMOJI[s.category] ?? 'ðŸ”',
         weekday_mask: 1 << s.weekday, source: 'detected', created_by: userId,
       }).select('id').single();
       if (error || !tpl) throw error ?? new Error('Could not save');
@@ -107,6 +111,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
       refreshAll();
     });
   }
+
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading routinesâ€¦</div>;
+  if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {
     const its = itemsByTemplate.get(t.id) ?? [];
@@ -160,7 +167,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{s.title}</p>
                   <p className="text-[10px] text-muted">
-                    {weekdayLong(s.weekday)}s at {minutesToLabel(s.startMinutes)} · seen {s.occurrences}×
+                    {weekdayLong(s.weekday)}s at {minutesToLabel(s.startMinutes)} Â· seen {s.occurrences}Ã—
                   </p>
                 </div>
               </div>
@@ -188,10 +195,10 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             return (
               <div key={t.id} className="group rounded-xl border border-border bg-surface/40 p-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-elevated text-base">{t.icon ?? '🔁'}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-elevated text-base">{t.icon ?? 'ðŸ”'}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold">{t.name}</p>
-                    <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} · {its.length} step{its.length === 1 ? '' : 's'}</p>
+                    <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} Â· {its.length} step{its.length === 1 ? '' : 's'}</p>
                   </div>
                   <button onClick={() => setEditing({ template: t, items: its })} aria-label="Edit routine"
                     className="rounded p-1 text-muted opacity-0 transition hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
@@ -235,7 +242,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
   const { error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(template?.name ?? '');
-  const [icon, setIcon] = useState(template?.icon ?? '🔁');
+  const [icon, setIcon] = useState(template?.icon ?? 'ðŸ”');
   const [mask, setMask] = useState(template?.weekday_mask ?? WEEKDAYS_WEEKDAYS);
   const [rows, setRows] = useState<DraftItem[]>(
     initialItems && initialItems.length
