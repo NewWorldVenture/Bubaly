@@ -41,24 +41,27 @@
 > docs — keep it green. Watch for control-byte corruption from concurrent writers
 > (`LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < file | wc -c` must be 0).
 >
-> **Latest verified state (2026-07-16 20:25 UTC, HEAD `ffed2023`):** full suite **514 files / 3,287
+> **Latest verified state (2026-07-16 20:35 UTC, HEAD `be91fc69`):** full suite **515 files / 3,293
 > tests green**. Shipped this relay: PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync
 > hash), PLA-0406/0407/0408 (reasoning-substrate observability — graph loader, family_signals read,
-> and snapshot upsert all log on failure), PLA-0409 (Home CRUD throws on write failure — silent
-> data-loss fix), PLA-0410 (same fix extended to Auto/Paperwork/Contacts CRUD + Locator side-effect
-> logging). Full increment table in `docs/progress/2026-07-16-20{00,10,15,20,25}.md`.
+> and snapshot upsert all log on failure), PLA-0409/0410 (silent write-failure fix — Home, Auto,
+> Paperwork, Contacts CRUD now throw; Locator side-effects logged), PLA-0411/0412 (misleading
+> empty-state fix — Auto, Home, and Social record-list reads now fail closed). Full increment table
+> in `docs/progress/2026-07-16-20{00,10,15,20,25,30,35}.md`.
 >
-> **Bare-write triage:** the 38-site `await …from().insert/update/delete()` scan is substantially
-> cleared for **primary user data** (Home, Auto, Paperwork, Contacts, Locator). Remaining bare writes
-> are intentionally best-effort audit-log/throttle/notification side-effects (`wallet_audit_logs`,
-> `child_login_throttle`, `demo_email_uses`, `audit_logs`, `trust_audit_logs`) — leave them silent.
+> **Silent-failure theme — both sides done for primary user data.** Writes surface failures instead
+> of faking success; reads fail closed instead of rendering a fake-empty list. Coverage: Home, Auto,
+> Paperwork, Contacts, Locator (writes) + Auto, Home, Social (reads — every `lib/*/queries.ts` record
+> lib). Remaining bare writes are intentionally best-effort audit-log/throttle/notification
+> side-effects (`wallet_audit_logs`, `child_login_throttle`, `demo_email_uses`, `audit_logs`,
+> `trust_audit_logs`) — leave them silent.
 >
-> **Next candidates:** non-reasoning module server *reads* that render primary lists where a discarded
-> error reads as an empty state to the user (page-load boundaries, complementing Codex's dashboard/
-> admin boundary suite); then the role, live-RLS, browser, backup, and deployment gates. The P0/P1
-> blockers (Auth Admin HTTP 500, remote migration ledger, credential rotation, authenticated E2E,
-> third-party callback smoke, backup/restore drill) need **Supabase/Vercel operator access** and
-> cannot be closed from the agent sandbox — leave them Open and flag them to the owner.
+> **Next candidates:** reads embedded directly in `page.tsx`/`server.ts` for other modules that
+> `return data ?? []` (the `lib/*/queries.ts` libs are now all fail-closed); then the role, live-RLS,
+> browser, backup, and deployment gates. The P0/P1 blockers (Auth Admin HTTP 500, remote migration
+> ledger, credential rotation, authenticated E2E, third-party callback smoke, backup/restore drill)
+> need **Supabase/Vercel operator access** and cannot be closed from the agent sandbox — leave them
+> Open and flag them to the owner.
 
 > ## 2026-07-13 AUTH SEED REPAIR — READ FIRST
 >
