@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0383 - Exit-Intent hid offer read failures as an empty editor
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/exit-intent`.
+- Finding: the offer query could fail while the page rendered zero offers and kept create, activate, pause, and delete controls available.
+- Repair: the Supabase error is checked before calculating offer metrics or rendering CRUD controls; failures return a retryable page state.
+- Evidence: focused Exit-Intent boundary suite (1 assertion), full 489 test files/3,249 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `03012c8c`.
+- Remaining launch gate: validate live Super Admin authorization, marketing table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
+### PLA-0382 - Personalization hid rule read failures as an empty editor
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/personalization`.
+- Finding: the rule query could fail while the page rendered no rules and kept create, activate, pause, and delete controls available.
+- Repair: the Supabase error is checked before grouping rules by slot or rendering CRUD controls; failures return a retryable page state.
+- Evidence: focused Personalization boundary suite (1 assertion), full 489 test files/3,249 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `03012c8c`.
+- Remaining launch gate: validate live Super Admin authorization, marketing table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0381 - Competitive Intelligence hid CRUD read failures as an empty dataset
 
 - Status: Resolved in source; live and deployed verification remain open.

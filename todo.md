@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:11:42 -04:00
+- Last updated: 2026-07-16 10:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `9c5edb3e` makes Super Admin Competitive Intelligence fail closed on CRUD read failures after `c8ef7399` repaired Customer Intelligence; live provider and deployment evidence remains open
+- Commit: `03012c8c` makes Super Admin Personalization and Exit-Intent fail closed on read failures after `9c5edb3e` repaired Competitive Intelligence; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,48 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0383 - Exit-Intent hid offer read failures as an empty editor
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing conversion / Supabase read boundary
+- Feature: Exit-Intent Popups
+- Route: `/admin/marketing/exit-intent`
+- File or files: `app/(app)/admin/marketing/exit-intent/page.tsx`, `tests/admin-exit-intent-read-boundary.test.ts`
+- Database objects: `marketing_exit_intent`
+- Affected roles: Super Admin
+- Scenario: the offer query could fail while the page rendered an empty list with create, activate, pause, and delete controls.
+- Launch impact: operators could manage conversion offers against incomplete state or interpret a backend outage as no offers.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required CRUD read.
+- Required remediation: preserve the query error, fail visibly, and only render metrics and controls after a successful read.
+- Implementation notes: added a retryable ReadFailure state and explicit error logging before offer metrics are derived.
+- Test plan: focused Exit-Intent boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (489 files/3,249 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `03012c8c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Exit-Intent no longer exposes CRUD controls over a failed or fabricated empty dataset.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and marketing audit.
+
+#### TODO-0382 - Personalization hid rule read failures as an empty editor
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing personalization / Supabase read boundary
+- Feature: Personalization
+- Route: `/admin/marketing/personalization`
+- File or files: `app/(app)/admin/marketing/personalization/page.tsx`, `tests/admin-personalization-read-boundary.test.ts`
+- Database objects: `marketing_personalization_rules`
+- Affected roles: Super Admin
+- Scenario: the rule query could fail while the page rendered no rules with create, activate, pause, and delete controls.
+- Launch impact: operators could manage targeting rules against incomplete state or mistake a backend outage for a clean default.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required CRUD read.
+- Required remediation: preserve the query error, fail visibly, and only render slot groupings and controls after a successful read.
+- Implementation notes: added a retryable ReadFailure state and explicit error logging before rules are grouped by slot.
+- Test plan: focused Personalization boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (489 files/3,249 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `03012c8c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Personalization no longer exposes CRUD controls over a failed or fabricated empty dataset.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and marketing audit.
 
 #### TODO-0381 - Competitive Intelligence hid CRUD read failures as an empty dataset
 
