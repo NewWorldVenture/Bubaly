@@ -13,7 +13,7 @@ import {
 export const metadata: Metadata = { title: 'Sync accounts' };
 export const dynamic = 'force-dynamic';
 
-const PROVIDERS: SyncProvider[] = ['google', 'microsoft', 'apple', 'amazon'];
+const PROVIDERS: SyncProvider[] = ['google', 'microsoft', 'apple'];
 const KINDS: SyncItemKind[] = ['calendar', 'reminder', 'note'];
 
 export default async function SyncAccountsPage() {
