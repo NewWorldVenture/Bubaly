@@ -63,7 +63,7 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
           style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold text-fg">{rate == null ? '—' : `${rate}%`}</span>
+        <span className="text-xl font-bold text-fg">{rate == null ? 'â€”' : `${rate}%`}</span>
       </div>
     </div>
   );
@@ -90,16 +90,16 @@ export function MedicationsModule() {
     return d.toISOString();
   }, []);
 
-  // ── Data ──────────────────────────────────────────────────
-  const { data: meds, loading: medsLoading, error: medsError } = useRealtimeQuery<Medication>({
+  // â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const { data: meds, loading: medsLoading, error: medsError, refresh: refreshMeds } = useRealtimeQuery<Medication>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).order('is_active', { ascending: false }).order('name'),
   });
-  const { data: schedules } = useRealtimeQuery<Schedule>({
+  const { data: schedules, loading: schedulesLoading, error: schedulesError, refresh: refreshSchedules } = useRealtimeQuery<Schedule>({
     table: 'medication_schedules', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
-  const { data: doses } = useRealtimeQuery<Dose>({
+  const { data: doses, loading: dosesLoading, error: dosesError, refresh: refreshDoses } = useRealtimeQuery<Dose>({
     table: 'medication_doses', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart),
   });
@@ -141,7 +141,7 @@ export function MedicationsModule() {
 
   const medById = useMemo(() => new Map((meds ?? []).map((m) => [m.id, m])), [meds]);
 
-  // ── Dose logging ──────────────────────────────────────────
+  // â”€â”€ Dose logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function logDose(due: DueDose, status: DoseStatus) {
     const key = due.scheduleId + due.slotKey;
     setBusyDose(key);
@@ -178,7 +178,7 @@ export function MedicationsModule() {
     if (status === 'taken') success('Dose logged');
   }
 
-  // ── Medication CRUD ───────────────────────────────────────
+  // â”€â”€ Medication CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function openNewMed() { setMedForm(blankMed); setMedModalOpen(true); }
   function openEditMed(m: Medication) {
     setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active, refill_on: m.refill_on ?? '', refill_reminder_days: m.refill_reminder_days ?? 7 });
@@ -222,7 +222,7 @@ export function MedicationsModule() {
     if (err) toastError(describeDbError(err));
   }
 
-  // ── Schedule CRUD ─────────────────────────────────────────
+  // â”€â”€ Schedule CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function openSchedule(m: Medication) { setScheduleFor(m); setScheduleForm(blankSchedule); }
 
   async function saveSchedule(e: React.FormEvent) {
@@ -266,8 +266,10 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
-  if (medsLoading) return <SkeletonList count={5} />;
-  if (medsError) return <ErrorState message={typeof medsError === 'string' ? medsError : 'Failed to load medications'} />;
+  const loading = medsLoading || schedulesLoading || dosesLoading;
+  const readError = medsError || schedulesError || dosesError;
+  if (loading) return <SkeletonList count={5} />;
+  if (readError) return <ErrorState message="Could not load medication data. Refresh and try again." onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
 
   return (
     <div>
@@ -308,7 +310,7 @@ export function MedicationsModule() {
                     <Pill className="h-4 w-4 text-brand-text flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-fg truncate">
-                        {med.name}{med.dosage ? <span className="text-muted font-normal"> · {med.dosage}</span> : null}
+                        {med.name}{med.dosage ? <span className="text-muted font-normal"> Â· {med.dosage}</span> : null}
                       </div>
                       {memberName(med.member_id) && <div className="text-xs text-muted">{memberName(med.member_id)}</div>}
                     </div>
@@ -469,13 +471,13 @@ export function MedicationsModule() {
           </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setMedModalOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={savingMed}>{savingMed ? 'Saving…' : medForm.id ? 'Save changes' : 'Add medication'}</Button>
+            <Button type="submit" disabled={savingMed}>{savingMed ? 'Savingâ€¦' : medForm.id ? 'Save changes' : 'Add medication'}</Button>
           </div>
         </form>
       </Modal>
 
       {/* Schedule modal */}
-      <Modal open={!!scheduleFor} onClose={() => setScheduleFor(null)} title={`Add schedule${scheduleFor ? ` · ${scheduleFor.name}` : ''}`}>
+      <Modal open={!!scheduleFor} onClose={() => setScheduleFor(null)} title={`Add schedule${scheduleFor ? ` Â· ${scheduleFor.name}` : ''}`}>
         <form onSubmit={saveSchedule} className="space-y-4">
           <Field label="Time of day" required>
             {(id) => <Input id={id} type="time" value={scheduleForm.time_of_day} onChange={(e) => setScheduleForm((f) => ({ ...f, time_of_day: e.target.value }))} />}
@@ -502,10 +504,11 @@ export function MedicationsModule() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setScheduleFor(null)}>Cancel</Button>
-            <Button type="submit" disabled={savingSchedule}>{savingSchedule ? 'Saving…' : 'Add schedule'}</Button>
+            <Button type="submit" disabled={savingSchedule}>{savingSchedule ? 'Savingâ€¦' : 'Add schedule'}</Button>
           </div>
         </form>
       </Modal>
     </div>
   );
 }
+
