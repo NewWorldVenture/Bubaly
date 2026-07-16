@@ -3,9 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isManager } from '@/lib/constants/roles';
 import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/location/geo';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
+
+// Family geofences (`family_places`) drive arrival/departure safety alerts
+// ("arrived at School"). Their RLS is family-scoped (any member) and children
+// have real logins, so a child could delete or silence the geofences watching
+// them. Editing shared geofences is therefore a manager-only action. (Posting
+// your OWN location / toggling your OWN sharing stays self-service.)
+const MANAGER_ONLY_PLACE = { ok: false as const, error: 'Only a parent or guardian can change family places.' };
 
 /**
  * Records the caller's current position, evaluates it against the family's saved
@@ -104,6 +112,7 @@ export async function savePlace(input: {
   latitude: number; longitude: number; radius_m?: number;
 }): Promise<LocationResult> {
   const c = await requireUserContext();
+  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
   if (!input.name?.trim()) return { ok: false, error: 'Name is required.' };
   const supabase = await createServer();
   const fields = {
@@ -120,6 +129,7 @@ export async function savePlace(input: {
 
 export async function deletePlace(id: string): Promise<LocationResult> {
   const c = await requireUserContext();
+  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
   const supabase = await createServer();
   const { error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId);
   if (error) return { ok: false, error: error.message };
@@ -130,6 +140,7 @@ export async function deletePlace(id: string): Promise<LocationResult> {
 /** Toggle a place's geofence on/off (drives the Geofences rail switches). */
 export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<LocationResult> {
   const c = await requireUserContext();
+  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
   const supabase = await createServer();
   const { error } = await supabase.from('family_places')
     .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);
