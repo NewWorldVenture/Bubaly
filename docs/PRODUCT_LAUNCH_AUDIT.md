@@ -744,3 +744,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `39e47f37` (+ prior `e92fd897`)
 - Status: Resolved in code and pushed to `main`; deployed to Vercel
 - Remaining dependencies: cross-cutting `.display_name.split(...)` / `.toLowerCase()` on nullable fields exists in ~20 other modules (school, sports, documents, messages, home, kids, family, briefing…) — broadcast to unit owners as a crash class (see COORDINATION §3b)
+
+### PLA-0500 - Child could place outbound AI concierge calls (§3a authz gap)
+
+- Timestamp: 2026-07-16 22:36 UTC
+- Service: A-13 Vacations / travel / concierge
+- Route: `/dashboard/concierge-calls` (server actions in `actions.ts`)
+- Affected files: `app/(app)/dashboard/concierge-calls/actions.ts`, `tests/concierge-calls-authz.test.ts`
+- Role: any signed-in family member, including a **child** (children have real Supabase logins)
+- Scenario: the AI Concierge Calls feature places REAL outbound phone calls that book / reschedule / cancel / confirm appointments with real businesses on the family's behalf (and can incur telephony cost). `requestCallAction`, `cancelCallAction`, and `requeueCallAction` only called `requireUserContext()`; RLS on `concierge_calls` is family-scoped `is_family_member(family_id)` FOR ALL ops (migration 0173), so any member — including a child — could invoke the server action directly (the UI hiding the button is not authorization) and have the AI dial out on the family's behalf, cancel a family member's booking, or re-trigger a call.
+- Severity: P1 (child-safety + real-world side effect + cost; same class as PLA-0450 chore self-approve and PLA-0470 guardian self-disable)
+- Launch impact: unauthorized real-world actions and spend attributable to a child account
+- Root cause: §3a cross-cutting pattern — state-changing family-scoped server action with `requireUserContext()` + family scoping but NO role gate; `cancelCallAction`/`requeueCallAction` did not even capture `ctx`.
+- Resolution: import `isManager`; gate `requestCallAction`, `cancelCallAction`, and `requeueCallAction` on `isManager(ctx.active.role)` immediately after resolving context (parent/adult only). `applyConciergePlanAction` (manual "Make it happen" collaborative write into family calendar/tasks) left open by design; the autonomous concierge path (`executeQueuedRunAction`/`dismissQueuedRunAction`/`setConciergeAutopilotAction`) was already manager-gated.
+- Supabase impact: none (server-action authorization; no schema/migration change). RLS unchanged (family-scoped, collaborative-by-design for reads).
+- Tests run: new `tests/concierge-calls-authz.test.ts` (5 static guards: imports isManager · every captured-context action gated on the first executable line · no ungated `await requireUserContext();` · ≥3 guarded mutations · manager = parent/adult only) — 5/5 pass; tsc/eslint clean on touched files
+- Validation evidence: `tests/concierge-calls-authz.test.ts` (5/5), `tsc --noEmit` exit 0, eslint clean
+- Commit: pending (this push)
+- Status: Resolved in code
+- Remaining dependencies: A-13 unit not yet DONE — remaining: cross-family RLS proof on the PG16 harness for vacations/trips/concierge tables, live CRUD walkthrough, seed ≥500 rows for A-13 tables, trip-intel delete-action per-action judgment (`deleteTripPlanAction`/`deleteDeparturePlanAction` currently open to all members — collaborative planning, likely OK)

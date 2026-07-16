@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { buildCallBrief, type CallTaskKind, type CallCategory } from '@/lib/concierge-calls/brief';
@@ -25,6 +26,10 @@ export async function requestCallAction(input: {
   details?: { memberName?: string; preferredTimes?: string; referenceNumber?: string; budget?: string; notes?: string };
 }): Promise<Result<{ id: string }>> {
   const ctx = await requireUserContext();
+  // An outbound AI call places real-world bookings/cancellations on the family's
+  // behalf and can incur telephony cost — a manager-only action. RLS is only
+  // family-scoped (any member), so the server action is the authorization gate.
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can request concierge calls' };
   const supabase = await createServer();
 
   const calleeName = (input.calleeName ?? '').trim();
@@ -76,7 +81,8 @@ export async function requestCallAction(input: {
 
 /** Cancel a pending/queued call request. */
 export async function cancelCallAction(id: string): Promise<Result> {
-  await requireUserContext();
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can manage concierge calls' };
   const supabase = await createServer();
   const { error } = await supabase.from('concierge_calls')
     .update({ status: 'cancelled' }).eq('id', id).in('status', ['draft', 'queued', 'action_needed']);
@@ -86,7 +92,9 @@ export async function cancelCallAction(id: string): Promise<Result> {
 
 /** Re-queue a failed / needs-you call (optionally after adding a phone number). */
 export async function requeueCallAction(id: string, phone?: string): Promise<Result> {
-  await requireUserContext();
+  const ctx = await requireUserContext();
+  // Re-queueing re-triggers a real outbound call — manager-only, same as request.
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can manage concierge calls' };
   const supabase = await createServer();
   const patch: { status: string; callee_phone?: string } = { status: 'queued' };
   if (phone?.trim()) patch.callee_phone = phone.trim();
