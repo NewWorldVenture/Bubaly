@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -56,11 +56,11 @@ function getPosition(): Promise<GeolocationPosition> {
 function geoErrorMessage(err: unknown): string {
   // GeolocationPositionError exposes numeric codes: 1 denied, 2 unavailable, 3 timeout.
   const code = typeof err === 'object' && err !== null && 'code' in err ? (err as { code: number }).code : null;
-  if (code === 1) return 'Location permission denied — allow it for this site in your browser settings.';
-  if (code === 2) return 'Your device couldn’t determine its location. Check that location services are on.';
+  if (code === 1) return 'Location permission denied â€” allow it for this site in your browser settings.';
+  if (code === 2) return 'Your device couldnâ€™t determine its location. Check that location services are on.';
   if (code === 3) return 'Location request timed out. Please try again.';
-  if (err instanceof Error && err.message === 'Geolocation unavailable') return 'This device doesn’t support location sharing.';
-  return 'Couldn’t get your location.';
+  if (err instanceof Error && err.message === 'Geolocation unavailable') return 'This device doesnâ€™t support location sharing.';
+  return 'Couldnâ€™t get your location.';
 }
 
 export function LocatorModule() {
@@ -84,15 +84,15 @@ export function LocatorModule() {
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
-  const { data: locations, loading, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
+  const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
     table: 'member_locations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('member_locations').select('*').eq('family_id', familyId),
   });
-  const { data: places, refresh: refreshPlaces } = useRealtimeQuery<Place>({
+  const { data: places, loading: placesLoading, error: placesError, refresh: refreshPlaces } = useRealtimeQuery<Place>({
     table: 'family_places', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_places').select('*').eq('family_id', familyId).order('name'),
   });
-  const { data: events, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
+  const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
     table: 'location_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('location_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }).limit(120),
   });
@@ -102,7 +102,7 @@ export function LocatorModule() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const memberName = (id: string) => memberById.get(id)?.display_name ?? 'Someone';
 
-  // Members that are actively sharing a coordinate → shown live on the map/list.
+  // Members that are actively sharing a coordinate â†’ shown live on the map/list.
   const liveMembers = useMemo(
     () => members.filter((m) => {
       const l = locByMember.get(m.id);
@@ -133,6 +133,9 @@ export function LocatorModule() {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
   }, [selfMember, locByMember]);
 
+  const loading = locationsLoading || placesLoading || eventsLoading;
+  const readError = locationsError || placesError || eventsError;
+
   function placeLabel(l: MemberLocation | undefined): string {
     if (!l || !l.is_sharing) return 'Not sharing';
     if (l.place_id && placeById.get(l.place_id)) return placeById.get(l.place_id)!.name;
@@ -150,7 +153,7 @@ export function LocatorModule() {
       if (!res.ok) { toastError(res.error ?? 'Failed to update location'); return; }
       setSharing(true);
       void refreshLocations(); void refreshEvents();
-      success(res.place ? `Shared — you're at ${res.place}` : 'Location shared');
+      success(res.place ? `Shared â€” you're at ${res.place}` : 'Location shared');
     } catch (e) {
       toastError(geoErrorMessage(e));
     } finally { setUpdating(false); }
@@ -167,7 +170,7 @@ export function LocatorModule() {
     setNow(new Date()); success('Locations refreshed');
   }
 
-  // ── Places / geofences ────────────────────────────────────
+  // â”€â”€ Places / geofences â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function openNewPlace() { setPlaceForm(blankPlace); setPlaceModal(true); }
   function openEditPlace(p: Place) {
     setPlaceForm({ id: p.id, name: p.name, icon: p.icon ?? 'other', address: p.address ?? '', latitude: String(p.latitude), longitude: String(p.longitude), radius_m: p.radius_m });
@@ -207,6 +210,7 @@ export function LocatorModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
+  if (readError) return <ErrorState message="Could not load family location data. Refresh and try again." onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
 
   const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
@@ -239,7 +243,7 @@ export function LocatorModule() {
           }
         />
 
-        {/* Member chips — only members actively sharing a location get a chip
+        {/* Member chips â€” only members actively sharing a location get a chip
             (matches the family-map design); everyone else is reachable via
             "All Family". Without this the chip row would render one tile per
             family member, which does not scale for large families. */}
@@ -347,7 +351,7 @@ export function LocatorModule() {
                     <div className="flex items-center gap-1.5 text-sm font-semibold">{m.display_name}{selfMember?.id === m.id && <span className="text-xs font-normal text-muted">(You)</span>}</div>
                     <div className="flex items-center gap-1 text-xs font-medium text-brand-text"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
                   </div>
-                  <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? '—'}</div>
+                  <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? 'â€”'}</div>
                   <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now)}</div>
                   <div className="flex w-16 shrink-0 items-center justify-end gap-1.5">
                     <div className="relative h-3.5 w-7 rounded-[3px] border border-current text-muted">
@@ -356,7 +360,7 @@ export function LocatorModule() {
                         tone === 'ok' ? 'bg-emerald-400' : tone === 'low' ? 'bg-amber-400' : tone === 'critical' ? 'bg-rose-400' : 'bg-muted')}
                         style={{ width: `${Math.max(6, ((l.battery ?? 0) / 100) * 20)}px` }} />
                     </div>
-                    <span className="text-xs text-muted">{l.battery != null ? `${l.battery}%` : '—'}</span>
+                    <span className="text-xs text-muted">{l.battery != null ? `${l.battery}%` : 'â€”'}</span>
                   </div>
                 </div>
               );
@@ -457,7 +461,7 @@ export function LocatorModule() {
                           <span className={cn('absolute -left-[15px] top-1 h-2 w-2 rounded-full', i === 0 ? 'bg-brand' : 'bg-muted/50')} />
                           <div className="flex items-center justify-between">
                             <span className="text-sm">{e.place_name ?? 'A place'}</span>
-                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
+                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' â€” Now' : ''}</span>
                           </div>
                           <span className="text-[10px] text-muted">{memberName(e.member_id)}</span>
                         </div>
@@ -514,10 +518,11 @@ export function LocatorModule() {
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => setPlaceModal(false)}>Cancel</Button>
-            <Button type="submit" loading={savingPlace}>{savingPlace ? 'Saving…' : placeForm.id ? 'Save changes' : 'Add place'}</Button>
+            <Button type="submit" loading={savingPlace}>{savingPlace ? 'Savingâ€¦' : placeForm.id ? 'Save changes' : 'Add place'}</Button>
           </div>
         </form>
       </Modal>
     </div>
   );
 }
+
