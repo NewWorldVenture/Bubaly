@@ -191,7 +191,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               <Trophy className="h-4 w-4 text-amber-400" /> Achieved ({achieved.length})
             </h2>
             {achieved.length === 0 ? (
-              <p className="py-3 text-center text-sm text-muted">First badge coming soon — start a skill above.</p>
+              <p className="py-3 text-center text-sm text-muted">No badges yet — start a skill above.</p>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {achieved.map(r => (
