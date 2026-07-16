@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0409 - Home module CRUD reported success while silently losing warranties, contractors, and service records
+
+- Timestamp: 2026-07-16 20:15 UTC
+- Service: Home / Household management (Warranties, Pros/Contractors, Service Records)
+- Route: `/dashboard/home/warranties`, `/dashboard/home/pros`, `/dashboard/home/service`
+- Affected files: `app/(app)/dashboard/home/actions.ts`, `tests/home-actions-write-boundary.test.ts`
+- Role: any family member who can edit household records
+- Scenario: a warranty/contractor/service-record insert, update, or soft-delete fails (RLS denial, constraint violation, outage) while the user submits the form
+- Severity: P1
+- Launch impact: six `void`-returning form actions (`saveWarrantyAction`, `deleteWarrantyAction`, `saveContractorAction`, `deleteContractorAction`, `saveServiceRecordAction`, `deleteServiceRecordAction`) discarded the write result entirely, then called `revalidatePath` and returned normally — so on any write failure the modal closed and the page refreshed as if the save succeeded, while the record was never persisted (silent data loss the user believes succeeded); the same file's newer `scheduleRecommendedTasksAction` already checked its error, so the module was internally inconsistent
+- Root cause: `await supabase.from(...).insert/update(...)` results were never destructured or inspected; a PostgREST failure returns `{ error }` without throwing
+- Resolution: capture `{ error }` on every write and `throw new Error(describeActionError(error, '…'))` on failure — the established idiom already used in `social`/`kitchen`/`trip-intel` actions — so the client transition rejects, the modal stays open, and the failure is surfaced instead of faked; the best-effort `home_assets.last_serviced_on` refresh (record already saved) now logs its error rather than throwing
+- Supabase impact: none; writes unchanged, only their failures are now surfaced/observable
+- Tests run: `tests/home-actions-write-boundary.test.ts` (insert failure throws, success resolves, delete failure throws), full suite 513 files / 3,280 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a mocked failing client and asserts `saveWarrantyAction`/`deleteWarrantyAction` reject while a successful client resolves
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live RLS/role verification of the surfaced errors remains a standing dependency
+- Remaining dependencies: authenticated per-role write verification once test credentials are available (LB-005 adjacent); other bare-write modules flagged in the audit backlog below
+
 ### PLA-0408 - Daily reasoning snapshot silently dropped write failures, breaking "since yesterday" trends
 
 - Timestamp: 2026-07-16 20:10 UTC

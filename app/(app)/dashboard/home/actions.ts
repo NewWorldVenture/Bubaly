@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
 
 async function ctx() {
@@ -43,18 +44,18 @@ export async function saveWarrantyAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  if (id) {
-    await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId);
-  } else {
-    await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
-  }
+  const { error } = id
+    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId)
+    : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
+  if (error) throw new Error(describeActionError(error, 'Could not save that warranty.'));
   revalidatePath('/dashboard/home/warranties');
   revalidatePath('/dashboard/home');
 }
 
 export async function deleteWarrantyAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
-  await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  const { error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  if (error) throw new Error(describeActionError(error, 'Could not delete that warranty.'));
   revalidatePath('/dashboard/home/warranties');
 }
 
@@ -74,17 +75,17 @@ export async function saveContractorAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  if (id) {
-    await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId);
-  } else {
-    await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
-  }
+  const { error } = id
+    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId)
+    : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
+  if (error) throw new Error(describeActionError(error, 'Could not save that contractor.'));
   revalidatePath('/dashboard/home/pros');
 }
 
 export async function deleteContractorAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
-  await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  const { error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  if (error) throw new Error(describeActionError(error, 'Could not delete that contractor.'));
   revalidatePath('/dashboard/home/pros');
 }
 
@@ -93,7 +94,7 @@ export async function saveServiceRecordAction(fd: FormData) {
   const { familyId, userId, supabase } = await ctx();
   const assetId = str(fd, 'asset_id');
   const serviceDate = str(fd, 'service_date');
-  await supabase.from('home_service_records').insert({
+  const { error } = await supabase.from('home_service_records').insert({
     family_id: familyId,
     asset_id: assetId,
     title: str(fd, 'title') ?? 'Service',
@@ -104,9 +105,13 @@ export async function saveServiceRecordAction(fd: FormData) {
     next_due_on: str(fd, 'next_due_on'),
     created_by: userId,
   });
-  // Keep the asset's last-serviced date fresh for life/forecast math.
+  if (error) throw new Error(describeActionError(error, 'Could not save that service record.'));
+  // Keep the asset's last-serviced date fresh for life/forecast math. Best-effort
+  // (the record itself is already saved), but log a failure so a broken update is
+  // observable instead of silently drifting the forecast math.
   if (assetId && serviceDate) {
-    await supabase.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId);
+    const { error: assetError } = await supabase.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId);
+    if (assetError) console.error('[home] home_assets last_serviced_on update failed', { familyId, assetId, error: assetError });
   }
   revalidatePath('/dashboard/home/service');
   revalidatePath('/dashboard/home');
@@ -114,7 +119,8 @@ export async function saveServiceRecordAction(fd: FormData) {
 
 export async function deleteServiceRecordAction(id: string) {
   const { familyId, userId, supabase } = await ctx();
-  await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  const { error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  if (error) throw new Error(describeActionError(error, 'Could not delete that service record.'));
   revalidatePath('/dashboard/home/service');
 }
 
