@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0367 - Intelligence and Briefing context reads hid failures as safe-looking defaults
+
+- Timestamp: 2026-07-16 08:22 America/New_York
+- Service: Intelligence Network preferences and Briefing Kitchen Mode
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/intelligence-module.tsx`, `components/modules/briefing-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: a failed consent read could silently appear as privacy-disabled defaults, while failed event/reminder reads could leave Kitchen Mode looking current with incomplete context.
+- Severity: P1
+- Launch impact: users could make privacy decisions from unverified state or miss time-sensitive household context while the interface appeared healthy.
+- Root cause: both surfaces ignored realtime query errors; Kitchen Mode also lacked a coordinated retry for its two context reads.
+- Resolution: Intelligence now blocks controls behind a retryable ErrorState; Briefing Kitchen Mode retries calendar and reminder reads together before rendering.
+- Supabase impact: no schema change; existing consent and household context reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (9 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
+- Validation evidence: 477 test files, 3,244 tests, 250-route build, and diff check passed; known build warnings remain documented.
+- Commit: `9682ff06`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed AI/context verification
+
 ### PLA-0366 - Tax, subscription, memory, and routine reads hid failures as empty state
 
 - Timestamp: 2026-07-16 08:13 America/New_York
