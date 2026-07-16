@@ -14,7 +14,7 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: Independence empty-state repair (`14f0d14b`) validated with 481 test files and 3,250 tests;
+Latest increment: Connections runtime catalog repair (`9eb160b0`) validated with 481 test files and 3,252 tests;
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
 
@@ -39,7 +39,7 @@ not yet complete.
 | A-15 | AI assistants, chat, voice and generated artifacts | 5 | In progress | AI persistence, ownership and request-guard tests | Verify model failures, quotas, privacy, streaming and cost controls |
 | A-16 | Notifications, reminders, automations and cron jobs | 4 | In progress | Cron auth, allowance recovery/plan-gating, digest and journey-recovery read/delivery boundaries, and Admin digest failure-summary tests | Verify schedules, retries, deduplication, delivery and observability |
 | A-17 | Admin, marketing, social and content management | 4 | In progress | Admin shell read-health warnings plus command-center, Security/Auth Admin, wallet overview/reconciliation, Social platform, Users & Families, notification helpers, document deletion, family creation, allowlist-read, content-read, report-read, audit-read, operational-read, billing-read, notification-read, feedback-read, integration-read, subscription-read, Stripe-read, marketing-read, marketing-dashboard, content/campaign, asset/messaging, CRM, control-plane, publishing, rewards/survey failure boundary tests | Verify Super Admin permissions, CRUD, media, storage/family rollback, real-time saves, alert routing, and audit log |
-| A-18 | Google, email, push, Stripe and other third-party integrations | 5 | In progress | Connections hub now surfaces family connection read failures; Admin Sync and family Sync surface provider, dead-letter, webhook-signature, connection, conflict, run, history, connected-account, and provider-detail read failures; implemented Google/Microsoft/Apple routes remain separate from unsupported provider directory entries | Live sandbox callbacks, secret rotation, retry and outage behavior; implement remaining providers |
+| A-18 | Google, email, push, Stripe and other third-party integrations | 5 | In progress | Connections hub now surfaces family connection read failures and renders only providers with real setup routes; Admin Sync and family Sync surface provider, dead-letter, webhook-signature, connection, conflict, run, history, connected-account, and provider-detail read failures; implemented Google/Microsoft/Apple routes remain separate from the internal future-provider registry | Live sandbox callbacks, secret rotation, retry and outage behavior; implement Gmail, banking, grocery, and smart-home providers |
 | A-19 | Mobile, responsive, accessibility and browser compatibility | 5 | In progress | Public Playwright/axe/overflow baseline | Page-by-page device matrix, keyboard, screen reader and touch testing |
 | A-20 | E2E interactions, performance, observability, backups and deployment | 7 | In progress | Public E2E baseline and production build | Full interaction coverage, restore drill, monitoring and launch smoke |
 |  | **Total** | **100** |  | **Verified: 10** |  |
