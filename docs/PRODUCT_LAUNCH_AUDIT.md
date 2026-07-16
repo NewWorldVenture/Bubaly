@@ -6,6 +6,44 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0415 - A-03 tenant isolation verified end-to-end on the PG16 harness (read + write, full-table RLS sweep)
+
+- Timestamp: 2026-07-16 20:50 UTC
+- Service: Platform / Auth / tenant isolation (A-03)
+- Route: cross-cutting (all family-scoped data)
+- Affected files: `docs/audit/rls-isolation-check.sql` (new reusable probe), `docs/audit/verify-pg.sh` (new shared harness), `tests/rls-isolation-sweep.test.ts` (new static guard)
+- Role: any authenticated member of family B attempting to reach family A
+- Scenario: prove one tenant cannot read or write another tenant's rows, and that no family-scoped table ships with RLS disabled
+- Severity: (verification of a CRITICAL invariant — no defect found)
+- Launch impact: tenant isolation is the top launch-security invariant; now has reproducible evidence, not just per-migration static assertions
+- Root cause: n/a (verification)
+- Resolution: brought up a fresh PG16 with all 230 migrations + `SEED_ALL`; provisioned a second tenant (family B / user B); under the `authenticated` role acting as user B proved: (1) **353/353** family-scoped tables have RLS ENABLED (zero disabled); (2) user B reads **0** rows across 10 top-risk family-A tables (`family_members, calendar_events, wallet_transactions, notes, documents, grocery_items, family_recipes, chore_assignments, family_photos, family_messages`) while seeing its own data; (3) user B's INSERT into family A is blocked by the RLS `WITH CHECK` policy ("new row violates row-level security policy"), and UPDATE/DELETE affect 0 rows — family A's data left intact (no PWNED/HACK rows)
+- Supabase impact: none (read-only verification); no schema change
+- Tests run: live probe `docs/audit/rls-isolation-check.sql` → "ALL INVARIANTS PASSED"; static guard `tests/rls-isolation-sweep.test.ts` (4 passing); eslint clean
+- Validation evidence: probe NOTICEs — "all family-scoped tables have RLS enabled" / "user B read 0 rows across 10 family-A tables" / "user B write attempts on family A all blocked"
+- Commit: (this increment)
+- Status: A-03 read/write tenant-isolation sub-invariant Verified; A-03 unit remains In-progress (session edges, every-role matrix, live Auth Admin, OAuth callbacks still open)
+- Remaining dependencies: run the probe in CI against an ephemeral PG; extend to role-level (child vs parent) and to RPC SECURITY DEFINER surfaces
+
+### PLA-0414 - Kitchen Display (`/display`) crashed into the app error boundary
+
+- Timestamp: 2026-07-16 20:20 UTC
+- Service: Display / Home command surfaces (A-05)
+- Route: `/display`
+- Affected files: `app/(app)/display/page.tsx`
+- Role: any signed-in member on Family Basic+ (kiosk/tablet)
+- Scenario: production showed "This page hit a snag" (ref 3415111988) instead of the kitchen display
+- Severity: P1 (a marketed Family-Basic surface was down)
+- Launch impact: paid feature unusable; now fault-tolerant
+- Root cause: the always-on kiosk had no isolation around its ~13 parallel reads + transforms; any single failing read/transform could bubble to the route-group error boundary
+- Resolution: wrapped all loading in a resilient `loadDisplay()` with an always-renderable empty-state fallback; labeled per-query error logging; hardened birthday parsing (YYYY-MM-DD / ISO / bare MM-DD, Invalid-Date guarded); NaN-guarded month days; array-validated saved tiles; `requireFeature()` kept outside the loader so redirect/notFound control flow still propagates
+- Supabase impact: none; reads unchanged
+- Tests run: PG16 harness — all 13 display queries run under RLS as the authenticated anchor member and return seeded rows (events 115/day, chores 311, recipes 510, photos 524); tsc/eslint clean; 31 ambient tests; `next build` green (`ƒ /display`)
+- Validation evidence: RLS query result table; build output
+- Commit: `77b87dc`
+- Status: Resolved and pushed to `main`
+- Remaining dependencies: optionally wrap client `DisplayShell` in a local error boundary so a hydration hiccup degrades one tile, not the page
+
 ### PLA-0413 - Referrals list hid read failures as empty; Guardian routing-rule read failures were invisible
 
 - Timestamp: 2026-07-16 20:38 UTC
