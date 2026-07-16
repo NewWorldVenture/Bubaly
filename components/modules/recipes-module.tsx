@@ -18,7 +18,7 @@ import { RECIPE_AI_ACTIONS } from '@/lib/recipes/ai-actions';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -101,7 +101,7 @@ export function RecipesModule() {
   const [newListName, setNewListName] = useState('Groceries');
   const [creatingList, setCreatingList] = useState(false);
 
-  const { data: recipes, loading, refresh } = useRealtimeQuery<Recipe>({
+  const { data: recipes, loading, error, refresh } = useRealtimeQuery<Recipe>({
     table: 'family_recipes', familyId, deps: [familyId],
     fetcher: (sb) =>
       sb.from('family_recipes').select('*').eq('family_id', familyId)
@@ -219,6 +219,7 @@ export function RecipesModule() {
   };
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family recipes. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="module-page">

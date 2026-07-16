@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
@@ -36,7 +36,7 @@ export function UtilitiesModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: bills, loading } = useRealtimeQuery<Bill>({
+  const { data: bills, loading, error, refresh } = useRealtimeQuery<Bill>({
     table: 'utility_bills', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('utility_bills').select('*').eq('family_id', familyId).order('period_month', { ascending: false }),
   });
@@ -81,6 +81,7 @@ export function UtilitiesModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load utility bills. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

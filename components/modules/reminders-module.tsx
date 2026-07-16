@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -102,7 +102,7 @@ export function RemindersModule() {
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const { data: lists } = useRealtimeQuery<Tables<'reminder_lists'>>({
+  const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<Tables<'reminder_lists'>>({
     table: 'reminder_lists', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reminder_lists').select('*').eq('family_id', familyId).order('sort_order'),
   });
@@ -115,6 +115,10 @@ export function RemindersModule() {
         .order('status', { ascending: true })
         .order('remind_at', { ascending: true, nullsFirst: false }),
   });
+
+  const combinedLoading = listsLoading || loading;
+  const combinedError = listsError || error;
+  const retry = () => { void refreshLists(); void refresh(); };
 
   const filtered = useMemo(() => {
     let rows = reminders;
@@ -234,8 +238,8 @@ export function RemindersModule() {
     });
   }
 
-  if (loading) return <SkeletonList />;
-  if (error) return <div className="p-4 text-danger text-sm">{error}</div>;
+  if (combinedLoading) return <SkeletonList />;
+  if (combinedError) return <ErrorState message="Could not load reminders. Refresh and try again." onRetry={retry} />;
 
   return (
     <div className="module-page">

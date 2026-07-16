@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
@@ -54,12 +54,12 @@ export function PhotosModule() {
   const [tab, setTab] = useState<'albums' | 'all' | 'favorites' | 'recents'>('albums');
   const dropRef = useRef<HTMLDivElement>(null);
 
-  const { data: albums, loading: albumsLoading, refresh: refreshAlbums } = useRealtimeQuery<Album>({
+  const { data: albums, loading: albumsLoading, error: albumsError, refresh: refreshAlbums } = useRealtimeQuery<Album>({
     table: 'family_albums', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_albums').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
 
-  const { data: allPhotos, loading: photosLoading, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
+  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
     table: 'family_photos', familyId, deps: [familyId, activeAlbum?.id],
     fetcher: (sb) => {
       let q = sb.from('family_photos').select('*').eq('family_id', familyId);
@@ -171,6 +171,8 @@ export function PhotosModule() {
   }
 
   const loading = albumsLoading || photosLoading;
+  const error = albumsError || photosError;
+  const refresh = () => { void refreshAlbums(); void refreshPhotos(); };
 
   // ── Album stats ───────────────────────────────────────────
   const albumStats = albums.map((a) => ({
@@ -180,6 +182,7 @@ export function PhotosModule() {
   }));
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family photos. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">

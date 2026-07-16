@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -51,14 +51,14 @@ export function ShoppingModule() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingList, setEditingList] = useState<GroceryList | null>(null);
 
-  const { data: lists, loading: listsLoading, refresh: refreshLists } = useRealtimeQuery<GroceryList>({
+  const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<GroceryList>({
     table: 'grocery_lists', familyId, deps: [familyId],
     fetcher: (sb) =>
       sb.from('grocery_lists').select('*').eq('family_id', familyId).is('archived_at', null)
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
   });
 
-  const { data: items, loading: itemsLoading, refresh: refreshItems } = useRealtimeQuery<GroceryItem>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<GroceryItem>({
     table: 'grocery_items', familyId, deps: [familyId, activeListId],
     fetcher: (sb) => {
       if (!activeListId) return Promise.resolve({ data: [], error: null });
@@ -75,6 +75,8 @@ export function ShoppingModule() {
   }, [lists, activeListId]);
 
   const activeList = lists.find((l) => l.id === activeListId);
+  const error = listsError || itemsError;
+  const refresh = () => { void refreshLists(); void refreshItems(); };
 
   const filtered = useMemo(() =>
     items.filter((i) => !search || i.name.toLowerCase().includes(search.toLowerCase())),
@@ -155,6 +157,7 @@ export function ShoppingModule() {
   }
 
   if (listsLoading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load shopping lists. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="module-with-sidebar">

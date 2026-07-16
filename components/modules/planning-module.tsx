@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
@@ -41,15 +41,17 @@ export function PlanningModule() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: plans, loading: lp } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'prep_plans', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('prep_plans').select('*').eq('family_id', familyId).eq('status', 'active').order('target_date'),
   });
-  const { data: steps, loading: ls } = useRealtimeQuery<Step>({
+  const { data: steps, loading: stepsLoading, error: stepsError, refresh: refreshSteps } = useRealtimeQuery<Step>({
     table: 'prep_plan_steps', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('prep_plan_steps').select('*').eq('family_id', familyId).order('sort_order'),
   });
-  const loading = lp || ls;
+  const loading = plansLoading || stepsLoading;
+  const error = plansError || stepsError;
+  const refresh = () => { void refreshPlans(); void refreshSteps(); };
 
   const stepsByPlan = useMemo(() => {
     const m = new Map<string, Step[]>();
@@ -89,6 +91,8 @@ export function PlanningModule() {
 
       {loading ? (
         <SkeletonList count={4} />
+      ) : error ? (
+        <ErrorState message="Could not load prep plans. Refresh and try again." onRetry={refresh} />
       ) : (plans ?? []).length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <CalendarClock className="mx-auto mb-3 size-8 text-muted" />

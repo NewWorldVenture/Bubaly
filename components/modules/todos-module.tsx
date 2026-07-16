@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -76,20 +76,24 @@ export function TodosModule() {
   const [quickTitle, setQuickTitle] = useState('');
   const [quickBusy, setQuickBusy] = useState(false);
 
-  const { data: lists, refresh: refreshLists } = useRealtimeQuery<TodoList>({
+  const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<TodoList>({
     table: 'todo_lists', familyId, deps: [familyId],
     fetcher: (sb) =>
       sb.from('todo_lists').select('*').eq('family_id', familyId).is('archived_at', null)
         .order('sort_order').order('created_at'),
   });
 
-  const { data: items, loading, refresh: refreshItems } = useRealtimeQuery<TodoItem>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<TodoItem>({
     table: 'todo_items', familyId, deps: [familyId],
     fetcher: (sb) =>
       sb.from('todo_items').select('*').eq('family_id', familyId)
         .order('due_date', { ascending: true, nullsFirst: false })
         .order('priority', { ascending: false }),
   });
+
+  const loading = listsLoading || itemsLoading;
+  const error = listsError || itemsError;
+  const refresh = () => { void refreshLists(); void refreshItems(); };
 
   const listById = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -297,6 +301,7 @@ export function TodosModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load tasks. Refresh and try again." onRetry={refresh} />;
 
   const nothing = tabItems.length === 0;
 
