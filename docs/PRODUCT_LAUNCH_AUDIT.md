@@ -24,6 +24,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: (this increment)
 - Status: Resolved in code and pushed to `main` (A-16 increment by agent-03); A-16 unit remains In-progress (delivery/schedule/retry/live-cron matrix still open)
 - Remaining dependencies: live push delivery + duplicate-suppression verification; route `[push]`/`[notifications]` signals into monitoring (A-20 / LB-008 adjacent)
+### PLA-0434 - Nutrition Tracker + Family Favorites rendered read failures as silent empty lists (A-10)
+
+- Timestamp: 2026-07-16 21:16 UTC
+- Service: Meals / Groceries / Food (A-10) — Nutrition Tracker and Family Favorites views
+- Route: `/dashboard/nutrition` (`components/meals/nutrition-view.tsx`), Family Favorites (`components/meals/favorites-view.tsx`)
+- Affected files: `components/meals/nutrition-view.tsx`, `components/meals/favorites-view.tsx`, `tests/meals-views-read-boundary.test.ts` (new)
+- Role: all family roles with the Food feature
+- Scenario: the `nutrition_logs` or `family_favorites` read fails for a real reason (RLS denial, transient outage) while online and the table exists
+- Severity: P2 (silent read failure / misleading empty state)
+- Launch impact: both views called `useRealtimeQuery` but destructured only `{ data, loading }`, discarding the hook's `error`. The hook already degrades missing-table (pending migration) and offline to a quiet empty list, but a GENUINE error sets `error` — which these views ignored, so a real failure rendered an empty tracker / empty favorites list with no error UI and no retry
+- Root cause: the two views dropped the `error`/`refresh` from the shared realtime-query hook
+- Resolution: both now destructure `error, refresh` and `return <ErrorState message=… onRetry={refresh} />` on a real error, matching the sibling Meals/Grocery/Pantry modules; writes were already toasting `describeDbError`
+- Supabase impact: none — reads unchanged; genuine failures now visible + retryable
+- Tests run: `tests/meals-views-read-boundary.test.ts` (both views destructure error+refresh and render a retryable ErrorState); `tsc --noEmit` clean; `eslint` clean; full `vitest` 3,336 green
+- Validation evidence: guard test asserts the `error, refresh` destructure and the `if (error) return <ErrorState … onRetry={refresh}` branch exist in both views
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`
+- Remaining dependencies: A-10 grocery/pantry modules already fail-visible (verified this pass); remaining for A-10 launch-complete: CRUD/AI action write-boundary sweep, live cross-family RLS proof on meals/recipes/grocery/pantry tables, and the ≥500-row relational seed confirmation
+
 
 ### PLA-0433 - Meals module secondary reads swallowed failures into silent empty lists (A-10)
 
