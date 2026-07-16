@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 07:03 America/New_York
+Audit snapshot: 2026-07-16 07:09 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 474 Vitest files and 3,230 tests pass in the latest full local gate.
+- 475 Vitest files and 3,231 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -78,6 +78,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Decision Engine now coordinates `family_decisions` and `decision_options` reads and renders a retryable
   failure state before an empty decision list. Health Visits now surfaces a retryable `health_visits` read
   error before an empty medical history.
+- Finances now coordinates account, transaction, budget, bill, and savings-goal reads and renders a retryable
+  failure state instead of calculating misleading zero-valued financial metrics from partial data.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
