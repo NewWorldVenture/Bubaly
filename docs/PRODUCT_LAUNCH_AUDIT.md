@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0398 - Family Automation hid rules and run-feed read failures as healthy defaults
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/family-automation`.
+- Finding: automation-rule, pending-run, or recent-run reads could fail while metrics, approval controls, and CRUD controls rendered healthy or empty states.
+- Repair: the route now preserves all required Supabase errors and returns a retryable page failure before rendering rules, approval actions, or activity metrics.
+- Evidence: focused Family Automation boundary suite (1 assertion), full 504 test files/3,264 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `4a01fc5e`.
+- Remaining launch gate: validate authenticated family RLS, manager approval behavior, mutation recovery, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0397 - Contact Timeline hid contact, interaction, and communication read failures as missing history
 
 - Status: Resolved in source; live and deployed verification remain open.

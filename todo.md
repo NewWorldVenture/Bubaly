@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:50:00 -04:00
+- Last updated: 2026-07-16 12:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ae763b67` makes Contact Timeline fail closed on contact and relationship-history read failures after `f04895cd` repaired Autonomous Family Management; live provider and deployment evidence remains open
+- Commit: `4a01fc5e` makes Family Automation fail closed on rule and run-feed read failures after `ae763b67` repaired Contact Timeline; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0398 - Family Automation hid rules and run-feed read failures as healthy defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Family Automation / Supabase read boundary
+- Feature: Family Automation
+- Route: `/dashboard/family-automation`
+- File or files: `app/(app)/dashboard/family-automation/page.tsx`, `tests/family-automation-read-boundary.test.ts`
+- Database objects: `family_automation_rules`, `family_automation_runs`
+- Affected roles: authenticated family members; manager-only creation, approval, and deletion controls
+- Scenario: rule, pending-run, or recent-run reads could fail while the page rendered healthy metrics, empty queues, or actionable CRUD/approval controls.
+- Launch impact: families could miss automation activity or act on incomplete approval state while the automation surface appeared healthy.
+- Root cause: the route discarded errors from all three required reads and derived metrics from nullable empty fallbacks.
+- Required remediation: preserve all required read errors and render a retryable page-level failure before rendering metrics, approval actions, or CRUD controls.
+- Implementation notes: coordinated the three query results, added a route-level ReadFailure state, and added a focused regression test.
+- Test plan: focused Family Automation boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (504 files/3,264 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `4a01fc5e`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Family Automation no longer presents healthy defaults after a failed required rule or run-feed read.
+- Remaining dependencies: verify authenticated family RLS, manager approval behavior, mutation recovery, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0397 - Contact Timeline hid contact, interaction, and communication read failures as missing history
 
