@@ -29,6 +29,11 @@ describe('A-03 tenant-isolation RLS probe is present and encodes its invariants'
     expect(sql).toContain('user B DELETEd');
   });
 
+  it('asserts SECURITY DEFINER RPCs reject cross-family callers', () => {
+    expect(sql).toContain('marketplace_create_circle');
+    expect(sql).toContain('cross-family caller');
+  });
+
   it('is wired to the shared harness runner', () => {
     const harness = readFileSync('docs/audit/verify-pg.sh', 'utf8');
     expect(harness).toContain('authenticated');

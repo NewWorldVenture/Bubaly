@@ -87,4 +87,25 @@ begin
   perform set_config('role','postgres', true);
 end $$;
 
+-- ── Invariant 4: SECURITY DEFINER RPCs reject cross-family callers ───────────
+-- SECURITY DEFINER runs as owner and bypasses RLS, so each family-taking RPC must
+-- gate on public.is_family_member(p_family). Prove a representative mutation RPC
+-- rejects user B acting on family A.
+grant execute on all functions in schema public to authenticated;
+do $$
+declare rejected boolean := false;
+begin
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000b2', true);
+  perform set_config('request.jwt.claim.role','authenticated', true);
+  begin
+    perform public.marketplace_create_circle('00000000-0000-4000-8000-0000000000f1','Hostile Circle');
+  exception when others then
+    rejected := (sqlerrm ilike '%not a member%');
+  end;
+  if not rejected then raise exception 'A-03 FAIL: marketplace_create_circle accepted a cross-family caller'; end if;
+  raise notice 'A-03 OK: SECURITY DEFINER RPC rejected a cross-family caller';
+  perform set_config('role','postgres', true);
+end $$;
+
 select 'A-03 tenant-isolation probe: ALL INVARIANTS PASSED' as result;
