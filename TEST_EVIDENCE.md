@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Management Read Boundary
+
+- Focused Admin Management boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 492 test files, 3,252 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Admin Management now fails visibly when `admin_users` cannot be read instead of rendering zero administrators.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `b465cf71`.
+
 ## Latest Local Evidence - Social Usage Read Boundary
 
 - Focused Social Usage boundary suite: 1 file, 1 assertion passed.
@@ -267,19 +279,7 @@ Audit date: 2026-07-15
 - Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
 - `git diff --check`: passed before commit.
 - Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones now surface retryable read failures before empty or derived states.
-- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
-- Source commit: `468611d5`.
-
-## Latest Local Evidence - Household Read Boundaries
-
-- Focused household boundary suite: 1 file, 4 assertions passed.
-- Full `npm.cmd test -- --run`: 477 test files, 3,239 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Announcements now coordinates announcement and read-receipt failures; Contacts, Screen Time, Celebrations, and Household Binder now surface retryable read failures before empty or derived states.
-- Live provider callbacks, …32628 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain …32830 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
