@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:40:00 -04:00
+- Last updated: 2026-07-16 10:45:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `b465cf71` makes Super Admin Admin Management fail closed on read failures after `ee26e70c` repaired Social Usage; live provider and deployment evidence remains open
+- Commit: `0f91564a` makes Super Admin Admin Settings fail closed on read failures after `b465cf71` repaired Admin Management; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0387 - Admin Settings hid administrator-count read failures as zero access holders
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / system settings / Supabase read boundary
+- Feature: Admin Settings
+- Route: `/admin/settings`
+- File or files: `app/(app)/admin/settings/page.tsx`, `tests/admin-settings-read-boundary.test.ts`
+- Database objects: `super_admins`
+- Affected roles: Super Admin
+- Scenario: the administrator-count query could fail while the page rendered zero access holders and system status as readable.
+- Launch impact: operators could mistake an authorization backend outage for an empty administrator roster.
+- Root cause: the route discarded the Supabase error object and used a zero fallback for a required access read.
+- Required remediation: preserve the query error and render a retryable page-level failure before building system status.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Admin Settings boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (493 files/3,253 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `0f91564a`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Admin Settings no longer presents zero access holders after a failed `super_admins` read.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the authorization workflow audit.
 
 #### TODO-0386 - Admin Management hid administrator read failures as zero admins
 
@@ -208,27 +229,7 @@
 - Implementation notes: added an explicit ReadFailure state, validated the score query before deriving rows, and validated the contact join before rendering lifecycle and identity fields.
 - Test plan: focused Lead Scores boundary suite; full Vitest, typecheck, lint, production build, and diff check.
 - Tests performed: focused suite (1 assertion); full Vitest (484 files/3,244 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `deb07a24`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Lead Scores now fails visibly on either required read failure instead of showing a fabricated empty state.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the page and workflow audit.
-
-#### TODO-0377 - Visitor Intelligence hid analytics failures as zero metrics
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / marketing analytics / Supabase read boundary
-- Feature: Visitor Intelligence
-- Route: `/admin/marketing/visitor-intelligence`
-- File or files: `app/(app)/admin/marketing/visitor-intelligence/page.tsx`, `tests/admin-visitor-intelligence-read-boundary.test.ts`
-- Database objects: `mkt_visitors`, `crm_contact_profile`, `crm_lead_scores`, and `mkt_consent_events`
-- Affected roles: Super Admin
-- Scenario: a service-role analytics query could fail while the page rendered zero-valued funnel, lead-band, and consent metrics.
-- Launch impact: operators could treat a failed analytics backend as healthy empty traffic and make decisions from false data.
-- Root cause: count reads discarded returned Supabase errors and converted thrown errors to zero.
-- Required remediation: preserve count-read errors, fail visibly with a retry state, and keep zero as a valid value only when the query succeeds.
-- Implementation notes: count now returns `{ value, error }`; all eleven metrics are checked before funnel calculation; the page includes a retry path.
-- Test plan: focused Visitor Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: …130371 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Evidence: source repair validated in commit `deb07a24`; local branch pushed; known build warnings remai…130814 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
