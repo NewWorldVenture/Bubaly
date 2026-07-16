@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0390 - Referrals hid settings and activity read failures as defaults or no activity
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/referrals` and shared referral config reads.
+- Finding: referral settings errors fell back to defaults and referral-row errors rendered no activity, leaving the admin dashboard actionable with incomplete state.
+- Repair: added a status-preserving config read helper and require both config and referral reads to succeed before metrics, settings, or activity render.
+- Evidence: focused Referrals boundary suite (1 assertion), full 496 test files/3,256 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `2b06e789`.
+- Remaining launch gate: validate live Super Admin authorization, referral settings/activity availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0389 - New Campaign hid segment read failures as an unfiltered audience selector
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -222,17 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1.
 - Surface: `/wallet/cards` and `/wallet/children/[childId]`.
 - Finding: provider-disabled card mode used â€œcoming soonâ€ copy, and child detail rendered Visa-like preview art without explicitly stating that no card had been issued.
-- Repair: provider-disabled mode now says spending cards are unavailable until configured; child detail now renders a clearly labeled non-issued preview with ledger-only language and no payment-card number/brand simulation.
-- Evidence: `tests/wallet-card-availability.test.ts`, Stripe capability suite, 478 test files/3,246 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `faf75b75`.
-- Remaining launch gate: verify real Stripe Issuing account capability, feature-flag/RLS state, and deployed browser behavior before enabling or advertising card issuance.
-
-### PLA-0367 - Intelligence and Briefing context reads hid failures as safe-looking defaults
-
-- Timestamp: 2026-07-16 08:22 America/New_York
-- Service: Intelligence Network preferences and Briefing Kitchen Mode
-- Route: corresponding family module routes under `/dashboard`
-- Affected files: `components/modules/intelligence-module.tsx`, `components/modules/briefing-module.tsx`, `tests/household-read-boundaries.test.ts`
-- Role: authenticated fam…35136 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Repair: provider-disabled mode now says spending cards are unavailable until configured; …35375 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
