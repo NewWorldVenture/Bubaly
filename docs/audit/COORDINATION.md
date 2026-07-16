@@ -91,7 +91,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 |------|----------------|--------|---------------|-----------------|-----------------|-------|
 | A-01 | codex (verified) | DONE | — | — | prior | build/lint/type/2929+ tests green |
 | A-02 | codex (verified) | DONE | — | — | prior | 230 migs + 600-row seed baseline |
-| A-03 | `agent-01` | IN_REVIEW | 2026-07-16 20:45 | 2026-07-16 20:57 | `a66023ab`+ | Isolation PROVEN: 353/353 tables RLS-on; cross-family read+write blocked; SECURITY DEFINER RPC rejects cross-family caller (PLA-0415). Unit stays In-progress: session edges, role matrix, live Auth Admin/OAuth open |
+| A-03 | `agent-01` | IN_REVIEW | 2026-07-16 20:45 | 2026-07-16 21:00 | `a66023ab`+ | Isolation PROVEN: 353/353 tables RLS-on; cross-family read+write blocked; SECURITY DEFINER RPC rejects cross-family caller (PLA-0415). Unit stays In-progress: session edges, role matrix, live Auth Admin/OAuth open |
 | A-04 | — | OPEN | | | | tier-gate + trial (see BLK: pending prod migs) |
 | A-05 | `agent-01` (display slice) | IN_REVIEW | 2026-07-16 20:20 | 2026-07-16 20:45 | `77b87dc` | Display kiosk hardened+RLS-verified; rest of dashboard open |
 | A-06 | — | OPEN | | | | |
