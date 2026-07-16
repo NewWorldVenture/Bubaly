@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Connections Runtime Catalog
+
+- Focused connection provider and adapter suites: 2 files, 25 assertions passed.
+- Full `npm.cmd test -- --run`: 481 test files, 3,252 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- The runtime Connections hub now renders only Google, Apple, and Outlook calendar providers with real setup routes; unsupported future-provider rows are excluded from the user-facing catalog.
+- Live OAuth callbacks, provider sync, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `9eb160b0`.
+
 ## Latest Local Evidence - Independence Empty State
 
 - Focused Independence empty-state contract: 1 file, 1 assertion passed.
