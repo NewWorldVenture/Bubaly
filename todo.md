@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:34:21 -04:00
+- Last updated: 2026-07-16 07:41:58 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ab367ebd` adds Devices, Immunizations, and Security read failure handling after Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `943990b3` adds household read failure handling for Announcements, Contacts, Screen Time, Celebrations, and the Household Binder after Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0362 - Household modules hid failed reads as empty or partial states
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Household operations / Supabase failure handling
+- Feature: Announcements, Contacts, Screen Time, Celebrations, and Household Binder
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/announcements-module.tsx`, `components/modules/contacts-module.tsx`, `components/modules/screen-time-module.tsx`, `components/modules/celebrations-module.tsx`, `components/modules/binder-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `family_announcements`, `announcement_reads`, `family_contacts`, `screen_time_entries`, `screen_time_limits`, `family_dates`, and `household_info`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed a raw error without recovery, or allowed dependent data to render from partial query results.
+- Launch impact: families could miss announcements, contacts, screen-time limits, celebrations, or household reference information while the UI appeared usable.
+- Root cause: several modules ignored realtime query errors; Announcements and Screen Time also lacked coordinated loading and retry behavior across multiple reads.
+- Required remediation: surface sanitized retryable errors before empty/derived states and refresh every required query together.
+- Implementation notes: Announcements coordinates announcements and read receipts; Screen Time coordinates entries and limits; Contacts, Celebrations, and Binder now use shared ErrorState retry behavior.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (4 focused assertions); full Vitest; typecheck; lint; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 477 files/3,239 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated in commit `943990b3`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed household verification.
 
 #### TODO-0361 - Devices, Immunizations, and Security hid safety reads as empty states
 
