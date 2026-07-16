@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { CONTACT_BAND_META, type ContactBand, type ContactScoreFactor } from '@/lib/marketing/contact-score';
 import { RecomputeButton, LeadRow } from './lead-scores-client';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Lead Scores', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,37 +19,57 @@ type ScoredContact = {
   lifecycle: string;
 };
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5 p-4 sm:p-6">
+      <h1 className="text-xl font-black sm:text-2xl">Lead Scores</h1>
+      <ErrorState message="Could not load lead scores from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/lead-scores" className="text-sm font-medium text-brand-text underline">Refresh lead scores</a>
+    </div>
+  );
+}
+
 export default async function LeadScoresPage() {
   const supabase = createServiceClient();
 
   // Ranked scores joined to their contact. Degrades to an empty state before 0172.
-  let rows: ScoredContact[] = [];
-  let totalScored = 0;
+  let scoresResult;
   try {
-    const { data: scores, count } = await supabase
+    scoresResult = await supabase
       .from('crm_lead_scores')
       .select('contact_id, score, band, factors', { count: 'exact' })
       .order('score', { ascending: false })
       .limit(100);
-    totalScored = count ?? 0;
+  } catch {
+    return <ReadFailure />;
+  }
+  if (scoresResult.error) return <ReadFailure />;
 
-    const ids = (scores ?? []).map((s) => s.contact_id);
-    const byId = new Map<string, { first_name: string | null; last_name: string | null; email: string | null; lifecycle_stage: string }>();
-    if (ids.length) {
-      const { data: contacts } = await supabase
+  const scores = scoresResult.data ?? [];
+  const totalScored = scoresResult.count ?? 0;
+
+  const ids = scores.map((s) => s.contact_id);
+  const byId = new Map<string, { first_name: string | null; last_name: string | null; email: string | null; lifecycle_stage: string }>();
+  if (ids.length) {
+    let contactsResult;
+    try {
+      contactsResult = await supabase
         .from('crm_contacts').select('id, first_name, last_name, email, lifecycle_stage').in('id', ids);
-      for (const c of contacts ?? []) byId.set(c.id, c);
+    } catch {
+      return <ReadFailure />;
     }
-    rows = (scores ?? []).map((s) => {
+    if (contactsResult.error) return <ReadFailure />;
+    for (const c of contactsResult.data ?? []) byId.set(c.id, c);
+  }
+  const rows: ScoredContact[] = scores.map((s) => {
       const c = byId.get(s.contact_id);
       const name = [c?.first_name, c?.last_name].filter(Boolean).join(' ') || c?.email || 'Unknown contact';
       return {
         contact_id: s.contact_id, score: s.score, band: s.band,
         factors: Array.isArray(s.factors) ? (s.factors as unknown as ContactScoreFactor[]) : [],
-        name, email: c?.email ?? null, lifecycle: c?.lifecycle_stage ?? '—',
+        name, email: c?.email ?? null, lifecycle: c?.lifecycle_stage ?? 'â€”',
       };
-    });
-  } catch { /* table not applied yet */ }
+  });
 
   const bandCount = (b: ContactBand) => rows.filter((r) => r.band === b).length;
   const stats = [
@@ -64,7 +85,7 @@ export default async function LeadScoresPage() {
         <div>
           <h1 className="text-xl font-black sm:text-2xl">Lead Scores</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Every contact scored 0–100 from the signals we collect — site engagement, recency,
+            Every contact scored 0â€“100 from the signals we collect â€” site engagement, recency,
             conversions, demo, consent, and profile depth. Each score is fully itemized: expand a
             row to see exactly why.
           </p>
