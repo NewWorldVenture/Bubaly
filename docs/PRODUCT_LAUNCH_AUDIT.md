@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0377 - Visitor Intelligence hid analytics failures as zero metrics
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/visitor-intelligence`.
+- Finding: eleven service-role analytics counts collapsed returned or thrown database failures to zero, making an unhealthy funnel look like a valid empty one.
+- Repair: count reads now retain `{ value, error }`; the page checks all metrics before deriving funnel and lead-band state and renders a retryable error state on failure.
+- Evidence: focused Visitor Intelligence boundary suite (1 assertion), full 483 test files/3,243 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `2dde5f16`.
+- Remaining launch gate: validate live Super Admin authorization, service-role table availability, and deployed retry behavior; the Auth Admin and broader launch blockers remain open.
+
 ### PLA-0376 - Workload Balance hid required read failures as empty history
 
 - Status: Resolved in source; live and deployed verification remain open.
