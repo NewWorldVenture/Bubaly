@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:55:00 -04:00
+- Last updated: 2026-07-16 11:00:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `d600ad7c` makes New Campaign fail closed on segment read failures after `51423350` repaired Social Providers; live provider and deployment evidence remains open
+- Commit: `2b06e789` makes Super Admin Referrals fail closed on settings/activity read failures after `d600ad7c` repaired New Campaign; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0390 - Referrals hid settings and activity read failures as defaults or no activity
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing referrals / Supabase read boundary
+- Feature: Referrals
+- Route: `/admin/marketing/referrals`
+- File or files: `app/(app)/admin/marketing/referrals/page.tsx`, `lib/referrals/server.ts`, `tests/admin-referrals-read-boundary.test.ts`
+- Database objects: `marketing_settings`, `referrals`
+- Affected roles: Super Admin
+- Scenario: settings failures fell back to defaults and referral activity failures rendered no rows while metrics and settings remained actionable.
+- Launch impact: operators could change or interpret the referral program against incomplete state.
+- Root cause: both the shared settings helper and the admin activity query discarded read errors.
+- Required remediation: preserve both read statuses and render a retryable page-level failure before metrics, settings, or rows.
+- Implementation notes: added `getReferralConfigResult` and coordinated settings/activity reads in the admin page.
+- Test plan: focused Referrals boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (496 files/3,256 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `2b06e789`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Admin Referrals no longer presents defaults or no activity after a failed settings/activity read.
+- Remaining dependencies: verify live Super Admin permissions and deployed referral behavior; continue the marketing workflow audit.
 
 #### TODO-0389 - New Campaign hid segment read failures as an unfiltered audience selector
 
@@ -210,27 +231,7 @@
 - Tests performed: focused suite (1 assertion); full Vitest (487 files/3,247 tests); typecheck; lint; clean 250-route build; diff check.
 - Evidence: source repair validated in commit `9c5edb3e`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
 - Resolution: Competitive Intelligence no longer exposes CRUD controls over a failed or fabricated empty dataset.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and SEO audit.
-
-#### TODO-0380 - Customer Intelligence hid analytics failures as zero attribution metrics
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / marketing attribution / Supabase read boundary
-- Feature: Customer Intelligence
-- Route: `/admin/marketing/intelligence`
-- File or files: `app/(app)/admin/marketing/intelligence/page.tsx`, `tests/admin-customer-intelligence-read-boundary.test.ts`
-- Database objects: `mkt_visitors`, `mkt_sessions`, and `mkt_touchpoints`
-- Affected roles: Super Admin
-- Scenario: visitor, session, or touchpoint failures were discarded while the route rendered zero counts and an empty attribution report.
-- Launch impact: acquisition and conversion decisions could be made from incomplete telemetry while the admin page appeared healthy.
-- Root cause: the route destructured Supabase results without checking error objects.
-- Required remediation: preserve all four query results, check every error, and render a retryable error state before calculating attribution.
-- Implementation notes: wrapped the read batch for thrown failures, checked returned errors, and only derive channels, conversions, and models after successful reads.
-- Test plan: focused Customer Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (486 files/3,246 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `c8ef7399`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Customer Intelligence now fails visibly on any required telemetry read failure instead of presenting zer…131721 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue th…132191 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
