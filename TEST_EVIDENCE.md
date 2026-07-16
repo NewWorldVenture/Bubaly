@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - New Campaign Segment Read Boundary
+
+- Focused New Campaign boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 495 test files, 3,255 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- New Campaign now fails visibly when `marketing_segments` cannot be read instead of allowing an unfiltered campaign by default.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `d600ad7c`.
+
 ## Latest Local Evidence - Social Providers Read Boundary
 
 - Focused Social Providers boundary suite: 1 file, 1 assertion passed.
@@ -271,16 +283,7 @@ Audit date: 2026-07-15
 
 - Focused household boundary suite: 1 file, 7 assertions passed.
 - Full `npm.cmd test -- --run`: 477 test files, 3,242 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner now surface retryable read failures before empty or derived states.
-- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
-- Source co…33241 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd run typecheck`: p…33446 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
