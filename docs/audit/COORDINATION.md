@@ -98,7 +98,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-07 | — | OPEN | | | | |
 | A-08 | `agent-01` | CLAIMED | 2026-07-16 21:16 | 2026-07-16 21:16 | | Wallet/goals/allowances/treasury: ledger integrity + RLS + overdraw/approval invariants |
 | A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:12 | `a5fa39e3` | VERIFIED: webhook(sig/replay/retry/self-heal), checkout(auth/RBAC/validate/rate-limit/trusted-url), all-routes RBAC, slug↔planLevel, downgrade rule (Plus→Basic only; Free unreachable via change-plan — already tested), /pay flow wired. 14 new guards. OPEN ONLY: live Stripe test-mode smoke (needs keys) |
-| A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:16 | `6f4e0e4e`+ | Food hub (PLA-0418) + Meals module (PLA-0433) + Nutrition/Favorites views (PLA-0434) read boundaries; grocery/pantry verified fail-visible. Remaining: CRUD/AI writes, live RLS, seed |
+| A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:16 | `6f4e0e4e`+ | Food hub (PLA-0418) + Meals module (PLA-0433) + Nutrition/Favorites views (PLA-0435) read boundaries; grocery/pantry verified fail-visible. Remaining: CRUD/AI writes, live RLS, seed |
 | A-11 | — | OPEN | | | | |
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |

@@ -24,7 +24,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: (this increment)
 - Status: Resolved in code and pushed to `main` (A-16 increment by agent-03); A-16 unit remains In-progress (delivery/schedule/retry/live-cron matrix still open)
 - Remaining dependencies: live push delivery + duplicate-suppression verification; route `[push]`/`[notifications]` signals into monitoring (A-20 / LB-008 adjacent)
-### PLA-0434 - Nutrition Tracker + Family Favorites rendered read failures as silent empty lists (A-10)
+### PLA-0435 - Nutrition Tracker + Family Favorites rendered read failures as silent empty lists (A-10)
 
 - Timestamp: 2026-07-16 21:16 UTC
 - Service: Meals / Groceries / Food (A-10) — Nutrition Tracker and Family Favorites views
