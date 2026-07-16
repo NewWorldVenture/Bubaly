@@ -32,4 +32,16 @@ describe('launch audit control plane', () => {
     expect(blockers).toContain('| LB-002 | P0 |');
     expect(blockers).toContain('The repository is currently NO-GO.');
   });
+
+  // PLA-0405 regression: an interrupted/concurrent writer once embedded stray
+  // control bytes (NUL + 0x01–0x1f) into the audit docs and a sync source file,
+  // corrupting the ledger and silently altering the Google content-hash
+  // separator. Guard the control-plane docs against any non-text control byte.
+  it('keeps the audit control-plane documents free of control-byte corruption', () => {
+    const controlByte = new RegExp('[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]'); // allow tab/LF/CR
+    for (const path of requiredDocs) {
+      const text = readFileSync(path, 'utf8');
+      expect(controlByte.test(text), `${path} contains a stray control byte`).toBe(false);
+    }
+  });
 });

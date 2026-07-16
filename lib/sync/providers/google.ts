@@ -7,7 +7,6 @@
 //
 // SERVER ONLY.
 
-import { createHash } from 'node:crypto';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 
@@ -393,18 +392,8 @@ export function reminderRowToGoogleTask(row: {
   };
 }
 
-/** Stable digest for change detection. Order-fixed; null-safe. */
-export function eventContentHash(r: {
-  title: string; description?: string | null; location?: string | null;
-  starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence_rule?: string | null;
-}): string {
-  const parts = [r.title, r.description ?? '', r.location ?? '', r.starts_at, r.ends_at ?? '', r.all_day ? '1' : '0', r.recurrence_rule ?? ''];
-  return createHash('sha256').update(parts.join('')).digest('hex');
-}
-
-export function reminderContentHash(r: {
-  title: string; notes?: string | null; due_at?: string | null; is_completed?: boolean;
-}): string {
-  const parts = [r.title, r.notes ?? '', r.due_at ?? '', r.is_completed ? '1' : '0'];
-  return createHash('sha256').update(parts.join('')).digest('hex');
-}
+// Change-detection digests are provider-neutral — Google and Microsoft MUST
+// hash the same normalized row identically. Re-export the single shared
+// implementation (lib/sync/hash) so the two adapters can never drift again. (A
+// duplicated local copy previously diverged, breaking cross-provider parity.)
+export { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
