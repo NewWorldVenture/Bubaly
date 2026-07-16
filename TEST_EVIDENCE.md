@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Social Providers Read Boundary
+
+- Focused Social Providers boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 494 test files, 3,254 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Social Providers now fails visibly when the `social_providers` catalog cannot be read instead of defaulting every provider to enabled.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `51423350`.
+
 ## Latest Local Evidence - Admin Settings Read Boundary
 
 - Focused Admin Settings boundary suite: 1 file, 1 assertion passed.

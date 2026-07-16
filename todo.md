@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:45:00 -04:00
+- Last updated: 2026-07-16 10:50:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0f91564a` makes Super Admin Admin Settings fail closed on read failures after `b465cf71` repaired Admin Management; live provider and deployment evidence remains open
+- Commit: `51423350` makes Super Admin Social Providers fail closed on read failures after `0f91564a` repaired Admin Settings; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0388 - Social Providers hid provider-catalog read failures as enabled defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / social integrations / Supabase read boundary
+- Feature: Social Providers
+- Route: `/admin/social/providers`
+- File or files: `app/(app)/admin/social/providers/page.tsx`, `tests/admin-social-providers-read-boundary.test.ts`
+- Database objects: `social_providers`
+- Affected roles: Super Admin
+- Scenario: the provider catalog query could fail while capability cards defaulted every provider to enabled.
+- Launch impact: operators could interpret an unavailable catalog as a healthy provider configuration.
+- Root cause: the route discarded the Supabase error object and defaulted the enabled map from an empty array.
+- Required remediation: preserve the query error and render a retryable page-level failure before building capability cards.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Social Providers boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (494 files/3,254 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `51423350`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Social Providers no longer presents enabled defaults after a failed provider-catalog read.
+- Remaining dependencies: verify live Super Admin permissions and deployed provider-catalog behavior; continue the integration audit.
 
 #### TODO-0387 - Admin Settings hid administrator-count read failures as zero access holders
 

@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0388 - Social Providers hid provider-catalog read failures as enabled defaults
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/providers`.
+- Finding: the `social_providers` query could fail while every capability card defaulted to “DB enabled: yes.”
+- Repair: the Supabase error is checked before building the enabled-provider map; failures return a retryable page state.
+- Evidence: focused Social Providers boundary suite (1 assertion), full 494 test files/3,254 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `51423350`.
+- Remaining launch gate: validate live Super Admin authorization, provider catalog availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0387 - Admin Settings hid administrator-count read failures as zero access holders
 
 - Status: Resolved in source; live and deployed verification remain open.
