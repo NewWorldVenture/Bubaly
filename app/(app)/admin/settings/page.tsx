@@ -3,9 +3,20 @@ import Link from 'next/link';
 import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Admin · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
+
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
+      <ErrorState message="Could not load administrator settings from Supabase. Refresh and try again." />
+      <Link href="/admin/settings" className="text-sm font-medium text-brand-text underline">Refresh settings</Link>
+    </div>
+  );
+}
 
 function host(url: string | undefined): string {
   if (!url) return '—';
@@ -14,7 +25,11 @@ function host(url: string | undefined): string {
 
 export default async function AdminSettingsPage() {
   const supabase = createServiceClient();
-  const { count: superAdmins } = await supabase.from('super_admins').select('email', { count: 'exact', head: true });
+  const { count: superAdmins, error } = await supabase.from('super_admins').select('email', { count: 'exact', head: true });
+  if (error) {
+    console.error('[admin-settings] administrator settings read failed', error);
+    return <ReadFailure />;
+  }
 
   const providers = [
     { name: 'Supabase (database, auth, storage)', ready: !!process.env.NEXT_PUBLIC_SUPABASE_URL, detail: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
