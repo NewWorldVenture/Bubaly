@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0400 - Family Operations and Reports hid shared-signal read failures as healthy summaries
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/family-operations` and `/family/reports`.
+- Finding: shared signal reads could fail while household completion, stress, bills, and task summaries rendered from an exception or zero-valued fallback.
+- Repair: both routes now consume the status-preserving signal result and return retryable page failures before rendering summary metrics.
+- Evidence: focused Family Summary boundary suite (1 assertion), full 506 test files/3,266 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `dd3c2929`.
+- Remaining launch gate: validate authenticated family RLS, summary source availability, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0399 - Family Stress hid signal, member, and logged-input read failures as a healthy forecast
 
 - Status: Resolved in source; live and deployed verification remain open.

@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Summary Read Boundaries
+
+- Focused Family Summary boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run`: 506 test files, 3,266 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Family Operations and Family Reports now fail visibly when shared signal reads fail instead of rendering healthy zero-valued summaries.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `dd3c2929`.
+
 ## Latest Local Evidence - Family Stress Read Boundaries
 
 - Focused Family Stress boundary suite: 1 file, 1 assertion passed.

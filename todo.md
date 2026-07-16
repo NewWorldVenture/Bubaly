@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:10:00 -04:00
+- Last updated: 2026-07-16 12:20:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `c4c3cb5f` makes Family Stress fail closed on signal and logged-input read failures after `4a01fc5e` repaired Family Automation; live provider and deployment evidence remains open
+- Commit: `dd3c2929` makes Family Operations and Family Reports fail closed on shared-signal read failures after `c4c3cb5f` repaired Family Stress; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0400 - Family Operations and Reports hid shared-signal read failures as healthy summaries
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Family Operations and Reports / Supabase read boundary
+- Feature: Family Operations and Family Reports
+- Route: `/dashboard/family-operations`, `/family/reports`
+- File or files: `app/(app)/dashboard/family-operations/page.tsx`, `app/(app)/family/reports/page.tsx`, `tests/family-summary-read-boundary.test.ts`
+- Database objects: shared family signal sources
+- Affected roles: authenticated family members
+- Scenario: shared signal reads could fail while completion, stress, bills, tasks, and report summaries rendered from an exception or zero-valued fallback.
+- Launch impact: families could make decisions from incomplete household summaries while the dashboard appeared healthy.
+- Root cause: both routes destructured the throwing compatibility helper without a route-level failure state.
+- Required remediation: consume the status-preserving signal result and render retryable page failures before summary metrics.
+- Implementation notes: switched both routes to `gatherSignalsResult`, added explicit failure states, and added one paired regression test.
+- Test plan: focused Family Summary boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (506 files/3,266 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `dd3c2929`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Family Operations and Family Reports no longer render healthy summaries after a failed shared signal read.
+- Remaining dependencies: verify authenticated family RLS, summary source availability, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0399 - Family Stress hid signal, member, and logged-input read failures as a healthy forecast
 
