@@ -1,27 +1,49 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Activity, AlertTriangle, Lightbulb, Gauge } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { gatherSignals } from '@/lib/family/signals';
+import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { fmtDate } from '@/lib/utils/format';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Stress Prediction' };
 export const dynamic = 'force-dynamic';
+
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <h1 className="text-2xl font-bold tracking-tight">Family Stress Prediction</h1>
+      <ErrorState message="Could not load family stress data from Supabase. Refresh and try again." />
+      <Link href="/dashboard/family-stress" className="text-sm font-medium text-brand-text underline">Refresh family stress</Link>
+    </div>
+  );
+}
 
 export default async function FamilyStressPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ stress }, { data: members }, { data: signals }] = await Promise.all([
-    gatherSignals(familyId),
+  const [signalsResult, membersResult, loggedSignalsResult] = await Promise.all([
+    gatherSignalsResult(familyId),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_stress_signals').select('*').eq('family_id', familyId)
       .order('occurred_on', { ascending: false }).limit(12),
   ]);
+
+  const readError = signalsResult.error ?? membersResult.error ?? loggedSignalsResult.error;
+  if (readError || !signalsResult.data) {
+    console.error('[dashboard-family-stress] required read failed', readError);
+    return <ReadFailure />;
+  }
+
+  const { stress } = signalsResult.data;
+  const members = membersResult.data;
+  const signals = loggedSignalsResult.data;
 
   return (
     <div className="space-y-5">
