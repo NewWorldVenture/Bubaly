@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 06:56:09 -04:00
+- Last updated: 2026-07-16 07:03:47 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `42625b69` adds Behavior read failure handling after Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `59b280ae` adds Decision Engine and Health Visits read failure handling after Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0357 - Decision Engine and Health Visits hid required reads as empty states
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Household planning and health / Supabase failure handling
+- Feature: Decision Engine and Health Visits
+- Route: `/dashboard/decisions`, health module routes using `/dashboard/health-visits`
+- File or files: `components/modules/decisions-module.tsx`, `components/modules/health-visits-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `family_decisions`, `decision_options`, and `health_visits`
+- Affected roles: authenticated family members, household managers, and health-history users
+- Scenario: a failed decision or option read could show no decisions; a failed health-visit read could show an empty medical history.
+- Launch impact: families could make choices without the available trade-offs or miss health-history and follow-up context.
+- Root cause: both modules ignored realtime query errors; Decision Engine also failed to coordinate its paired decision/options reads.
+- Required remediation: surface sanitized retryable errors before empty UI and retry all required Decision Engine reads together.
+- Implementation notes: Decision Engine now coordinates both reads; Health Visits now renders an ErrorState on failure.
+- Test plan: focused household boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 474 files/3,230 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `59b280ae`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0356 - Behavior insights hid behavior-log read failures as no logged behavior
 
@@ -202,27 +223,7 @@
 - Database objects: `vacations`, `vacation_itinerary_days`, and `vacation_itinerary_items`
 - Affected roles: authenticated family members and household trip planners
 - Scenario: trip, day, or itinerary-item reads could fail while the page rendered no days planned or an incomplete schedule.
-- Launch impact: families could miss planned activities or incorrectly rebuild an itinerary from incomplete data.
-- Root cause: only the itinerary days query exposed loading state; trip and item read failures were ignored.
-- Required remediation: track all three required reads, wait for complete data, and render a sanitized retry state before showing an empty schedule.
-- Implementation notes: Trip Itinerary now fails closed on any required read failure and retries all three reads together.
-- Test plan: focused itinerary boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/trip-itinerary-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 466 files/3,216 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
-- Resolution: source repair validated locally in commit `7e6ce831`; documentation and remote publication remain pending for this increment.
-- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
-
-#### TODO-0347 - Trip overview hid incomplete readiness and itinerary reads
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Vacation overview / Supabase failure handling
-- Feature: Trip Overview
-- Route: `/dashboard/vacations/[id]/overview`
-- File or files: `components/vacations/trip-overview.tsx`, `tests/trip-overview-boundary.test.ts`
-- Database objects: `vacations`, `vacation_members`, `vacation_lodging`, `vacation_flights`, `vacation_transportation`, `vacation_activities`, `vacation_reservations`, `vacation_budgets`, `vacation_expenses`, `vacation_packing_items`, `vacation_documents`, `vacation_emergency_contacts`, `vacation_itinerary_days`, `vacation_itinerary_items`, `vacation_weather_snapshots`, and `vacation_ai_recommendations`
-- Affected roles: authenticated family members and household trip planners
-- Scenario: any secondary overview read could fail while readiness, budget, transport, weather, or r…115168 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Launch impact: families could miss planned activities or incorrectly rebuild an itinerar…115682 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
