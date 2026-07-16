@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0362 - Household modules hid failed reads as empty or partial states
+
+- Timestamp: 2026-07-16 07:41 America/New_York
+- Service: Announcements, Contacts, Screen Time, Celebrations, and Household Binder
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/announcements-module.tsx`, `components/modules/contacts-module.tsx`, `components/modules/screen-time-module.tsx`, `components/modules/celebrations-module.tsx`, `components/modules/binder-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed a raw error without recovery, or allowed dependent data to render from partial query results.
+- Severity: P1
+- Launch impact: families could miss announcements, contacts, screen-time limits, celebrations, or household reference information while the UI appeared usable.
+- Root cause: several modules ignored realtime query errors; Announcements and Screen Time also lacked coordinated loading and retry behavior across multiple reads.
+- Resolution: all five modules now surface retryable ErrorState UI; Announcements coordinates announcements and read-receipt queries, and Screen Time coordinates entries and limits before rendering derived state.
+- Supabase impact: no schema change; existing family-scoped household reads now have explicit page-level failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (4 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 477 test files, 3,239 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `943990b3`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed household verification
+
 ### PLA-0361 - Devices, Immunizations, and Security hid safety reads as empty states
 
 - Timestamp: 2026-07-16 07:34 America/New_York
