@@ -119,7 +119,7 @@ async function loadDisplay(
       if (!mmdd) return false;
       return mmddEnd >= mmddToday ? mmdd >= mmddToday && mmdd <= mmddEnd : mmdd >= mmddToday || mmdd <= mmddEnd;
     })
-    .map((m) => ({ name: m.display_name, date: formatBirthday(birthdayMonthDay(m.birthday)!) }));
+    .map((m) => ({ name: m.display_name ?? 'Member', date: formatBirthday(birthdayMonthDay(m.birthday)!) }));
 
   const eventDays = [...new Set((monthEvents ?? [])
     .map((e) => new Date(e.starts_at).getDate())
@@ -127,7 +127,7 @@ async function loadDisplay(
 
   const data: DisplayData = {
     familyName,
-    members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name, color: m.color, role: m.role })),
+    members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
     events: events ?? [],
     upcoming: upcoming ?? [],
     chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
