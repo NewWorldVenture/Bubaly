@@ -1,6 +1,6 @@
 'use client';
 
-// Autonomous Prep Plans — "prepare, don't notify". Coordinated, timed plans for
+// Autonomous Prep Plans â€” "prepare, don't notify". Coordinated, timed plans for
 // what's on the horizon (trips, birthdays, expiring docs), generated from real
 // family data by the pure engine + server action. Plans + steps are real Supabase
 // rows; checking steps off and dismissing plans persist. 100% Supabase + realtime.
@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
@@ -41,15 +41,17 @@ export function PlanningModule() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: plans, loading: lp } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'prep_plans', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('prep_plans').select('*').eq('family_id', familyId).eq('status', 'active').order('target_date'),
   });
-  const { data: steps, loading: ls } = useRealtimeQuery<Step>({
+  const { data: steps, loading: stepsLoading, error: stepsError, refresh: refreshSteps } = useRealtimeQuery<Step>({
     table: 'prep_plan_steps', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('prep_plan_steps').select('*').eq('family_id', familyId).order('sort_order'),
   });
-  const loading = lp || ls;
+  const loading = plansLoading || stepsLoading;
+  const error = plansError || stepsError;
+  const refresh = () => { void refreshPlans(); void refreshSteps(); };
 
   const stepsByPlan = useMemo(() => {
     const m = new Map<string, Step[]>();
@@ -63,7 +65,7 @@ export function PlanningModule() {
     const res = await generatePrepPlansAction();
     setGenerating(false);
     if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
-    if (res.plans === 0) { toastError('Nothing on the horizon yet — add a trip, birthday, or document date.'); return; }
+    if (res.plans === 0) { toastError('Nothing on the horizon yet â€” add a trip, birthday, or document date.'); return; }
     success(`${res.plans} prep ${res.plans === 1 ? 'plan' : 'plans'} ready`);
   }
 
@@ -83,21 +85,23 @@ export function PlanningModule() {
     <div className="space-y-6">
       <PageHeader
         title="Prep Plans"
-        description="The AI looks ahead and prepares — coordinated, timed plans for what's coming, so nothing is a last-minute scramble."
-        action={<Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>}
+        description="The AI looks ahead and prepares â€” coordinated, timed plans for what's coming, so nothing is a last-minute scramble."
+        action={<Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking aheadâ€¦' : 'Generate plans'}</Button>}
       />
 
       {loading ? (
         <SkeletonList count={4} />
+      ) : error ? (
+        <ErrorState message="Could not load prep plans. Refresh and try again." onRetry={refresh} />
       ) : (plans ?? []).length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <CalendarClock className="mx-auto mb-3 size-8 text-muted" />
-          <h3 className="mb-1 text-base font-semibold">Nothing to prep — yet</h3>
+          <h3 className="mb-1 text-base font-semibold">Nothing to prep â€” yet</h3>
           <p className="mx-auto mb-4 max-w-md text-sm text-muted">
             Add a trip, a birthday, or a document with an expiry date, then generate plans. The
             assistant works backward from each date into timed, ordered steps.
           </p>
-          <Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>
+          <Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking aheadâ€¦' : 'Generate plans'}</Button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -115,7 +119,7 @@ export function PlanningModule() {
                       <h3 className="font-semibold">{p.title}</h3>
                       <p className="text-xs text-muted">
                         {d === 0 ? 'today' : d > 0 ? `in ${d} day${d === 1 ? '' : 's'}` : `${-d} day${d === -1 ? '' : 's'} ago`}
-                        {planSteps.length > 0 && ` · ${done}/${planSteps.length} done`}
+                        {planSteps.length > 0 && ` Â· ${done}/${planSteps.length} done`}
                       </p>
                     </div>
                   </div>
