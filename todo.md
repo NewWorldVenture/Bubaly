@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:35:00 -04:00
+- Last updated: 2026-07-16 12:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `c56b870e` makes Dashboard Briefing fail closed on Operating Index snapshot read failures after `463c5b60` repaired Dashboard Activity; live provider and deployment evidence remains open
+- Commit: `306aeb17` makes Command Center fail closed on family and Operating Index read failures after `c56b870e` repaired Dashboard Briefing; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0404 - Command Center hid family and Operating Index read failures as a healthy readiness score
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / command center / Supabase read boundary
+- Feature: Family Command Center
+- Route: `/dashboard/command-center`
+- File or files: `app/(app)/dashboard/command-center/page.tsx`, `tests/command-center-read-boundary.test.ts`
+- Database objects: `family_members`, `calendar_events`, `chore_assignments`, `meal_plans`, `documents`, `family_operating_index`
+- Affected roles: authenticated family members with the Command Center feature
+- Scenario: a source or Operating Index query could fail while the route computed a readiness score and issues from partial data.
+- Launch impact: users could receive a reassuring but incomplete household status.
+- Root cause: the route discarded primary query errors and assumed `loadOperatingIndex` succeeded.
+- Required remediation: preserve all source errors and catch Operating Index load failures before computing derived score, issues, or recap.
+- Implementation notes: added route-level ErrorState handling, explicit primary read checks, a try/catch around Operating Index loading, and a focused regression test.
+- Test plan: focused Command Center boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (510 files/3,270 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `306aeb17`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Command Center no longer computes readiness from a failed source or Operating Index load.
+- Remaining dependencies: verify authenticated family RLS, Operating Index availability, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0403 - Dashboard Briefing hid Operating Index snapshot read failures as an empty recap
 

@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0404 - Command Center hid family and Operating Index read failures as a healthy readiness score
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/command-center`.
+- Finding: member, event, chore, meal-plan, document, or Operating Index reads could fail while the Command Center calculated a readiness score from partial data.
+- Repair: the route now preserves all five primary read errors and catches Operating Index load failures, returning a retryable page failure before computing score or issues.
+- Evidence: focused Command Center boundary suite (1 assertion), full 510 test files/3,270 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `306aeb17`.
+- Remaining launch gate: validate authenticated family RLS, Operating Index availability, and deployed retry behavior; shared reasoning-context and broader dashboard gates remain open.
+
 ### PLA-0403 - Dashboard Briefing hid Operating Index snapshot read failures as an empty recap
 
 - Status: Resolved in source; live and deployed verification remain open.
