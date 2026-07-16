@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0441 - A-16 notification/reminder tables verified RLS tenant-scoped (guarded)
+
+- Timestamp: 2026-07-16 21:23 UTC
+- Service: Notifications / reminders tenant isolation (A-16)
+- Route: cross-cutting — `notifications`, `family_reminders`, `reminder_lists`, `push_devices`
+- Affected files: `tests/a16-notifications-rls.test.ts` (new static guard)
+- Role: any member of family B attempting to reach family A's notifications/reminders/devices
+- Scenario: confirm the A-16 data tables are tenant-scoped (no cross-family read/write) and guard that scoping against future drift
+- Severity: (verification of a CRITICAL invariant on the A-16 tables — no defect found)
+- Launch impact: notifications and reminders carry sensitive per-family activity; their RLS scoping is a launch-security invariant. This complements agent-01's global A-03 harness proof (PLA-0415: 353/353 tables RLS-enabled, family B reads 0 rows of family A, cross-family writes blocked) with an A-16-specific static guard so the scoping on these exact tables cannot silently regress
+- Root cause: n/a (verification)
+- Resolution: confirmed each A-16 table's migration-defined RLS policy is tenant-scoped — `notifications` (recipient `user_id = auth.uid()` OR `is_family_member(family_id)` for family broadcasts; writes `with check is_family_member`/`can_manage_family`), `family_reminders` (`family_id in (select family_id from family_members where user_id = auth.uid())`), `reminder_lists` (active `family_members` membership on `reminder_lists.family_id`), `push_devices` (per-owner `user_id = auth.uid()` on all four ops), and that migration 0118 force-enables RLS on every public base table via a loop. Added `tests/a16-notifications-rls.test.ts` pinning these policies to their migrations
+- Supabase impact: none (read-only verification); no schema change
+- Tests run: `tests/a16-notifications-rls.test.ts` (4 — one per table), full suite 3,338 tests, eslint clean, typecheck clean
+- Validation evidence: the guard asserts each table's RLS-enable mechanism and its family/user-scoped policy text; the live cross-family proof remains agent-01's A-03 PG16 probe (`docs/audit/rls-isolation-check.sql`)
+- Commit: (this increment)
+- Status: A-16 tenant-isolation sub-invariant Verified + guarded; A-16 unit remains In-progress (live delivery/schedule/retry matrix, and extending the live probe's per-table read-check to notifications/family_reminders, still open)
+- Remaining dependencies: add notifications/family_reminders to the A-03 live read-probe's table list (coordinate with A-03 owner); live cron delivery verification
+
 ### PLA-0440 - A-08 wallet money-safety verified: overspend prevention + hold idempotency (PAY-1) proven live
 
 - Timestamp: 2026-07-16 21:18 UTC
