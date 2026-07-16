@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0407 - Family reasoning report swallowed a family_signals read failure as "all clear"
+
+- Timestamp: 2026-07-16 20:07 UTC
+- Service: AI reasoning report (`loadReasoningReport`) consumed by every six-question reasoning surface (Briefing, Calm, Decisions, Outcomes, Agents, dashboard reasoning strips)
+- Route: `lib/reasoning/engine-server.ts`
+- Affected files: `lib/reasoning/engine-server.ts`, `tests/reasoning-engine-read-boundary.test.ts`
+- Role: any family; every surface that renders the reasoning report
+- Scenario: the `family_signals` read fails (RLS denial, drifted table, outage) while the report is assembled
+- Severity: P2
+- Launch impact: the R10 hard-signals read used `const { data } = …` inside a `try/catch`, but a PostgREST failure returns `{ data: null, error }` without throwing — so the `catch` never fired, the error was discarded, and the report silently degraded to zero signals, reporting "all clear" on the behavioral-signals dimension even when the signals table was broken
+- Root cause: the destructure dropped `error`, and the `try/catch` only guarded against thrown exceptions, not returned PostgREST errors
+- Resolution: capture `error` and log via `console.error('[reasoning-engine] family_signals read failed', { familyId, error })` while preserving the intentional degrade-to-calm behavior; also log if the read genuinely throws — consistent with the PLA-0406 shared-loader treatment
+- Supabase impact: none; read-only diagnostics only
+- Tests run: `tests/reasoning-engine-read-boundary.test.ts` (logs + produces a 6-answer report on failure; silent on success), `tests/reasoning-engine.test.ts`, full suite 512 files / 3,275 tests, eslint clean
+- Validation evidence: boundary test asserts the `[reasoning-engine] family_signals read failed` log fires and the report still returns all six answers; success path asserts the log does not fire
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; production log-based alerting on the `[reasoning-engine]` / `[reasoning-context]` signals remains a standing observability dependency
+- Remaining dependencies: route these signals into monitoring once provisioned (A-20 / LB-008 adjacent)
+
 ### PLA-0406 - Shared reasoning-context graph loader swallowed read failures with zero telemetry
 
 - Timestamp: 2026-07-16 20:00 UTC

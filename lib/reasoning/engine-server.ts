@@ -36,11 +36,19 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
   // Hard signals (R10) — the harder-to-copy behavioral patterns.
   let signals: ReasoningSignal[] = [];
   try {
-    const { data } = await sb.from('family_signals')
+    const { data, error } = await sb.from('family_signals')
       .select('kind, title, detail, score').eq('family_id', familyId).eq('status', 'active')
       .order('score', { ascending: false }).limit(20);
+    // Degrade to no signals (the engine treats missing input as calm), but log a
+    // read error — a PostgREST failure returns { data: null, error } without
+    // throwing, so a broken family_signals table would otherwise silently make
+    // every reasoning surface report "all clear" on this dimension forever.
+    if (error) console.error('[reasoning-engine] family_signals read failed', { familyId, error });
     signals = (data ?? []).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score, href: SIGNAL_HREF }));
-  } catch { signals = []; }
+  } catch (err) {
+    console.error('[reasoning-engine] family_signals read threw', { familyId, err });
+    signals = [];
+  }
 
   return answerFamilyQuestions({ orchestrator, insights, signals, nextActions }, now);
 }
