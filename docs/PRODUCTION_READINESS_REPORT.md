@@ -1,6 +1,6 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 08:22 America/New_York
+Audit snapshot: 2026-07-16 08:26 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
@@ -118,8 +118,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - First-family provisioning is serialized locally in migration `0212`: concurrent protected requests now
   use a per-user advisory lock around the membership check and initial household writes. Remote application
   and an authenticated two-request first-login drill remain launch dependencies.
-- Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f6718-176b-7afb-b940-546891799a83`); local Docker/Supabase status is unavailable.
+- Latest live evidence (2026-07-16 08:26 America/New_York): all 11 schema probes pass; public Auth health
+  passes, but Auth Admin users still returns HTTP 500 `Database error finding users` (request
+  `019f6ae2-b616-7860-9608-8f23138c5e72`); local Docker/Supabase status is unavailable.
 - Shared auth now logs provider and super-admin lookup failures, authenticated context treats auth reads as unavailable,
   OAuth callback membership failures fail closed, and the admin shell shows non-blocking warnings for profile, invite,
   and notification read failures instead of silently substituting defaults.

@@ -884,7 +884,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ### PLA-B001 - Auth Admin health is unverified
 
-- Timestamp: 2026-07-15
+- Timestamp: 2026-07-16 08:26 America/New_York (latest retest)
 - Service: Authentication and tenant operations
 - Route: Supabase Auth Admin users endpoint
 - Affected files: `scripts/audit-supabase-auth.mjs`, auth configuration and deployment secrets
@@ -892,11 +892,11 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Scenario: production user administration and account lifecycle are exercised
 - Severity: P0
 - Launch impact: cannot certify account creation, recovery, admin control, or role lifecycle
-- Root cause: live endpoint has historically returned HTTP 500
+- Root cause: live endpoint currently returns HTTP 500 `Database error finding users` while public Auth health passes
 - Resolution: none yet; tracked as `LB-001`
 - Supabase impact: Auth Admin health and user lifecycle remain unverified
-- Tests run: historical `npm.cmd run db:audit:auth`
-- Validation evidence: `docs/LAUNCH_BLOCKERS.md`
+- Tests run: `npm.cmd run db:audit:auth` (public Auth health passed; Admin users failed with request `019f6ae2-b616-7860-9608-8f23138c5e72`)
+- Validation evidence: `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCTION_READINESS_REPORT.md`
 - Commit: n/a
 - Status: Open
 - Remaining dependencies: Supabase operator diagnosis and live retest
