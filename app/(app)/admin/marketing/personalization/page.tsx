@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Sparkles, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
 import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/personalization';
@@ -15,6 +17,16 @@ type Rule = Tables<'marketing_personalization_rules'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-black sm:text-2xl">Personalization</h1>
+      <ErrorState message="Could not load personalization rules from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/personalization" className="text-sm font-medium text-brand-text underline">Refresh personalization</Link>
+    </div>
+  );
+}
+
 function matchSummary(m: AudienceMatch): string {
   const parts: string[] = [];
   if (m.source?.length) parts.push(`source: ${m.source.join('/')}`);
@@ -24,19 +36,23 @@ function matchSummary(m: AudienceMatch): string {
   if (m.paths?.length) parts.push(`path: ${m.paths.join('/')}`);
   if (m.countries?.length) parts.push(`country: ${m.countries.join('/')}`);
   if (typeof m.returning === 'boolean') parts.push(m.returning ? 'returning' : 'new visitor');
-  if (m.minSessions) parts.push(`≥${m.minSessions} sessions`);
-  return parts.length ? parts.join(' · ') : 'Everyone (default)';
+  if (m.minSessions) parts.push(`â‰¥${m.minSessions} sessions`);
+  return parts.length ? parts.join(' Â· ') : 'Everyone (default)';
 }
 
 export default async function PersonalizationPage() {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_personalization_rules')
     .select('*')
     .is('deleted_at', null)
     .order('slot')
     .order('priority', { ascending: false })
     .limit(300);
+  if (error) {
+    console.error('[admin-marketing-personalization] rule read failed', error);
+    return <ReadFailure />;
+  }
   const rules = (data ?? []) as Rule[];
 
   const bySlot = new Map<string, Rule[]>();
@@ -109,7 +125,7 @@ export default async function PersonalizationPage() {
                       </p>
                       <p className="mt-1 text-xs text-muted">{matchSummary(m)}</p>
                       {(v.headline || v.cta_label) && (
-                        <p className="mt-1 truncate text-xs text-fg/80">→ {v.headline ?? ''}{v.cta_label ? ` [${v.cta_label}]` : ''}</p>
+                        <p className="mt-1 truncate text-xs text-fg/80">â†’ {v.headline ?? ''}{v.cta_label ? ` [${v.cta_label}]` : ''}</p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -119,7 +135,7 @@ export default async function PersonalizationPage() {
                         </button>
                       </form>
                       <form action={deleteRuleAction.bind(null, r.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">âœ•</button>
                       </form>
                     </div>
                   </div>
