@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Intelligence and Briefing Read Boundaries
+
+- Focused household boundary suite: 1 file, 9 assertions passed.
+- Full `npm.cmd test -- --run`: 477 test files, 3,244 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Intelligence Network preferences and Briefing Kitchen Mode now surface retryable read failures before privacy controls or time-sensitive context are rendered.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `9682ff06`.
+
 ## Latest Local Evidence - Records and Routines Read Boundaries
 
 - Focused household boundary suite: 1 file, 8 assertions passed.
