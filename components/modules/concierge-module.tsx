@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
@@ -55,7 +55,7 @@ function fmtCents(cents: number | null) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 
-// ─── Main Module ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function ConciergeModule() {
   const { familyId, userId, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
@@ -67,7 +67,7 @@ export function ConciergeModule() {
   const [showAddPlan, setShowAddPlan] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { data: plans, loading: plansLoading, refresh: refreshPlans } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'concierge_plans', familyId, deps: [familyId],
     fetcher: async (supabase) => supabase.from('concierge_plans').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -144,13 +144,13 @@ export function ConciergeModule() {
   const activePlans  = plans.filter(p => !['completed', 'cancelled'].includes(p.status));
   const pastPlans    = plans.filter(p => ['completed', 'cancelled'].includes(p.status));
 
-  return (
+  return plansLoading ? <SkeletonList /> : plansError ? <ErrorState message="Could not load concierge plans. Refresh and try again." onRetry={refreshPlans} /> : (
     <div className="module-with-sidebar">
-      {/* ── Main column ── */}
+      {/* â”€â”€ Main column â”€â”€ */}
       <div className="module-main">
         <div className="module-page">
           {activeKind ? (
-            /* ── Chat view ── */
+            /* â”€â”€ Chat view â”€â”€ */
             <div className="flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
               <div className="flex items-center gap-3 mb-4">
                 <button onClick={() => { setActiveKind(null); setMessages([]); }}
@@ -214,7 +214,7 @@ export function ConciergeModule() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
-                  placeholder="Tell me what you'd like to plan…"
+                  placeholder="Tell me what you'd like to planâ€¦"
                   rows={2}
                   className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
                 />
@@ -226,7 +226,7 @@ export function ConciergeModule() {
               </div>
             </div>
           ) : (
-            /* ── Home view ── */
+            /* â”€â”€ Home view â”€â”€ */
             <>
               {/* Hero */}
               <div className="mb-6 overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-violet-500/5 to-transparent p-6">
@@ -242,7 +242,7 @@ export function ConciergeModule() {
                       </div>
                     </div>
                     <p className="text-sm text-muted max-w-sm">
-                      Your personal family concierge — plan getaways, book restaurants, coordinate date nights, and discover family activities.
+                      Your personal family concierge â€” plan getaways, book restaurants, coordinate date nights, and discover family activities.
                     </p>
                   </div>
                 </div>
@@ -335,14 +335,14 @@ export function ConciergeModule() {
                 </div>
               )}
 
-              {/* Autopilot — mobile mount (the desktop mount lives in the sidebar). */}
+              {/* Autopilot â€” mobile mount (the desktop mount lives in the sidebar). */}
               <AutopilotPanel className="lg:hidden" />
             </>
           )}
         </div>
       </div>
 
-      {/* ── Sidebar ── */}
+      {/* â”€â”€ Sidebar â”€â”€ */}
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {selectedPlan ? (
           <PlanDetail plan={selectedPlan} familyId={familyId} userId={userId} onClose={() => setSelectedPlan(null)} onDelete={deletePlan} onRefresh={refreshPlans} />
@@ -377,13 +377,13 @@ export function ConciergeModule() {
               <p className="mb-3 text-sm font-semibold">Inspiration</p>
               <div className="space-y-2">
                 {[
-                  { emoji: '🏖️', text: 'Plan a beach trip this summer' },
-                  { emoji: '🍕', text: 'Find a new family pizza spot' },
-                  { emoji: '🎭', text: 'Book a show or event nearby' },
-                  { emoji: '🌲', text: 'Camping or hiking weekend' },
-                  { emoji: '💑', text: 'Surprise date night ideas' },
+                  { emoji: 'ðŸ–ï¸', text: 'Plan a beach trip this summer' },
+                  { emoji: 'ðŸ•', text: 'Find a new family pizza spot' },
+                  { emoji: 'ðŸŽ­', text: 'Book a show or event nearby' },
+                  { emoji: 'ðŸŒ²', text: 'Camping or hiking weekend' },
+                  { emoji: 'ðŸ’‘', text: 'Surprise date night ideas' },
                 ].map((tip, i) => (
-                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: `I'd love to help with that! Tell me more about "${tip.text}" — what's your timeline and budget?` }]); setInput(tip.text); }}
+                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: `I'd love to help with that! Tell me more about "${tip.text}" â€” what's your timeline and budget?` }]); setInput(tip.text); }}
                     className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface/60 transition">
                     <span className="text-base">{tip.emoji}</span>
                     <span className="text-muted">{tip.text}</span>
@@ -403,7 +403,7 @@ export function ConciergeModule() {
   );
 }
 
-// ─── Plan Detail ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Plan Detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
@@ -418,13 +418,13 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     const { error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id);
     if (error) { toastError(describeDbError(error)); return; }
     onRefresh();
-    // The autonomous execution loop: accepting a plan (→ booked/confirmed) lets
-    // Bubaly execute its write-backs per the family's autopilot dial — done
+    // The autonomous execution loop: accepting a plan (â†’ booked/confirmed) lets
+    // Bubaly execute its write-backs per the family's autopilot dial â€” done
     // instantly, queued for approval, or left manual. Audited either way.
     try {
       const res = await planAcceptedAction(plan.id, prev, status);
       if (res.ok && res.summary) {
-        success(res.mode === 'auto' ? res.summary : `Queued for approval — check the Autopilot panel`);
+        success(res.mode === 'auto' ? res.summary : `Queued for approval â€” check the Autopilot panel`);
       }
     } catch { /* the loop is best-effort; the status change already saved */ }
   }
@@ -493,7 +493,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   );
 }
 
-// ─── Add Plan Modal ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Add Plan Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function AddPlanModal({ familyId, userId, onClose, onSaved }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
@@ -560,11 +560,11 @@ function AddPlanModal({ familyId, userId, onClose, onSaved }: {
           {id => <Input id={id} name="location" placeholder="City, venue, or destination" />}
         </Field>
         <Field label="Notes">
-          {id => <Textarea id={id} name="description" rows={3} placeholder="Any details, ideas, or requirements…" />}
+          {id => <Textarea id={id} name="description" rows={3} placeholder="Any details, ideas, or requirementsâ€¦" />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Add Plan'}</Button>
+          <Button type="submit" loading={loading}>{loading ? 'Savingâ€¦' : 'Add Plan'}</Button>
         </div>
       </form>
     </Modal>
