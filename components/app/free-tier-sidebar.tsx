@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Star, ListPlus, ListX, Lock } from 'lucide-react';
+import { Star, ListPlus, ListX, Lock, RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
@@ -145,6 +145,22 @@ function useSidebarNav() {
     return saveSidebarNavAction({ keys: clean });
   }, [childMap]);
 
+  /** Reset the whole sidebar to the plan default — top-level keys AND every
+   *  group's sub-page layout — matching the Settings › Navigation Choices reset. */
+  const resetToDefault = useCallback((): Promise<{ ok: boolean; error?: string }> => {
+    const clean = [...DEFAULT_SIDEBAR_NAV_KEYS];
+    setKeysState(clean);
+    setChildMap({});
+    try {
+      window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean));
+      window.localStorage.setItem(SIDEBAR_NAV_CHILDREN_STORAGE_KEY, JSON.stringify({}));
+    } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: clean, children: {} } }));
+    }
+    return saveSidebarNavAction({ keys: clean, children: {} });
+  }, []);
+
   const items = useMemo(
     () => resolveNavKeys(keys, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS)
       .map((href) => ALL_SERVICES_BY_HREF.get(href))
@@ -161,15 +177,16 @@ function useSidebarNav() {
     [keys, childMap],
   );
 
-  return { items, keys, persist };
+  return { items, keys, childMap, persist, resetToDefault };
 }
 
 /** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles and a
  *  "Pin all in my plan" / "Unpin all" header for the member's tier. */
-function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinAll, onUnpinAll, busy }: {
+function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinAll, onUnpinAll, onReset, isDefault, busy }: {
   open: boolean; onClose: () => void; onLocked: (item: NavItem) => void;
   pinned: Set<string>; onTogglePin: (href: string) => void;
-  onPinAll: (hrefs: string[]) => void; onUnpinAll: (hrefs: string[]) => void; busy: boolean;
+  onPinAll: (hrefs: string[]) => void; onUnpinAll: (hrefs: string[]) => void;
+  onReset: () => void; isDefault: boolean; busy: boolean;
 }) {
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const manager = isManager(role);
@@ -210,6 +227,14 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
           >
             <ListX className="h-3.5 w-3.5" /> {allPinned ? 'Unpin all' : 'Unpin these'}
+          </button>
+          <button
+            type="button" disabled={busy || isDefault}
+            onClick={onReset}
+            title="Reset your sidebar to your plan’s default layout"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Reset
           </button>
         </div>
       </div>
@@ -294,8 +319,16 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   const [allOpen, setAllOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const liveUnread = useLiveUnread(unreadMessages, familyId, userId);
-  const { items: sidebarNav, keys, persist } = useSidebarNav();
+  const { items: sidebarNav, keys, childMap, persist, resetToDefault } = useSidebarNav();
   const manager = isManager(role);
+
+  // Already on the plan default? (same top-level keys + no sub-page overrides.)
+  const isDefaultLayout = useMemo(
+    () => keys.length === DEFAULT_SIDEBAR_NAV_KEYS.length
+      && keys.every((k, i) => k === DEFAULT_SIDEBAR_NAV_KEYS[i])
+      && Object.keys(childMap).length === 0,
+    [keys, childMap],
+  );
 
   // Render list: role-visible, payment-tier-gated (a pinned above-plan module
   // renders locked with the upgrade prompt, never as a dead link). Hidden/off
@@ -335,6 +368,15 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   const unpinAll = useCallback((hrefs: string[]) => {
     void save(removeNavKeys(keys, hrefs), 'Unpinned those services.');
   }, [keys, save]);
+
+  const reset = useCallback(async () => {
+    if (isDefaultLayout) return;
+    setBusy(true);
+    const res = await resetToDefault();
+    setBusy(false);
+    if (!res.ok) { toastError(res.error ?? 'Could not reset your sidebar.'); return; }
+    success('Sidebar reset to your plan’s default.');
+  }, [isDefaultLayout, resetToDefault, toastError, success]);
 
   return (
     <>
@@ -392,6 +434,8 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         onTogglePin={togglePin}
         onPinAll={pinAll}
         onUnpinAll={unpinAll}
+        onReset={reset}
+        isDefault={isDefaultLayout}
         busy={busy}
       />
     </>
