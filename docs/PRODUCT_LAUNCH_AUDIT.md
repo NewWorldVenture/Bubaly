@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0365 - Coordination modules hid failed reads as empty or partial states
+
+- Timestamp: 2026-07-16 08:06 America/New_York
+- Service: Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/concierge-module.tsx`, `components/modules/voice-module.tsx`, `components/modules/next-actions-module.tsx`, `components/modules/voting-module.tsx`, `components/modules/weekend-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed incomplete history, or allowed planning, voting, and weekend summaries to derive from partial query results.
+- Severity: P1
+- Launch impact: families could miss saved plans, voice captures, next actions, poll options/votes, budgets, or local events while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Resolution: all five modules now surface retryable ErrorState UI; Next Actions, Voting, and Weekend Planner coordinate every required read before rendering derived state.
+- Supabase impact: no schema change; existing family-scoped planning, AI, voting, and local-event reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (7 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 477 test files, 3,242 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `0b228692`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed coordination verification
+
 ### PLA-0364 - Daily household modules hid failed reads as empty or partial states
 
 - Timestamp: 2026-07-16 07:56 America/New_York
