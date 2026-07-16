@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
@@ -32,7 +32,7 @@ export function BehaviorModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: logs, loading } = useRealtimeQuery<Log>({
+  const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'behavior_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
   });
@@ -95,6 +95,7 @@ export function BehaviorModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load behavior logs. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -171,7 +172,7 @@ export function BehaviorModule() {
                   ))}
                 </div>
                 {s.topCategories.length > 0 && (
-                  <p className="mt-3 flex items-center gap-1 text-xs text-muted"><TrendingUp className="h-3 w-3" /> {s.topCategories.map((c) => `${c.category} (${c.count})`).join(' · ')}</p>
+                  <p className="mt-3 flex items-center gap-1 text-xs text-muted"><TrendingUp className="h-3 w-3" /> {s.topCategories.map((c) => `${c.category} (${c.count})`).join(' Â· ')}</p>
                 )}
               </div>
             );
@@ -195,8 +196,8 @@ export function BehaviorModule() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm">
                   <span className="font-medium capitalize">{l.category}</span>
-                  {m ? ` · ${m.display_name}` : ''}
-                  {l.points ? <span className={l.points > 0 ? 'text-success' : 'text-danger'}> · {l.points > 0 ? '+' : ''}{l.points}</span> : null}
+                  {m ? ` Â· ${m.display_name}` : ''}
+                  {l.points ? <span className={l.points > 0 ? 'text-success' : 'text-danger'}> Â· {l.points > 0 ? '+' : ''}{l.points}</span> : null}
                 </p>
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
@@ -213,7 +214,7 @@ export function BehaviorModule() {
             <Field label="Child">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">â€” Select â€”</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
@@ -251,3 +252,4 @@ export function BehaviorModule() {
     </div>
   );
 }
+
