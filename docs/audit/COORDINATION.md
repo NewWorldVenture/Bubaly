@@ -46,7 +46,7 @@ Last board update: **2026-07-16 21:00 UTC** · by `agent-03`
 |--------|-----------------|------------------|----------------------|
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
-| `agent-02` | Opus 4.8 — display service-tiles (shipped `375e97ec`), now A-10 meals/food | 2026-07-16 20:55 | 2026-07-16 20:55 |
+| `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food+meals read boundaries (PLA-0418/0433) | 2026-07-16 20:55 | 2026-07-16 21:12 |
 | `agent-03` | Opus 4.8 — silent-failure sweep (PLA-0405..0413,0417 on A-05/12/15/17/18 helpers); A-16 notifications engine (PLA-0432) | 2026-07-16 21:00 | 2026-07-16 21:05 |
 | `agent-04` | _free — claim me_ | | |
 
@@ -98,7 +98,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-07 | — | OPEN | | | | |
 | A-08 | — | OPEN | | | | Codex did PAY-1/PAY-2; full flow open |
 | A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:12 | `a5fa39e3` | VERIFIED: webhook(sig/replay/retry/self-heal), checkout(auth/RBAC/validate/rate-limit/trusted-url), all-routes RBAC, slug↔planLevel, downgrade rule (Plus→Basic only; Free unreachable via change-plan — already tested), /pay flow wired. 14 new guards. OPEN ONLY: live Stripe test-mode smoke (needs keys) |
-| A-10 | `agent-02` | CLAIMED | 2026-07-16 20:55 | 2026-07-16 20:55 | — | Meals/groceries/food: silent-read + write-boundary sweep |
+| A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:12 | `08f3b50b`+ | Food hub degrade-and-log (PLA-0418) + Meals module secondary reads log (PLA-0433); grocery/pantry/nutrition + live RLS/seed remain |
 | A-11 | — | OPEN | | | | |
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |

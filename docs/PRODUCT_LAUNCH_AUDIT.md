@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0433 - Meals module secondary reads swallowed failures into silent empty lists (A-10)
+
+- Timestamp: 2026-07-16 21:12 UTC
+- Service: Meals / Groceries / Food (A-10) — the Meal Planning module's client reads
+- Route: `/dashboard/meals` (`components/modules/meals-module.tsx`)
+- Affected files: `components/modules/meals-module.tsx`, `tests/meals-module-read-boundary.test.ts` (new)
+- Role: all family roles (any member with the Meals feature)
+- Scenario: the "add from your meals" library read (`meals`) or the weekly dinner-vote panel reads (`meal_votes`/`meal_vote_options`/`meal_vote_ballots`) fail via RLS/outage
+- Severity: P3 (secondary/enhancement client reads — degrade is acceptable, silence is not)
+- Launch impact: `reloadLibrary` did `.then(({ data }) => setLibrary(data ?? []))` and `loadVote` used `options ?? []`/`ballots ?? []`, dropping the error — so a failing library read left the meal-picker mysteriously empty and a failing vote read hid an active "what's for dinner" vote, both with zero signal in logs
+- Root cause: the two secondary reads destructured only `data` and never inspected the PostgREST `error`
+- Resolution: both reads now capture `error` and `console.error('[meals] library/vote read failed', …)` before degrading; the primary `meal_plans` read was already fail-visible via `useRealtimeQuery` → `<ErrorState onRetry>` (unchanged), and all writes already `toastError(describeDbError(...))`
+- Supabase impact: none — reads unchanged; failures now observable
+- Tests run: `tests/meals-module-read-boundary.test.ts` (static guards that both reads log and the old silent `.then(({ data }) => setLibrary(data ?? []))` is gone); `tsc --noEmit` clean; `eslint` clean on the touched file; full `vitest` suite (below)
+- Validation evidence: guard test asserts the two `console.error('[meals] … read failed'` calls exist and the silent pattern is absent
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`
+- Remaining dependencies: A-10 still In-progress — grocery/pantry/nutrition module client reads, CRUD/AI action coverage, live cross-family RLS proof, and the ≥500-row relational seed check remain
+
 ### PLA-0432 - Notification generation engine silently skipped whole categories on a read failure (A-16)
 
 - Timestamp: 2026-07-16 21:05 UTC
