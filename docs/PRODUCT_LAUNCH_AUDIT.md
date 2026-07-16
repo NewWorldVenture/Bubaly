@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
+
+- Timestamp: 2026-07-16 06:51 America/New_York
+- Service: Family Location
+- Route: `/dashboard/locator`
+- Affected files: `components/modules/locator-module.tsx`, `tests/family-location-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: one or more location reads could fail while the map and live-location sections rendered from empty or partial arrays.
+- Severity: P1
+- Launch impact: families could miss a member location, geofence, or recent safety history while the page appeared usable.
+- Root cause: the module only gated on the locations query loading state and ignored errors from all three required reads.
+- Resolution: Location now waits for all three reads and renders sanitized retryable ErrorState UI with a coordinated retry before the map.
+- Supabase impact: no schema change; existing family-scoped location reads now have an explicit page-level failure contract.
+- Tests run: `tests/family-location-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 472 test files, 3,227 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `632f677d`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed family-location verification
+
 ### PLA-0354 - Play Dates hid family scheduling read failures as no play dates
 
 - Timestamp: 2026-07-16 06:45 America/New_York
@@ -210,25 +229,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: all three routes now log failures and render sanitized retry states before showing conflict or account status.
 - Supabase impact: no schema change; family-scoped sync conflict and account reads now have explicit failure contracts.
 - Tests run: `tests/sync-route-read-boundaries.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 463 test files, 3,209 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `ec14b828`
-- Status: Resolved in code; live provider callbacks, conflict-resolution, RLS, role, browser, and deployed evidence remains open
-- Remaining dependencies: provider sandbox callbacks, conflict-resolution action drills, cross-family RLS, browser, backup, and deployed Sync verification
-
-### PLA-0343 - Family Sync showed zero health and history after required reads failed
-
-- Timestamp: 2026-07-15 16:16 America/New_York
-- Service: Family Sync hub and synchronization history
-- Route: `/dashboard/sync`, `/dashboard/sync/history`
-- Affected files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/history/page.tsx`, `tests/sync-read-boundary.test.ts`
-- Role: authenticated family members and household integration operators
-- Scenario: connection, calendar, conflict, run, or audit-history reads could fail while the pages rendered zero health metrics or â€œno runsâ€ empty states.
-- Severity: P1
-- Launch impact: families could miss provider outages, open conflicts, or failed synchronization and assume their data was current.
-- Root cause: query results were used without checking their error fields.
-- Resolution: all required hub and history reads now fail visibly with sanitized route-specific retry states before health or history data is derived.
-- Supabase impact: no schema change; family-scoped sync operational reads now have explicit failure contracts.
-- Tests run: `tests/sync-read-boundary.test.ts` (1 focused test); fu…24355 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Validation …24761 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
