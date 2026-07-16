@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0354 - Play Dates hid family scheduling read failures as no play dates
+
+- Timestamp: 2026-07-16 06:45 America/New_York
+- Service: Play Dates
+- Route: `/dashboard/family/play-dates`
+- Affected files: `components/family/play-dates-view.tsx`, `tests/family-safety-read-boundaries.test.ts`
+- Role: authenticated family members and household planners
+- Scenario: a failed `play_dates` read could render â€œNo play dates yet,â€ indistinguishable from a household with no scheduled social activity.
+- Severity: P1
+- Launch impact: families could miss upcoming child-safety and pickup coordination details.
+- Root cause: the view ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Resolution: Play Dates now renders sanitized retryable ErrorState UI before the empty schedule on any read failure.
+- Supabase impact: no schema change; the existing family-scoped schedule read now has an explicit failure contract.
+- Tests run: `tests/family-safety-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 471 test files, 3,226 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `4f5edc92`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed family-safety verification
+
 ### PLA-0353 - Driving Safety and Find Phone hid family location read failures
 
 - Timestamp: 2026-07-16 06:37 America/New_York
@@ -209,25 +228,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Root cause: query results were used without checking their error fields.
 - Resolution: all required hub and history reads now fail visibly with sanitized route-specific retry states before health or history data is derived.
 - Supabase impact: no schema change; family-scoped sync operational reads now have explicit failure contracts.
-- Tests run: `tests/sync-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation evidence: 462 test files, 3,208 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `91394c90`
-- Status: Resolved in code; live provider callbacks, recovery/conflict, RLS, role, browser, and deployed evidence remains open
-- Remaining dependencies: provider sandbox callbacks, retry/conflict drills, cross-family RLS, browser, backup, and deployed Sync verification
-
-### PLA-0342 - Admin Users rendered partial access data after required reads failed
-
-- Timestamp: 2026-07-15 16:12 America/New_York
-- Service: Super Admin Users & Families access management
-- Route: `/admin/users`
-- Affected files: `app/(app)/admin/users/page.tsx`, `tests/admin-users-read-boundary.test.ts`
-- Role: Super Admin and access-management operators
-- Scenario: any required profile, family, membership, subscription, invitation, role, permission, or super-admin read could fail while the page rendered partial users, empty filters, or misleading access counts.
-- Severity: P1
-- Launch impact: operators could change access based on incomplete or stale membership and permission data.
-- Root cause: query failures were collected into a warning banner but the page continued to derive metrics and rows from partial results.
-- Resolution: the page now logs the failure and renders a sanitized retryable ErrorState before any access data is derived or shown.
-- Supabase impact: no sch…23967 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Tests run: `tests/sync-read-boundary.test.ts` (1 focused test); fu…24355 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
