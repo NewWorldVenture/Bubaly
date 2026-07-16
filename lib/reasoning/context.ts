@@ -155,6 +155,12 @@ export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<G
       .select('id, source_id, target_id, relation, weight, attributes')
       .eq('family_id', familyId).limit(8000),
   ]);
+  // Graceful degradation is intentional (the graph is a reasoning *enhancement*,
+  // not a source of truth), but a swallowed read error would silently make every
+  // AI surface reason over an empty graph forever with no signal. Log the failure
+  // so a drifted/broken graph table is observable while still degrading to empty.
+  if (ents.error) console.error('[reasoning-context] graph_entities read failed', { familyId, error: ents.error });
+  if (edges.error) console.error('[reasoning-context] graph_edges read failed', { familyId, error: edges.error });
   // R3: keep the graph current at the point of use. Fire-and-forget + dynamic
   // import so context.ts's static graph stays free of `server-only`/`next` deps
   // (the pure core + its tests still import cleanly). No-op outside a request.

@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0406 - Shared reasoning-context graph loader swallowed read failures with zero telemetry
+
+- Timestamp: 2026-07-16 20:00 UTC
+- Service: AI reasoning substrate (Knowledge Graph → every AI surface: FOI, Concierge, Briefing, Playbook, Calm, Decisions, Prep-Plans, Agents)
+- Route: `lib/reasoning/context.ts` (`loadFamilyGraph`), consumed by all graph-backed dashboard/AI routes
+- Affected files: `lib/reasoning/context.ts`, `tests/reasoning-context-read-boundary.test.ts`
+- Role: any family; every authenticated AI surface that calls `loadFamilyContext`
+- Scenario: `graph_entities` / `graph_edges` read fails (drifted table, RLS denial, outage) while an AI surface loads the family reasoning context
+- Severity: P2
+- Launch impact: graceful degradation to an empty graph is intentional (the graph is a reasoning *enhancement*, not a source of truth, so it must never crash a surface), but the read error was swallowed with `?? []` and no log — a persistently broken graph table would silently make every AI surface reason over 0 entities forever with no operational signal
+- Root cause: `loadFamilyGraph` mapped `ents.data ?? []` / `edges.data ?? []` and discarded `ents.error` / `edges.error` entirely
+- Resolution: log each read failure via the established `console.error('[reasoning-context] … read failed', { familyId, error })` convention (86-site pattern in `lib/`) while preserving the intentional empty-graph degradation — resilience unchanged, observability restored
+- Supabase impact: none; read-only diagnostics only
+- Tests run: `tests/reasoning-context-read-boundary.test.ts` (degrades-without-throwing + logs on failure, silent on success), `tests/reasoning-context.test.ts`, full suite 511 files / 3,273 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test asserts an empty graph is returned (no throw) and both `[reasoning-context]` failure logs fire; success path asserts rows map and nothing is logged
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live drifted-table alerting wiring remains a standing observability dependency
+- Remaining dependencies: route the `[reasoning-context]` signal into production log-based alerting once monitoring is provisioned (A-20 / LB-008 adjacent)
+
 ### PLA-0405 - Control-byte corruption in the audit ledger and the Google sync content hash
 
 - Timestamp: 2026-07-16 19:50 UTC
