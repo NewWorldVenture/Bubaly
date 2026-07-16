@@ -57,7 +57,11 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
 export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId: string | null, now: Date = new Date()): Promise<ReasoningReport> {
   const report = await loadReasoningReport(sb, familyId, now);
   try {
-    await sb.from('reasoning_snapshots').upsert({
+    // Best-effort persistence — the report is returned regardless — but a
+    // PostgREST write failure returns { error } without throwing, so we must
+    // inspect it: a broken reasoning_snapshots table would otherwise silently
+    // drop every daily snapshot and break "since yesterday" trends with no signal.
+    const { error } = await sb.from('reasoning_snapshots').upsert({
       family_id: familyId,
       as_of_date: now.toISOString().slice(0, 10),
       all_clear: report.allClear,
@@ -65,6 +69,7 @@ export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId:
       report: reasoningSummary(report) as never,
       created_by: userId,
     }, { onConflict: 'family_id,as_of_date' });
-  } catch { /* snapshot is best-effort */ }
+    if (error) console.error('[reasoning-engine] reasoning_snapshots upsert failed', { familyId, error });
+  } catch (err) { console.error('[reasoning-engine] reasoning_snapshots upsert threw', { familyId, err }); }
   return report;
 }

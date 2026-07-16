@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { loadReasoningReport } from '@/lib/reasoning/engine-server';
+import { loadAndSnapshotReasoning, loadReasoningReport } from '@/lib/reasoning/engine-server';
 
 // A chainable query stub: select/eq/order/limit all return the chain, and the
 // chain is awaitable, resolving to the supplied PostgREST-shaped result.
@@ -52,5 +52,46 @@ describe('loadReasoningReport family_signals read boundary', () => {
 
     const logged = err.mock.calls.map((c) => String(c[0]));
     expect(logged).not.toContain('[reasoning-engine] family_signals read failed');
+  });
+});
+
+// A chain whose terminal `.upsert()` resolves to the supplied result; other
+// tables throw so the report sources degrade cleanly and isolate the write path.
+function snapshotSupabase(upsertResult: { error: unknown }): SupabaseClient<Database> {
+  return {
+    from: (table: string) => {
+      if (table === 'reasoning_snapshots') {
+        return {
+          upsert: () => Promise.resolve({ data: null, error: upsertResult.error }),
+        };
+      }
+      if (table === 'family_signals') return signalsChain({ data: [], error: null });
+      throw new Error(`unmocked table ${table}`);
+    },
+  } as unknown as SupabaseClient<Database>;
+}
+
+describe('loadAndSnapshotReasoning snapshot write boundary', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('logs the upsert failure and still returns the report', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = snapshotSupabase({ error: { message: 'relation reasoning_snapshots does not exist' } });
+
+    const report = await loadAndSnapshotReasoning(supabase, 'fam-1', null, new Date('2026-07-16T12:00:00Z'));
+
+    expect(report.answers).toHaveLength(6);
+    const logged = err.mock.calls.map((c) => String(c[0]));
+    expect(logged).toContain('[reasoning-engine] reasoning_snapshots upsert failed');
+  });
+
+  it('does not log a snapshot failure when the upsert succeeds', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = snapshotSupabase({ error: null });
+
+    await loadAndSnapshotReasoning(supabase, 'fam-1', null, new Date('2026-07-16T12:00:00Z'));
+
+    const logged = err.mock.calls.map((c) => String(c[0]));
+    expect(logged).not.toContain('[reasoning-engine] reasoning_snapshots upsert failed');
   });
 });

@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0408 - Daily reasoning snapshot silently dropped write failures, breaking "since yesterday" trends
+
+- Timestamp: 2026-07-16 20:10 UTC
+- Service: AI reasoning history (`loadAndSnapshotReasoning`) — persists the daily snapshot that powers "since yesterday" reasoning deltas
+- Route: `lib/reasoning/engine-server.ts`
+- Affected files: `lib/reasoning/engine-server.ts`, `tests/reasoning-engine-read-boundary.test.ts`
+- Role: any family; every surface that shows day-over-day reasoning trends
+- Scenario: the `reasoning_snapshots` upsert fails (drifted table, RLS denial, outage) while persisting today's snapshot
+- Severity: P2
+- Launch impact: the upsert was awaited inside a `try/catch`, but a PostgREST write failure returns `{ error }` without throwing — so the `catch` never fired, the result was discarded, and a broken `reasoning_snapshots` table would silently drop every daily snapshot, leaving "since yesterday" trend comparisons permanently empty with no operational signal
+- Root cause: the upsert result was not destructured or inspected; only thrown exceptions were guarded
+- Resolution: inspect the returned `{ error }` and log via `console.error('[reasoning-engine] reasoning_snapshots upsert failed', { familyId, error })` (and log a genuine throw) while preserving the best-effort "return the report regardless" behavior — consistent with PLA-0406/0407
+- Supabase impact: none; the write itself is unchanged, only its failure is now observable
+- Tests run: `tests/reasoning-engine-read-boundary.test.ts` (now 4 — read + write boundaries, failure logs + success silence), full suite 512 files / 3,277 tests, eslint clean
+- Validation evidence: boundary test asserts the `reasoning_snapshots upsert failed` log fires on error and the report is still returned; success path asserts the log does not fire
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; production log-based alerting on the `[reasoning-engine]` signals remains a standing observability dependency
+- Remaining dependencies: route these signals into monitoring once provisioned (A-20 / LB-008 adjacent)
+
 ### PLA-0407 - Family reasoning report swallowed a family_signals read failure as "all clear"
 
 - Timestamp: 2026-07-16 20:07 UTC
