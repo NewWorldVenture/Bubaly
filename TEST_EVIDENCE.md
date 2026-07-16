@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Finances Read Boundary
+
+- Focused finance boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test`: 475 test files, 3,231 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Finances now retries all five required reads before deriving balances, spending, bills, and savings metrics.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Decision and Health Visit Read Boundaries
 
 - Focused household boundary suite: 1 file, 2 assertions passed.
@@ -265,22 +279,7 @@ Audit date: 2026-07-15
 - `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
 - `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
 - `git diff --check`: passed.
-- `/admin` now preserves all required dashboard query failures and recent-activity actor failures instead of rendering zero/empty command-center metrics.
-- Live Super Admin role/browser, alert-routing, Auth/RLS, backup, and deployment evidence remain open.
-
-## Latest Local Evidence - Admin Security/Auth Read Boundary
-
-- Focused security suite: 1 file, 1 test passed.
-- Full `npm.cmd test`: 458 test files, 3,204 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `git diff --check`: passed.
-- `/admin/security` now preserves Auth Admin, invite, audit, family, and actor-profile failures and renders a retryable sanitized error state.
-- Live Auth Admin health, authenticated role/RLS, browser, backup,…26615 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `/admin` now preserves all required dashboard query failures and recent-activity actor failures instead of rendering zero/empty command-center metric…26858 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
