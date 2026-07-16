@@ -2,6 +2,21 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Coordination Read Boundaries
+
+- Focused household boundary suite: 1 file, 7 assertions passed.
+- Full `npm.cmd test -- --run`: 477 test files, 3,242 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner now surface retryable read failures before empty or derived states.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `0b228692`.
+
 ## Latest Local Evidence - Daily Household Read Boundaries
 
 - Focused household boundary suite: 1 file, 6 assertions passed.
