@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0386 - Admin Management hid administrator read failures as zero admins
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/admins`.
+- Finding: the `admin_users` query could fail while the page rendered zero administrators and retained access-management controls.
+- Repair: the Supabase error is checked before calculating role counts, filters, or admin-management controls; failures return a retryable page state.
+- Evidence: focused Admin Management boundary suite (1 assertion), full 492 test files/3,252 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `b465cf71`.
+- Remaining launch gate: validate live Super Admin authorization, admin table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0385 - Social Usage hid usage-event read failures as an empty meter
 
 - Status: Resolved in source; live and deployed verification remain open.

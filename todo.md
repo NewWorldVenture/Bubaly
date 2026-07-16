@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:35:00 -04:00
+- Last updated: 2026-07-16 10:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ee26e70c` makes Super Admin Social Usage fail closed on read failures after `80a790c6` repaired Social Audit; live provider and deployment evidence remains open
+- Commit: `b465cf71` makes Super Admin Admin Management fail closed on read failures after `ee26e70c` repaired Social Usage; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0386 - Admin Management hid administrator read failures as zero admins
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / authorization management / Supabase read boundary
+- Feature: Admin Management
+- Route: `/admin/admins`
+- File or files: `app/(app)/admin/admins/page.tsx`, `tests/admin-admins-read-boundary.test.ts`
+- Database objects: `admin_users`
+- Affected roles: Super Admin
+- Scenario: the administrator query could fail while the page rendered zero admins and retained access-management controls.
+- Launch impact: operators could mistake an authorization backend outage for no administrators and make unsafe access decisions.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required access read.
+- Required remediation: preserve the query error and render a retryable page-level failure before calculating access metrics or controls.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Admin Management boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (492 files/3,252 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `b465cf71`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Admin Management no longer presents zero administrators after a failed `admin_users` read.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the authorization workflow audit.
 
 #### TODO-0385 - Social Usage hid usage-event read failures as an empty meter
 
