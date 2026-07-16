@@ -1,17 +1,34 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 import { PROVIDERS, PLATFORMS, isProviderConfigured, type SocialPlatform } from '@/lib/social/capabilities';
 import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Social Providers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
+      <AdminSocialSubnav active="/admin/social/providers" />
+      <ErrorState message="Could not load social providers from Supabase. Refresh and try again." />
+      <Link href="/admin/social/providers" className="text-sm font-medium text-brand-text underline">Refresh social providers</Link>
+    </div>
+  );
+}
+
 export default async function AdminProvidersPage() {
   const supabase = createServiceClient();
-  const { data: rows } = await supabase.from('social_providers').select('platform, label, is_enabled, needs_app_review, char_limit');
+  const { data: rows, error } = await supabase.from('social_providers').select('platform, label, is_enabled, needs_app_review, char_limit');
+  if (error) {
+    console.error('[admin-social-providers] provider catalog read failed', error);
+    return <ReadFailure />;
+  }
   const enabled = new Map((rows ?? []).map((r) => [r.platform, r.is_enabled]));
 
   return (
