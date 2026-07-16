@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - New Campaign Segment Read Boundary
+
+- Focused New Campaign boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 495 test files, 3,255 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- New Campaign now fails visibly when `marketing_segments` cannot be read instead of allowing an unfiltered campaign by default.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `d600ad7c`.
+
 ## Latest Local Evidence - Social Providers Read Boundary
 
 - Focused Social Providers boundary suite: 1 file, 1 assertion passed.

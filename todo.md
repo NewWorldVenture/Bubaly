@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:50:00 -04:00
+- Last updated: 2026-07-16 10:55:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `51423350` makes Super Admin Social Providers fail closed on read failures after `0f91564a` repaired Admin Settings; live provider and deployment evidence remains open
+- Commit: `d600ad7c` makes New Campaign fail closed on segment read failures after `51423350` repaired Social Providers; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0389 - New Campaign hid segment read failures as an unfiltered audience selector
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing campaigns / Supabase read boundary
+- Feature: New Campaign
+- Route: `/admin/marketing/campaigns/new`
+- File or files: `app/(app)/admin/marketing/campaigns/new/page.tsx`, `tests/admin-campaign-new-read-boundary.test.ts`
+- Database objects: `marketing_segments`
+- Affected roles: Super Admin
+- Scenario: the segment query could fail while the form rendered a “No segment” fallback and allowed an unfiltered campaign.
+- Launch impact: operators could create campaigns without intended audience targeting after a silent backend failure.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required campaign dependency.
+- Required remediation: preserve the query error and render a retryable page-level failure before rendering the campaign form.
+- Implementation notes: added a ReadFailure state, refresh links, and explicit error logging.
+- Test plan: focused New Campaign boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (495 files/3,255 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `d600ad7c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: New Campaign no longer silently permits an unfiltered audience after a failed segment read.
+- Remaining dependencies: verify live Super Admin permissions and deployed campaign-segment behavior; continue the marketing workflow audit.
 
 #### TODO-0388 - Social Providers hid provider-catalog read failures as enabled defaults
 
