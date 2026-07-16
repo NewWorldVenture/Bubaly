@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { DEVICE_TYPES, DEVICE_INTEGRATIONS, DEVICE_STATUSES, integrationLabel, summarizeDevices, groupByRoom, type DeviceLike } from '@/lib/home/devices';
 import type { Tables } from '@/lib/database.types';
 
@@ -23,7 +23,7 @@ export function DevicesModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: devices, loading } = useRealtimeQuery<Device>({
+  const { data: devices, loading, error, refresh } = useRealtimeQuery<Device>({
     table: 'smart_devices', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('smart_devices').select('*').eq('family_id', familyId).order('room').order('name'),
   });
@@ -59,6 +59,7 @@ export function DevicesModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family devices. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -89,7 +90,7 @@ export function DevicesModule() {
                   <button onClick={() => cycleStatus(d)} title="Cycle status" className={d.status === 'online' ? 'text-success' : d.status === 'offline' ? 'text-danger' : 'text-muted'}><Icon className="h-4 w-4" /></button>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{d.name}</p>
-                    <p className="text-xs text-muted">{d.type}{d.brand ? ` · ${d.brand}` : ''} · {integrationLabel(d.integration)}{d.last_state ? ` · ${d.last_state}` : ''}</p>
+                    <p className="text-xs text-muted">{d.type}{d.brand ? ` Â· ${d.brand}` : ''} Â· {integrationLabel(d.integration)}{d.last_state ? ` Â· ${d.last_state}` : ''}</p>
                   </div>
                   <button onClick={() => edit(d)} className="text-muted hover:text-fg" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(d.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -114,7 +115,7 @@ export function DevicesModule() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Status">{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{DEVICE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</Select>}</Field>
-              <Field label="Last state">{(id) => <Input id={id} value={form.last_state} onChange={(e) => setForm({ ...form, last_state: e.target.value })} placeholder="On, 72°F, Locked…" />}</Field>
+              <Field label="Last state">{(id) => <Input id={id} value={form.last_state} onChange={(e) => setForm({ ...form, last_state: e.target.value })} placeholder="On, 72Â°F, Lockedâ€¦" />}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
