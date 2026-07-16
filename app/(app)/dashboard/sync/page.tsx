@@ -22,7 +22,7 @@ const ITEM_KINDS: { key: SyncItemKind; label: string; icon: React.ComponentType<
   { key: 'note', label: 'Notes', icon: StickyNote },
 ];
 
-const CONNECTABLE: SyncProvider[] = ['google', 'microsoft', 'apple', 'amazon'];
+const CONNECTABLE: SyncProvider[] = ['google', 'microsoft', 'apple'];
 
 function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: SyncItemKind }) {
   const c = CAPABILITIES[provider][kind];
@@ -75,7 +75,7 @@ export default async function SyncHubPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync</h1>
           <p className="mt-1 text-sm text-muted">
-            Connect Google, Microsoft/Outlook, Apple, and Alexa to two-way sync your calendars, reminders, and notes.
+            Connect Google, Microsoft/Outlook, or Apple to sync your calendars and reminders.
           </p>
         </div>
         <Link href="/dashboard/sync/accounts" className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
@@ -103,7 +103,7 @@ export default async function SyncHubPage() {
         </div>
       </div>
 
-      {/* Capability matrix — the honest source of truth */}
+      {/* Capability matrix â€” the honest source of truth */}
       <Card>
         <h2 className="mb-1 text-base font-semibold">What each provider supports</h2>
         <p className="mb-4 text-xs text-muted">
@@ -173,7 +173,7 @@ export default async function SyncHubPage() {
               <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3 text-sm">
                 <RefreshCw className="h-4 w-4 text-muted" />
                 <span className="font-medium">{PROVIDER_LABELS[(r.provider as SyncProvider)] ?? r.provider}</span>
-                <span className="text-xs text-muted">↓{r.items_imported} ↑{r.items_exported}{r.conflicts_found ? ` · ${r.conflicts_found} conflicts` : ''}</span>
+                <span className="text-xs text-muted">â†“{r.items_imported} â†‘{r.items_exported}{r.conflicts_found ? ` Â· ${r.conflicts_found} conflicts` : ''}</span>
                 <Badge tone={r.status === 'succeeded' ? 'success' : r.status === 'failed' ? 'danger' : 'neutral'} className="ml-auto">{r.status}</Badge>
               </div>
             ))}
