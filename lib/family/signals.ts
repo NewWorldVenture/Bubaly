@@ -34,7 +34,12 @@ export type FamilySignals = {
   };
 };
 
-export async function gatherSignals(familyId: string): Promise<FamilySignals> {
+export type FamilySignalsResult = {
+  data: FamilySignals | null;
+  error: unknown | null;
+};
+
+export async function gatherSignalsResult(familyId: string): Promise<FamilySignalsResult> {
   const supabase = await createServer();
   const now = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0);
@@ -78,6 +83,10 @@ export async function gatherSignals(familyId: string): Promise<FamilySignals> {
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
   ]);
+
+  const readError = [weekEvents, appts, openTasks, doneTasks, totalTasks, bills, homework, sports, routines, meals, grocery]
+    .find((result) => result.error)?.error;
+  if (readError) return { data: null, error: readError };
 
   // Per-day event histogram → busiest day + back-to-back transitions.
   const byDay = new Map<string, number>();
@@ -172,5 +181,11 @@ export async function gatherSignals(familyId: string): Promise<FamilySignals> {
     plannedMeals: counts.plannedMeals,
   });
 
-  return { stress, completion, actions, counts };
+  return { data: { stress, completion, actions, counts }, error: null };
+}
+
+export async function gatherSignals(familyId: string): Promise<FamilySignals> {
+  const result = await gatherSignalsResult(familyId);
+  if (result.error || !result.data) throw result.error ?? new Error('Family signal reads failed');
+  return result.data;
 }
