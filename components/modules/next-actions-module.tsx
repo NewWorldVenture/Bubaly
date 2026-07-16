@@ -14,7 +14,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { cn } from '@/lib/utils/cn';
@@ -56,15 +56,15 @@ export function NextActionsModule() {
   // 45-day horizon keeps the list focused on what's actually actionable soon.
   const horizon = dayKey(new Date(Date.now() + 45 * 86_400_000));
 
-  const { data: events, loading: le } = useRealtimeQuery<Event>({
+  const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId),
   });
-  const { data: tasks, loading: lt } = useRealtimeQuery<Task>({
+  const { data: tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useRealtimeQuery<Task>({
     table: 'todo_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', false),
   });
-  const { data: opps, loading: lo } = useRealtimeQuery<Opp>({
+  const { data: opps, loading: oppsLoading, error: oppsError, refresh: refreshOpps } = useRealtimeQuery<Opp>({
     table: 'opportunities', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('opportunities').select('*').eq('family_id', familyId),
   });
@@ -94,7 +94,9 @@ export function NextActionsModule() {
     return rankNextActions(inputs, today);
   }, [events, tasks, opps, today, horizon]);
 
-  const loading = le || lt || lo;
+  const loading = eventsLoading || tasksLoading || oppsLoading;
+  const error = eventsError || tasksError || oppsError;
+  const refresh = () => { void refreshEvents(); void refreshTasks(); void refreshOpps(); };
   const grouped = useMemo(() => {
     const m = new Map<string, typeof ranked>();
     for (const a of ranked) {
@@ -115,6 +117,7 @@ export function NextActionsModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
+  if (error) return <ErrorState message="Could not load next actions. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">

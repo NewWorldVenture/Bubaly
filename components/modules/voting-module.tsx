@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
@@ -48,28 +48,32 @@ export function VotingModule() {
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
 
-  const { data: polls, loading } = useRealtimeQuery<Poll>({
+  const { data: polls, loading: pollsLoading, error: pollsError, refresh: refreshPolls } = useRealtimeQuery<Poll>({
     table: 'family_polls', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_polls').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
-  const { data: options } = useRealtimeQuery<Option>({
+  const { data: options, loading: optionsLoading, error: optionsError, refresh: refreshOptions } = useRealtimeQuery<Option>({
     table: 'family_poll_options', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_poll_options').select('*').eq('family_id', familyId),
   });
-  const { data: votes } = useRealtimeQuery<VoteRow>({
+  const { data: votes, loading: votesLoading, error: votesError, refresh: refreshVotes } = useRealtimeQuery<VoteRow>({
     table: 'family_poll_votes', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_poll_votes').select('*').eq('family_id', familyId),
   });
-  const { data: vacations } = useRealtimeQuery<VacationLite>({
+  const { data: vacations, loading: vacationsLoading, error: vacationsError, refresh: refreshVacations } = useRealtimeQuery<VacationLite>({
     table: 'vacations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacations').select('id, title').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
   // Reasoning context: the family's real budgets fund the consensus when a poll
   // has a spending category but no explicit cap.
-  const { data: budgets } = useRealtimeQuery<BudgetRow>({
+  const { data: budgets, loading: budgetsLoading, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<BudgetRow>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('category, amount').eq('family_id', familyId),
   });
+
+  const loading = pollsLoading || optionsLoading || votesLoading || vacationsLoading || budgetsLoading;
+  const error = pollsError || optionsError || votesError || vacationsError || budgetsError;
+  const refresh = () => { void refreshPolls(); void refreshOptions(); void refreshVotes(); void refreshVacations(); void refreshBudgets(); };
 
   const [form, setForm] = useState<Form | null>(null);
   const optionsByPoll = useMemo(() => {
@@ -143,6 +147,7 @@ export function VotingModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family voting data. Refresh and try again." onRetry={refresh} />;
   const all = polls ?? [];
   const budgetRows = budgets ?? [];
 

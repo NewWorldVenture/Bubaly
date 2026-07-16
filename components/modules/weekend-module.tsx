@@ -9,7 +9,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 
@@ -33,22 +33,26 @@ export function WeekendModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: events, loading } = useRealtimeQuery<Event>({
+  const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'weekend_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('weekend_events').select('*').eq('family_id', familyId),
   });
-  const { data: plans } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'weekend_plans', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('weekend_plans').select('*').eq('family_id', familyId),
   });
-  const { data: searches } = useRealtimeQuery<SearchRow>({
+  const { data: searches, loading: searchesLoading, error: searchesError, refresh: refreshSearches } = useRealtimeQuery<SearchRow>({
     table: 'weekend_searches', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('weekend_searches').select('*').eq('family_id', familyId),
   });
-  const { data: feeds } = useRealtimeQuery<Feed>({
+  const { data: feeds, loading: feedsLoading, error: feedsError, refresh: refreshFeeds } = useRealtimeQuery<Feed>({
     table: 'weekend_feeds', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('weekend_feeds').select('*').eq('family_id', familyId),
   });
+
+  const loading = eventsLoading || plansLoading || searchesLoading || feedsLoading;
+  const error = eventsError || plansError || searchesError || feedsError;
+  const refresh = () => { void refreshEvents(); void refreshPlans(); void refreshSearches(); void refreshFeeds(); };
 
   const [zip, setZip] = useState('');
   const [radius, setRadius] = useState<number>(DEFAULT_RADIUS);
@@ -208,7 +212,7 @@ export function WeekendModule() {
       )}
 
       {/* discovered events grouped by day */}
-      {loading ? <SkeletonList /> : grouped.length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load weekend planner data. Refresh and try again." onRetry={refresh} /> : grouped.length === 0 ? (
         <EmptyState icon={Sparkles} title="No upcoming events yet" description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
       ) : (
         <div className="space-y-6">

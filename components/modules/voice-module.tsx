@@ -13,7 +13,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
@@ -62,7 +62,7 @@ export function VoiceModule() {
   // tweak before running (and so unsupported browsers can type instead).
   useEffect(() => { if (speech.transcript) setText(speech.transcript); }, [speech.transcript]);
 
-  const { data: history, loading } = useRealtimeQuery<VoiceCommand>({
+  const { data: history, loading, error, refresh } = useRealtimeQuery<VoiceCommand>({
     table: 'voice_commands', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('voice_commands').select('*').eq('family_id', familyId)
       .order('created_at', { ascending: false }).limit(20),
@@ -207,6 +207,8 @@ export function VoiceModule() {
         </h2>
         {loading ? (
           <SkeletonList count={3} />
+        ) : error ? (
+          <ErrorState message="Could not load voice history. Refresh and try again." onRetry={refresh} />
         ) : (history ?? []).length === 0 ? (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">
             <Info className="h-4 w-4 shrink-0" /> Your spoken commands will appear here so you can re-run them in a tap.

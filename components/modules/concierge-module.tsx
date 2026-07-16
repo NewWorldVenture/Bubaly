@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
@@ -67,7 +67,7 @@ export function ConciergeModule() {
   const [showAddPlan, setShowAddPlan] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { data: plans, loading: plansLoading, refresh: refreshPlans } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'concierge_plans', familyId, deps: [familyId],
     fetcher: async (supabase) => supabase.from('concierge_plans').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -144,7 +144,7 @@ export function ConciergeModule() {
   const activePlans  = plans.filter(p => !['completed', 'cancelled'].includes(p.status));
   const pastPlans    = plans.filter(p => ['completed', 'cancelled'].includes(p.status));
 
-  return (
+  return plansLoading ? <SkeletonList /> : plansError ? <ErrorState message="Could not load concierge plans. Refresh and try again." onRetry={refreshPlans} /> : (
     <div className="module-with-sidebar">
       {/* ── Main column ── */}
       <div className="module-main">
