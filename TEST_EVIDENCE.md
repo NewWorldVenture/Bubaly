@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Documents Integration Surface
+
+- Focused document action and wallet card contract suites: 2 files, 4 assertions passed.
+- Full `npm.cmd test -- --run`: 479 test files, 3,248 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Removed disconnected Google Drive and Dropbox document-import actions; supported upload, folder creation, and scan actions remain.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `2c474f5a`.
+
 ## Latest Local Evidence - Wallet Card Availability Contract
 
 - Focused wallet card contract and Stripe capability suite: 2 files, 21 assertions passed.
