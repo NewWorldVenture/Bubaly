@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:30:00 -04:00
+- Last updated: 2026-07-16 10:35:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `80a790c6` makes Super Admin Social Audit fail closed on read failures after `03012c8c` repaired Personalization and Exit-Intent; live provider and deployment evidence remains open
+- Commit: `ee26e70c` makes Super Admin Social Usage fail closed on read failures after `80a790c6` repaired Social Audit; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0385 - Social Usage hid usage-event read failures as an empty meter
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / social operations / Supabase read boundary
+- Feature: Social Usage
+- Route: `/admin/social/usage`
+- File or files: `app/(app)/admin/social/usage/page.tsx`, `tests/admin-social-usage-read-boundary.test.ts`
+- Database objects: `social_usage_events`
+- Affected roles: Super Admin
+- Scenario: the usage-event query could fail while the page rendered no metering activity and a healthy empty state.
+- Launch impact: operators could mistake a usage-data outage for no activity and lose visibility into metered social operations.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required operational read.
+- Required remediation: preserve the query error and render a retryable page-level failure before calculating totals or the empty state.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Social Usage boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (491 files/3,251 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `ee26e70c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Social Usage no longer presents a fabricated empty meter after a failed usage-event read.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and social audit.
 
 #### TODO-0384 - Social Audit hid audit-log read failures as an empty history
 

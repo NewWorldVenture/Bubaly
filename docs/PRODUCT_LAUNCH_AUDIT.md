@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0385 - Social Usage hid usage-event read failures as an empty meter
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/usage`.
+- Finding: the usage-event query could fail while the page rendered no metering activity, masking an unavailable operational feed.
+- Repair: the Supabase error is checked before calculating totals or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Social Usage boundary suite (1 assertion), full 491 test files/3,251 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `ee26e70c`.
+- Remaining launch gate: validate live Super Admin authorization, usage table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0384 - Social Audit hid audit-log read failures as an empty history
 
 - Status: Resolved in source; live and deployed verification remain open.
