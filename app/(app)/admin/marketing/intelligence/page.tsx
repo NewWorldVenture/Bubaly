@@ -5,25 +5,48 @@ import { Card } from '@/components/ui/card';
 import {
   attributeConversions, conversionCount, channelOf, ATTRIBUTION_MODEL_LABELS, type Touchpoint,
 } from '@/lib/marketing/attribution';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Customer Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-black sm:text-2xl">Customer Intelligence</h1>
+      <ErrorState message="Could not load customer intelligence from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/intelligence" className="text-sm font-medium text-brand-text underline">Refresh customer intelligence</a>
+    </div>
+  );
+}
+
 export default async function IntelligencePage() {
   const supabase = createServiceClient();
-  const [{ count: visitorCount }, { count: sessionCount }, { data: sessions }, { data: touchpoints }] = await Promise.all([
-    supabase.from('mkt_visitors').select('*', { count: 'exact', head: true }),
-    supabase.from('mkt_sessions').select('*', { count: 'exact', head: true }),
-    supabase.from('mkt_sessions').select('source').limit(5000),
-    supabase.from('mkt_touchpoints').select('visitor_id, source, kind, occurred_at').limit(10000),
-  ]);
+  let results;
+  try {
+    results = await Promise.all([
+      supabase.from('mkt_visitors').select('*', { count: 'exact', head: true }),
+      supabase.from('mkt_sessions').select('*', { count: 'exact', head: true }),
+      supabase.from('mkt_sessions').select('source').limit(5000),
+      supabase.from('mkt_touchpoints').select('visitor_id, source, kind, occurred_at').limit(10000),
+    ]);
+  } catch {
+    return <ReadFailure />;
+  }
+  const [visitorsResult, sessionCountResult, sessionsResult, touchpointsResult] = results;
+  if (results.some((result) => result.error)) return <ReadFailure />;
 
-  const tps = (touchpoints ?? []) as Touchpoint[];
+  const visitorCount = visitorsResult.count ?? 0;
+  const sessionCount = sessionCountResult.count ?? 0;
+  const sessions = sessionsResult.data ?? [];
+  const touchpoints = touchpointsResult.data ?? [];
+
+  const tps = touchpoints as Touchpoint[];
   const conversions = conversionCount(tps);
 
   // Top acquisition channels by session volume.
   const sourceCounts = new Map<string, number>();
-  for (const s of sessions ?? []) {
+  for (const s of sessions) {
     const ch = channelOf({ source: s.source });
     sourceCounts.set(ch, (sourceCounts.get(ch) ?? 0) + 1);
   }
@@ -34,8 +57,8 @@ export default async function IntelligencePage() {
   const attribution = models.map((m) => ({ model: m, rows: attributeConversions(tps, m).slice(0, 6) }));
 
   const stats = [
-    { label: 'Visitors', value: visitorCount ?? 0, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: 'Sessions', value: sessionCount ?? 0, icon: MousePointerClick, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: 'Visitors', value: visitorCount, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Sessions', value: sessionCount, icon: MousePointerClick, tint: 'text-blue-400 bg-blue-500/15' },
     { label: 'Conversions', value: conversions, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Touchpoints', value: tps.length, icon: Radar, tint: 'text-amber-400 bg-amber-500/15' },
   ];
