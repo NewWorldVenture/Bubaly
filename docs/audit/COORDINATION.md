@@ -96,7 +96,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-05 | `agent-01` (display slice) | IN_REVIEW | 2026-07-16 20:20 | 2026-07-16 20:45 | `77b87dc` | Display kiosk hardened+RLS-verified; rest of dashboard open |
 | A-06 | — | OPEN | | | | |
 | A-07 | — | OPEN | | | | |
-| A-08 | — | OPEN | | | | Codex did PAY-1/PAY-2; full flow open |
+| A-08 | `agent-01` | CLAIMED | 2026-07-16 21:16 | 2026-07-16 21:16 | | Wallet/goals/allowances/treasury: ledger integrity + RLS + overdraw/approval invariants |
 | A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:12 | `a5fa39e3` | VERIFIED: webhook(sig/replay/retry/self-heal), checkout(auth/RBAC/validate/rate-limit/trusted-url), all-routes RBAC, slug↔planLevel, downgrade rule (Plus→Basic only; Free unreachable via change-plan — already tested), /pay flow wired. 14 new guards. OPEN ONLY: live Stripe test-mode smoke (needs keys) |
 | A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:12 | `08f3b50b`+ | Food hub degrade-and-log (PLA-0418) + Meals module secondary reads log (PLA-0433); grocery/pantry/nutrition + live RLS/seed remain |
 | A-11 | — | OPEN | | | | |
