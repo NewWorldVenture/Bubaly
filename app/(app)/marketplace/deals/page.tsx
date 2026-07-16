@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import {
   priceBand, assessPrice, dealLabel, discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
@@ -15,6 +16,16 @@ export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <PageHeader title="Deals" description="Deal discovery is temporarily unavailable." />
+      <ErrorState message="Could not load marketplace deals from Supabase. Refresh and try again." />
+      <Link href="/marketplace/deals" className="text-sm font-medium text-brand-text underline">Refresh deals</Link>
+    </div>
+  );
+}
+
 type Row = { id: string; title: string; photo_url: string | null; category: string; condition: string | null; price_cents: number };
 
 /** Deals feed — reachable, available sale listings priced at or below their
@@ -24,12 +35,16 @@ export default async function DealsPage() {
   await requireUserContext();
   const sb = await createServer();
 
-  const { data } = await sb
+  const { data, error } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, category, condition, price_cents')
     .eq('kind', 'sell').eq('status', 'available').gt('price_cents', 0)
     .order('created_at', { ascending: false })
     .limit(400);
+  if (error) {
+    console.error('[marketplace-deals] listing read failed', error);
+    return <ReadFailure />;
+  }
 
   const rows = (data ?? []) as Row[];
 
