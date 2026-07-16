@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
@@ -32,14 +32,18 @@ export function ScreenTimeModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: entries, loading } = useRealtimeQuery<Entry>({
+  const { data: entries, loading: entriesLoading, error: entriesError, refresh: refreshEntries } = useRealtimeQuery<Entry>({
     table: 'screen_time_entries', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('screen_time_entries').select('*').eq('family_id', familyId).order('entry_date', { ascending: false }),
   });
-  const { data: limits } = useRealtimeQuery<Limit>({
+  const { data: limits, loading: limitsLoading, error: limitsError, refresh: refreshLimits } = useRealtimeQuery<Limit>({
     table: 'screen_time_limits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('screen_time_limits').select('*').eq('family_id', familyId),
   });
+
+  const loading = entriesLoading || limitsLoading;
+  const error = entriesError || limitsError;
+  const refresh = () => { void refreshEntries(); void refreshLimits(); };
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [limitFor, setLimitFor] = useState<{ memberId: string; minutes: string } | null>(null);
@@ -93,6 +97,7 @@ export function ScreenTimeModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load screen time data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

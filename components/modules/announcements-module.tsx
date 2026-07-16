@@ -28,15 +28,19 @@ export function AnnouncementsModule() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const activeMembers = members.filter((m) => m.is_active).length;
 
-  const { data: announcements, loading, error } = useRealtimeQuery<Announcement>({
+  const { data: announcements, loading: announcementsLoading, error: announcementsError, refresh: refreshAnnouncements } = useRealtimeQuery<Announcement>({
     table: 'family_announcements', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_announcements').select('*').eq('family_id', familyId)
       .order('is_pinned', { ascending: false }).order('created_at', { ascending: false }),
   });
-  const { data: reads } = useRealtimeQuery<Read>({
+  const { data: reads, loading: readsLoading, error: readsError, refresh: refreshReads } = useRealtimeQuery<Read>({
     table: 'announcement_reads', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('announcement_reads').select('*').eq('family_id', familyId),
   });
+
+  const loading = announcementsLoading || readsLoading;
+  const error = announcementsError || readsError;
+  const refresh = () => { void refreshAnnouncements(); void refreshReads(); };
 
   const readsByAnnouncement = useMemo(() => {
     const m = new Map<string, Read[]>();
@@ -110,7 +114,7 @@ export function AnnouncementsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load announcements." />
+        <ErrorState message="Could not load announcements. Refresh and try again." onRetry={refresh} />
       ) : (announcements ?? []).length === 0 ? (
         <EmptyState
           icon={Megaphone}

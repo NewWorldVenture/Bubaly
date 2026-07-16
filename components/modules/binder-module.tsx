@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { BINDER_CATEGORIES, binderCategoryLabel, maskValue, groupByCategory, type InfoLike } from '@/lib/home/binder';
 import type { Tables } from '@/lib/database.types';
@@ -22,7 +22,7 @@ export function BinderModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: items, loading } = useRealtimeQuery<Info>({
+  const { data: items, loading, error, refresh } = useRealtimeQuery<Info>({
     table: 'household_info', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('household_info').select('*').eq('family_id', familyId).order('category').order('sort'),
   });
@@ -56,6 +56,7 @@ export function BinderModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load household binder data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

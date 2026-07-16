@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -112,7 +112,7 @@ export function ContactsModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <div className="p-4 text-danger text-sm">{error}</div>;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
     <div className="module-page">

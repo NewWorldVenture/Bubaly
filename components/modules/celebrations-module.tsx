@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
@@ -38,7 +38,7 @@ export function CelebrationsModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: dates, loading } = useRealtimeQuery<FamilyDate>({
+  const { data: dates, loading, error, refresh } = useRealtimeQuery<FamilyDate>({
     table: 'family_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_dates').select('*').eq('family_id', familyId),
   });
@@ -97,6 +97,8 @@ export function CelebrationsModule() {
 
       {loading ? (
         <SkeletonList />
+      ) : error ? (
+        <ErrorState message="Could not load celebrations. Refresh and try again." onRetry={refresh} />
       ) : upcoming.length === 0 ? (
         <EmptyState icon={Gift} title="No upcoming celebrations" description="Add birthdays in family member profiles, or add a custom date here." />
       ) : (
