@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0470 - A-12 SECURITY: a child could disable/delete their own Guardian safety rules
+
+- Timestamp: 2026-07-16 21:42 UTC
+- Service: Guardian / family safety (A-12)
+- Route: `/guardian/*` (server actions in `app/(app)/guardian/actions.ts`)
+- Affected files: `app/(app)/guardian/actions.ts`, `tests/guardian-authz.test.ts` (new)
+- Role: **child / teen** (any non-manager family member with a login)
+- Scenario: a child invokes `toggleRuleAction`/`deleteRuleAction` (or contact/trust/phone/profile edits) to turn off the call/message screening that protects them
+- Severity: **HIGH** (child-safety authorization bypass)
+- Launch impact: every guardian mutation action (`upsertContactAction`, `deleteContactAction`, `updateContactTrustAction`, `upsertMemberProfileAction`, `updateContextAction`, `assignGuardianPhoneAction`, `createRuleAction`, `toggleRuleAction`, `deleteRuleAction`, `generateGuardianSuggestionsAction`, `acknowledgeEscalationAction`) only called `requireUserContext()` + family scope — no role check (the `actor: 'parent'` field is a hardcoded audit label, not authz). RLS on `guardian_routing_rules` is `is_family_member(family_id)` FOR ALL (migration 0137), and children get real Supabase sessions, so a child could disable or delete the safety rules screening their own calls/messages, or tamper with guardian contacts/trust/phone assignments.
+- Root cause: missing server-side authorization; parent-only intent was enforced only by hiding the UI.
+- Resolution: added `if (!isManager(ctx.active.role)) return guardianForbidden();` (manager = parent/adult) immediately after context resolution in all 11 mutation actions, before any write. `reviewSuggestionAction` was already gated server-side (returns `forbidden`). Same class of bug as PLA-0450 (chores).
+- Supabase impact: none (app-layer authz). Follow-up recommended: restrict guardian-table WRITE RLS to managers (`can_manage_family`) as defense-in-depth.
+- Tests run: `tests/guardian-authz.test.ts` (4, new — asserts the gate follows every captured context); existing guardian suite (10 files / 62 tests) still passes; tsc + eslint clean.
+- Validation evidence: static guard reports 0 offending actions; 11 gates present.
+- Commit: (this increment)
+- Status: RESOLVED and pushed to `main`
+- Remaining dependencies: manager-scoped RLS on guardian tables; live harness test that a child role cannot toggle a rule once role-scoped RLS exists.
+
 ### PLA-0461 - `family-media` storage bucket is undefined in migrations and served via public URLs (A-11) — OPEN, owner-gated
 
 - Timestamp: 2026-07-16 21:30 UTC

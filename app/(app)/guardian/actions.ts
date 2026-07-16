@@ -4,12 +4,22 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
+import { isManager } from '@/lib/constants/roles';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
+
+// Guardian settings govern a child's call/message SAFETY screening. RLS on the
+// guardian tables is family-scoped (any member), and children have real logins,
+// so these server actions are the authorization boundary: only a family manager
+// (parent/adult) may change safety config. The failure-only shape is assignable
+// to every ActionResult<T>.
+function guardianForbidden(): { ok: false; error: string } {
+  return { ok: false, error: 'Only a parent or guardian can change safety settings.' };
+}
 
 function actionFailure<T = void>(operation: string, error: unknown): ActionResult<T> {
   console.error(`[guardian-action] ${operation} failed`, error);
@@ -45,6 +55,7 @@ export async function upsertContactAction(input: {
   member_id?: string;
 }): Promise<ActionResult<{ id: string }>> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
@@ -98,6 +109,7 @@ export async function upsertContactAction(input: {
 
 export async function deleteContactAction(contactId: string): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const { error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
@@ -114,6 +126,7 @@ export async function updateContactTrustAction(
   trustLevel: TrustLevel,
 ): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
@@ -155,6 +168,7 @@ export async function upsertMemberProfileAction(input: {
   context_overrides?: Record<string, RoutingMode>;
 }): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
@@ -187,6 +201,7 @@ export async function updateContextAction(
   context: string,
 ): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
@@ -210,6 +225,7 @@ export async function assignGuardianPhoneAction(input: {
   phone: string;
 }): Promise<ActionResult<{ phone: string | null }>> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
@@ -280,6 +296,7 @@ export async function createRuleAction(input: {
   member_id?: string;
 }): Promise<ActionResult<{ id: string }>> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
@@ -329,6 +346,7 @@ export async function createRuleAction(input: {
 
 export async function toggleRuleAction(ruleId: string, isActive: boolean): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
@@ -342,6 +360,7 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
 
 export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
@@ -361,6 +380,7 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
  */
 export async function generateGuardianSuggestionsAction(): Promise<ActionResult<{ created: number }>> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const result = await runLearningForFamily(supabase, ctx.active.familyId);
   revalidatePath('/guardian');
@@ -390,6 +410,7 @@ export async function reviewSuggestionAction(
 
 export async function acknowledgeEscalationAction(escalationId: string): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
   const { error } = await (db.from('guardian_escalations') as ReturnType<typeof supabase.from>)
