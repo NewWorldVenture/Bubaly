@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime } from '@/lib/family/safety';
@@ -23,7 +23,7 @@ export function DrivingSafetyView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading } = useRealtimeQuery<Trip>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Trip>({
     table: 'driving_trips', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('driving_trips').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(200),
   });
@@ -46,12 +46,12 @@ export function DrivingSafetyView() {
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Avg score" value={avg != null ? String(avg) : '—'} tint={avg != null ? SCORE_TINT[scoreBand(avg)] : 'text-muted'} icon={Gauge} />
+        <Stat label="Avg score" value={avg != null ? String(avg) : 'â€”'} tint={avg != null ? SCORE_TINT[scoreBand(avg)] : 'text-muted'} icon={Gauge} />
         <Stat label="Trips" value={String(trips.length)} tint="text-fg" icon={Car} />
         <Stat label="Miles" value={totalMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} tint="text-fg" icon={TrendingDown} />
       </div>
 
-      {loading ? <SkeletonList /> : trips.length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load driving trips. Refresh and try again." onRetry={refresh} /> : trips.length === 0 ? (
         <EmptyState icon={Car} title="No trips logged" description="Log a trip to start tracking driving safety scores."
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Log trip</Button>} />
       ) : (
@@ -65,7 +65,7 @@ export function DrivingSafetyView() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{t.label || `${m?.display_name ?? 'Driver'}'s trip`}</p>
                   <p className="truncate text-xs text-muted">
-                    {fmtDateTime(t.started_at)} · {Number(t.distance_miles)} mi · max {t.max_mph} mph
+                    {fmtDateTime(t.started_at)} Â· {Number(t.distance_miles)} mi Â· max {t.max_mph} mph
                   </p>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
                     <span>{t.hard_brakes} hard brakes</span>
@@ -126,7 +126,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
     <Modal open onClose={onClose} title="Log a Trip">
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Driver">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Driver">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="When">{(id) => <Input id={id} type="datetime-local" value={v.started_at} onChange={(e) => setV({ ...v, started_at: e.target.value })} />}</Field>
         </div>
         <Field label="Label" hint="Optional">{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder="School run" />}</Field>
@@ -151,3 +151,4 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
     </Modal>
   );
 }
+
