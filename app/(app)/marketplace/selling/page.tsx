@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import { auctionStatus } from '@/lib/marketplace/auction';
 import {
   attentionItems, rankListings, sellerTotals, needsAttention,
@@ -12,7 +13,7 @@ import {
 } from '@/lib/marketplace/selling';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = { title: 'Selling · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Selling Â· Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 const CHIP_TONE: Record<AttentionTone, string> = {
@@ -22,7 +23,17 @@ const CHIP_TONE: Record<AttentionTone, string> = {
   muted: 'bg-border/60 text-muted',
 };
 
-/** Seller cockpit — every listing you're selling, ranked by what needs your
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <PageHeader title="Selling" description="Your seller cockpit is temporarily unavailable." />
+      <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
+      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">Refresh selling</Link>
+    </div>
+  );
+}
+
+/** Seller cockpit â€” every listing you're selling, ranked by what needs your
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
 export default async function SellingPage() {
@@ -32,7 +43,7 @@ export default async function SellingPage() {
   const selfId = ctx.active.member.id;
   const now = new Date();
 
-  const { data: listings } = await sb
+  const { data: listings, error: listingsError } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, kind, status, price_cents, sale_format, bid_count, auction_starts_at, auction_ends_at')
     .eq('family_id', familyId).eq('member_id', selfId)
@@ -49,7 +60,7 @@ export default async function SellingPage() {
     return m;
   };
 
-  const [savesRes, offersRes, negRes, qRes, handoffRes, overdueRes] = ids.length
+  const signalResults = ids.length
     ? await Promise.all([
         sb.from('marketplace_saves').select('listing_id').in('listing_id', ids),
         sb.from('marketplace_offers').select('listing_id').eq('status', 'open').in('listing_id', ids),
@@ -59,6 +70,14 @@ export default async function SellingPage() {
         sb.from('marketplace_orders').select('listing_id, ends_on, returned_at, status, kind')
           .eq('seller_member', selfId).in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active']).in('listing_id', ids),
       ])
+    : [];
+  const signalError = signalResults.find((result) => result.error)?.error;
+  if (listingsError || signalError) {
+    console.error('[marketplace-selling] seller read failed', listingsError ?? signalError);
+    return <ReadFailure />;
+  }
+  const [savesRes, offersRes, negRes, qRes, handoffRes, overdueRes] = signalResults.length
+    ? signalResults
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
   const watchers = tally(savesRes.data);
@@ -97,18 +116,18 @@ export default async function SellingPage() {
   const totals = sellerTotals(signals);
 
   const tiles = [
-    { label: 'Active listings', value: totals.activeListings, icon: '🏷️' },
-    { label: 'Needs attention', value: totals.needsAttention, icon: '🔔' },
-    { label: 'Watchers', value: totals.watchers, icon: '👀' },
-    { label: 'Open offers', value: totals.openOffers, icon: '🤝' },
-    { label: 'Questions', value: totals.questionsToAnswer, icon: '💬' },
+    { label: 'Active listings', value: totals.activeListings, icon: 'ðŸ·ï¸' },
+    { label: 'Needs attention', value: totals.needsAttention, icon: 'ðŸ””' },
+    { label: 'Watchers', value: totals.watchers, icon: 'ðŸ‘€' },
+    { label: 'Open offers', value: totals.openOffers, icon: 'ðŸ¤' },
+    { label: 'Questions', value: totals.questionsToAnswer, icon: 'ðŸ’¬' },
   ];
 
   return (
     <div className="module-page">
       <PageHeader
         title="Selling"
-        description="Everything you're selling, ranked by what needs you — answer questions, reply to offers, confirm pickups, chase returns."
+        description="Everything you're selling, ranked by what needs you â€” answer questions, reply to offers, confirm pickups, chase returns."
         action={
           <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
             <Plus className="h-4 w-4" /> Post an item
@@ -128,8 +147,8 @@ export default async function SellingPage() {
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <LayoutDashboard className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">You’re not selling anything yet</p>
-          <p className="mt-1 text-sm text-muted">Post your first item and this becomes your command center — watchers, offers, questions, and pickups all in one place.</p>
+          <p className="mt-3 text-sm font-semibold">Youâ€™re not selling anything yet</p>
+          <p className="mt-1 text-sm text-muted">Post your first item and this becomes your command center â€” watchers, offers, questions, and pickups all in one place.</p>
         </div>
       ) : (
         <ul className="space-y-2">
@@ -142,12 +161,12 @@ export default async function SellingPage() {
                     needsAttention(s) ? 'border-amber-500/30' : 'border-border')}>
                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg">
                     <ListingImage src={s.photo} alt={s.title} className="h-full w-full object-cover"
-                      fallback={<div className="flex h-full w-full items-center justify-center bg-elevated text-muted">🏷️</div>} />
+                      fallback={<div className="flex h-full w-full items-center justify-center bg-elevated text-muted">ðŸ·ï¸</div>} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-semibold">{s.title}</p>
-                      <span className="shrink-0 text-xs capitalize text-muted">· {s.status}</span>
+                      <span className="shrink-0 text-xs capitalize text-muted">Â· {s.status}</span>
                     </div>
                     {items.length > 0 ? (
                       <div className="mt-1 flex flex-wrap gap-1.5">
