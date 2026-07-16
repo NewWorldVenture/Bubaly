@@ -31,7 +31,7 @@ begin
 
   for i in 0..(n - 1) loop
     insert into public.crm_contacts (email, lead_source, lead_status, lifecycle_stage, first_name)
-    values ('score+' || i || '@seed.bubaly.app', 'seed_score', 'lead', 'lead', 'Score ' || i)
+    values ('score+' || i || '@seed.bubaly.app', 'seed_score', 'new', 'lead', 'Score ' || i)
     returning id into cid;
 
     -- Spread scores 4..96 across the four bands; build a ledger that sums to it.

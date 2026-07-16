@@ -34,7 +34,7 @@ begin
 
   for i in 0..(n - 1) loop
     insert into public.crm_contacts (email, lead_source, lead_status, lifecycle_stage, first_name)
-    values ('profile+' || i || '@seed.bubaly.app', 'seed_profile', 'lead', 'lead', 'Lead ' || i)
+    values ('profile+' || i || '@seed.bubaly.app', 'seed_profile', 'new', 'lead', 'Lead ' || i)
     returning id into cid;
 
     fill := i % 6;  -- 0..5

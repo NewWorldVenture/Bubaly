@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0416 - CRM seed produced ZERO rows (invalid lead_status broke the whole block)
+
+- Timestamp: 2026-07-16 20:56 UTC
+- Service: Seed pack integrity / CRM (A-02, A-17)
+- Route: n/a (seed data)
+- Affected files: `supabase/SEED_ALL.sql`, `supabase/seed_crm_lead_scores.sql`, `supabase/seed_crm_contact_profile.sql`
+- Role: any test profile relying on CRM lead/contact data
+- Scenario: running `SEED_ALL` (or either standalone CRM seed) against a fresh DB
+- Severity: P2 (seed-pack defect — the mandate requires a clean 500+ row pack; the affected surface had no test data at all)
+- Launch impact: `crm_contacts` seeded **0** rows because every insert used `lead_status = 'lead'`, which violates `crm_contacts_lead_status_check IN ('new','working','qualified','unqualified','customer')` (migration 0056). The check violation aborted the whole seed block, so CRM lead-scores and contact-profile surfaces had no data to test against
+- Root cause: seed used a `lead_status` value that was never in the constraint's allow-list (confusion with `lifecycle_stage`, where `'lead'` IS valid)
+- Resolution: changed the `lead_status` literal from `'lead'` to `'new'` in all three files (`lifecycle_stage` left as `'lead'`, which is valid)
+- Supabase impact: seed-only; no schema/migration change
+- Tests run: harness re-run of both CRM seeds — 0 → **1000** `crm_contacts` rows (500 lead-scores + 500 contact-profile), all `lead_status='new'`, zero errors
+- Validation evidence: `select count(*) from crm_contacts` 0 → 1000; `select lead_status,count(*)` → `new|1000`
+- Commit: (this increment)
+- Status: Resolved and pushed to `main`
+- Remaining dependencies: none; re-run full `SEED_ALL` end-to-end to confirm no other block still aborts
+
 ### PLA-0415 - A-03 tenant isolation verified end-to-end on the PG16 harness (read + write, full-table RLS sweep)
 
 - Timestamp: 2026-07-16 20:50 UTC
