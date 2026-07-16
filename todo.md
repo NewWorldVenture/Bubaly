@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:06:12 -04:00
+- Last updated: 2026-07-16 08:13:48 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0b228692` adds coordination read failure handling for Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner after Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `0cecf444` adds read failure handling for Tax Vault, Subscriptions, Trip Memories, and Routines after coordination reads for Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner, plus Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0366 - Tax, subscription, memory, and routine reads hid failures as empty state
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Household records and recurring operations / Supabase failure handling
+- Feature: Tax Vault, Subscriptions, Trip Memories, and Routines
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/tax-vault-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/trip-memories-module.tsx`, `components/modules/routines-panel.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `tax_documents`, `family_subscriptions`, `trip_memories`, `vacations`, `routine_templates`, and `routine_template_items`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state or allowed trip and routine summaries to derive from partial query results.
+- Launch impact: families could miss tax records, recurring charges, travel memories, or saved routines while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; Trip Memories and Routines also lacked coordinated loading and retry behavior across dependent reads.
+- Required remediation: surface sanitized retryable errors before empty/derived states and refresh every required query together.
+- Implementation notes: Trip Memories and Routines coordinate dependent reads; Tax Vault and Subscriptions now use shared ErrorState retry behavior.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (8 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
+- Evidence: full local gate passed with 477 files/3,243 tests and a clean 250-route build; known webpack cache serialization and Supabase Edge-runtime warnings remain.
+- Resolution: source repair validated in commit `0cecf444`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed records/routines verification.
 
 #### TODO-0365 - Coordination modules hid failed reads as empty or partial states
 

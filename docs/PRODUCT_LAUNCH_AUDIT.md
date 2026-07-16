@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0366 - Tax, subscription, memory, and routine reads hid failures as empty state
+
+- Timestamp: 2026-07-16 08:13 America/New_York
+- Service: Tax Vault, Subscriptions, Trip Memories, and Routines
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/tax-vault-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/trip-memories-module.tsx`, `components/modules/routines-panel.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state or allowed trip and routine summaries to derive from partial query results.
+- Severity: P1
+- Launch impact: families could miss tax records, recurring charges, travel memories, or saved routines while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; Trip Memories and Routines also lacked coordinated loading and retry behavior across dependent reads.
+- Resolution: all four surfaces now expose retryable ErrorState UI; Trip Memories and Routines coordinate every required read before rendering derived state.
+- Supabase impact: no schema change; existing family-scoped record, travel, and routine reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (8 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
+- Validation evidence: 477 test files, 3,243 tests, 250-route build, and diff check passed; known build warnings remain documented.
+- Commit: `0cecf444`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed records/routines verification
+
 ### PLA-0365 - Coordination modules hid failed reads as empty or partial states
 
 - Timestamp: 2026-07-16 08:06 America/New_York
