@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime } from '@/lib/family/safety';
@@ -25,7 +25,7 @@ export function PlayDatesView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading } = useRealtimeQuery<PlayDate>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<PlayDate>({
     table: 'play_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('play_dates').select('*').eq('family_id', familyId).order('starts_at', { ascending: true }),
   });
@@ -79,7 +79,7 @@ export function PlayDatesView() {
       <PageHeader title="Play Dates" description="Schedule and track the kids' play dates."
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Schedule play date</Button>} />
 
-      {loading ? <SkeletonList /> : (rows ?? []).length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load play dates. Refresh and try again." onRetry={refresh} /> : (rows ?? []).length === 0 ? (
         <EmptyState icon={Heart} title="No play dates yet" description="Schedule a play date to keep the kids' social calendar organized."
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Schedule play date</Button>} />
       ) : (
