@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
@@ -27,7 +27,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: visits, loading } = useRealtimeQuery<Visit>({
+  const { data: visits, loading, error, refresh } = useRealtimeQuery<Visit>({
     table: 'health_visits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_visits').select('*').eq('family_id', familyId),
   });
@@ -104,7 +104,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
           <ul className="space-y-1 text-sm">
             {followUps.slice(0, 4).map((v) => {
               const d = daysUntilFollowUp(v)!;
-              return <li key={v.id} className="flex items-center gap-2"><span className="font-medium">{v.title}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} · {fmtDate(v.follow_up_date!)}</span></li>;
+              return <li key={v.id} className="flex items-center gap-2"><span className="font-medium">{v.title}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} Â· {fmtDate(v.follow_up_date!)}</span></li>;
             })}
           </ul>
         </div>
@@ -112,6 +112,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
       {loading ? (
         <SkeletonList />
+      ) : error ? (
+        <ErrorState message="Could not load health visits. Refresh and try again." onRetry={refresh} />
       ) : scoped.length === 0 ? (
         <EmptyState icon={Stethoscope} title="No visits logged" description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
       ) : (
@@ -128,7 +130,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                       <p className="truncate font-semibold">{v.title}</p>
                       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">{meta.label}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted">{fmtDate(v.visit_date)}{v.provider_name ? ` · ${v.provider_name}` : ''}{who ? ` · ${who.display_name}` : ''}</p>
+                    <p className="mt-0.5 text-xs text-muted">{fmtDate(v.visit_date)}{v.provider_name ? ` Â· ${v.provider_name}` : ''}{who ? ` Â· ${who.display_name}` : ''}</p>
                     {v.reason && <p className="mt-1 text-sm">{v.reason}</p>}
                     {v.outcome && <p className="mt-1 text-sm text-muted">{v.outcome}</p>}
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
@@ -162,7 +164,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               )}
               <Field label="Family member">{(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">â€” Select â€”</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}</Field>
@@ -189,3 +191,4 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     </div>
   );
 }
+
