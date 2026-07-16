@@ -17,6 +17,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import {
   availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
@@ -66,15 +67,18 @@ async function materializePlan(
 
       if (kind === 'calendar' && plan.planned_for) {
         const descParts = [plan.description, plan.location ? `Location: ${plan.location}` : null].filter(Boolean);
-        const { data: ev } = await sb.from('calendar_events').insert({
+        const { data: ev, error: evErr } = await sb.from('calendar_events').insert({
           family_id: familyId, created_by: userId, title: plan.title,
           description: descParts.length ? descParts.join('\n') : null,
           location: plan.location, category: 'general',
           starts_at: new Date(`${plan.planned_for}T00:00:00.000Z`).toISOString(), all_day: true,
         }).select('id').single();
+        // Don't claim a write-back that didn't land — a failed insert must not be
+        // reported as applied (which would also skip it on the idempotent re-run).
+        if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); continue; }
         targetTable = 'calendar_events'; targetId = ev?.id ?? null;
       } else if (kind === 'reminder' || kind === 'task') {
-        const { data: rem } = await sb.from('family_reminders').insert({
+        const { data: rem, error: remErr } = await sb.from('family_reminders').insert({
           family_id: familyId, created_by: userId,
           title: writeBackTitle(kind, plan.title),
           notes: plan.description ?? null,
@@ -82,16 +86,20 @@ async function materializePlan(
           remind_at: reminderLeadAt(plan.planned_for),
           ai_suggested: true,
         }).select('id').single();
+        if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); continue; }
         targetTable = 'family_reminders'; targetId = rem?.id ?? null;
       } else {
         continue;
       }
 
-      await sb.from('concierge_plan_actions').insert({
+      const { error: logErr } = await sb.from('concierge_plan_actions').insert({
         family_id: familyId, plan_id: plan.id, action_kind: kind,
         target_table: targetTable, target_id: targetId,
         detail: writeBackTitle(kind, plan.title), created_by: userId,
       });
+      // The real record was created above; if only the idempotency-log write fails,
+      // log it (a re-run could then duplicate this write-back) but still count it.
+      if (logErr) console.error('[concierge] concierge_plan_actions log failed', { planId: plan.id, familyId, kind, error: logErr });
       applied.push(kind);
     } catch {
       /* one failed write-back shouldn't abort the rest */
@@ -234,16 +242,25 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   const applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
   const summary = runSummary(plan.title, applied);
 
-  await sb.from('family_automation_runs').update({
+  // Record the run as executed. materializePlan is idempotent (it skips kinds
+  // already in concierge_plan_actions), so surfacing this failure lets the
+  // manager safely retry rather than leaving the run stuck "pending" with the
+  // plan already applied — which would look like the approval did nothing.
+  const { error: runErr } = await sb.from('family_automation_runs').update({
     status: 'executed', summary, result: { steps: applied } as never,
     approved_by: ctx.user.id, approved_at: new Date().toISOString(),
   }).eq('id', runId).eq('family_id', familyId);
+  if (runErr) {
+    console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
+    return { ok: false, error: describeActionError(runErr, 'Applied the plan but could not record the run as executed. Refresh and try again.') };
+  }
 
   if (meta.approval_id) {
-    await sb.from('approval_requests').update({
+    const { error: apprErr } = await sb.from('approval_requests').update({
       status: 'approved', decided_by: ctx.user.id, decided_at: new Date().toISOString(),
       executed_at: new Date().toISOString(), execution_result: summary,
     }).eq('id', meta.approval_id).eq('family_id', familyId);
+    if (apprErr) console.error('[concierge] approval stamp after execution failed', { approvalId: meta.approval_id, familyId, error: apprErr });
   }
 
   revalidatePath(PATH);
@@ -262,14 +279,19 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!run || run.status !== 'pending') return { ok: false, error: 'Run not found or already handled' };
 
-  await sb.from('family_automation_runs').update({ status: 'dismissed' })
+  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
     .eq('id', runId).eq('family_id', ctx.active.familyId);
+  if (dismissErr) {
+    console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
+    return { ok: false, error: describeActionError(dismissErr, 'Could not dismiss that run. Refresh and try again.') };
+  }
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
   if (meta.approval_id) {
-    await sb.from('approval_requests').update({
+    const { error: apprErr } = await sb.from('approval_requests').update({
       status: 'declined', decided_by: ctx.user.id, decided_at: new Date().toISOString(),
     }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId);
+    if (apprErr) console.error('[concierge] approval decline stamp failed', { approvalId: meta.approval_id, familyId: ctx.active.familyId, error: apprErr });
   }
 
   revalidatePath(PATH);

@@ -214,10 +214,13 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
         { supabase, familyId: ctx.active.familyId, userId: ctx.user.id },
         { name: payload.name, args: (payload.args ?? {}) as Record<string, any> },
       );
-      await supabase.from('approval_requests').update({
+      const { error: stampErr } = await supabase.from('approval_requests').update({
         executed_at: new Date().toISOString(),
         execution_result: result.ok ? 'executed' : `error: ${result.error ?? 'unknown'}`,
       }).eq('id', input.id);
+      // The action already ran; if this stamp is silently lost the request looks
+      // un-executed and could be re-run, so make the failure observable.
+      if (stampErr) console.error('[trust] execution-result stamp failed', { approvalId: input.id, error: stampErr });
       await supabase.from('trust_audit_logs').insert({
         family_id: ctx.active.familyId, actor_kind: 'ai_agent', actor_id: 'system',
         domain: appr.domain, capability: appr.capability,

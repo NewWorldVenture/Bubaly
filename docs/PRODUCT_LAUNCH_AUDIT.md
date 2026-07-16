@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0417 - Concierge automation approve/dismiss reported success while the run stayed pending
+
+- Timestamp: 2026-07-16 20:53 UTC
+- Service: AI Concierge autonomous-execution loop (queued-run approval) + Trust approval execution
+- Route: `/dashboard/concierge` (approve/dismiss queued run), `/dashboard/trust` (approval execution stamp)
+- Affected files: `app/(app)/dashboard/concierge/actions.ts`, `app/(app)/dashboard/trust/actions.ts`, `tests/concierge-run-write-boundary.test.ts`
+- Role: parents/guardians (managers)
+- Scenario: a manager approves or dismisses a queued automation run, or a fully-approved trust request auto-executes, and the status/stamp write fails (RLS, constraint, outage)
+- Severity: P1 (silent state-change / consistency)
+- Launch impact: `executeQueuedRunAction` and `dismissQueuedRunAction` discarded the `family_automation_runs` status-update result and returned `{ ok: true }`, so the run stayed "pending" in the UI while the manager was told it was executed/dismissed — and `materializePlan` pushed a write-back onto `applied` even when its `calendar_events`/`family_reminders` insert failed, falsely claiming a calendar event or reminder was created (and, because the write-back was recorded as applied, skipping it on the idempotent re-run so it was never actually created). The Trust execution-result stamp was likewise unchecked, so a fully-executed action could look un-executed and be re-run
+- Root cause: the run status updates, the write-back inserts inside `materializePlan`, and the trust execution stamp all dropped the PostgREST `error`
+- Resolution: `executeQueuedRunAction`/`dismissQueuedRunAction` now capture the run status-update error and return `{ ok: false, error: describeActionError(...) }` (retry is safe — `materializePlan` is idempotent via `concierge_plan_actions`); `materializePlan` now `continue`s (does not mark applied) when a calendar/reminder insert fails and logs it, and logs the `concierge_plan_actions` idempotency-log write failure; the secondary `approval_requests` stamps and the Trust execution-result stamp now `console.error` on failure. Best-effort audit-log/throttle/insights writes (`trust_audit_logs`, `wallet_audit_logs`, `child_login_throttle`, `demo_email_uses`, `audit_logs`, `money_timeline_insights`) were reviewed and left intentionally silent
+- Supabase impact: none; writes unchanged, only their failures surfaced/observable and `applied` made honest
+- Tests run: `tests/concierge-run-write-boundary.test.ts` (dismiss returns ok:false on write error, ok:true on success), full suite 516 files / 3,297 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a mocked failing update and asserts `dismissQueuedRunAction` returns `{ ok: false }`; success path returns `{ ok: true }`
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live per-role verification remains a standing dependency
+- Remaining dependencies: this closes the primary-data bare-write triage in `app/**/actions.ts` — the remaining unchecked writes are all intentionally best-effort audit/throttle/derived-insight side-effects
+
 ### PLA-0416 - CRM seed produced ZERO rows (invalid lead_status broke the whole block)
 
 - Timestamp: 2026-07-16 20:56 UTC
