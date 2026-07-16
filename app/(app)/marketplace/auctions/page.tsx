@@ -4,6 +4,7 @@ import { Gavel, Clock, Flame, TrendingUp } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import { auctionStatus, timeLeft, reserveMet, type AuctionListing } from '@/lib/marketplace/auction';
 import { cn } from '@/lib/utils/cn';
 
@@ -11,6 +12,16 @@ export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubal
 export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" /> Live Auctions</h1>
+      <ErrorState message="Could not load live auctions from Supabase. Refresh and try again." />
+      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">Refresh auctions</Link>
+    </div>
+  );
+}
 
 type Row = {
   id: string; title: string; photo_url: string | null; category: string;
@@ -27,13 +38,17 @@ export default async function AuctionsPage() {
   const now = new Date();
 
   // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
-  const { data } = await sb
+  const { data, error } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, reserve_cents, buy_now_cents, auction_starts_at, auction_ends_at')
     .eq('sale_format', 'auction').eq('status', 'available')
     .gt('auction_ends_at', now.toISOString())
     .order('auction_ends_at', { ascending: true })
     .limit(60);
+  if (error) {
+    console.error('[marketplace-auctions] listing read failed', error);
+    return <ReadFailure />;
+  }
 
   const rows = (data ?? []) as Row[];
   const toAuction = (r: Row): AuctionListing => ({
