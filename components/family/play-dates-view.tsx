@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime } from '@/lib/family/safety';
@@ -25,7 +25,7 @@ export function PlayDatesView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading } = useRealtimeQuery<PlayDate>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<PlayDate>({
     table: 'play_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('play_dates').select('*').eq('family_id', familyId).order('starts_at', { ascending: true }),
   });
@@ -79,14 +79,14 @@ export function PlayDatesView() {
       <PageHeader title="Play Dates" description="Schedule and track the kids' play dates."
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Schedule play date</Button>} />
 
-      {loading ? <SkeletonList /> : (rows ?? []).length === 0 ? (
+      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load play dates. Refresh and try again." onRetry={refresh} /> : (rows ?? []).length === 0 ? (
         <EmptyState icon={Heart} title="No play dates yet" description="Schedule a play date to keep the kids' social calendar organized."
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Schedule play date</Button>} />
       ) : (
         <div className="space-y-6">
           <section>
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Upcoming</h2>
-            {upcoming.length === 0 ? <p className="rounded-2xl border border-dashed border-border bg-surface/30 px-4 py-8 text-center text-sm text-muted">Nothing coming up — schedule one!</p>
+            {upcoming.length === 0 ? <p className="rounded-2xl border border-dashed border-border bg-surface/30 px-4 py-8 text-center text-sm text-muted">Nothing coming up â€” schedule one!</p>
               : <div className="grid gap-3 sm:grid-cols-2">{upcoming.map((pd) => <Card key={pd.id} pd={pd} />)}</div>}
           </section>
           {past.length > 0 && (
@@ -129,7 +129,7 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
       <form onSubmit={submit} className="space-y-4">
         <Field label="Title">{(id) => <Input id={id} value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} placeholder="Playdate at the park" required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Child">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Child">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="When">{(id) => <Input id={id} type="datetime-local" value={v.starts_at} onChange={(e) => setV({ ...v, starts_at: e.target.value })} required />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -149,3 +149,4 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
     </Modal>
   );
 }
+
