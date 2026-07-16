@@ -1,22 +1,38 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { createServiceClient } from '@/lib/supabase/server';
 import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ClipboardList } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Social Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight">Audit log</h1>
+      <AdminSocialSubnav active="/admin/social/audit" />
+      <ErrorState message="Could not load social audit entries from Supabase. Refresh and try again." />
+      <Link href="/admin/social/audit" className="text-sm font-medium text-brand-text underline">Refresh social audit</Link>
+    </div>
+  );
+}
+
 export default async function AdminAuditPage() {
   const supabase = createServiceClient();
-  const { data: logs } = await supabase
+  const { data: logs, error } = await supabase
     .from('social_audit_logs')
     .select('id, family_id, action, entity_type, summary, occurred_at')
     .order('occurred_at', { ascending: false })
     .limit(200);
+  if (error) {
+    console.error('[admin-social-audit] audit read failed', error);
+    return <ReadFailure />;
+  }
 
   return (
     <div className="module-page">
