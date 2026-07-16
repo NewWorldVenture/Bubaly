@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0480 - A-06 calendar verified: wiring, tenant isolation, collaborative authz, and SSRF-safe ICS import
+
+- Timestamp: 2026-07-16 22:02 UTC
+- Service: Calendar / planning (A-06)
+- Route: `/dashboard/calendar`, `POST /api/calendar/sync` (ICS import), `GET /api/sync/feeds/[token]` (ICS export)
+- Affected files: `tests/calendar-sync-ssrf-guard.test.ts` (new); audited `supabase/migrations/0105_calendar_events_rls_repair.sql`, `lib/server/public-calendar-fetch.ts`, `app/api/calendar/sync/route.ts`, `app/api/sync/feeds/[token]/route.ts`
+- Role: any family member (calendar is collaborative); external ICS subscribers (capability token)
+- Scenario: confirm calendar CRUD is Supabase-wired + tenant-isolated, the authz model is intentional, and the ICS import cannot be used for SSRF
+- Severity: (verification — no defect found; positive SSRF-defense confirmation)
+- Launch impact: (1) `calendar_events` has explicit per-op RLS (select/insert/update/delete) all `is_family_member(family_id)` — collaborative family-calendar model is intentional (kids add their own events), and cross-family isolation is already proven live (PLA-0415). (2) The ICS **import** fetches a user-supplied URL — SSRF vector — but goes through `fetchPublicCalendarText`, which rejects loopback/private/link-local/metadata hosts, blocks redirects into private networks, and caps body size (tested in `public-calendar-fetch.test.ts`); the sync route uses it with no raw `fetch()`. (3) The ICS **export** (`/api/sync/feeds/[token]`) is outbound-only, scoped by an unguessable capability token to `feed_enabled` rows
+- Root cause: n/a (verification + regression guard)
+- Resolution: added `tests/calendar-sync-ssrf-guard.test.ts` pinning the sync route to the guarded fetcher (asserts import + use + no raw `fetch()`), so a refactor cannot silently reintroduce SSRF. Pure engines (recurrence/scheduling/feeds/heatmap) already have dedicated tests
+- Supabase impact: none (read/verify only)
+- Tests run: `tests/calendar-sync-ssrf-guard.test.ts` (3 passing); eslint clean
+- Validation evidence: 3/3 green; sync route imports+uses `fetchPublicCalendarText`, zero raw fetch()
+- Commit: (this increment)
+- Status: A-06 wiring/isolation/SSRF Verified + guarded; unit remains In-progress (recurrence UX flows, provider two-way sync = A-18, live E2E)
+- Remaining dependencies: live Google/Apple provider sync (A-18); authenticated E2E of recurring-event edit/delete
+
 ### PLA-0470 - A-12 SECURITY: a child could disable/delete their own Guardian safety rules
 
 - Timestamp: 2026-07-16 21:42 UTC
