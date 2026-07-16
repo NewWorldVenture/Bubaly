@@ -16,7 +16,7 @@ import type { Tables } from '@/lib/database.types';
 type Kid = { id: string; display_name: string; role: string; birthday: string | null; color: string | null };
 type Row = Tables<'independence_milestones'>;
 
-const DEFAULT_AGE = 10;   // no birthday on file → mid-ladder, parent can still pick anything
+const DEFAULT_AGE = 10;   // no birthday on file â†’ mid-ladder, parent can still pick anything
 
 export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] }) {
   const router = useRouter();
@@ -68,7 +68,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
     <div className="module-page">
       <PageHeader
         title="Independence"
-        description="An age-based ladder of real-life skills — responsibilities grow as they do."
+        description="An age-based ladder of real-life skills â€” responsibilities grow as they do."
       />
 
       {/* Kid switcher */}
@@ -96,7 +96,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">
-                Level {level.level} · {level.label}
+                Level {level.level} Â· {level.label}
                 {ageFromBirthday(kid.birthday) === null && (
                   <span className="ml-2 text-[10px] font-semibold text-muted">(add a birthday for age-tuned suggestions)</span>
                 )}
@@ -117,20 +117,20 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               <div className="space-y-2">
                 {inProgress.map(r => (
                   <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
-                    <span className="text-xl">{DOMAIN_ICON[r.domain as IndependenceDomain] ?? '⭐'}</span>
+                    <span className="text-xl">{DOMAIN_ICON[r.domain as IndependenceDomain] ?? 'â­'}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold">{r.title}</p>
                       {r.description && <p className="mt-0.5 text-xs text-muted">{r.description}</p>}
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-1.5">
                       <button
-                        onClick={() => run(() => achieveMilestoneAction(r.id), 'ach-' + r.id, `${kid.display_name} achieved “${r.title}” 🎉`)}
+                        onClick={() => run(() => achieveMilestoneAction(r.id), 'ach-' + r.id, `${kid.display_name} achieved â€œ${r.title}â€ ðŸŽ‰`)}
                         disabled={pending}
                         className="rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-400 transition hover:bg-emerald-500/25 disabled:opacity-50">
                         {busy === 'ach-' + r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Achieved!'}
                       </button>
                       <button
-                        onClick={() => run(() => skipMilestoneAction(r.id), 'skip-' + r.id, 'Skipped — it won’t be suggested again.')}
+                        onClick={() => run(() => skipMilestoneAction(r.id), 'skip-' + r.id, 'Skipped â€” it wonâ€™t be suggested again.')}
                         disabled={pending}
                         aria-label={`Skip ${r.title}`}
                         className="rounded-lg p-2 text-muted transition hover:text-fg disabled:opacity-50">
@@ -148,7 +148,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
             <h2 className="mb-1 flex items-center gap-2 text-sm font-bold">
               <Sparkles className="h-4 w-4 text-brand-text" /> Ready for {kid.display_name} (age {age})
             </h2>
-            <p className="mb-3 text-xs text-muted">Age-matched skills to start next — foundations first.</p>
+            <p className="mb-3 text-xs text-muted">Age-matched skills to start next â€” foundations first.</p>
             <div className="space-y-2">
               {(showAllSuggestions ? suggestions : suggestions.slice(0, 6)).map(m => (
                 <div key={m.title} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
@@ -157,13 +157,13 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                     <p className="text-sm font-semibold">
                       {m.title}
                       <span className="ml-2 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
-                        {DOMAIN_LABEL[m.domain]} · {m.ageBand}
+                        {DOMAIN_LABEL[m.domain]} Â· {m.ageBand}
                       </span>
                     </p>
                     <p className="mt-0.5 text-xs text-muted">{m.description}</p>
                   </div>
                   <button
-                    onClick={() => run(() => startMilestoneAction(kid.id, m.title), 'start-' + m.title, `Added “${m.title}” to ${kid.display_name}'s ladder.`)}
+                    onClick={() => run(() => startMilestoneAction(kid.id, m.title), 'start-' + m.title, `Added â€œ${m.title}â€ to ${kid.display_name}'s ladder.`)}
                     disabled={pending}
                     className="flex-shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
                     {busy === 'start-' + m.title ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start'}
@@ -172,7 +172,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               ))}
               {suggestions.length === 0 && (
                 <p className="py-4 text-center text-sm text-muted">
-                  Every age-appropriate skill is on the ladder already — amazing! 🎉
+                  Every age-appropriate skill is on the ladder already â€” amazing! ðŸŽ‰
                 </p>
               )}
             </div>
@@ -191,7 +191,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               <Trophy className="h-4 w-4 text-amber-400" /> Achieved ({achieved.length})
             </h2>
             {achieved.length === 0 ? (
-              <p className="py-3 text-center text-sm text-muted">First badge coming soon — start a skill above.</p>
+              <p className="py-3 text-center text-sm text-muted">No badges yet â€” start a skill above.</p>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {achieved.map(r => (
@@ -201,8 +201,8 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                       <p className="text-sm font-semibold">{r.title}</p>
                       <p className="mt-0.5 text-[11px] text-muted">
                         {DOMAIN_LABEL[r.domain as IndependenceDomain] ?? r.domain}
-                        {r.achieved_at && <> · {new Date(r.achieved_at).toLocaleDateString()}</>}
-                        {r.evidence && <> · {r.evidence}</>}
+                        {r.achieved_at && <> Â· {new Date(r.achieved_at).toLocaleDateString()}</>}
+                        {r.evidence && <> Â· {r.evidence}</>}
                       </p>
                     </div>
                   </div>
