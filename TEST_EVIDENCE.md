@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Marketplace Deals Read Boundary
+
+- Focused Deals boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 499 test files, 3,259 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Deals now fails visibly when marketplace listings cannot be read instead of presenting a healthy empty deal feed.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `071bfd7c`.
+
 ## Latest Local Evidence - Marketplace Selling Read Boundaries
 
 - Focused Selling boundary suite: 1 file, 1 assertion passed.
@@ -273,18 +285,7 @@ Audit date: 2026-07-15
 - Full `npm.cmd test -- --run`: 479 test files, 3,248 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Removed disconnected Google Drive and Dropbox document-import actions; supported upload, folder creation, and scan actions remain.
-- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
-- Source commit: `2c474f5a`.
-
-## Latest Local Evidence - Wallet Card Availability Contract
-
-- Focused wallet card contract and Stripe capability suite: 2 files, 21 assertions passed.
-- Full `npm.cmd test -- --run`: 478 test files, 3,246 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice …34058 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Clean `npm.cmd run buil…34258 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
