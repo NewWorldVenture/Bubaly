@@ -6,6 +6,52 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## 2026-07-16 LAUNCH AUDIT — RESUME HERE (multi-bot relay)
+>
+> **Context:** The owner is running the full production-launch audit (protocol in the
+> Codex screenshot / `docs/PRODUCT_LAUNCH_AUDIT.md`). Codex ran the first pass and is
+> currently out of usage; Claude bots are relaying the work forward until Codex resumes.
+> **Any Claude bot picking this up: read this block, then continue the same pattern.**
+>
+> **The 6 control-plane docs to keep current (never let them drift):**
+> - `docs/PRODUCT_LAUNCH_AUDIT.md` — issue ledger, newest-first `### PLA-NNNN` entries.
+> - `docs/AUDIT_PROGRESS.md` — weighted inventory; `verified weight / 100 * 100`. Currently **10.0%**.
+> - `docs/LAUNCH_BLOCKERS.md` — LB-001..008 (P0/P1). Decision is **NO-GO** until these clear.
+> - `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/PRODUCTION_READINESS_REPORT.md`.
+> - `docs/progress/YYYY-MM-DD-HHMM.md` — publish a fresh dated file every ~30 min of active work.
+>
+> **The working loop (one validated increment at a time):**
+> 1. Pick the next route/surface (see "Next candidates" below).
+> 2. Find a real defect — the dominant class is a Supabase read that drops `error` and silently
+>    renders empty/healthy. Harden it: user-facing source-of-truth reads **fail closed** (retryable
+>    error), optional *enhancement* reads (e.g. the knowledge graph) **degrade but must log** via
+>    `console.error('[namespace] … read failed', { … })`.
+> 3. Add a focused `*-read-boundary.test.ts` (see `tests/reasoning-context-read-boundary.test.ts`
+>    for the fake-Supabase pattern).
+> 4. Add a `PLA-NNNN` ledger entry, bump progress doc, run **full `npx vitest run`** + `eslint` +
+>    `tsc --noEmit` (the only expected tsc noise is the missing optional `@axe-core/playwright`
+>    dev dep in the e2e spec — exit code is still 0).
+> 5. Commit, **push directly to `main`**, then `git fetch origin main` and verify
+>    `HEAD == origin/main` (rebase over any concurrent push with 2s/4s/8s/16s backoff).
+> 6. **Never claim 100% or GO** — the percentage only moves when a full weighted unit's live +
+>    role + route + deployment gate is verified, and no P0/P1 blocker may be open.
+>
+> **Guardrails:** control-plane guard `tests/launch-audit-docs.test.ts` pins the `PLA-0281` anchor,
+> the LB-001/002 rows, the weighted formula, and a control-byte cleanliness check across all audit
+> docs — keep it green. Watch for control-byte corruption from concurrent writers
+> (`LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < file | wc -c` must be 0).
+>
+> **Latest verified state (2026-07-16 20:00 UTC, HEAD `d271cacf`):** full suite **511 files / 3,273
+> tests green**; PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync hash) and PLA-0406
+> (shared reasoning-context loader now logs graph read failures) shipped to `main`.
+>
+> **Next candidates:** verify the remaining graph-backed AI surfaces (Concierge, Playbook, Decisions,
+> Outcomes, Agents, Calm) consume the hardened `loadFamilyContext` correctly and degrade honestly;
+> then resume the role, live-RLS, browser, backup, and deployment gates. The P0/P1 blockers
+> (Auth Admin HTTP 500, remote migration ledger, credential rotation, authenticated E2E,
+> third-party callback smoke, backup/restore drill) need **Supabase/Vercel operator access** and
+> cannot be closed from the agent sandbox — leave them Open and flag them to the owner.
+
 > ## 2026-07-13 AUTH SEED REPAIR — READ FIRST
 >
 > Production Auth health is 200, but the unfiltered Admin Users endpoint returns
