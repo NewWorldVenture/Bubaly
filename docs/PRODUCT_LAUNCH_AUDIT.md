@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0360 - Medical Records hid active-medication read failures from clinical records
+
+- Timestamp: 2026-07-16 07:27 America/New_York
+- Service: Medical Records
+- Route: `/dashboard/medical-records` and kind-specific medical-records routes
+- Affected files: `components/modules/medical-records-module.tsx`, `tests/health-read-boundaries.test.ts`
+- Role: authenticated family members, household managers, and health-history users
+- Scenario: the active-medications read could fail while providers, insurance, and medical profiles rendered as healthy, leaving medication context incomplete.
+- Severity: P1
+- Launch impact: families could view a partial clinical record while believing all related medical data was current.
+- Root cause: the module excluded medication loading/error state from its existing three-query gate.
+- Resolution: Medical Records now coordinates four required reads and retries providers, policies, profiles, and active medications together before rendering records.
+- Supabase impact: no schema change; existing family-scoped clinical reads now have an explicit page-level failure contract.
+- Tests run: `tests/health-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 476 test files, 3,234 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `eb3ff4b8`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed health verification
+
 ### PLA-0359 - Health and Medications hid required clinical reads as partial history
 
 - Timestamp: 2026-07-16 07:14 America/New_York
