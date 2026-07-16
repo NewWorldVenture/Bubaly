@@ -12,7 +12,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: () => createServer() }))
 function queryClient(result: { data: unknown; error: unknown }) {
   const chain: Record<string, unknown> = {
     select: () => chain, eq: () => chain, is: () => chain, neq: () => chain,
-    not: () => chain, order: () => chain, limit: () => chain,
+    not: () => chain, order: () => chain, limit: () => chain, in: () => chain,
+    ilike: () => chain, maybeSingle: () => Promise.resolve(result),
     then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
   };
   return { from: () => chain };
@@ -46,5 +47,18 @@ describe('module record queries fail closed on read error', () => {
     createServer.mockResolvedValue(queryClient({ data: [{ id: 'a1' }], error: null }));
     const { getAssets } = await import('@/lib/home/queries');
     await expect(getAssets('fam-1')).resolves.toEqual([{ id: 'a1' }]);
+  });
+
+  it('social getAccounts throws when the read fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    createServer.mockResolvedValue(queryClient({ data: null, error: { message: 'permission denied for table social_accounts' } }));
+    const { getAccounts } = await import('@/lib/social/queries');
+    await expect(getAccounts('fam-1')).rejects.toThrow(/Could not load your social data/);
+  });
+
+  it('social getPosts returns rows on success', async () => {
+    createServer.mockResolvedValue(queryClient({ data: [{ id: 'p1' }], error: null }));
+    const { getPosts } = await import('@/lib/social/queries');
+    await expect(getPosts('fam-1')).resolves.toEqual([{ id: 'p1' }]);
   });
 });

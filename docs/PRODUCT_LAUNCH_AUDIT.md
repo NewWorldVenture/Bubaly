@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0412 - Social Command Center lists rendered a misleading empty state on read failure
+
+- Timestamp: 2026-07-16 20:33 UTC
+- Service: Social Command Center (family-facing) — accounts, feed, posts, media library, calendar, inbox, analytics, overview
+- Route: `/dashboard/social/*` (posts, scheduled, published, failed, feed, media-library, content-studio, post detail, overview)
+- Affected files: `lib/social/queries.ts`, `tests/module-queries-read-boundary.test.ts`
+- Role: any family member with social access
+- Scenario: a social read fails (RLS denial, drifted table, outage) while a Social page loads
+- Severity: P1 (continuation of the PLA-0411 misleading-empty-state class)
+- Launch impact: all ~10 read helpers in `lib/social/queries.ts` discarded the PostgREST `error` and returned `data ?? []` / zero counts, so a failed read rendered a confident empty state — "no posts / no accounts / all metrics zero" — when the data was merely unreadable; the module's own header comment promises it is "fully Supabase-backed — no fabricated rows," which a silent empty read violates
+- Root cause: `const { data } = await …; return data ?? []` and `count ?? 0` dropped `error` across the list getters (`getAccounts`, `getFeed`, `getPosts`, `getMediaLibrary`, `getCalendarItems`), the multi-read getters (`getPost`, `getInbox`), and the aggregates (`getAnalytics`, `getSocialOverview`)
+- Resolution: added `orThrow`/`throwIfError` helpers; every read now fails closed on error — log via `console.error('[social/queries] read failed', …)` and throw "Could not load your social data from Supabase. Refresh and try again." — while `getPost` still tolerates a genuine not-found (null post, no error). All consumers are dedicated Social pages with no try/catch, so the page surfaces a visible error instead of a fake-empty UI
+- Supabase impact: none; reads unchanged, only their failures now fail closed and are observable
+- Tests run: `tests/module-queries-read-boundary.test.ts` (now 6 — auto/home/social getters throw on error, return rows on success), full suite 515 files / 3,293 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a mocked failing client and asserts `getAccounts` rejects with the fail-closed message; `getPosts` returns rows on success
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live per-role RLS verification remains a standing dependency
+- Remaining dependencies: authenticated per-role read verification (LB-005 adjacent); this completes the `lib/*/queries.ts` fail-closed triage (auto, home, social — the only three record-query libs)
+
 ### PLA-0411 - Auto and Home record lists rendered a misleading empty state on read failure
 
 - Timestamp: 2026-07-16 20:29 UTC
