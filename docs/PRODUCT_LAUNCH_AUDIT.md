@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0461 - `family-media` storage bucket is undefined in migrations and served via public URLs (A-11) — OPEN, owner-gated
+
+- Timestamp: 2026-07-16 21:30 UTC
+- Service: Files / media storage (A-11) + Photos (A-05), Memories, Messages attachments, Reminder attachments
+- Route: `/dashboard/photos`, `/dashboard/memories`, `/dashboard/messages`, `/dashboard/files/*`, reminder attachments
+- Affected files (consumers): `components/modules/photos-module.tsx`, `components/memories/create-memory.tsx`, `components/modules/messages-module.tsx`, `components/modules/reminders-module.tsx`, `lib/storage/family-media.ts`; **no migration defines the bucket**
+- Role: any user uploading media; any unauthenticated party with an object URL
+- Scenario: (1) a fresh Supabase project / the PG16 harness has no `family-media` bucket; (2) media is served via `getPublicUrl`
+- Severity: **P1** (reproducibility + privacy) — filed as blocker **LB-009**
+- Launch impact:
+  1. **Reproducibility / wiring gap** — four features upload to the `family-media` bucket, but unlike every other bucket (`documents` 0007, `chore-proof` 0043, `avatars` 0089, `marketplace-photos` 0194, `marketing-assets` 0060, feedback 0197) it is **created in no migration**. It exists in production only because it was created manually in the Supabase dashboard. On any fresh environment (a new project, the launch-audit PG16 harness, a rebuild) Photos, Create-Memory, Messages attachments, and Reminder attachments all **fail to upload** — and the bucket's `public` flag + RLS live only in the dashboard, outside version control.
+  2. **Privacy** — every consumer resolves attachments with `getPublicUrl`, i.e. the bucket is public-read. Object paths are `${familyId}/…/${Date.now()}.${ext}` (semi-guessable). So family photos (including children's), private message image/audio/file attachments, and memories are **readable by anyone with the URL, bypassing family RLS on reads**. `documents` (the private, signed-URL bucket) is the correct contrasting model.
+- Root cause: the bucket + its policies were provisioned out-of-band (dashboard) instead of in a migration; consumers were built against a public bucket
+- Recommended resolution (owner-gated — a prod storage migration is human-owned per the coordination rules, and the public→private switch is a cross-module security/UX decision):
+  1. Add a migration that idempotently creates `family-media` (`insert … on conflict do nothing`, `file_size_limit = 26214400`) with **family-folder write RLS** on `storage.objects` mirroring the `documents` bucket (`is_family_member(((storage.foldername(name))[1])::uuid)` for insert/update/delete), so fresh environments and the harness work and cross-family writes are blocked — without altering the existing prod bucket.
+  2. Decide read visibility: to close the privacy gap, make the bucket private + add a family-folder SELECT policy and switch the four consumers from `getPublicUrl` to `createSignedUrl` (the pattern `documents-module` already uses). This is the cross-module change requiring owner sign-off.
+- Supabase impact: requires a new prod storage migration (human-owned) + a potential public→private flip
+- Tests run: static analysis — confirmed zero migrations define `family-media`; confirmed all four consumers use `getPublicUrl`; contrasted against the correctly-defined `documents` bucket (0007, family-folder RLS) verified in PLA-0442
+- Validation evidence: `grep -rn family-media supabase/migrations` → no bucket insert/policy; consumers at photos-module:105, create-memory:103, messages-module:365, reminders-module:624 all call `getPublicUrl`
+- Commit: (documentation only — no code change; fix is owner-gated)
+- Status: **OPEN** — documented as launch blocker LB-009; flagged to owner (agent-03, A-11)
+- Remaining dependencies: owner decision on public vs. signed-URL; a human-applied prod storage migration; add `family-media` to the seed/harness once defined
+
 ### PLA-0460 - A-14 marketplace ownership/trust RPCs verified caller-gated (guarded)
 
 - Timestamp: 2026-07-16 21:31 UTC

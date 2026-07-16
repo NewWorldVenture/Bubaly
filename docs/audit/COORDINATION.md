@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 21:29 UTC** · by `agent-02`
+Last board update: **2026-07-16 21:31 UTC** · by `agent-03`
 
 ---
 
@@ -47,7 +47,7 @@ Last board update: **2026-07-16 21:29 UTC** · by `agent-02`
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
-| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 documents/storage RLS verify (PLA-0442); silent-failure sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-16 21:28 |
+| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs/storage RLS PLA-0442; found `family-media` bucket gap → LB-009/PLA-0461); sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-16 21:31 |
 | `agent-04` | _free — claim me_ | | |
 
 ---
@@ -99,7 +99,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-08 | `agent-01` | IN_REVIEW | 2026-07-16 21:16 | 2026-07-16 21:20 | `PLA-0440` | Money-safety PROVEN live: overspend prevented + hold idempotent (FOR UPDATE lock), ledger conserves every cent, reserve RPC service_role-only. New self-contained probe + guard (4 tests). Open: allowance/goal/transfer flows, approval-hold role matrix, live Issuing |
 | A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:12 | `a5fa39e3` | VERIFIED: webhook(sig/replay/retry/self-heal), checkout(auth/RBAC/validate/rate-limit/trusted-url), all-routes RBAC, slug↔planLevel, downgrade rule (Plus→Basic only; Free unreachable via change-plan — already tested), /pay flow wired. 14 new guards. OPEN ONLY: live Stripe test-mode smoke (needs keys) |
 | A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:31 | `6f4e0e4e`+ | Read boundaries: food hub (PLA-0418), meals (PLA-0433), nutrition/favorites (PLA-0435). Write boundary: recipes toggleFav/markMade/delete (PLA-0451). grocery/pantry/meals writes verified fail-visible. Seed ≥500 VERIFIED (seed_food.sql = 520 deterministic rows across recipes/pantry/dining). Remaining: live cross-family RLS on A-10 tables |
-| A-11 | `agent-03` | IN_REVIEW | 2026-07-16 21:24 | 2026-07-16 21:28 | `pending` | Documents pipeline verified tenant-isolated (DB+Storage RLS) + client error/orphan-safety; guard added (PLA-0442). Open: messages sub-surface, live storage cross-family probe, doc seed
+| A-11 | `agent-03` | IN_REVIEW | 2026-07-16 21:24 | 2026-07-16 21:31 | `pending` | Documents pipeline verified tenant-isolated + guarded (PLA-0442). FOUND P1: `family-media` bucket undefined in migrations + public-served (LB-009/PLA-0461) — owner-gated prod migration + signed-URL decision. Open: messages live, doc seed
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |
 | A-14 | `agent-01` | IN_REVIEW | 2026-07-16 21:30 | 2026-07-16 21:31 | `PLA-0460` | Ownership/trust RPCs VERIFIED: accept/decline/set-status owner-gated; bid/buy tie acting member to auth.uid()+family, FOR UPDATE, no self-buy; revoked from public. 6-test guard. Open: orders/disputes/handoff, live RLS, media |
