@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:30:42 -04:00
+- Last updated: 2026-07-16 09:41:58 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0a4b83cd` makes Workload Balance fail closed on required read failures after `ada8107c` corrected the Apple Reminders capability claim; live provider and deployment evidence remains open
+- Commit: `2dde5f16` makes Super Admin Visitor Intelligence fail closed on analytics read failures after `0a4b83cd` repaired Workload Balance; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0377 - Visitor Intelligence hid analytics failures as zero metrics
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing analytics / Supabase read boundary
+- Feature: Visitor Intelligence
+- Route: `/admin/marketing/visitor-intelligence`
+- File or files: `app/(app)/admin/marketing/visitor-intelligence/page.tsx`, `tests/admin-visitor-intelligence-read-boundary.test.ts`
+- Database objects: `mkt_visitors`, `crm_contact_profile`, `crm_lead_scores`, and `mkt_consent_events`
+- Affected roles: Super Admin
+- Scenario: a service-role analytics query could fail while the page rendered zero-valued funnel, lead-band, and consent metrics.
+- Launch impact: operators could treat a failed analytics backend as healthy empty traffic and make decisions from false data.
+- Root cause: count reads discarded returned Supabase errors and converted thrown errors to zero.
+- Required remediation: preserve count-read errors, fail visibly with a retry state, and keep zero as a valid value only when the query succeeds.
+- Implementation notes: count now returns `{ value, error }`; all eleven metrics are checked before funnel calculation; the page includes a retry path.
+- Test plan: focused Visitor Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (483 files/3,243 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `2dde5f16`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Visitor Intelligence no longer masks Supabase analytics failures as zero metrics.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the page and workflow audit.
 
 #### TODO-0376 - Workload Balance hid required read failures as empty history
 
