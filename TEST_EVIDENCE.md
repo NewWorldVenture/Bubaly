@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Workload Read Boundary
+
+- Focused Workload boundary and balance suites: 2 files, 11 assertions passed.
+- Full `npm.cmd test -- --run`: 482 test files, 3,242 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Workload Balance now fails visibly when any required workload or history query fails; snapshot-save failures are shown through the toast path.
+- Live Auth Admin, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `0a4b83cd`.
+
 ## Latest Local Evidence - Apple Reminders Capability Honesty
 
 - Focused Apple sync and capability suites: 2 files, 34 assertions passed.
