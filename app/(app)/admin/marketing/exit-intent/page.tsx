@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LogOut, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch } from '@/lib/marketing/personalization';
 import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/marketing/exit-intent';
@@ -16,6 +18,16 @@ type Offer = Tables<'marketing_exit_intent'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-black sm:text-2xl">Exit-Intent Popups</h1>
+      <ErrorState message="Could not load exit-intent offers from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">Refresh exit-intent offers</Link>
+    </div>
+  );
+}
+
 function matchSummary(m: AudienceMatch): string {
   const p: string[] = [];
   if (m.source?.length) p.push(`source: ${m.source.join('/')}`);
@@ -23,19 +35,23 @@ function matchSummary(m: AudienceMatch): string {
   if (m.paths?.length) p.push(`path: ${m.paths.join('/')}`);
   if (m.countries?.length) p.push(`country: ${m.countries.join('/')}`);
   if (typeof m.returning === 'boolean') p.push(m.returning ? 'returning' : 'new visitor');
-  if (m.minSessions) p.push(`≥${m.minSessions} sessions`);
-  return p.length ? p.join(' · ') : 'Everyone';
+  if (m.minSessions) p.push(`â‰¥${m.minSessions} sessions`);
+  return p.length ? p.join(' Â· ') : 'Everyone';
 }
 
 export default async function ExitIntentPage() {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_exit_intent')
     .select('*')
     .is('deleted_at', null)
     .order('priority', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(200);
+  if (error) {
+    console.error('[admin-marketing-exit-intent] offer read failed', error);
+    return <ReadFailure />;
+  }
   const offers = (data ?? []) as Offer[];
   const stats = summarizeExitIntent(offers);
 
@@ -113,9 +129,9 @@ export default async function ExitIntentPage() {
                     <Badge tone="neutral">P{o.priority}</Badge>
                     <Badge tone={o.status === 'active' ? 'success' : 'neutral'}>{o.status === 'active' ? 'Active' : 'Paused'}</Badge>
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-fg/80">“{o.headline}”{o.cta_label ? ` → [${o.cta_label}]` : ''}</p>
+                  <p className="mt-0.5 truncate text-xs text-fg/80">â€œ{o.headline}â€{o.cta_label ? ` â†’ [${o.cta_label}]` : ''}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {matchSummary(m)} · {trig.mode === 'scroll' ? `scroll ${trig.scrollPercent}%` : 'mouseleave'} · {o.impressions} shown · {o.conversions} converted ({conversionRate(o.conversions, o.impressions)}%)
+                    {matchSummary(m)} Â· {trig.mode === 'scroll' ? `scroll ${trig.scrollPercent}%` : 'mouseleave'} Â· {o.impressions} shown Â· {o.conversions} converted ({conversionRate(o.conversions, o.impressions)}%)
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -125,7 +141,7 @@ export default async function ExitIntentPage() {
                     </button>
                   </form>
                   <form action={deleteExitIntentAction.bind(null, o.id)}>
-                    <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
+                    <button type="submit" className="text-xs text-muted hover:text-rose-400">âœ•</button>
                   </form>
                 </div>
               </Card>
