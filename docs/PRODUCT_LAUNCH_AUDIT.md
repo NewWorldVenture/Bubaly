@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0442 - A-11 documents pipeline verified tenant-isolated across DB + Storage (guarded)
+
+- Timestamp: 2026-07-16 21:28 UTC
+- Service: Files / documents / storage (A-11)
+- Route: `/dashboard/documents`, `/dashboard/binder`, `/dashboard/files/{cloud,shared,vault}`
+- Affected files: `tests/a11-documents-storage-rls.test.ts` (new static guard)
+- Role: any member of family B attempting to reach family A's documents (metadata or bytes)
+- Scenario: confirm both layers of the documents pipeline — the `documents` DB table and the private `documents` Storage bucket — are family-scoped, and that the client handles errors + never orphans a stored file
+- Severity: (verification of a CRITICAL invariant on the A-11 surface — no defect found)
+- Launch impact: documents carry a family's most sensitive records; isolation must hold at both the metadata and the object-storage layer. Verified and guarded so neither can silently regress
+- Root cause: n/a (verification)
+- Resolution: verified the full pipeline is sound —
+  (1) **DB table** `documents` (migration 0109): RLS enabled, all four ops scoped to `is_family_member(family_id)`;
+  (2) **Storage bucket** `documents` (migration 0007): all four `storage.objects` policies scoped to `bucket_id = 'documents' AND is_family_member(((storage.foldername(name))[1])::uuid)` — the first path segment is the family id, so family B cannot read/write family A's objects;
+  (3) **Storage helper** `lib/storage/documents.ts`: enforces the 25 MB limit, uses `buildFamilyPath` (family-folder), and returns `{ error }` from upload / signed-URL / remove;
+  (4) **Client modules** (`documents-module`, `files-hub-module`, `binder-module`): `useRealtimeQuery` with `error`→`<ErrorState onRetry>`, every write error-checked via `describeDbError`, and — critically — a failed DB insert after an upload calls `removeFamilyDocument(path)` so no orphaned storage object is left behind. Added `tests/a11-documents-storage-rls.test.ts` pinning both RLS layers
+- Supabase impact: none (read-only verification); no schema change
+- Tests run: `tests/a11-documents-storage-rls.test.ts` (2 — DB table + storage bucket), full suite 3,348 tests, eslint clean, typecheck clean
+- Validation evidence: the guard asserts the `documents` table's four family-scoped policies and the four family-folder storage policies with the `foldername()[1]` isolation predicate
+- Commit: (this increment)
+- Status: A-11 documents/storage tenant-isolation + error-handling + orphan-safety Verified + guarded; A-11 unit remains In-progress (messages/vault-specific surfaces, live cross-family storage probe, and ≥500-row doc seed still open)
+- Remaining dependencies: extend the A-03 live probe to a storage cross-family object read; audit the messages sub-surface; live upload/download/delete smoke
+
 ### PLA-0441 - A-16 notification/reminder tables verified RLS tenant-scoped (guarded)
 
 - Timestamp: 2026-07-16 21:23 UTC
