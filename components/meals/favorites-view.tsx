@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { FAVORITE_KIND_META } from '@/lib/meals/tracker';
@@ -22,7 +22,7 @@ export function FavoritesView() {
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: rows, loading } = useRealtimeQuery<Favorite>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Favorite>({
     table: 'family_favorites', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_favorites').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -43,6 +43,10 @@ export function FavoritesView() {
     const { error } = await createClient().from('family_favorites').delete().eq('id', id);
     if (error) toastError(error.message); else success('Removed');
   }
+
+  // A genuine read failure must surface + be retryable, not silently render as an
+  // empty favorites list. (Missing-table/offline are already degraded by the hook.)
+  if (error) return <ErrorState message="Could not load favorites. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="module-page">

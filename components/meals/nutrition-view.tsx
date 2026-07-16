@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { dailyTotals, groupByMeal, todayKey, MEAL_META, MEALS } from '@/lib/meals/tracker';
@@ -27,7 +27,7 @@ export function NutritionView() {
   const [member, setMember] = useState<string>(selfMember?.id ?? members[0]?.id ?? '');
   const [form, setForm] = useState(false);
 
-  const { data: rows, loading } = useRealtimeQuery<Log>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'nutrition_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('nutrition_logs').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
   });
@@ -41,6 +41,10 @@ export function NutritionView() {
     const { error } = await createClient().from('nutrition_logs').delete().eq('id', id);
     if (error) toastError(error.message);
   }
+
+  // A genuine read failure must surface + be retryable, not silently render as an
+  // empty tracker. (Missing-table/offline are already degraded to empty by the hook.)
+  if (error) return <ErrorState message="Could not load nutrition logs. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="module-page">
