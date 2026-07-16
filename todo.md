@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 06:45:16 -04:00
+- Last updated: 2026-07-16 06:51:06 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `4f5edc92` adds Play Dates read failure handling after Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `632f677d` adds Location read failure handling after Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Family Location
+- Route: `/dashboard/locator`
+- File or files: `components/modules/locator-module.tsx`, `tests/family-location-read-boundary.test.ts`
+- Database objects: `member_locations`, `family_places`, and `location_events`
+- Affected roles: authenticated family members and household managers
+- Scenario: one or more location reads could fail while the map and live-location sections rendered from empty or partial arrays.
+- Launch impact: families could miss a member location, geofence, or recent safety history while the page appeared usable.
+- Root cause: the module only gated on the locations query loading state and ignored errors from all three required reads.
+- Required remediation: coordinate loading and failure state for locations, places, and history, then retry the complete read set together.
+- Implementation notes: Location now waits for all three reads and renders a sanitized ErrorState with a coordinated retry action before the map.
+- Test plan: focused location boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-location-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 472 files/3,227 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `632f677d`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0354 - Play Dates hid family scheduling read failures as no play dates
 
@@ -200,29 +221,7 @@
 - Route: `/dashboard/vacations/reports`
 - File or files: `components/vacations/vacations-reports.tsx`, `tests/vacations-reports-boundary.test.ts`
 - Database objects: `vacations`, `vacation_expenses`, `vacation_budgets`, and `vacation_travel_scores`
-- Affected roles: authenticated family members and household trip planners
-- Scenario: expense, budget, or travel-score reads could fail while the report rendered trip counts and partial financial totals as if complete.
-- Launch impact: families could make travel budget decisions from incomplete or stale report data.
-- Root cause: only the trips query exposed loading state; secondary report reads ignored their loading and error contracts.
-- Required remediation: track all report reads, wait for every required result, and render a sanitized retry state before calculating totals or charts.
-- Implementation notes: Vacation Reports now fails closed on any required read failure and retries all four reads together.
-- Test plan: focused vacation report boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 464 files/3,212 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
-- Resolution: source repair validated locally in commit `194e4ecb`; documentation and remote publication remain pending for this increment.
-- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
-
-### Active audit issue
-
-#### TODO-0345 - Connections hub hid family connection read failures as disconnected providers
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Family integrations / connections observability / Supabase failure handling
-- Feature: Family Connections hub
-- Route: `/dashboard/connections`
-- File or files: `components/modules/connections-module.tsx`, `tests/connections-ui-boundary.test.ts`
-- Database objects: `family_conne…114246 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- …114722 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
