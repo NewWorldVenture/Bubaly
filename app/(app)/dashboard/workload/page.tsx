@@ -3,18 +3,19 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { WorkloadModule } from '@/components/modules/workload-module';
 import type { Tables } from '@/lib/database.types';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Workload Balance' };
 export const dynamic = 'force-dynamic';
 
-/** Who is carrying the household — mental-load measurement + one-tap rebalance. */
+/** Who is carrying the household â€” mental-load measurement + one-tap rebalance. */
 export default async function WorkloadPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
   const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const [membersQ, assignQ, choresQ, todosQ, eventsQ] = await Promise.all([
+  const [membersQ, assignQ, choresQ, todosQ, eventsQ, snapshotsQ] = await Promise.all([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, chore_id, member_id, status, created_at')
@@ -24,15 +25,23 @@ export default async function WorkloadPage() {
       .eq('family_id', familyId).gte('created_at', weekAgo).limit(1000),
     supabase.from('calendar_events').select('created_by, starts_at')
       .eq('family_id', familyId).gte('starts_at', weekAgo).limit(1000),
+    supabase.from('workload_snapshots').select('*')
+      .eq('family_id', familyId).order('week_start', { ascending: false }).limit(600),
   ]);
 
-  // Snapshot history for trends — degrades safely before migration 0174.
-  let snapshots: Tables<'workload_snapshots'>[] = [];
-  try {
-    const { data } = await supabase.from('workload_snapshots').select('*')
-      .eq('family_id', familyId).order('week_start', { ascending: false }).limit(600);
-    snapshots = (data ?? []) as Tables<'workload_snapshots'>[];
-  } catch { /* table not applied yet */ }
+  // Snapshot history for trends â€” degrades safely before migration 0174.
+  const queries = [membersQ, assignQ, choresQ, todosQ, eventsQ, snapshotsQ];
+  const failedQuery = queries.find((query) => query.error);
+  if (failedQuery?.error) {
+    console.error('[workload] page data read failed', failedQuery.error);
+    return (
+      <div className="module-page">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Workload Balance</h1>
+        <ErrorState message="Could not load workload data from Supabase. Refresh and try again." />
+        <a href="/dashboard/workload" className="text-sm font-medium text-brand-text underline">Refresh workload data</a>
+      </div>
+    );
+  }
 
   return (
     <WorkloadModule
@@ -42,7 +51,7 @@ export default async function WorkloadPage() {
       chores={(choresQ.data ?? []) as { id: string; title: string; est_minutes: number | null; points: number }[]}
       todos={(todosQ.data ?? []) as { assigned_to_id: string | null; is_done: boolean; created_at: string }[]}
       events={(eventsQ.data ?? []) as { created_by: string | null; starts_at: string }[]}
-      snapshots={snapshots}
+      snapshots={(snapshotsQ.data ?? []) as Tables<'workload_snapshots'>[]}
     />
   );
 }
