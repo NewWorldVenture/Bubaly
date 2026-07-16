@@ -1,7 +1,7 @@
 'use client';
 
 // Wallet → Cards. Frictionless card management for kids — virtual + physical.
-// Three modes: (A) Stripe not configured → coming-soon placeholder, (B) setup
+// Three modes: (A) provider not configured → explicit unavailable state, (B) setup
 // needed → guided 3-step onboarding wizard, (C) live → manage per-child cards
 // with instant freeze, spend controls, and physical-card ordering.
 import { useState, useEffect } from 'react';
@@ -105,17 +105,17 @@ export function MoneyCardsView({
     router.refresh();
   }
 
-  // ── Mode A: Stripe cards not configured yet → friendly coming-soon ──
+  // ── Mode A: card provider is not configured → explicit unavailable state ──
   if (!capabilities.connectOnboarding && !capabilities.issuing) {
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title="Cards" description="Give kids a safe way to spend — coming soon." />
+        <PageHeader title="Cards" description="Spending cards are not enabled for this family yet." />
         <div className="mt-4 rounded-2xl border border-border bg-surface/40 p-6">
           <EmptyState
             icon={CreditCard}
-            title="Spending cards coming soon"
-            description="Your Family Wallet tracks allowances, gifts, savings goals and chore rewards today. Kid-safe spending cards will appear here when they're ready — no action needed."
+            title="Spending cards are unavailable"
+            description="Your Family Wallet tracks allowances, gifts, savings goals and chore rewards today. A parent can return here after the family card program has been configured."
           />
         </div>
       </div>

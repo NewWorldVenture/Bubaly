@@ -2,7 +2,7 @@
 
 // Child wallet detail — world-class financial dashboard for one child.
 // • Smart Split donut (CSS conic-gradient) showing actual bucket allocation
-// • Virtual card placeholder (Stripe Issuing when approved)
+// • Clear card-status preview when no payment card has been issued
 // • AI Money Coach: inline coaching card
 // • Quick actions: Add Funds, Request to Spend, Send to Sibling
 // • Goals with animated progress bars + date forecast
@@ -123,50 +123,47 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
   );
 }
 
-// ─── Virtual Card ─────────────────────────────────────────────────────────────
+// ─── Card status ──────────────────────────────────────────────────────────────
 
-function VirtualCardPlaceholder({ child }: { child: Child }) {
+function SpendingCardPreview({ child }: { child: Child }) {
   const spendable = child.buckets.spend ?? 0;
   return (
     <div className="relative overflow-hidden rounded-2xl p-5 text-white select-none"
-      style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #1d4ed8 100%)' }}>
+      style={{ background: 'var(--color-brand-subtle, rgba(14, 116, 144, 0.12))' }}>
       {/* Decorative circles */}
-      <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
-      <div className="pointer-events-none absolute -right-3 top-10 h-20 w-20 rounded-full bg-white/5" />
-      <div className="pointer-events-none absolute bottom-0 left-0 h-24 w-24 rounded-full bg-white/[0.03]" />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand/10" />
+      <div className="pointer-events-none absolute -right-3 top-10 h-20 w-20 rounded-full bg-brand/10" />
 
       {/* Top row */}
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">Bubaly Family</p>
-          <p className="mt-0.5 text-base font-bold">{child.name}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Bubaly Family</p>
+          <p className="mt-0.5 text-base font-bold text-foreground">{child.name}</p>
         </div>
-        <div className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2 py-1">
-          <CreditCard className="h-3.5 w-3.5 text-white/70" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">Virtual</span>
+        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 py-1">
+          <CreditCard className="h-3.5 w-3.5 text-muted" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Preview</span>
         </div>
       </div>
 
       {/* Balance */}
       <div className="relative mt-4">
-        <p className="text-[10px] uppercase tracking-widest text-white/50">Spend balance</p>
-        <p className="text-3xl font-black">{formatCents(spendable)}</p>
+        <p className="text-[10px] uppercase tracking-widest text-muted">Available spend balance</p>
+        <p className="text-3xl font-black text-foreground">{formatCents(spendable)}</p>
       </div>
 
-      {/* Card number */}
-      <p className="relative mt-3 font-mono text-base tracking-[0.25em] text-white/30">
-        ••••  ••••  ••••  ••••
-      </p>
+      <p className="relative mt-3 text-sm font-semibold text-foreground">No payment card issued</p>
+      <p className="relative mt-1 text-xs text-muted">This balance is tracked in the family ledger until a card is actually issued.</p>
 
       {/* Bottom row */}
       <div className="relative mt-4 flex items-end justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-white/40">Spending card</p>
-          <Link href="/wallet/cards" className="text-xs font-semibold text-white/60 underline-offset-2 transition hover:text-white hover:underline">
-            Manage cards → every swipe checks this balance
+          <p className="text-[10px] uppercase tracking-widest text-muted">Card setup</p>
+          <Link href="/wallet/cards" className="text-xs font-semibold text-brand-text underline-offset-2 transition hover:underline">
+            Open card setup →
           </Link>
         </div>
-        <p className="text-xl font-black italic tracking-wider text-white/80">VISA</p>
+        <p className="text-right text-[10px] font-semibold uppercase tracking-widest text-muted">Ledger only</p>
       </div>
     </div>
   );
@@ -691,8 +688,8 @@ export function ChildDetailView({
         )}
       </div>
 
-      {/* ── Virtual Card ──────────────────────────────────────────────────────── */}
-      <VirtualCardPlaceholder child={child} />
+      {/* ── Card status ───────────────────────────────────────────────────────── */}
+      <SpendingCardPreview child={child} />
 
       {/* ── AI Money Coach ────────────────────────────────────────────────────── */}
       <AICoachCard childId={child.id} />
