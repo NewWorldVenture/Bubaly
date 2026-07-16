@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
@@ -48,28 +48,32 @@ export function VotingModule() {
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
 
-  const { data: polls, loading } = useRealtimeQuery<Poll>({
+  const { data: polls, loading: pollsLoading, error: pollsError, refresh: refreshPolls } = useRealtimeQuery<Poll>({
     table: 'family_polls', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_polls').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
-  const { data: options } = useRealtimeQuery<Option>({
+  const { data: options, loading: optionsLoading, error: optionsError, refresh: refreshOptions } = useRealtimeQuery<Option>({
     table: 'family_poll_options', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_poll_options').select('*').eq('family_id', familyId),
   });
-  const { data: votes } = useRealtimeQuery<VoteRow>({
+  const { data: votes, loading: votesLoading, error: votesError, refresh: refreshVotes } = useRealtimeQuery<VoteRow>({
     table: 'family_poll_votes', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_poll_votes').select('*').eq('family_id', familyId),
   });
-  const { data: vacations } = useRealtimeQuery<VacationLite>({
+  const { data: vacations, loading: vacationsLoading, error: vacationsError, refresh: refreshVacations } = useRealtimeQuery<VacationLite>({
     table: 'vacations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacations').select('id, title').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
   // Reasoning context: the family's real budgets fund the consensus when a poll
   // has a spending category but no explicit cap.
-  const { data: budgets } = useRealtimeQuery<BudgetRow>({
+  const { data: budgets, loading: budgetsLoading, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<BudgetRow>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('category, amount').eq('family_id', familyId),
   });
+
+  const loading = pollsLoading || optionsLoading || votesLoading || vacationsLoading || budgetsLoading;
+  const error = pollsError || optionsError || votesError || vacationsError || budgetsError;
+  const refresh = () => { void refreshPolls(); void refreshOptions(); void refreshVotes(); void refreshVacations(); void refreshBudgets(); };
 
   const [form, setForm] = useState<Form | null>(null);
   const optionsByPoll = useMemo(() => {
@@ -143,6 +147,7 @@ export function VotingModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family voting data. Refresh and try again." onRetry={refresh} />;
   const all = polls ?? [];
   const budgetRows = budgets ?? [];
 
@@ -151,7 +156,7 @@ export function VotingModule() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand-text" /> Group Voting</h3>
-          <p className="mt-0.5 text-xs text-muted">The family votes — Bubaly weighs it against your budget and needs, and recommends.</p>
+          <p className="mt-0.5 text-xs text-muted">The family votes â€” Bubaly weighs it against your budget and needs, and recommends.</p>
         </div>
         <div className="flex items-center gap-2">
           <AiInsight kind="votes" iconOnly />
@@ -160,7 +165,7 @@ export function VotingModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Vote} title="No polls yet" description="Create a poll to make a collaborative family decision — a trip, a restaurant, a movie night. Add each option's cost and Bubaly will facilitate consensus." />
+        <EmptyState icon={Vote} title="No polls yet" description="Create a poll to make a collaborative family decision â€” a trip, a restaurant, a movie night. Add each option's cost and Bubaly will facilitate consensus." />
       ) : all.map((p) => {
         const opts = (optionsByPoll.get(p.id) ?? []) as Option[];
         const pollVotes = (votesByPoll.get(p.id) ?? []) as VoteRow[];
@@ -169,7 +174,7 @@ export function VotingModule() {
         const closed = isPollClosed(p.status, p.closes_at);
         const vac = vacationName(p.vacation_id);
 
-        // ── AI facilitation ────────────────────────────────────────────────
+        // â”€â”€ AI facilitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const budgetCents = typeof p.budget_cents === 'number'
           ? p.budget_cents
           : budgetCapForCategory(p.decision_category, budgetRows);
@@ -200,11 +205,11 @@ export function VotingModule() {
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
-                  {p.kind === 'multi' ? 'Multiple choice' : 'Single choice'} · {voterCount(pollVotes as VoteLike[])} voted
-                  {vac ? <> · <Plane className="inline h-3 w-3" /> {vac}</> : ''}
-                  {typeof budgetCents === 'number' ? <> · <DollarSign className="inline h-3 w-3" /> budget {usd(budgetCents)}{p.budget_cents == null ? ' (from your budget)' : ''}</> : ''}
-                  {requiredTags.length > 0 ? <> · <Leaf className="inline h-3 w-3" /> {requiredTags.join(', ')}</> : ''}
-                  {p.closes_at ? ` · closes ${fmtDate(p.closes_at)}` : ''}
+                  {p.kind === 'multi' ? 'Multiple choice' : 'Single choice'} Â· {voterCount(pollVotes as VoteLike[])} voted
+                  {vac ? <> Â· <Plane className="inline h-3 w-3" /> {vac}</> : ''}
+                  {typeof budgetCents === 'number' ? <> Â· <DollarSign className="inline h-3 w-3" /> budget {usd(budgetCents)}{p.budget_cents == null ? ' (from your budget)' : ''}</> : ''}
+                  {requiredTags.length > 0 ? <> Â· <Leaf className="inline h-3 w-3" /> {requiredTags.join(', ')}</> : ''}
+                  {p.closes_at ? ` Â· closes ${fmtDate(p.closes_at)}` : ''}
                   {closed && <span className="ml-1 inline-flex items-center gap-1 text-amber-500"><Lock className="h-3 w-3" /> closed</span>}
                 </p>
                 {p.description && <p className="mt-1 text-sm text-muted">{p.description}</p>}
@@ -221,12 +226,12 @@ export function VotingModule() {
                 <div className="flex items-center gap-2 text-sm">
                   <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span>
-                    Bubaly recommends <strong>{consensus.recommendation.label}</strong> — {consensus.recommendation.rationale}
+                    Bubaly recommends <strong>{consensus.recommendation.label}</strong> â€” {consensus.recommendation.rationale}
                   </span>
                 </div>
                 {consensus.totalVotes > 0 && (
                   <p className="mt-1 pl-6 text-xs text-emerald-300/80">
-                    {consensus.consensusLevel >= 0.6 ? 'Strong agreement' : consensus.consensusLevel >= 0.4 ? 'Leaning one way' : 'Split vote'} · {consensus.totalVotes} vote{consensus.totalVotes === 1 ? '' : 's'} cast
+                    {consensus.consensusLevel >= 0.6 ? 'Strong agreement' : consensus.consensusLevel >= 0.4 ? 'Leaning one way' : 'Split vote'} Â· {consensus.totalVotes} vote{consensus.totalVotes === 1 ? '' : 's'} cast
                   </p>
                 )}
                 <div className="mt-2 pl-6">
@@ -278,7 +283,7 @@ export function VotingModule() {
                         {t.leading && t.count > 0 && <Trophy className="h-3.5 w-3.5 text-amber-500" />}
                         {t.label}
                       </span>
-                      <span className="text-muted">{t.count} · {t.pct}%</span>
+                      <span className="text-muted">{t.count} Â· {t.pct}%</span>
                     </span>
                     {facilitated && (opt?.cost_cents != null || opt?.travel_minutes != null || (opt?.tags?.length ?? 0) > 0 || (rank && !rank.feasible)) && (
                       <span className="relative mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
@@ -310,7 +315,7 @@ export function VotingModule() {
             </div>
             <Field label="Required tags (optional, comma-separated)">{(id) => <Input id={id} value={form.required_tags} onChange={(e) => setForm({ ...form, required_tags: e.target.value })} placeholder="vegetarian, gluten-free" />}</Field>
             {(vacations ?? []).length > 0 && (
-              <Field label="Link to a trip (optional)">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">— None —</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
+              <Field label="Link to a trip (optional)">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">â€” None â€”</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
             )}
             <Field label="Options">
               {() => (
