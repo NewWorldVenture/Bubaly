@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0358 - Finances summary hid account and planning read failures as zero metrics
+
+- Timestamp: 2026-07-16 07:09 America/New_York
+- Service: Finances
+- Route: `/dashboard/finances`
+- Affected files: `components/modules/finances-module.tsx`, `tests/finances-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: any of five required finance reads could fail while the summary derived balances, spending, and upcoming obligations from empty fallback arrays.
+- Severity: P1
+- Launch impact: families could see misleading zero balances or make financial decisions from incomplete data.
+- Root cause: the module only waited on account and transaction loading and ignored every query error.
+- Resolution: Finances now coordinates all five reads and renders sanitized retryable ErrorState UI before financial metrics; retry refreshes the complete read set.
+- Supabase impact: no schema change; existing family-scoped financial reads now have an explicit page-level failure contract.
+- Tests run: `tests/finances-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 475 test files, 3,231 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `541c1a40`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed finance verification
+
 ### PLA-0357 - Decision Engine and Health Visits hid required reads as empty states
 
 - Timestamp: 2026-07-16 07:03 America/New_York
