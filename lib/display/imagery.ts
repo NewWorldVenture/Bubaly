@@ -72,14 +72,14 @@ export const MEAL_TYPE_IMAGES: Readonly<Record<string, string>> = {
 };
 
 /** Thumbnail for a planned meal — the dish by name when possible, else the meal type. */
-export function mealImage(name: string | null | undefined, mealType: string): string {
+export function mealImage(name: string | null | undefined, mealType: string | null | undefined): string {
   const n = (name ?? '').trim();
   if (n) {
     for (const [re, url] of RECIPE_KEYWORD_IMAGES) {
       if (re.test(n)) return url;
     }
   }
-  return MEAL_TYPE_IMAGES[mealType.toLowerCase()] ?? DEFAULT_FOOD_IMAGE;
+  return MEAL_TYPE_IMAGES[(mealType ?? '').toLowerCase()] ?? DEFAULT_FOOD_IMAGE;
 }
 
 // ── Ambient photo set (photo background + idle photo frame fallback) ─────────
