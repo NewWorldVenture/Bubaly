@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 11:00 America/New_York
+Audit snapshot: 2026-07-16 11:05 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 496 Vitest files and 3,256 tests pass in the latest full local gate.
+- 497 Vitest files and 3,257 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -82,6 +82,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   a failed read renders a retryable state instead of silently allowing an unfiltered campaign.
 - Super Admin Referrals now checks both referral settings and activity reads before rendering metrics,
   settings, or rows; a failed read renders a retryable state instead of defaults or no activity.
+- Marketplace Live Auctions now checks its listing read before deriving auction stats or rendering the empty
+  board; a failed read renders a retryable state instead of implying no live auctions.
 - Announcements now coordinates announcement and read-receipt failures; Contacts, Screen Time, Celebrations,
   and the Household Binder now surface retryable read failures instead of rendering healthy empty or partial
   household states. Live provider, RLS, browser, backup, and deployment evidence remains open.

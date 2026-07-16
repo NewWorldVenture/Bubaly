@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0391 - Live Auctions hid listing read failures as an empty marketplace
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/marketplace/auctions`.
+- Finding: the marketplace listing query could fail while the route rendered “No live auctions right now” and zero operational stats.
+- Repair: the Supabase error is checked before deriving auction stats or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Live Auctions boundary suite (1 assertion), full 497 test files/3,257 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `f86dd8a2`.
+- Remaining launch gate: validate authenticated family reachability, marketplace RLS, listing availability, and deployed retry behavior; broader payment and deployment gates remain open.
+
 ### PLA-0390 - Referrals hid settings and activity read failures as defaults or no activity
 
 - Status: Resolved in source; live and deployed verification remain open.

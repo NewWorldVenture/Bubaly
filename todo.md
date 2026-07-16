@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:00:00 -04:00
+- Last updated: 2026-07-16 11:05:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2b06e789` makes Super Admin Referrals fail closed on settings/activity read failures after `d600ad7c` repaired New Campaign; live provider and deployment evidence remains open
+- Commit: `f86dd8a2` makes Marketplace Live Auctions fail closed on listing read failures after `2b06e789` repaired Referrals; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0391 - Live Auctions hid listing read failures as an empty marketplace
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Marketplace / auction discovery / Supabase read boundary
+- Feature: Live Auctions
+- Route: `/marketplace/auctions`
+- File or files: `app/(app)/marketplace/auctions/page.tsx`, `tests/marketplace-auctions-read-boundary.test.ts`
+- Database objects: `marketplace_listings`
+- Affected roles: authenticated family members with marketplace reachability
+- Scenario: the auction listing query could fail while the route rendered zero stats and a healthy empty state.
+- Launch impact: buyers could miss available auctions and interpret a marketplace outage as no inventory.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required listing read.
+- Required remediation: preserve the query error and render a retryable page-level failure before deriving stats or the empty board.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Live Auctions boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (497 files/3,257 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `f86dd8a2`; local branch pushed; known build warnings remain; live Auth, RLS, browser, payment, and deployment evidence remain open.
+- Resolution: Live Auctions no longer presents a fabricated empty marketplace after a failed listing read.
+- Remaining dependencies: verify authenticated reachability, marketplace RLS, and deployed retry behavior; continue the buyer/seller workflow audit.
 
 #### TODO-0390 - Referrals hid settings and activity read failures as defaults or no activity
 
