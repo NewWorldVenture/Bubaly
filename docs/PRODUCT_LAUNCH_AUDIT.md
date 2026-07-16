@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0389 - New Campaign hid segment read failures as an unfiltered audience selector
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/campaigns/new`.
+- Finding: the `marketing_segments` query could fail while campaign creation rendered a â€œNo segmentâ€ fallback and allowed an unfiltered campaign.
+- Repair: the Supabase error is checked before rendering the campaign form; failures return a retryable page state instead of silently removing audience targeting.
+- Evidence: focused New Campaign boundary suite (1 assertion), full 495 test files/3,255 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `d600ad7c`.
+- Remaining launch gate: validate live Super Admin authorization, segment availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0388 - Social Providers hid provider-catalog read failures as enabled defaults
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -222,14 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Service: Intelligence Network preferences and Briefing Kitchen Mode
 - Route: corresponding family module routes under `/dashboard`
 - Affected files: `components/modules/intelligence-module.tsx`, `components/modules/briefing-module.tsx`, `tests/household-read-boundaries.test.ts`
-- Role: authenticated family members and household managers
-- Scenario: a failed consent read could silently appear as privacy-disabled defaults, while failed event/reminder reads could leave Kitchen Mode looking current with incomplete context.
-- Severity: P1
-- Launch impact: users could make privacy decisions from unverified state or miss time-sensitive household context while the interface appeared healthy.
-- Root cause: both surfaces ignored realtime query errors; Kitchen Mode also lacked a coordinated retry for its two context reads.
-- Resolution: Intelligence now blocks controls behind a retryable ErrorState; Briefing Kitchen Mode retries calendar and reminder reads together before rendering.
-- Supabase impact: no schema change; existing consent and household context reads now have explicit failure contracts.
-- Tests run: `tests/household-read-boundaries.test.ts` (9 focused assertions); full Vitest; typecheck; lint;…34908 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Role: authenticated fam…35136 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
