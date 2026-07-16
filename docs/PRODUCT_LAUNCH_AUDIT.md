@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0374 - Sync account pages exposed Amazon without a real account adapter
+
+- Status: Resolved in source; live provider and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/sync`, `/dashboard/sync/accounts`, and `/dashboard/sync/accounts/[provider]`.
+- Finding: Amazon/Alexa appeared as a connectable account despite having no production sync adapter; only export-only ICS capability exists.
+- Repair: removed Amazon from all three setup arrays and updated the Sync hub copy; the truthful Amazon capability matrix remains intact.
+- Evidence: `tests/sync-connectable-surface.test.ts`, route-boundary/capability suites, full 481 test files/3,240 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `05bc83e4`.
+- Remaining launch gate: validate live Google/Microsoft/Apple OAuth/sync and implement a real Amazon adapter before exposing account setup.
+
 ### PLA-0373 - Dead Connections adapter layer duplicated the real sync registry
 
 - Status: Resolved in source; live provider and deployed verification remain open.
