@@ -829,3 +829,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Verified; regression lock added
 - Remaining dependencies (A-18 not yet DONE): live OAuth round-trip with real provider keys (Google/Microsoft) in a staging env; token-refresh expiry path under real 401; conflict-resolution + dedupe correctness under a real two-way sync; feed-token (`app/api/sync/feeds/[token]`) rate-limit/abuse review.
+
+### PLA-0530 - A-17 admin/marketing/social: platform-admin authz VERIFIED (every action re-gates), guard added
+
+- Timestamp: 2026-07-16 23:12 UTC
+- Service: A-17 Admin / marketing / social / content
+- Route: `app/(app)/admin/**` (~28 action files, ~130+ server actions)
+- Affected files: `tests/admin-authz-gate.test.ts` (new); verification only elsewhere
+- Role: platform super-admin surface (oversees every family — users, families, billing, Stripe keys, bans, password resets, CRM, marketing, tiers)
+- Scenario: verified the §3a "layout gates the render but the server action is directly invocable" class against the highest-blast-radius surface in the app — the site-admin console.
+- Severity: n/a (no defect found; regression guard added)
+- Findings (VERIFIED):
+  - The `/admin` layout gates the whole segment: unauthenticated → `/login`, non-super-admin → `/dashboard`.
+  - **Every admin server action re-verifies independently** (defense-in-depth, not layout-reliant) and fails closed:
+    - `app/(app)/admin/actions.ts` (16 actions incl. create-user, create-family, set-super-admin, save-Stripe-settings, ban-user, password-reset) → local `assertSuperAdmin()` (`isSuperAdmin()` → early return) at the top of each.
+    - `admin/marketing/**` (78 actions across 19 files) → `requireMarketingAdmin()` which is explicitly documented as "the layout gates /admin but actions must re-verify independently", does `getUser()` + `isSuperAdmin()`, and THROWS before returning the privileged client.
+    - `admins`, `feedback`, `support-tickets`, `marketplace/reports`, `tier-features` → a local `guard()` wrapper calling `isSuperAdmin()`.
+    - `services` (`resetServiceDescriptionAction`→`saveServiceDescriptionAction`) and `support-tickets` (`resolve/close/reopen`→`updateTicket`) gate transitively through a shared helper.
+  - Whole-tree invariant confirmed: **0** admin action files touch the service-role client without also referencing a super-admin gate.
+- Resolution: no code change required. Added `tests/admin-authz-gate.test.ts` (4 tests): every admin actions file using the privileged client must reference a super-admin gate; the layout gates the segment + redirects; `requireMarketingAdmin` enforces `isSuperAdmin` and throws. Guards against a new admin action file shipping without a gate.
+- Supabase impact: none.
+- Tests run: `tests/admin-authz-gate.test.ts` 4/4; tsc/eslint clean.
+- Validation evidence: 4/4 pass; `tsc --noEmit` clean; eslint exit 0.
+- Commit: pending (this push)
+- Status: Verified; regression guard added
+- Remaining dependencies (A-17 not yet DONE): admin API route handlers (`app/api/admin/**` if any) authz sweep; marketing PUBLIC surfaces (landing pages / forms / lead capture) input-validation + rate-limit review; social-post outbound integration wiring; live super-admin E2E.
