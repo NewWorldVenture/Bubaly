@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, Cloud, Download, File, FileArchive, FileText, Folder, FolderPlus,
-  HardDrive, Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
+  ChevronLeft, ChevronRight, Download, File, FileArchive, FileText, Folder, FolderPlus,
+  Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
   Search, Sparkles, Star, Table as TableIcon, Trash2, Upload, Video,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -24,13 +24,13 @@ import type { Tables } from '@/lib/database.types';
 
 type Document = Tables<'documents'>;
 
-// ── Formatting helpers ──────────────────────────────────────────────────────
+// â”€â”€ Formatting helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const GB = 1024 ** 3;
 const STORAGE_LIMIT_GB = 10;
 const STORAGE_LIMIT = STORAGE_LIMIT_GB * GB;
 
 function fmtSize(bytes: number | null): string {
-  if (!bytes) return '—';
+  if (!bytes) return 'â€”';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
   if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -52,7 +52,7 @@ function timeAgo(iso: string): string {
   return fmtDate(iso);
 }
 
-// ── File-type detection → icon + color, and coarse storage group ────────────
+// â”€â”€ File-type detection â†’ icon + color, and coarse storage group â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type FileMeta = { Icon: typeof FileText; color: string; tint: string };
 function ext(title: string, mime: string | null): string {
   const m = /\.([a-z0-9]+)$/i.exec(title);
@@ -109,7 +109,7 @@ const TYPE_FILTERS: { value: 'all' | StorageGroup; label: string }[] = [
 ];
 const SORTS = [
   { value: 'modified', label: 'Last Modified' },
-  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'name', label: 'Name (Aâ€“Z)' },
   { value: 'size', label: 'Largest first' },
   { value: 'oldest', label: 'Oldest first' },
 ] as const;
@@ -188,7 +188,7 @@ export function DocumentsModule() {
     });
   }, [storage]);
 
-  // Filter → search → sort.
+  // Filter â†’ search â†’ sort.
   const filtered = useMemo(() => {
     let rows = data;
     if (folderFilter) rows = rows.filter((d) => (d.category?.trim() || 'general') === folderFilter);
@@ -218,7 +218,7 @@ export function DocumentsModule() {
     [...data].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5),
     [data]);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  // â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function toggleFavorite(doc: Document) {
     const next = !isFav(doc);
     setFavPending((p) => ({ ...p, [doc.id]: next }));
@@ -253,7 +253,7 @@ export function DocumentsModule() {
   function pickFile(f: File | null) {
     // Fail fast at pick time (before the form) with the real bucket limit.
     if (f && f.size > DOCUMENT_MAX_BYTES) {
-      toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`);
+      toastError(`â€œ${f.name}â€ is too large (max ${DOCUMENT_MAX_MB} MB).`);
       return;
     }
     setFile(f);
@@ -278,10 +278,6 @@ export function DocumentsModule() {
     if (err) { await removeFamilyDocument(sb, path); toastError('Failed to save file'); return; }
     success('File uploaded');
     setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
-  }
-
-  function comingSoon(what: string) {
-    toastError(`${what} isn't connected yet — connect it in Settings → Integrations.`);
   }
 
   if (loading) return <SkeletonList />;
@@ -347,7 +343,7 @@ export function DocumentsModule() {
                     <div className="flex -space-x-1.5">
                       {f.contributors.slice(0, 3).map((uid) => {
                         const m = memberByUser.get(uid);
-                        return <Avatar key={uid} name={m?.display_name ?? '—'} color={m?.color} size={20} className="ring-2 ring-surface" />;
+                        return <Avatar key={uid} name={m?.display_name ?? 'â€”'} color={m?.color} size={20} className="ring-2 ring-surface" />;
                       })}
                     </div>
                   </button>
@@ -364,7 +360,7 @@ export function DocumentsModule() {
               All Files
               {folderFilter && (
                 <button onClick={() => setFolderFilter(null)} className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-text">
-                  {folderLabel(folderFilter)} ✕
+                  {folderLabel(folderFilter)} âœ•
                 </button>
               )}
             </h2>
@@ -490,8 +486,8 @@ export function DocumentsModule() {
               <div className="flex items-center gap-1">
                 <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label="Previous page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronLeft className="h-4 w-4" /></button>
                 {pageNumbers(safePage, totalPages).map((p, i) => (
-                  p === '…'
-                    ? <span key={`e${i}`} className="px-1.5 text-sm text-muted">…</span>
+                  p === 'â€¦'
+                    ? <span key={`e${i}`} className="px-1.5 text-sm text-muted">â€¦</span>
                     : <button key={p} onClick={() => setPage(p as number)} className={cn('h-8 min-w-8 rounded-lg px-2 text-sm font-medium', p === safePage ? 'bg-brand text-brand-fg' : 'border border-border text-muted hover:bg-elevated')}>{p}</button>
                 ))}
                 <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label="Next page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronRight className="h-4 w-4" /></button>
@@ -549,8 +545,6 @@ export function DocumentsModule() {
               { icon: Upload, label: 'Upload Files', onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
               { icon: FolderPlus, label: 'Create New Folder', onClick: () => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); } },
               { icon: ScanLine, label: 'Scan Document', onClick: () => scanInputRef.current?.click() },
-              { icon: HardDrive, label: 'Add from Google Drive', onClick: () => comingSoon('Google Drive') },
-              { icon: Cloud, label: 'Add from Dropbox', onClick: () => comingSoon('Dropbox') },
             ].map(({ icon: Icon, label, onClick }) => (
               <button key={label} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-elevated">
                 <Icon className="h-4 w-4 text-muted" /> {label}
@@ -619,7 +613,7 @@ export function DocumentsModule() {
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (
-              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p></>
+              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} Â· click to change</p></>
             ) : (
               <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
             )}
@@ -634,11 +628,11 @@ export function DocumentsModule() {
           <Field label="Visibility">{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
               <option value="">Shared with family</option>
-              {members.map((m) => <option key={m.id} value={m.id}>Private · {m.display_name}</option>)}
+              {members.map((m) => <option key={m.id} value={m.id}>Private Â· {m.display_name}</option>)}
             </Select>
           )}</Field>
-          <Field label="Expires (optional)" hint="For passports, insurance, registrations — Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
-          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload File'}</Button>
+          <Field label="Expires (optional)" hint="For passports, insurance, registrations â€” Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
+          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploadingâ€¦' : 'Upload File'}</Button>
         </div>
       </Modal>
 
@@ -656,15 +650,15 @@ export function DocumentsModule() {
   );
 }
 
-// Compact page-number list with ellipses: 1 … p-1 p p+1 … N.
-function pageNumbers(current: number, total: number): (number | '…')[] {
+// Compact page-number list with ellipses: 1 â€¦ p-1 p p+1 â€¦ N.
+function pageNumbers(current: number, total: number): (number | 'â€¦')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const out: (number | '…')[] = [1];
+  const out: (number | 'â€¦')[] = [1];
   const start = Math.max(2, current - 1);
   const end = Math.min(total - 1, current + 1);
-  if (start > 2) out.push('…');
+  if (start > 2) out.push('â€¦');
   for (let p = start; p <= end; p++) out.push(p);
-  if (end < total - 1) out.push('…');
+  if (end < total - 1) out.push('â€¦');
   out.push(total);
   return out;
 }
