@@ -74,13 +74,13 @@ function formatRelativeTime(iso: string) {
 }
 
 const WORKOUT_ICONS: Record<string, string> = {
-  run: '🏃', running: '🏃', jog: '🏃',
-  swim: '🏊', swimming: '🏊',
-  bike: '🚴', cycling: '🚴', biking: '🚴',
-  walk: '🚶', walking: '🚶', hike: '🚶', hiking: '🥾',
-  yoga: '🧘', pilates: '🧘',
-  weights: '🏋️', lifting: '🏋️', gym: '🏋️', strength: '🏋️',
-  dance: '💃', basketball: '🏀', soccer: '⚽', tennis: '🎾', golf: '⛳',
+  run: 'ðŸƒ', running: 'ðŸƒ', jog: 'ðŸƒ',
+  swim: 'ðŸŠ', swimming: 'ðŸŠ',
+  bike: 'ðŸš´', cycling: 'ðŸš´', biking: 'ðŸš´',
+  walk: 'ðŸš¶', walking: 'ðŸš¶', hike: 'ðŸš¶', hiking: 'ðŸ¥¾',
+  yoga: 'ðŸ§˜', pilates: 'ðŸ§˜',
+  weights: 'ðŸ‹ï¸', lifting: 'ðŸ‹ï¸', gym: 'ðŸ‹ï¸', strength: 'ðŸ‹ï¸',
+  dance: 'ðŸ’ƒ', basketball: 'ðŸ€', soccer: 'âš½', tennis: 'ðŸŽ¾', golf: 'â›³',
 };
 
 function workoutIcon(activity: string) {
@@ -88,7 +88,7 @@ function workoutIcon(activity: string) {
   for (const [key, icon] of Object.entries(WORKOUT_ICONS)) {
     if (lower.includes(key)) return icon;
   }
-  return '🏅';
+  return 'ðŸ…';
 }
 
 export function HealthModule() {
@@ -119,33 +119,33 @@ export function HealthModule() {
   const weekAgo = useMemo(() => daysAgo(7), []);
   const todayISO = useMemo(() => todayStart(), []);
 
-  // ── Data queries ──────────────────────────────────────────
-  const { data: metrics, loading: metricsLoading, error: metricsError } = useRealtimeQuery<HealthMetric>({
+  // â”€â”€ Data queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const { data: metrics, loading: metricsLoading, error: metricsError, refresh: refreshMetrics } = useRealtimeQuery<HealthMetric>({
     table: 'health_metrics', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_metrics').select('*').eq('family_id', familyId).gte('recorded_at', weekAgo).order('recorded_at', { ascending: false }),
   });
 
-  const { data: workouts, loading: workoutsLoading, error: workoutsError } = useRealtimeQuery<WorkoutLog>({
+  const { data: workouts, loading: workoutsLoading, error: workoutsError, refresh: refreshWorkouts } = useRealtimeQuery<WorkoutLog>({
     table: 'workout_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('workout_logs').select('*').eq('family_id', familyId).order('recorded_at', { ascending: false }).limit(10),
   });
 
-  const { data: appointments, loading: apptLoading, error: apptError } = useRealtimeQuery<Appointment>({
+  const { data: appointments, loading: apptLoading, error: apptError, refresh: refreshAppointments } = useRealtimeQuery<Appointment>({
     table: 'appointments', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).order('starts_at').limit(6),
   });
 
-  const { data: reminders, loading: remLoading, error: remError } = useRealtimeQuery<Reminder>({
+  const { data: reminders, loading: remLoading, error: remError, refresh: refreshReminders } = useRealtimeQuery<Reminder>({
     table: 'reminders', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).limit(4),
   });
 
-  const { data: symptoms } = useRealtimeQuery<SymptomLog>({
+  const { data: symptoms, loading: symptomsLoading, error: symptomsError, refresh: refreshSymptoms } = useRealtimeQuery<SymptomLog>({
     table: 'symptom_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('symptom_logs').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(50),
   });
 
-  const { data: goals } = useRealtimeQuery<HealthGoal>({
+  const { data: goals, loading: goalsLoading, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<HealthGoal>({
     table: 'health_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_goals').select('*').eq('family_id', familyId).eq('is_active', true),
   });
@@ -163,10 +163,11 @@ export function HealthModule() {
   );
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const loading = metricsLoading || workoutsLoading || apptLoading || remLoading;
-  const error = metricsError || workoutsError || apptError || remError;
+  const loading = metricsLoading || workoutsLoading || apptLoading || remLoading || symptomsLoading || goalsLoading;
+  const error = metricsError || workoutsError || apptError || remError || symptomsError || goalsError;
+  const refresh = () => { void refreshMetrics(); void refreshWorkouts(); void refreshAppointments(); void refreshReminders(); void refreshSymptoms(); void refreshGoals(); };
 
-  // ── Derived data ──────────────────────────────────────────
+  // â”€â”€ Derived data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const todayMetrics = useMemo(() => metrics.filter((m) => m.recorded_at >= todayISO), [metrics, todayISO]);
 
   const totalStepsToday = useMemo(() => todayMetrics.filter((m) => m.type === 'steps').reduce((s, m) => s + m.value, 0), [todayMetrics]);
@@ -283,7 +284,7 @@ export function HealthModule() {
       }
       if (consecutive >= 3) {
         result.push({
-          icon: '💡',
+          icon: 'ðŸ’¡',
           text: `${m.display_name} has hit their step goal for ${consecutive} days in a row!`,
           color: 'bg-violet-500/15 border-violet-400/20',
         });
@@ -295,7 +296,7 @@ export function HealthModule() {
     const avgThisWeek = thisWeekSleep.length > 0 ? thisWeekSleep.reduce((s, m) => s + m.value, 0) / thisWeekSleep.length : 0;
     if (avgThisWeek >= 8) {
       result.push({
-        icon: '😴',
+        icon: 'ðŸ˜´',
         text: `Family is averaging ${formatSleepHours(avgThisWeek)} of sleep this week. Great rest!`,
         color: 'bg-blue-500/15 border-blue-400/20',
       });
@@ -308,7 +309,7 @@ export function HealthModule() {
       const daysUntil = Math.ceil((new Date(next.starts_at).getTime() - Date.now()) / 86400000);
       if (daysUntil <= 7) {
         result.push({
-          icon: '⚠️',
+          icon: 'âš ï¸',
           text: `${member ? member.display_name + ' has' : 'There is'} a checkup in ${daysUntil} day${daysUntil === 1 ? '' : 's'}: ${next.title}`,
           color: 'bg-orange-500/15 border-orange-400/20',
         });
@@ -319,7 +320,7 @@ export function HealthModule() {
     const todayWater = todayMetrics.filter((m) => m.type === 'water_cups').reduce((s, m) => s + m.value, 0);
     if (todayWater > 0 && todayWater < 8) {
       result.push({
-        icon: '💧',
+        icon: 'ðŸ’§',
         text: `Family has logged ${todayWater} cups of water today. Keep hydrating!`,
         color: 'bg-cyan-500/15 border-cyan-400/20',
       });
@@ -327,7 +328,7 @@ export function HealthModule() {
 
     if (result.length === 0) {
       result.push({
-        icon: '📊',
+        icon: 'ðŸ“Š',
         text: 'Start logging health metrics to see personalized insights for your family.',
         color: 'bg-violet-500/15 border-violet-400/20',
       });
@@ -336,7 +337,7 @@ export function HealthModule() {
     return result;
   }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor]);
 
-  // ── CRUD handlers ──────────────────────────────────────────
+  // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function saveAppointment() {
     if (!apptForm.title || !apptForm.starts_at) return;
     setSaving(true);
@@ -385,271 +386,7 @@ export function HealthModule() {
     const { error: err } = await sb.from('workout_logs').insert({
       family_id: familyId,
       member_id: workoutForm.member_id,
-      activity: workoutForm.activity,
-      duration_minutes: workoutForm.duration_minutes ? parseInt(workoutForm.duration_minutes) : null,
-      calories: workoutForm.calories ? parseInt(workoutForm.calories) : null,
-      distance: workoutForm.distance ? parseFloat(workoutForm.distance) : null,
-      notes: workoutForm.notes || null,
-      recorded_at: workoutForm.recorded_at ? new Date(workoutForm.recorded_at).toISOString() : new Date().toISOString(),
-      created_by: userId,
-    });
-    setSaving(false);
-    if (err) { toastError('Failed to log workout'); return; }
-    success('Workout logged!');
-    setWorkoutOpen(false);
-    setWorkoutForm({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
-  }
-
-  async function saveSymptom() {
-    if (!symptomForm.member_id || !symptomForm.symptom.trim()) return;
-    setSaving(true);
-    const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').insert({
-      family_id: familyId,
-      member_id: symptomForm.member_id,
-      symptom: symptomForm.symptom.trim(),
-      severity: parseInt(symptomForm.severity) || 3,
-      body_area: symptomForm.body_area.trim() || null,
-      notes: symptomForm.notes.trim() || null,
-      started_at: symptomForm.started_at ? new Date(symptomForm.started_at).toISOString() : new Date().toISOString(),
-      created_by: userId,
-    });
-    setSaving(false);
-    if (err) { toastError('Failed to log symptom'); return; }
-    success('Symptom logged!');
-    setSymptomOpen(false);
-    setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
-  }
-
-  async function resolveSymptom(s: SymptomLog) {
-    const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
-    if (err) { toastError('Failed to update symptom'); return; }
-    success('Marked resolved.');
-  }
-
-  async function deleteSymptom(s: SymptomLog) {
-    const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
-    if (err) { toastError('Failed to delete symptom'); return; }
-    success('Symptom removed.');
-  }
-
-  async function saveGoal() {
-    if (!goalForm.member_id || !goalForm.target) return;
-    const target = parseFloat(goalForm.target);
-    if (!(target > 0)) { toastError('Target must be greater than 0.'); return; }
-    setSaving(true);
-    const sb = createClient();
-    const typeInfo = METRIC_TYPES.find((t) => t.value === goalForm.metric_type);
-    const { error: err } = await sb.from('health_goals').upsert({
-      family_id: familyId,
-      member_id: goalForm.member_id,
-      metric_type: goalForm.metric_type,
-      target,
-      period: goalForm.period,
-      label: typeInfo?.label ?? null,
-      is_active: true,
-      created_by: userId,
-    }, { onConflict: 'member_id,metric_type,period' });
-    setSaving(false);
-    if (err) { toastError('Failed to save goal'); return; }
-    success('Goal saved!');
-    setGoalOpen(false);
-    setGoalForm({ member_id: '', metric_type: 'steps', target: '', period: 'daily' });
-  }
-
-  async function askCoach() {
-    if (!coachForm.question.trim()) return;
-    setCoachLoading(true);
-    setCoachError('');
-    setCoachAnswer('');
-    try {
-      const res = await fetch('/api/ai/health/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: coachForm.question.trim(), memberId: coachForm.member_id || null }),
-      });
-      const json = await res.json();
-      if (!res.ok) { setCoachError(json.error || 'The coach is unavailable right now.'); return; }
-      setCoachAnswer(json.text || '');
-    } catch {
-      setCoachError('Network error. Please try again.');
-    } finally {
-      setCoachLoading(false);
-    }
-  }
-
-  // Most-recent symptoms first; active ones surfaced to the top.
-  const sortedSymptoms = useMemo(() => {
-    return [...symptoms].sort((a, b) => {
-      if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
-      return b.started_at.localeCompare(a.started_at);
-    });
-  }, [symptoms]);
-  const activeSymptomCount = useMemo(() => symptoms.filter((s) => s.status === 'active').length, [symptoms]);
-
-  // ── Loading / Error ──────────────────────────────────────
-  if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} />;
-
-  const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
-
-  return (
-    <div className="module-with-sidebar">
-      <div className="module-main space-y-5">
-        <PageHeader
-          title="Health"
-          description="Track fitness, wellness, and health across your whole family."
-          action={
-            <div className="flex gap-2">
-              <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>
-              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> Log Workout</Button>
-            </div>
-          }
-        />
-
-        {/* Tab bar */}
-        <div className="flex items-center justify-between border-b border-border">
-          <div className="tab-bar">
-            {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Stats grid */}
-        <div className="grid-stats gap-3">
-          {statsGrid.map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
-              <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
-              <p className="text-2xl font-black">{value}</p>
-              <p className="text-sm font-semibold">{label}</p>
-              <p className="text-xs text-muted">{sub}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Activity Summary + Family Health */}
-        <div className="grid gap-5 lg:grid-cols-2">
-          {/* Activity Summary */}
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Activity Summary</h2>
-              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> Set goals</button>
-            </div>
-            {metrics.length === 0 ? (
-              <EmptyState icon={Activity} title="No activity data yet" description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
-            ) : (
-              <>
-                <div className="flex items-center gap-6">
-                  <div className="relative h-32 w-32 shrink-0">
-                    <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="url(#healthGrad)" strokeWidth="12" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-                      <defs><linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#7c5dff" /><stop offset="100%" stopColor="#34d399" /></linearGradient></defs>
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-black">{goalPct}%</span>
-                      <span className="text-[10px] text-muted">Goal Met</span>
-                    </div>
-                  </div>
-                  <div className="space-y-3 flex-1">
-                    {activityProgress.map((s) => (
-                      <div key={s.label}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-muted">{s.label}</span>
-                          <span className="font-semibold">{s.val} / {s.goal}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-border">
-                          <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-400" style={{ width: `${s.pct}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-5">
-                  <p className="mb-3 text-xs text-muted">This Week</p>
-                  <div className="flex items-end gap-1.5 h-16">
-                    {weeklyBars.map(({ day, pct }) => (
-                      <div key={day} className="flex flex-1 flex-col items-center gap-1">
-                        <div className="w-full rounded-sm bg-gradient-to-t from-violet-600 to-blue-400 opacity-80" style={{ height: `${Math.max(pct, 2)}%` }} />
-                        <span className="text-[9px] text-muted/60">{day}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Family Health at a Glance */}
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Family Health at a Glance</h2>
-            </div>
-            {memberStats.every((ms) => ms.steps === 0 && ms.sleep === 0 && ms.hr === 0) ? (
-              <EmptyState icon={Heart} title="No member health data" description="Log metrics for family members to see their health at a glance." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
-            ) : (
-              <div className="max-h-[32rem] space-y-3 overflow-y-auto">
-                {memberStats.map(({ member: m, steps, sleep, hr, pct }) => (
-                  <div key={m.id} className="rounded-xl border border-border p-3">
-                    <div className="flex items-center gap-3 mb-2.5">
-                      <Avatar name={m.display_name} color={m.color} size={32} />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">{m.display_name}</p>
-                        <p className="text-xs text-muted">{m.role}</p>
-                      </div>
-                      <span className="text-xs font-bold" style={{ color: m.color ?? undefined }}>{pct}%</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div><p className="font-bold">{steps.toLocaleString()}</p><p className="text-muted">Steps</p></div>
-                      <div><p className="font-bold">{formatSleepHours(sleep)}</p><p className="text-muted">Sleep</p></div>
-                      <div><p className="font-bold">{hr > 0 ? `${hr} bpm` : '--'}</p><p className="text-muted">Heart Rate</p></div>
-                    </div>
-                    <div className="mt-2.5 h-1.5 rounded-full bg-border">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.color ?? undefined }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Workouts + Insights */}
-        <div className="grid gap-5 lg:grid-cols-2">
-          {/* Recent Workouts */}
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Recent Workouts</h2>
-              <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">+ Log workout</button>
-            </div>
-            {workouts.length === 0 ? (
-              <EmptyState icon={Dumbbell} title="No workouts logged" description="Track runs, swims, bike rides, and more." action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Workout</Button>} />
-            ) : (
-              <div className="space-y-3">
-                {workouts.slice(0, 5).map((w) => {
-                  const member = memberById.get(w.member_id);
-                  return (
-                    <div key={w.id} className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface/40 text-xl">{workoutIcon(w.activity)}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold">{w.activity}</p>
-                        <p className="text-xs text-muted">
-                          {member?.display_name ?? 'Unknown'}
-                          {w.distance ? ` · ${w.distance} mi` : ''}
-                          {w.duration_minutes ? ` · ${formatDuration(w.duration_minutes)}` : ''}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories} cal</p> : null}
-                        <p className="text-xs text-muted/60">{formatRelativeTime(w.recorded_at)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      activit…3527 tokens truncated…div>
             )}
           </div>
 
@@ -683,7 +420,7 @@ export function HealthModule() {
             <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> Log symptom</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
-            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
+            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time â€” severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
           ) : (
             <div className="space-y-2.5">
               {sortedSymptoms.slice(0, 12).map((s) => {
@@ -699,9 +436,9 @@ export function HealthModule() {
                       </div>
                       <p className="truncate text-xs text-muted">
                         {member?.display_name ?? 'Unknown'}
-                        {s.body_area ? ` · ${s.body_area}` : ''}
-                        {` · since ${formatRelativeTime(s.started_at)}`}
-                        {s.notes ? ` · ${s.notes}` : ''}
+                        {s.body_area ? ` Â· ${s.body_area}` : ''}
+                        {` Â· since ${formatRelativeTime(s.started_at)}`}
+                        {s.notes ? ` Â· ${s.notes}` : ''}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -718,7 +455,7 @@ export function HealthModule() {
         </div>
       </div>
 
-      {/* ── Sidebar ──────────────────────────────────────────── */}
+      {/* â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Health Summary */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -801,7 +538,7 @@ export function HealthModule() {
         </div>
       </aside>
 
-      {/* ── Modals ──────────────────────────────────────────── */}
+      {/* â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 
       {/* Add Appointment Modal */}
       <Modal open={apptOpen} title="Add Appointment" onClose={() => setApptOpen(false)}>
@@ -853,7 +590,7 @@ export function HealthModule() {
           <Field label="Family Member">{(id) => <Select id={id} value={symptomForm.member_id} onChange={(e) => setSymptomForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="Symptom">{(id) => <Input id={id} value={symptomForm.symptom} onChange={(e) => setSymptomForm((f) => ({ ...f, symptom: e.target.value }))} placeholder="e.g. Headache, Sore throat, Fever" />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 — Mild</option><option value="2">2 — Mild</option><option value="3">3 — Moderate</option><option value="4">4 — Severe</option><option value="5">5 — Severe</option></Select>}</Field>
+            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 â€” Mild</option><option value="2">2 â€” Mild</option><option value="3">3 â€” Moderate</option><option value="4">4 â€” Severe</option><option value="5">5 â€” Severe</option></Select>}</Field>
             <Field label="Body Area (optional)">{(id) => <Input id={id} value={symptomForm.body_area} onChange={(e) => setSymptomForm((f) => ({ ...f, body_area: e.target.value }))} placeholder="e.g. Head, Stomach" />}</Field>
           </div>
           <Field label="Started (optional)">{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>
@@ -894,3 +631,4 @@ export function HealthModule() {
     </div>
   );
 }
+
