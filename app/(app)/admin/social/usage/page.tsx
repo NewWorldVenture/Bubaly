@@ -1,19 +1,35 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Gauge } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Social Usage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
+      <AdminSocialSubnav active="/admin/social/usage" />
+      <ErrorState message="Could not load social usage events from Supabase. Refresh and try again." />
+      <Link href="/admin/social/usage" className="text-sm font-medium text-brand-text underline">Refresh social usage</Link>
+    </div>
+  );
+}
+
 export default async function AdminUsagePage() {
   const supabase = createServiceClient();
-  const { data: events } = await supabase
+  const { data: events, error } = await supabase
     .from('social_usage_events')
     .select('kind, quantity')
     .limit(5000);
+  if (error) {
+    console.error('[admin-social-usage] usage read failed', error);
+    return <ReadFailure />;
+  }
 
   const totals = new Map<string, number>();
   for (const e of events ?? []) {
