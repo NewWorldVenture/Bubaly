@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0440 - A-08 wallet money-safety verified: overspend prevention + hold idempotency (PAY-1) proven live
+
+- Timestamp: 2026-07-16 21:18 UTC
+- Service: Wallet / Bubaly Money (A-08)
+- Route: card authorization path (`wallet_reserve_card_auth` RPC, called by the Issuing webhook)
+- Affected files: `docs/audit/wallet-overspend-check.sql` (new self-contained probe), `tests/wallet-overspend-probe.test.ts` (new guard); audited `supabase/migrations/0155_wallet_auth_holds.sql`, `lib/wallet/ledger.ts`, `lib/wallet/server.ts`
+- Role: any child spending on an Issuing card; concurrent authorizations
+- Scenario: prove a child cannot spend beyond their SPEND balance even under concurrent/re-delivered authorizations
+- Severity: (verification of a CRITICAL money invariant — no defect found)
+- Launch impact: the atomic hold is the guarantee that Bubaly Money cannot overspend a child's balance; now has an independent reproducible proof beyond the existing PAY-1 work
+- Root cause: n/a (verification + regression guard)
+- Resolution: confirmed `wallet_reserve_card_auth` takes `SELECT … FOR UPDATE` on the child's SPEND bucket (serializes concurrent auths), computes spendable as completed+processing (so a prior hold reduces it), declines on insufficient funds, is idempotent per `stripe_ref`, and is `service_role`-only (`revoke all from public`). Proved live on the harness: fund $10 → auth $8 approves, second $8 declines (only $2 left), replay of auth_1 approves without a second hold, exact $2 approves, next $1 declines; exactly 2 holds ($8+$2), $0 remaining. Also confirmed the pure ledger `allocate()` conserves every cent (exhaustively tested 0–1234 in `wallet-ledger.test.ts`) and reversals net to zero
+- Supabase impact: read/verify only; probe cleans up its own test member/wallet/holds (no residue)
+- Tests run: `docs/audit/wallet-overspend-check.sql` → "ALL INVARIANTS PASSED"; `tests/wallet-overspend-probe.test.ts` (4 passing); eslint clean
+- Validation evidence: probe NOTICE "A-08 OK: overspend prevented, holds counted, idempotent per auth id"; live sequence t/f/t/t/f with 2 holds and $0 remaining
+- Commit: (this increment)
+- Status: A-08 core money-safety Verified; unit remains In-progress (allowance runs, goal funding, transfers, parent-approval holds, wallet RLS role matrix, live Stripe Issuing)
+- Remaining dependencies: run both probes in CI against ephemeral PG; role-level (child vs parent) approval-boundary proof
+
 ### PLA-0434 - Push dispatch silently dropped every push on a read failure and risked duplicate pushes (A-16)
 
 - Timestamp: 2026-07-16 21:16 UTC
