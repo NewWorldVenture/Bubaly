@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:54:07 -04:00
+- Last updated: 2026-07-16 09:02:43 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `14f0d14b` replaces the Independence empty-state “coming soon” phrase with “No badges yet” after `916ee059` made App Store unavailable entries explicit; live provider and deployment evidence remains open
+- Commit: `9eb160b0` hides unsupported connection providers from the runtime hub after `14f0d14b` replaced the Independence empty-state roadmap phrase with “No badges yet”; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0372 - Connections hub exposed providers without live setup routes
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Connections / third-party integration integrity / disconnected UI
+- Feature: Family Connections hub
+- Route: `/dashboard/connections`
+- File or files: `lib/connections/providers.ts`, `components/modules/connections-module.tsx`, `tests/connections-providers.test.ts`
+- Database objects: `family_connections`
+- Affected roles: authenticated family members
+- Scenario: the hub rendered Gmail, Plaid, Instacart, Amazon Fresh, and smart-home providers even though they had no live setup or sync route; users saw a directory of services they could not actually connect.
+- Launch impact: families could mistake catalog entries for supported integrations and create connection records without a functioning data path.
+- Root cause: the internal future-provider registry was used directly as the runtime UI catalog.
+- Required remediation: expose only providers with a real OAuth/setup route in the runtime hub; retain future providers internally until their adapters, callbacks, storage, retry, and tenant controls are complete.
+- Implementation notes: added `CONNECTABLE_PROVIDERS`, changed `mergeConnections` to use it, and updated the hub copy to describe supported calendar sync only. Unsupported rows are ignored by the runtime view.
+- Test plan: focused connection-provider and adapter suites, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused connection suites (25 assertions); full Vitest (481 files/3,252 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source repair validated in commit `9eb160b0`; local branch pushed; known build warnings remain; live OAuth, RLS, browser, and deployment evidence remain open.
+- Resolution: the runtime Connections page no longer advertises unsupported providers as connectable services.
+- Remaining dependencies: implement and separately verify Gmail, banking, grocery, and smart-home integrations before adding them back to the runtime catalog.
 
 #### TODO-0371 - Independence empty state used roadmap language
 
