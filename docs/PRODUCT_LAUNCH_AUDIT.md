@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0385 - Social Usage hid usage-event read failures as an empty meter
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/usage`.
+- Finding: the usage-event query could fail while the page rendered no metering activity, masking an unavailable operational feed.
+- Repair: the Supabase error is checked before calculating totals or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Social Usage boundary suite (1 assertion), full 491 test files/3,251 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `ee26e70c`.
+- Remaining launch gate: validate live Super Admin authorization, usage table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0384 - Social Audit hid audit-log read failures as an empty history
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -218,14 +228,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 - Timestamp: 2026-07-16 08:06 America/New_York
 - Service: Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner
-- Route: corresponding family module routes under `/dashboard`
-- Affected files: `components/modules/concierge-module.tsx`, `components/modules/voice-module.tsx`, `components/modules/next-actions-module.tsx`, `components/modules/voting-module.tsx`, `components/modules/weekend-module.tsx`, `tests/household-read-boundaries.test.ts`
-- Role: authenticated family members and household managers
-- Scenario: failed reads either rendered a healthy empty state, exposed incomplete history, or allowed planning, voting, and weekend summaries to derive from partial query results.
-- Severity: P1
-- Launch impact: families could miss saved plans, voice captures, next actions, poll options/votes, budgets, or local events while the UI appeared usable.
-- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
--…34072 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Route: corresponding family modul…34280 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
