@@ -17,7 +17,8 @@ import {
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
-import { DEFAULT_TILES, resolveTiles, tileListLimit, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
+import { DEFAULT_TILES, resolveTiles, tileListLimit, SERVICE_WIDGET, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
+import { ALL_SERVICES_CATALOG, ALL_SERVICES_BY_HREF } from '@/lib/constants/navigation';
 import { recipeImage, mealImage, AMBIENT_FALLBACK_PHOTOS } from '@/lib/display/imagery';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
@@ -126,6 +127,30 @@ function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName
 // ── Widget bodies ─────────────────────────────────────────────────────────────
 // `size` makes every widget DYNAMIC to the tile it's in: a compact tile shows a
 // condensed layout / fewer rows (so it never clips), a taller tile shows more.
+// ── Service launcher tile — ANY app feature can live on the display ──────────
+function ServiceTile({ href }: { href: string }) {
+  const item = ALL_SERVICES_BY_HREF.get(href);
+  const Icon = item?.icon ?? Sparkles;
+  const label = item?.label
+    ?? (href.split('/').filter(Boolean).pop() ?? 'Open')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <Link
+      href={href}
+      className="group flex h-full min-h-0 flex-col items-center justify-center gap-2 text-center transition hover:bg-white/5"
+    >
+      <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-white/20 to-white/5 ring-1 ring-white/15 transition group-hover:scale-105">
+        <Icon className="h-7 w-7 text-white" />
+      </span>
+      <span className="max-w-full truncate px-2 text-sm font-bold text-white">{label}</span>
+      <span className="inline-flex items-center gap-1 text-[11px] text-white/45 transition group-hover:text-white/70">
+        Open <ArrowRight className="h-3 w-3" />
+      </span>
+    </Link>
+  );
+}
+
 function WidgetBody({ widget, size, data, memberById, now }: {
   widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
@@ -604,18 +629,20 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
               'relative flex min-h-[172px] flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:min-h-0',
               sizeClass(tile.size), editing && 'ring-1 ring-brand/50',
             )}>
-              {tile.widget !== 'featured' && tile.widget !== 'clock' && (
+              {tile.widget !== 'featured' && tile.widget !== 'clock' && tile.widget !== 'service' && (
                 <div className="mb-3 flex shrink-0 items-center gap-2 text-sm font-bold text-white/60">
                   {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4 shrink-0" />; })()}
-                  <span className="truncate">{widgetLabel(tile.widget)}</span>
+                  <span className="truncate">{widgetLabel(tile.widget as WidgetKey)}</span>
                 </div>
               )}
               {/* Body flexes to fill the tile; list widgets scroll (scrollbar
                   hidden) as a safety net so nothing is ever hard-clipped, while
                   the size-aware widgets above keep content fitting by design. */}
-              <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0 flex-1 overflow-y-auto scrollbar-none')}>
+              <div className={cn(tile.widget === 'featured' || tile.widget === 'service' ? 'h-full' : 'min-h-0 flex-1 overflow-y-auto scrollbar-none')}>
                 <WidgetBoundary label={tile.widget}>
-                  <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} />
+                  {tile.widget === 'service'
+                    ? <ServiceTile href={tile.href ?? '/dashboard'} />
+                    : <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} />}
                 </WidgetBoundary>
               </div>
 
@@ -631,8 +658,25 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                   </div>
                   <div className="space-y-2">
                     <label className="block text-xs text-white/60">Section
-                      <select value={tile.widget} onChange={(e) => update(tile.id, { widget: e.target.value as WidgetKey })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
-                        {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                      <select
+                        value={tile.widget === 'service' ? `service:${tile.href ?? ''}` : tile.widget}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          // "service:<href>" pins ANY app feature as a launcher
+                          // tile; a plain key selects a built-in display widget.
+                          if (v.startsWith('service:')) update(tile.id, { widget: SERVICE_WIDGET, href: v.slice('service:'.length) });
+                          else update(tile.id, { widget: v as WidgetKey, href: undefined });
+                        }}
+                        className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white"
+                      >
+                        <optgroup label="Display widgets">
+                          {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                        </optgroup>
+                        <optgroup label="All services & features">
+                          {ALL_SERVICES_CATALOG.map((s) => (
+                            <option key={s.href} value={`service:${s.href}`}>{s.label}</option>
+                          ))}
+                        </optgroup>
                       </select>
                     </label>
                     <label className="block text-xs text-white/60">Size

@@ -18,7 +18,21 @@ export type WidgetKey = (typeof WIDGET_KEYS)[number];
 export const TILE_SIZES = ['sm', 'md', 'lg', 'wide', 'hero'] as const;
 export type TileSize = (typeof TILE_SIZES)[number];
 
-export type Tile = { id: string; widget: WidgetKey; size: TileSize };
+/** A launcher tile for ANY app service/feature: opens `href` when tapped.
+ *  Grants the display editor 100% flexibility beyond the built-in widgets. */
+export const SERVICE_WIDGET = 'service' as const;
+export type TileWidget = WidgetKey | typeof SERVICE_WIDGET;
+
+export type Tile = { id: string; widget: TileWidget; size: TileSize; href?: string };
+
+// Internal app path only — the editor picks from the service catalog, but the
+// STORED value is untrusted jsonb. Must start with a single '/', the charset
+// excludes ':' entirely (blocks javascript:/https: schemes) while allowing the
+// catalog's query/hash deep links (?view=…, #members). 120-char cap.
+const SERVICE_HREF_RE = /^\/[a-z0-9\-_/?=&#.[\]]{0,119}$/i;
+export function isServiceHref(v: unknown): v is string {
+  return typeof v === 'string' && SERVICE_HREF_RE.test(v) && !v.startsWith('//');
+}
 
 export const DEFAULT_TILES: Tile[] = [
   { id: 't1', widget: 'featured', size: 'hero' },
@@ -79,12 +93,17 @@ export function resolveTiles(raw: unknown, uid: () => string = fallbackUid): Til
   for (const el of raw) {
     if (!el || typeof el !== 'object' || Array.isArray(el)) continue;
     const r = el as Record<string, unknown>;
-    if (!(WIDGET_KEYS as readonly string[]).includes(r.widget as string)) continue;
-    tiles.push({
-      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : uid(),
-      widget: r.widget as WidgetKey,
-      size: (TILE_SIZES as readonly string[]).includes(r.size as string) ? r.size as TileSize : 'sm',
-    });
+    const id = typeof r.id === 'string' && r.id.length > 0 ? r.id : uid();
+    const size = (TILE_SIZES as readonly string[]).includes(r.size as string) ? r.size as TileSize : 'sm';
+
+    if ((WIDGET_KEYS as readonly string[]).includes(r.widget as string)) {
+      // Built-in widget — never carries an href (strip any stored junk).
+      tiles.push({ id, widget: r.widget as WidgetKey, size });
+    } else if (r.widget === SERVICE_WIDGET && isServiceHref(r.href)) {
+      // Service launcher — only with a valid internal app path.
+      tiles.push({ id, widget: SERVICE_WIDGET, size, href: r.href });
+    }
+    // anything else (unknown widget, bad href) is dropped, never crashes
   }
   return tiles.length ? tiles : DEFAULT_TILES;
 }

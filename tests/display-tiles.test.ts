@@ -68,3 +68,38 @@ describe('tile size → vertical room (dynamic widget sizing)', () => {
     expect(tileListLimit('md', 3)).toBeGreaterThan(tileListLimit('sm', 3));
   });
 });
+
+describe('service launcher tiles (any feature via the display editor)', () => {
+  const uid = () => 'fresh';
+
+  it('accepts a service tile with a valid internal href and preserves it', () => {
+    const saved = [{ id: 's1', widget: 'service', size: 'sm', href: '/dashboard/groceries' }];
+    expect(resolveTiles(saved, uid)).toEqual(saved);
+  });
+
+  it('accepts the catalog’s query/hash deep links', () => {
+    const saved = [
+      { id: 'a', widget: 'service', size: 'sm', href: '/dashboard?view=family' },
+      { id: 'b', widget: 'service', size: 'sm', href: '/dashboard/settings#members' },
+    ];
+    expect(resolveTiles(saved, uid)).toEqual(saved);
+  });
+
+  it('drops service tiles with unsafe or missing hrefs', () => {
+    const bad = [
+      { id: 'a', widget: 'service', size: 'sm' },                                  // no href
+      { id: 'b', widget: 'service', size: 'sm', href: 'https://evil.example' },    // absolute URL
+      { id: 'c', widget: 'service', size: 'sm', href: '//evil.example' },          // protocol-relative
+      { id: 'd', widget: 'service', size: 'sm', href: 'javascript:alert(1)' },     // scheme
+      { id: 'e', widget: 'service', size: 'sm', href: '/x/y:z' },                  // colon anywhere
+      { id: 'f', widget: 'service', size: 'sm', href: '/' + 'x'.repeat(200) },     // too long
+    ];
+    const keep = { id: 'ok', widget: 'service', size: 'md', href: '/wallet' };
+    expect(resolveTiles([...bad, keep], uid)).toEqual([keep]);
+  });
+
+  it('strips a stray href stored on a built-in widget tile', () => {
+    expect(resolveTiles([{ id: 'a', widget: 'clock', size: 'sm', href: '/x' }], uid))
+      .toEqual([{ id: 'a', widget: 'clock', size: 'sm' }]);
+  });
+});
