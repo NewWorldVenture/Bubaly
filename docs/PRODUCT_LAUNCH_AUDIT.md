@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0364 - Daily household modules hid failed reads as empty or partial states
+
+- Timestamp: 2026-07-16 07:56 America/New_York
+- Service: Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/planning-module.tsx`, `components/modules/photos-module.tsx`, `components/modules/pets-module.tsx`, `components/modules/recipes-module.tsx`, `components/modules/reminders-module.tsx`, `components/modules/shopping-module.tsx`, `components/modules/todos-module.tsx`, `components/modules/utilities-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed a raw error without recovery, or allowed dependent list/media/care state to render from partial query results.
+- Severity: P1
+- Launch impact: families could miss preparation plans, photos, pet care, recipes, reminders, shopping items, tasks, or utility cost history while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Resolution: all eight modules now surface retryable ErrorState UI; Prep Plans, Photos, Pets, Reminders, Shopping, and Todos coordinate dependent reads before rendering derived state.
+- Supabase impact: no schema change; existing family-scoped planning, media, care, food, task, and utility reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (6 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 477 test files, 3,241 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `d8a0213a`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed daily household verification
+
 ### PLA-0363 - Household insight modules hid failed reads as empty or partial states
 
 - Timestamp: 2026-07-16 07:50 America/New_York

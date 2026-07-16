@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Daily Household Read Boundaries
+
+- Focused household boundary suite: 1 file, 6 assertions passed.
+- Full `npm.cmd test -- --run`: 477 test files, 3,241 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities now surface retryable read failures before empty or derived states.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `d8a0213a`.
+
 ## Latest Local Evidence - Household Insight Read Boundaries
 
 - Focused household boundary suite: 1 file, 5 assertions passed.
