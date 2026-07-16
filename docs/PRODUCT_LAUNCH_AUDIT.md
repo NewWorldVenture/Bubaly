@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0375 - Apple Reminders was advertised before VTODO sync existed
+
+- Status: Resolved in source; live provider and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/sync/accounts/apple` and the shared sync capability matrix.
+- Finding: Apple Reminders was presented as a two-way CalDAV capability even though the Apple adapter drops VTODO collections and returns no task list.
+- Repair: marked Apple Reminders unsupported, kept Apple Calendar available over CalDAV, and removed Reminders from Apple setup guidance.
+- Evidence: Apple sync and capability suites (34 assertions), full 481 test files/3,240 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `ada8107c`.
+- Remaining launch gate: implement and test Apple VTODO read/write sync before advertising Reminders again; live Auth Admin, OAuth, RLS, browser, backup, and deployment evidence also remain open.
+
 ### PLA-0374 - Sync account pages exposed Amazon without a real account adapter
 
 - Status: Resolved in source; live provider and deployed verification remain open.
