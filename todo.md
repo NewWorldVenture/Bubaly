@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:24:05 -04:00
+- Last updated: 2026-07-16 09:30:42 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `ada8107c` removes the unsupported Apple Reminders claim after `05bc83e4` removed Amazon/Alexa from the Sync account setup surface; live provider and deployment evidence remains open
+- Commit: `0a4b83cd` makes Workload Balance fail closed on required read failures after `ada8107c` corrected the Apple Reminders capability claim; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0376 - Workload Balance hid required read failures as empty history
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Supabase read boundary / operational integrity
+- Feature: Workload Balance
+- Route: `/dashboard/workload`
+- File or files: `app/(app)/dashboard/workload/page.tsx`, `app/(app)/dashboard/workload/actions.ts`, `components/modules/workload-module.tsx`, `tests/workload-read-boundary.test.ts`
+- Database objects: `family_members`, `chore_assignments`, `chores`, `todo_items`, `calendar_events`, and `workload_snapshots`
+- Affected roles: authenticated family members
+- Scenario: a required workload query could fail while the page rendered empty arrays; snapshot save failures were returned from a fire-and-forget action and never shown to the user.
+- Launch impact: a household could see a plausible but incomplete workload report and believe trend history was current.
+- Root cause: Supabase read errors were not checked, and the snapshot action result was discarded by the client.
+- Required remediation: check every required query, render a retryable error state on failure, and surface snapshot-save failures through the existing toast path.
+- Implementation notes: moved snapshot history into the required query set, added a page-level error boundary, replaced the roadmap-style save error, and handled the server action result in the client.
+- Test plan: focused workload boundary and balance suites; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused Workload suites (11 assertions); full Vitest (482 files/3,242 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `0a4b83cd`; local branch pushed; known build warnings remain; live RLS, browser, and deployment evidence remain open.
+- Resolution: Workload Balance now fails visibly on required read failure and reports snapshot persistence errors instead of presenting empty or silently degraded state.
+- Remaining dependencies: verify live workload RLS and browser behavior, and complete the broader route audit.
 
 #### TODO-0374 - Sync account pages exposed Amazon without a real account adapter
 
