@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Decision and Health Visit Read Boundaries
+
+- Focused household boundary suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 474 test files, 3,230 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Decision Engine now retries both required decision and option reads; Health Visits now surfaces a retryable read failure before its empty history state.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Behavior Read Boundary
 
 - Focused behavior boundary suite: 1 file, 1 assertion passed.
@@ -266,25 +280,7 @@ Audit date: 2026-07-15
 - `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
 - `git diff --check`: passed.
 - `/admin/security` now preserves Auth Admin, invite, audit, family, and actor-profile failures and renders a retryable sanitized error state.
-- Live Auth Admin health, authenticated role/RLS, browser, backup, and deployment evidence remain open.
-
-## Latest Local Evidence - Admin Wallet Overview Read Boundary
-
-- Focused admin-wallet suites: 2 files, 2 tests passed.
-- Full `npm.cmd test`: 457 test files, 3,203 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `git diff --check`: passed.
-- `/admin/wallet` now preserves failures from all seven required reads and renders a sanitized retry state before showing wallet metrics or controls.
-- Live Super Admin role/browser outage drills, remote RLS, backup/restore, and deployment evidence remain open.
-
-## Latest Local Evidence - Admin Wallet Reconciliation Read Boundary
-
--…26355 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Live Auth Admin health, authenticated role/RLS, browser, backup,…26615 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
