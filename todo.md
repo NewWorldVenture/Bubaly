@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:03:47 -04:00
+- Last updated: 2026-07-16 07:09:24 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `59b280ae` adds Decision Engine and Health Visits read failure handling after Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `541c1a40` adds Finance read failure handling after Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0358 - Finances summary hid account and planning read failures as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Finance / Supabase failure handling
+- Feature: Finances
+- Route: `/dashboard/finances`
+- File or files: `components/modules/finances-module.tsx`, `tests/finances-read-boundary.test.ts`
+- Database objects: `financial_accounts`, `transactions`, `budgets`, `bills`, and `savings_goals`
+- Affected roles: authenticated family members and household managers
+- Scenario: any of five required finance reads could fail while the summary derived balances, spending, and upcoming obligations from empty fallback arrays.
+- Launch impact: families could see misleading zero balances or make financial decisions from incomplete data.
+- Root cause: the module only waited on account and transaction loading and ignored every query error.
+- Required remediation: coordinate all five reads and render a sanitized retryable error before financial metrics.
+- Implementation notes: Finances now tracks all loading/error states and retries the complete finance read set together.
+- Test plan: focused finance boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/finances-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 475 files/3,231 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `541c1a40`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0357 - Decision Engine and Health Visits hid required reads as empty states
 
@@ -203,27 +224,7 @@
 - Affected roles: authenticated family members and household trip planners
 - Scenario: shared CRUD list reads or budget/expense reads could fail while sections rendered empty lists or zero financial totals.
 - Launch impact: families could miss trip records or make budget decisions from incomplete data.
-- Root cause: `TripCrudSection` ignored read errors, and Trip Budget did not track loading or errors for its summary queries.
-- Required remediation: surface retryable errors in the shared CRUD primitive and fail closed on both budget summary reads.
-- Implementation notes: shared vacation CRUD sections now show sanitized retry states; Trip Budget waits for both reads and retries them together.
-- Test plan: focused CRUD/budget boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/vacation-crud-read-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 467 files/3,218 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
-- Resolution: source repair validated locally in commit `3adef7e6`; documentation and remote publication remain pending for this increment.
-- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
-
-#### TODO-0348 - Trip itinerary hid failed day and item reads as an empty schedule
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Vacation itinerary / Supabase failure handling
-- Feature: Trip Itinerary
-- Route: `/dashboard/vacations/[id]/itinerary`
-- File or files: `components/vacations/trip-itinerary.tsx`, `tests/trip-itinerary-boundary.test.ts`
-- Database objects: `vacations`, `vacation_itinerary_days`, and `vacation_itinerary_items`
-- Affected roles: authenticated family members and household trip planners
-- Scenario: trip, day, or itinerary-item reads could fail while the page rendered no days planned or an incomplete schedule.
-- Launch impact: families could miss planned activities or incorrectly rebuild an itinerar…115682 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Root cause: `TripCrudSection` igno…116139 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
