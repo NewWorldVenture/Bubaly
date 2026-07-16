@@ -71,11 +71,17 @@ export type ReferralListRow = Database['public']['Tables']['referrals']['Row'];
 
 /** Referrals a family has made (as the referrer), newest first. */
 export async function listReferralsForFamily(supabase: DB, familyId: string): Promise<ReferralListRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('referrals')
     .select('*')
     .eq('referrer_family_id', familyId)
     .order('created_at', { ascending: false });
+  // Fail closed: the referrals page is source-of-truth. A swallowed read error
+  // would show "no referrals yet" when the list is merely unreadable.
+  if (error) {
+    console.error('[referrals/server] referrals read failed', { familyId, error });
+    throw new Error('Could not load your referrals from Supabase. Refresh and try again.');
+  }
   return data ?? [];
 }
 

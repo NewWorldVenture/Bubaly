@@ -118,13 +118,18 @@ async function loadRules(
   familyId: string,
   memberId: string | null,
 ): Promise<GuardianRule[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('guardian_routing_rules')
     .select('*')
     .eq('family_id', familyId)
     .eq('is_active', true)
     .or(memberId ? `member_id.is.null,member_id.eq.${memberId}` : 'member_id.is.null')
     .order('priority', { ascending: true });
+  // Degrade to profile defaults rather than throw — this runs in the inbound
+  // call/message webhook pipeline, so a hard failure would break screening
+  // entirely. But log it: a broken rules table silently changes how calls are
+  // routed (custom blocks/overrides get skipped), which must be observable.
+  if (error) console.error('[guardian/pipeline] guardian_routing_rules read failed', { familyId, memberId, error });
   return (data ?? []) as unknown as GuardianRule[];
 }
 

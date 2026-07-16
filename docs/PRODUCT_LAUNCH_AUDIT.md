@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0413 - Referrals list hid read failures as empty; Guardian routing-rule read failures were invisible
+
+- Timestamp: 2026-07-16 20:38 UTC
+- Service: Referrals (family-facing) + Guardian call/message screening pipeline
+- Route: `/referrals`; inbound Guardian voice/SMS webhook pipeline (`lib/guardian/pipeline.ts`)
+- Affected files: `lib/referrals/server.ts`, `lib/guardian/pipeline.ts`, `tests/module-queries-read-boundary.test.ts`
+- Role: any family (referrals); any inbound caller/sender (Guardian)
+- Scenario: the `referrals` read fails while the Referrals page loads; the `guardian_routing_rules` read fails while an inbound call/message is screened
+- Severity: P2
+- Launch impact: (1) `listReferralsForFamily` discarded the read `error` and returned `[]`, so a failed read showed "no referrals yet" when the list was merely unreadable (misleading-empty class). (2) `loadRules` in the Guardian pipeline discarded its read `error` and returned `[]`, silently falling back to profile defaults — so a broken `guardian_routing_rules` table would skip custom blocks/overrides and change how calls are routed with zero operational signal
+- Root cause: both dropped `error` from the destructure
+- Resolution: **Referrals fails closed** (log + throw "Could not load your referrals from Supabase. Refresh and try again.") — it is a dedicated source-of-truth page with no try/catch. **Guardian degrades but logs** (`console.error('[guardian/pipeline] guardian_routing_rules read failed', …)`) rather than throwing, because it runs in the inbound webhook path where a hard failure would break screening entirely; degrading to profile defaults is the safe fallback, but the failure is now observable
+- Supabase impact: none; reads unchanged, only their failures surfaced/observable
+- Tests run: `tests/module-queries-read-boundary.test.ts` (now 8 — adds referrals throw-on-error + rows-on-success), full suite 515 files / 3,295 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a failing client and asserts `listReferralsForFamily` rejects with the fail-closed message; success path returns rows
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live verification remains a standing dependency
+- Remaining dependencies: `lib/capture/save.ts` id-extraction and `lib/marketing/personalization-server.ts` were reviewed and left as-is (the former reads back a already-checked insert; the latter is optional marketing enhancement where degrade-to-empty is correct)
+
 ### PLA-0412 - Social Command Center lists rendered a misleading empty state on read failure
 
 - Timestamp: 2026-07-16 20:33 UTC

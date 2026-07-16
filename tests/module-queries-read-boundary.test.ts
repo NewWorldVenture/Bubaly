@@ -61,4 +61,19 @@ describe('module record queries fail closed on read error', () => {
     const { getPosts } = await import('@/lib/social/queries');
     await expect(getPosts('fam-1')).resolves.toEqual([{ id: 'p1' }]);
   });
+
+  // listReferralsForFamily takes the client directly, so drive it without the
+  // createServer mock.
+  it('referrals listReferralsForFamily throws when the read fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const client = queryClient({ data: null, error: { message: 'permission denied for table referrals' } });
+    const { listReferralsForFamily } = await import('@/lib/referrals/server');
+    await expect(listReferralsForFamily(client as never, 'fam-1')).rejects.toThrow(/Could not load your referrals/);
+  });
+
+  it('referrals listReferralsForFamily returns rows on success', async () => {
+    const client = queryClient({ data: [{ id: 'r1' }], error: null });
+    const { listReferralsForFamily } = await import('@/lib/referrals/server');
+    await expect(listReferralsForFamily(client as never, 'fam-1')).resolves.toEqual([{ id: 'r1' }]);
+  });
 });
