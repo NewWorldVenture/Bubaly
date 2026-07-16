@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 10:30 America/New_York
+Audit snapshot: 2026-07-16 10:35 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 490 Vitest files and 3,250 tests pass in the latest full local gate.
+- 491 Vitest files and 3,251 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -70,6 +70,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   controls; a failed read renders a retryable state instead of an empty editor.
 - Super Admin Social Audit now checks the `social_audit_logs` read before rendering history or its empty state;
   a failed read renders a retryable state instead of implying no audit activity.
+- Super Admin Social Usage now checks the `social_usage_events` read before calculating metering totals;
+  a failed read renders a retryable state instead of implying no usage activity.
 - Announcements now coordinates announcement and read-receipt failures; Contacts, Screen Time, Celebrations,
   and the Household Binder now surface retryable read failures instead of rendering healthy empty or partial
   household states. Live provider, RLS, browser, backup, and deployment evidence remains open.
