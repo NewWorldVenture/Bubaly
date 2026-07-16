@@ -132,6 +132,20 @@ static guard test (see `tests/{chore-approval,guardian}-authz.test.ts`). Likely
 suspects: A-06 calendar deletes, A-10 meal-plan/grocery deletes, A-13 vacations,
 A-17 admin, A-11 file deletes.
 
+**Candidate sweep (agent-01):** `actions.ts` files calling `requireUserContext()`
+with NO `isManager/isAdmin/can_manage` anywhere. CANDIDATES needing per-action
+judgment — NOT all bugs (voting, feedback, paperwork, per-user prefs are correctly
+open to all members; do NOT blanket-gate): `dashboard/auto`, `dashboard/social(-feed)`,
+`marketplace(/community,/handoff,/alerts,/negotiations,/auctions,/report)`,
+`dashboard/home`, `dashboard/trip-intel`, `dashboard/recipes/vote` (kids vote — OK),
+`dashboard/locator` (self loc-share = product call; `savePlace/deletePlace/setGeofenceEnabled`
+on shared `family_places` = likely manager-only), `dashboard/contact-center`,
+`dashboard/kitchen`, `dashboard/family-digital-twin`, `dashboard/dining`,
+`dashboard/independence`, `dashboard/sync/feeds`, `dashboard/concierge-calls`,
+`dashboard/app-store`, `dashboard/workload`, `dashboard/money-timeline`,
+`dashboard/moments`, `dashboard/family-signals`, `dashboard/conflicts`,
+`dashboard/migrate`. Each unit owner: gate only the child-must-not-do actions + add an authz guard test.
+
 ---
 
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
