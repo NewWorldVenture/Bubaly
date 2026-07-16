@@ -28,15 +28,19 @@ export function AnnouncementsModule() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const activeMembers = members.filter((m) => m.is_active).length;
 
-  const { data: announcements, loading, error } = useRealtimeQuery<Announcement>({
+  const { data: announcements, loading: announcementsLoading, error: announcementsError, refresh: refreshAnnouncements } = useRealtimeQuery<Announcement>({
     table: 'family_announcements', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_announcements').select('*').eq('family_id', familyId)
       .order('is_pinned', { ascending: false }).order('created_at', { ascending: false }),
   });
-  const { data: reads } = useRealtimeQuery<Read>({
+  const { data: reads, loading: readsLoading, error: readsError, refresh: refreshReads } = useRealtimeQuery<Read>({
     table: 'announcement_reads', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('announcement_reads').select('*').eq('family_id', familyId),
   });
+
+  const loading = announcementsLoading || readsLoading;
+  const error = announcementsError || readsError;
+  const refresh = () => { void refreshAnnouncements(); void refreshReads(); };
 
   const readsByAnnouncement = useMemo(() => {
     const m = new Map<string, Read[]>();
@@ -110,12 +114,12 @@ export function AnnouncementsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load announcements." />
+        <ErrorState message="Could not load announcements. Refresh and try again." onRetry={refresh} />
       ) : (announcements ?? []).length === 0 ? (
         <EmptyState
           icon={Megaphone}
           title="No announcements yet"
-          description={admin ? 'Post the first family update — everyone will see it here.' : 'Family updates from your parents will appear here.'}
+          description={admin ? 'Post the first family update â€” everyone will see it here.' : 'Family updates from your parents will appear here.'}
         />
       ) : (
         <ul className="space-y-3">
@@ -133,7 +137,7 @@ export function AnnouncementsModule() {
                     </div>
                     {a.body && <p className="mt-1 whitespace-pre-wrap text-sm text-fg/90">{a.body}</p>}
                     <div className="mt-2 flex items-center gap-3 text-xs text-muted">
-                      <span>{author?.display_name ?? 'Family'} · {fmtDateTime(a.created_at)}</span>
+                      <span>{author?.display_name ?? 'Family'} Â· {fmtDateTime(a.created_at)}</span>
                       <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{readCount}/{activeMembers} read</span>
                     </div>
                   </div>
@@ -157,7 +161,7 @@ export function AnnouncementsModule() {
       <Modal open={showCompose} onClose={() => setShowCompose(false)} title="New announcement">
         <form onSubmit={post} className="space-y-4">
           <Field label="Title" required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Early dismissal Friday" required />}</Field>
-          <Field label="Details">{(id) => <Textarea id={id} value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Add any details…" />}</Field>
+          <Field label="Details">{(id) => <Textarea id={id} value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Add any detailsâ€¦" />}</Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
             Pin to top
