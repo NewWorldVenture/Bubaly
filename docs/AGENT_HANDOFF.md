@@ -41,13 +41,16 @@
 > docs — keep it green. Watch for control-byte corruption from concurrent writers
 > (`LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < file | wc -c` must be 0).
 >
-> **Latest verified state (2026-07-16 20:35 UTC, HEAD `be91fc69`):** full suite **515 files / 3,293
+> **Latest verified state (2026-07-16 20:40 UTC, HEAD `40d355d4`):** full suite **515 files / 3,295
 > tests green**. Shipped this relay: PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync
 > hash), PLA-0406/0407/0408 (reasoning-substrate observability — graph loader, family_signals read,
 > and snapshot upsert all log on failure), PLA-0409/0410 (silent write-failure fix — Home, Auto,
 > Paperwork, Contacts CRUD now throw; Locator side-effects logged), PLA-0411/0412 (misleading
-> empty-state fix — Auto, Home, and Social record-list reads now fail closed). Full increment table
-> in `docs/progress/2026-07-16-20{00,10,15,20,25,30,35}.md`.
+> empty-state fix — Auto, Home, and Social record-list reads now fail closed), PLA-0413 (Referrals
+> fails closed; Guardian routing-rule read failure logged). Full increment table in
+> `docs/progress/2026-07-16-20{00,10,15,20,25,30,35,40}.md`. **The `lib/` shared read/write helper
+> silent-failure sweep is complete** — remaining work is per-page inlined reads or the operator-gated
+> live blockers.
 >
 > **Silent-failure theme — both sides done for primary user data.** Writes surface failures instead
 > of faking success; reads fail closed instead of rendering a fake-empty list. Coverage: Home, Auto,
