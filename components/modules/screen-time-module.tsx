@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
@@ -32,14 +32,18 @@ export function ScreenTimeModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: entries, loading } = useRealtimeQuery<Entry>({
+  const { data: entries, loading: entriesLoading, error: entriesError, refresh: refreshEntries } = useRealtimeQuery<Entry>({
     table: 'screen_time_entries', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('screen_time_entries').select('*').eq('family_id', familyId).order('entry_date', { ascending: false }),
   });
-  const { data: limits } = useRealtimeQuery<Limit>({
+  const { data: limits, loading: limitsLoading, error: limitsError, refresh: refreshLimits } = useRealtimeQuery<Limit>({
     table: 'screen_time_limits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('screen_time_limits').select('*').eq('family_id', familyId),
   });
+
+  const loading = entriesLoading || limitsLoading;
+  const error = entriesError || limitsError;
+  const refresh = () => { void refreshEntries(); void refreshLimits(); };
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [limitFor, setLimitFor] = useState<{ memberId: string; minutes: string } | null>(null);
@@ -93,6 +97,7 @@ export function ScreenTimeModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load screen time data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -171,8 +176,8 @@ export function ScreenTimeModule() {
             <div key={e.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm">
-                  <span className="font-medium">{formatMinutes(e.minutes)}</span> · <span className={categoryMeta(e.category).productive ? 'text-success' : ''}>{categoryMeta(e.category).label}</span>
-                  {m ? ` · ${m.display_name}` : ''}{e.device ? ` · ${e.device}` : ''}
+                  <span className="font-medium">{formatMinutes(e.minutes)}</span> Â· <span className={categoryMeta(e.category).productive ? 'text-success' : ''}>{categoryMeta(e.category).label}</span>
+                  {m ? ` Â· ${m.display_name}` : ''}{e.device ? ` Â· ${e.device}` : ''}
                 </p>
                 {e.note && <p className="text-xs text-muted">{e.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
@@ -189,7 +194,7 @@ export function ScreenTimeModule() {
             <Field label="Child">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(ev) => setForm({ ...form, member_id: ev.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">â€” Select â€”</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
@@ -205,7 +210,7 @@ export function ScreenTimeModule() {
                 </Select>
               )}
             </Field>
-            <Field label="Device (optional)">{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder="iPad, Switch, TV…" />}</Field>
+            <Field label="Device (optional)">{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder="iPad, Switch, TVâ€¦" />}</Field>
             <Field label="Note (optional)">{(id) => <Textarea id={id} value={form.note} onChange={(ev) => setForm({ ...form, note: ev.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
