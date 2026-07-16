@@ -1,16 +1,18 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 11:30 America/New_York
+Audit snapshot: 2026-07-16 11:40 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 501 Vitest files and 3,261 tests pass in the latest full local gate.
+- 502 Vitest files and 3,262 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
+- Autonomous Family Management now preserves required family signal, recommendation, rule, and automation-run
+  read failures and renders a retryable state before showing monitoring, risk, or approval controls.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
   goal funding is published in migration `0208` and commit `7a20e160`.
 - Wallet activation now fails closed on disclosure, member, child-wallet, bucket, and rule provisioning
@@ -46,7 +48,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Super Admin Users now fails visibly when required profile, family, membership, subscription, invite, role,
   permission, or super-admin reads fail, instead of rendering partial access data and misleading counts.
 - Family Sync and Sync history now fail visibly when connection, calendar, conflict, run, or audit-history
-  reads fail, instead of presenting zero health or â€œno runsâ€ states as if synchronization were current.
+  reads fail, instead of presenting zero health or “no runs” states as if synchronization were current.
 - Sync conflicts, connected accounts, and provider detail now fail visibly when their required reads fail,
   instead of presenting no conflicts or disconnected provider states from partial data.
 - The family Connections hub now surfaces its realtime Supabase read error with a retry action instead of
@@ -123,7 +125,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   safety data cannot look like a clean empty state.
 - Trip Weather and Trip Packing now fail visibly when their trip, weather, packing-list, item, or activity
   dependencies cannot be read, instead of rendering empty plans from partial data.
-- Family Check In now surfaces a retryable safety-feed read error instead of presenting â€œNo check-ins yetâ€
+- Family Check In now surfaces a retryable safety-feed read error instead of presenting “No check-ins yet”
   after a failed `safety_check_ins` query.
 - Driving Safety now surfaces a retryable trip-read error instead of presenting no trips or zeroed summary
   metrics after a failed `driving_trips` query. Find Phone now treats both `member_locations` and
@@ -169,7 +171,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   guardian, and webhook routes to reach their own rate-limit, token, secret, or signature checks.
 - Admin notification producers and mark-read UI now surface Supabase failures locally; full Super Admin
   permission, browser, and alert-routing verification remains open.
-- The Connections hub no longer creates label-only â€œconnectedâ€ records for providers without a real OAuth
+- The Connections hub no longer creates label-only “connected” records for providers without a real OAuth
   or sync path; remaining provider implementations and live callback verification are still open.
 - The Admin digest cron now reports feed and recipient failures; live Resend delivery and scheduled-cron
   verification remain open.
