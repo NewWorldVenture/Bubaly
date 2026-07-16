@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
@@ -27,7 +27,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: visits, loading } = useRealtimeQuery<Visit>({
+  const { data: visits, loading, error, refresh } = useRealtimeQuery<Visit>({
     table: 'health_visits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_visits').select('*').eq('family_id', familyId),
   });
@@ -112,6 +112,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
       {loading ? (
         <SkeletonList />
+      ) : error ? (
+        <ErrorState message="Could not load health visits. Refresh and try again." onRetry={refresh} />
       ) : scoped.length === 0 ? (
         <EmptyState icon={Stethoscope} title="No visits logged" description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
       ) : (

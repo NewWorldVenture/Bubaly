@@ -16,7 +16,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { evaluateDecision, type OptionInput, type Criterion } from '@/lib/decisions/engine';
@@ -31,11 +31,11 @@ export function DecisionsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: decisions, loading: ld } = useRealtimeQuery<Decision>({
+  const { data: decisions, loading: ld, error: decisionsError, refresh: refreshDecisions } = useRealtimeQuery<Decision>({
     table: 'family_decisions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_decisions').select('*').eq('family_id', familyId).order('updated_at', { ascending: false }),
   });
-  const { data: options, loading: lo } = useRealtimeQuery<Option>({
+  const { data: options, loading: lo, error: optionsError, refresh: refreshOptions } = useRealtimeQuery<Option>({
     table: 'decision_options', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('decision_options').select('*').eq('family_id', familyId),
   });
@@ -87,6 +87,7 @@ export function DecisionsModule() {
   }
 
   const loading = ld || lo;
+  const readError = decisionsError || optionsError;
 
   return (
     <div className="space-y-6">
@@ -98,6 +99,8 @@ export function DecisionsModule() {
 
       {loading ? (
         <SkeletonList count={4} />
+      ) : readError ? (
+        <ErrorState message="Could not load decision data. Refresh and try again." onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
       ) : (decisions ?? []).length === 0 ? (
         <EmptyState onAdd={() => setAddDecision(true)} />
       ) : (
