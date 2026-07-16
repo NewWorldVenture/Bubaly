@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0376 - Workload Balance hid required read failures as empty history
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/workload`.
+- Finding: required workload and snapshot queries could fail while the page rendered empty arrays, and snapshot-save failures were discarded by a fire-and-forget action.
+- Repair: check every required query, render a retryable error state, replace the roadmap-style save error, and surface persistence errors through the toast path.
+- Evidence: focused Workload suites (11 assertions), full 482 test files/3,242 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `0a4b83cd`.
+- Remaining launch gate: verify live Workload RLS and deployed browser behavior; the broader Auth, role, backup, and deployment gates remain open.
+
 ### PLA-0375 - Apple Reminders was advertised before VTODO sync existed
 
 - Status: Resolved in source; live provider and deployed verification remain open.
