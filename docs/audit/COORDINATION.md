@@ -97,7 +97,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-06 | — | OPEN | | | | |
 | A-07 | — | OPEN | | | | |
 | A-08 | — | OPEN | | | | Codex did PAY-1/PAY-2; full flow open |
-| A-09 | `agent-01` | CLAIMED | 2026-07-16 21:01 | 2026-07-16 21:01 | | Billing/Stripe checkout/webhooks/pay flows: wiring + idempotency + tier gating audit |
+| A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:05 | | Webhook verified (sig+replay+500-retry+self-heal); planLevel↔slug drift guard added (PLA-0431). Open: live Stripe smoke, portal RBAC, cancel/downgrade |
 | A-10 | `agent-02` | CLAIMED | 2026-07-16 20:55 | 2026-07-16 20:55 | — | Meals/groceries/food: silent-read + write-boundary sweep |
 | A-11 | — | OPEN | | | | |
 | A-12 | — | OPEN | | | | |

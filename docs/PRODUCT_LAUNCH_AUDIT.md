@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0431 - A-09 revenue invariant: guard webhook plan slugs against planLevel() drift
+
+- Timestamp: 2026-07-16 21:04 UTC
+- Service: Billing / entitlement (A-09)
+- Route: `POST /api/webhooks/stripe` → `subscriptions.plan` → entitlement gating
+- Affected files: `app/api/webhooks/stripe/route.ts` (audited), `lib/constants/plans.ts` (audited), `tests/billing-entitlement-consistency.test.ts` (new)
+- Role: any paying family
+- Scenario: the Stripe subscription webhook maps a price id → plan slug and persists it; `planLevel()` later resolves that slug to an entitlement level (0/1/2)
+- Severity: (guards a CRITICAL revenue invariant — no defect found today; the risk is future drift)
+- Launch impact: verified the webhook writes exactly `plus / plus_annual / basic / basic_annual`, and `planLevel()` maps every one to a PAID level (plus→2, basic→1), with legacy `family/family_annual`→1 and unknown/free→0. If a future price→slug were added without updating `planLevel()`, a paying family would silently resolve to Free — now caught by CI
+- Root cause: n/a (verification + regression guard); the two files had no test tying them together
+- Resolution: added `tests/billing-entitlement-consistency.test.ts` which parses the webhook's price→plan ladder and asserts every slug it emits satisfies `planLevel() >= 1`, that plus/basic levels are exact, that unknown/null/undefined are Free, and that the webhook throws on an unknown price rather than writing a Free slug
+- Supabase impact: none; read/verify only. Also confirmed the webhook is signature-verified (`constructEvent`), replay-safe (`recordEvent`/`markEventProcessed`/`markEventError`), returns 500 to force Stripe retry on handler failure, and self-heals the `checkout_sessions` row on completion
+- Tests run: `tests/billing-entitlement-consistency.test.ts` (5 passing); eslint clean
+- Validation evidence: 5/5 green; slugs parsed from source = `plus, plus_annual, basic, basic_annual`, all `planLevel >= 1`
+- Commit: (this increment)
+- Status: Resolved and pushed to `main`; A-09 remains In-progress (live Stripe signature/replay/refund smoke, portal RBAC, and cancel/downgrade flows still open)
+- Remaining dependencies: live webhook idempotency + refund smoke against Stripe test mode
+
 ### PLA-0417 - Concierge automation approve/dismiss reported success while the run stayed pending
 
 - Timestamp: 2026-07-16 20:53 UTC
