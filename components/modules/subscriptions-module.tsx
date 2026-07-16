@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { usd } from '@/lib/finance/splits';
@@ -30,7 +30,7 @@ export function SubscriptionsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: subs, loading } = useRealtimeQuery<Sub>({
+  const { data: subs, loading, error, refresh } = useRealtimeQuery<Sub>({
     table: 'subscriptions_tracked', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('subscriptions_tracked').select('*').eq('family_id', familyId).order('status').order('name'),
   });
@@ -80,6 +80,7 @@ export function SubscriptionsModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load subscriptions. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -117,13 +118,13 @@ export function SubscriptionsModule() {
             <div key={s.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3">
               <div className="min-w-0">
                 <p className={`font-medium ${canceled ? 'text-muted line-through' : ''}`}>
-                  {s.name} <span className="text-muted">· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
+                  {s.name} <span className="text-muted">Â· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
                   {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> unused</span>}
                   {s.status === 'trial' && <span className="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">trial</span>}
                 </p>
                 <p className="text-xs text-muted">
-                  {s.category ?? 'Other'} · {usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo · {usd(annualCostCents(s.cost_cents, s.cadence))}/yr
-                  {s.next_charge ? ` · next ${fmtDate(s.next_charge)}` : ''}{s.last_used ? ` · used ${fmtDate(s.last_used)}` : ' · never used'}
+                  {s.category ?? 'Other'} Â· {usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo Â· {usd(annualCostCents(s.cost_cents, s.cadence))}/yr
+                  {s.next_charge ? ` Â· next ${fmtDate(s.next_charge)}` : ''}{s.last_used ? ` Â· used ${fmtDate(s.last_used)}` : ' Â· never used'}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
@@ -140,7 +141,7 @@ export function SubscriptionsModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit subscription' : 'Add subscription'}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Netflix, Spotify…" />}</Field>
+            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Netflix, Spotifyâ€¦" />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cost ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
               <Field label="Billing">{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
