@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0393 - Deals hid listing read failures as no standout deals
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/marketplace/deals`.
+- Finding: the deal-feed listing query could fail while price-coach logic rendered â€œNo standout deals right now.â€
+- Repair: the Supabase error is checked before building comparable price bands or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Deals boundary suite (1 assertion), full 499 test files/3,259 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `071bfd7c`.
+- Remaining launch gate: validate authenticated marketplace reachability, listing availability, price-coach data, and deployed retry behavior; broader payment and deployment gates remain open.
+
 ### PLA-0392 - Selling hid listing and seller-signal read failures as zero activity
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -221,18 +231,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in source; live and deployed verification remain open.
 - Severity: P2.
 - Surface: Independence badge collection.
-- Finding: an empty collection rendered â€œFirst badge coming soon,â€ which described a roadmap rather than current data.
-- Repair: changed the empty state to â€œNo badges yet â€” start a skill above.â€
-- Evidence: `tests/independence-empty-state.test.ts`, full 481 test files/3,250 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `14f0d14b`.
-- Remaining launch gate: verify live progress reads and deployed UI copy.
-
-### PLA-0370 - App Store advertised unavailable catalog entries as â€œComing soonâ€
-
-- Status: Resolved in source; live catalog and deployed verification remain open.
-- Severity: P1.
-- Surface: `/dashboard/app-store`.
-- Finding: catalog entries with `coming_soon` status rendered a roadmap label in the install-control position instead of a clear unavailable state.
-- Repair: renamed the …35822 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Finding: an empty collection rend…36034 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
