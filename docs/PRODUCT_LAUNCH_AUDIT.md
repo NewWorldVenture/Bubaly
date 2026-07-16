@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
+
+- Timestamp: 2026-07-16 06:51 America/New_York
+- Service: Family Location
+- Route: `/dashboard/locator`
+- Affected files: `components/modules/locator-module.tsx`, `tests/family-location-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: one or more location reads could fail while the map and live-location sections rendered from empty or partial arrays.
+- Severity: P1
+- Launch impact: families could miss a member location, geofence, or recent safety history while the page appeared usable.
+- Root cause: the module only gated on the locations query loading state and ignored errors from all three required reads.
+- Resolution: Location now waits for all three reads and renders sanitized retryable ErrorState UI with a coordinated retry before the map.
+- Supabase impact: no schema change; existing family-scoped location reads now have an explicit page-level failure contract.
+- Tests run: `tests/family-location-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 472 test files, 3,227 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `632f677d`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed family-location verification
+
 ### PLA-0354 - Play Dates hid family scheduling read failures as no play dates
 
 - Timestamp: 2026-07-16 06:45 America/New_York

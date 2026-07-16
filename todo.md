@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 06:45:16 -04:00
+- Last updated: 2026-07-16 06:51:06 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `4f5edc92` adds Play Dates read failure handling after Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `632f677d` adds Location read failure handling after Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Family Location
+- Route: `/dashboard/locator`
+- File or files: `components/modules/locator-module.tsx`, `tests/family-location-read-boundary.test.ts`
+- Database objects: `member_locations`, `family_places`, and `location_events`
+- Affected roles: authenticated family members and household managers
+- Scenario: one or more location reads could fail while the map and live-location sections rendered from empty or partial arrays.
+- Launch impact: families could miss a member location, geofence, or recent safety history while the page appeared usable.
+- Root cause: the module only gated on the locations query loading state and ignored errors from all three required reads.
+- Required remediation: coordinate loading and failure state for locations, places, and history, then retry the complete read set together.
+- Implementation notes: Location now waits for all three reads and renders a sanitized ErrorState with a coordinated retry action before the map.
+- Test plan: focused location boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-location-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 472 files/3,227 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `632f677d`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0354 - Play Dates hid family scheduling read failures as no play dates
 
