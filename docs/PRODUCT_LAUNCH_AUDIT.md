@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0369 - Documents exposed cloud-import buttons without provider adapters
+
+- Status: Resolved in source; provider implementation and deployed verification remain open.
+- Severity: P1.
+- Surface: Family Documents quick actions.
+- Finding: Google Drive and Dropbox buttons were clickable but only fired a “not connected” toast because no provider adapters existed.
+- Repair: removed both disconnected actions, unused icons, and the dead `comingSoon` helper; supported upload, folder creation, and scan actions remain visible.
+- Evidence: `tests/documents-import-actions.test.ts`, full 479 test files/3,248 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `2c474f5a`.
+- Remaining launch gate: implement OAuth, storage, retry, and tenant controls before reintroducing cloud-import actions.
+
 ### PLA-0368 - Wallet card surfaces implied an issued payment card before provider setup
 
 - Status: Resolved in source; live provider and deployed verification remain open.

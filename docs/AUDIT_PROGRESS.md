@@ -14,7 +14,7 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: wallet card availability contract repair (`faf75b75`) validated with 478 test files and 3,246 tests;
+Latest increment: disconnected document import action removal (`2c474f5a`) validated with 479 test files and 3,248 tests;
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
 
@@ -32,7 +32,7 @@ not yet complete.
 | A-08 | Wallet, goals, allowances, transfers and treasury | 7 | In progress | Atomic wallet RPCs, goal funding repair, allowance recovery tests, wallet action/read-boundary coverage, family-scoped wallet hub deletion, checked provisioning/approval paths, fail-closed entitlement reads, fail-closed shared ledger/card helpers, retryable Super Admin wallet overview/reconciliation read failures, fail-closed Finances and Expenses summary reads, and honest provider-disabled card surfaces | Verify every wallet page, RPC deployment, concurrency, live Stripe Issuing capability and reconciliation |
 | A-09 | Billing, subscriptions, Stripe checkout and public pay flows | 6 | In progress | Checkout, change-plan, cancel, portal, and Stripe subscription webhook state reads now fail closed; provider/local sync divergence is exposed as retryable partial success; portal access and cancellation input are validated; completed Checkout webhooks repair missing tracking rows; unknown prices, card authorization/capture failures, hold release, customer/tracking/sync, and webhook automation failures are logged and surfaced; focused boundary tests pass | Live webhook/idempotency, tier, failure and refund smoke tests |
 | A-10 | Meals, groceries, nutrition and food household data | 4 | In progress | Existing meal planning persistence repair plus retryable Recipes and Shopping reads | Verify all CRUD, AI, imports, empty states and relational seed data |
-| A-11 | Messages, files, documents and storage | 5 | In progress | Feature-specific Supabase notes | Verify upload/download/delete, bucket policies, previews and tenant isolation |
+| A-11 | Messages, files, documents and storage | 5 | In progress | Feature-specific Supabase notes, retryable document reads, upload size guards, and removal of disconnected cloud-import actions | Verify upload/download/delete, bucket policies, previews, tenant isolation, and live provider adapters |
 | A-12 | Guardian, family safety, contacts and escalation | 5 | In progress | Existing safety tests plus 11 focused Guardian callback/escalation tests, Contact Center persistence/routing boundaries, retryable Check In, Driving Safety, Find Phone, Play Dates, Location, Health, Medication, and Contacts read handling; durable replay claim and parent phone mapping locally verified | Verify role boundaries, SMS/provider callbacks, email routing, throttling, privacy and live RLS |
 | A-13 | Vacations, travel, itineraries and concierge | 4 | In progress | Vacation AI persistence repair plus retryable Vacation Reports, Trip Overview, Trip Itinerary, shared CRUD, Budget, Emergency Summary, Weather, Packing, and Concierge read boundaries | Verify every trip workflow, external integration, media and recovery path |
 | A-14 | Marketplace, listings, offers, auctions and orders | 5 | In progress | RLS and atomic auction repairs plus Marketplace overview/detail/community/orders/alerts/creators/following/collections read-boundary coverage | Verify buyer/seller roles, media, payments, disputes and inventory races |
