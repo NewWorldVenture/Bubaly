@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Referrals Read Boundaries
+
+- Focused Referrals boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 496 test files, 3,256 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Admin Referrals now fails visibly when either referral settings or activity cannot be read instead of showing defaults or no activity.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `2b06e789`.
+
 ## Latest Local Evidence - New Campaign Segment Read Boundary
 
 - Focused New Campaign boundary suite: 1 file, 1 assertion passed.

@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0390 - Referrals hid settings and activity read failures as defaults or no activity
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/referrals` and shared referral config reads.
+- Finding: referral settings errors fell back to defaults and referral-row errors rendered no activity, leaving the admin dashboard actionable with incomplete state.
+- Repair: added a status-preserving config read helper and require both config and referral reads to succeed before metrics, settings, or activity render.
+- Evidence: focused Referrals boundary suite (1 assertion), full 496 test files/3,256 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `2b06e789`.
+- Remaining launch gate: validate live Super Admin authorization, referral settings/activity availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0389 - New Campaign hid segment read failures as an unfiltered audience selector
 
 - Status: Resolved in source; live and deployed verification remain open.
