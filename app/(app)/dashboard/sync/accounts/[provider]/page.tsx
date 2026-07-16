@@ -18,7 +18,7 @@ import type { SyncProviderEnum } from '@/lib/database.types';
 export const metadata: Metadata = { title: 'Sync provider' };
 export const dynamic = 'force-dynamic';
 
-const VALID: SyncProvider[] = ['google', 'microsoft', 'apple', 'amazon'];
+const VALID: SyncProvider[] = ['google', 'microsoft', 'apple'];
 const KINDS: { key: SyncItemKind; label: string }[] = [
   { key: 'calendar', label: 'Calendars' },
   { key: 'reminder', label: 'Reminders' },

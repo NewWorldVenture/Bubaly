@@ -22,7 +22,7 @@ const ITEM_KINDS: { key: SyncItemKind; label: string; icon: React.ComponentType<
   { key: 'note', label: 'Notes', icon: StickyNote },
 ];
 
-const CONNECTABLE: SyncProvider[] = ['google', 'microsoft', 'apple', 'amazon'];
+const CONNECTABLE: SyncProvider[] = ['google', 'microsoft', 'apple'];
 
 function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: SyncItemKind }) {
   const c = CAPABILITIES[provider][kind];
@@ -75,7 +75,7 @@ export default async function SyncHubPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync</h1>
           <p className="mt-1 text-sm text-muted">
-            Connect Google, Microsoft/Outlook, Apple, and Alexa to two-way sync your calendars, reminders, and notes.
+            Connect Google, Microsoft/Outlook, or Apple to sync your calendars and reminders.
           </p>
         </div>
         <Link href="/dashboard/sync/accounts" className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
