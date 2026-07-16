@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0379 - Onboarding Audit hid progress failures as a healthy zero-run funnel
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/onboarding`.
+- Finding: the onboarding progress query could fail while the page rendered zero runs, zero rates, and no stalls as if the audit were healthy and empty.
+- Repair: the query now preserves its error state and returns a retryable page-level failure before funnel analysis.
+- Evidence: focused Onboarding Audit boundary suite (1 assertion), full 485 test files/3,245 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `1c028718`.
+- Remaining launch gate: validate live Super Admin authorization, onboarding telemetry availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0378 - Lead Scores hid score and contact failures as an empty leaderboard
 
 - Status: Resolved in source; live and deployed verification remain open.
