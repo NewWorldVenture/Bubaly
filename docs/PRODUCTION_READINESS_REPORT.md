@@ -224,4 +224,3 @@ the full route/role/workflow audit remain open. See:
 - `docs/SUPABASE_WIRING_MATRIX.md` for schema, RLS, runtime and integration wiring.
 - `docs/LAUNCH_BLOCKERS.md` for release gates.
 - `docs/PRODUCT_LAUNCH_AUDIT.md` for issue-level evidence.
-
