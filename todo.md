@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:40:00 -04:00
+- Last updated: 2026-07-16 11:50:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f04895cd` makes Autonomous Family Management fail closed on signal and automation read failures after `d43b15c4` repaired Family Assistant; live provider and deployment evidence remains open
+- Commit: `ae763b67` makes Contact Timeline fail closed on contact and relationship-history read failures after `f04895cd` repaired Autonomous Family Management; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0397 - Contact Timeline hid contact, interaction, and communication read failures as missing history
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Contacts / Supabase read boundary
+- Feature: Contact Timeline
+- Route: `/dashboard/contacts/[id]`
+- File or files: `app/(app)/dashboard/contacts/[id]/page.tsx`, `tests/contact-timeline-read-boundary.test.ts`
+- Database objects: `family_contacts`, `contact_interactions`, `family_communications`
+- Affected roles: authenticated family members with family-scoped contact access
+- Scenario: contact lookup failures could look like a missing contact, while interaction or communication failures rendered an empty relationship history.
+- Launch impact: families could miss relationship context and interpret an incomplete contact record as healthy.
+- Root cause: the route discarded the contact error and ignored returned errors from both timeline data sources.
+- Required remediation: preserve all three read errors and render a retryable page-level failure before building relationship health or timeline views.
+- Implementation notes: added a route-level ReadFailure state, checked contact/interactions/communications results, and added a focused regression test.
+- Test plan: focused Contact Timeline boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (503 files/3,263 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `ae763b67`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Contact Timeline no longer presents a missing contact or empty history after a failed required read.
+- Remaining dependencies: verify authenticated family RLS, contact ownership, communication availability, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0396 - Autonomous Family Management hid signal and automation read failures as healthy defaults
 

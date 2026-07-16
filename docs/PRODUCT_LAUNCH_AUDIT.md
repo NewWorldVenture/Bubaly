@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0397 - Contact Timeline hid contact, interaction, and communication read failures as missing history
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/contacts/[id]`.
+- Finding: contact lookup failures could look like a missing contact, while interaction and communication failures rendered an empty timeline.
+- Repair: the route now preserves all three Supabase errors and returns a retryable page failure before building relationship health or timeline views.
+- Evidence: focused Contact Timeline boundary suite (1 assertion), full 503 test files/3,263 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `ae763b67`.
+- Remaining launch gate: validate authenticated family RLS, contact ownership, communication availability, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0396 - Autonomous Family Management hid signal and automation read failures as healthy defaults
 
 - Status: Resolved in source; live and deployed verification remain open.
