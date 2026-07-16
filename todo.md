@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:27:46 -04:00
+- Last updated: 2026-07-16 07:34:21 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `eb3ff4b8` adds Medical Records read failure handling after Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `ab367ebd` adds Devices, Immunizations, and Security read failure handling after Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0361 - Devices, Immunizations, and Security hid safety reads as empty states
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Safety and health / Supabase failure handling
+- Feature: Smart Home Devices, Immunizations, and Home Security
+- Route: device, immunization, and security module routes under `/dashboard`
+- File or files: `components/modules/devices-module.tsx`, `components/modules/immunizations-module.tsx`, `components/modules/security-module.tsx`, `tests/safety-read-boundaries.test.ts`
+- Database objects: `smart_devices`, `immunizations`, and `home_security_events`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed device, immunization, or security-event reads fell through to empty safety states after loading.
+- Launch impact: families could miss connected-device status, vaccine records, or home-security events while the UI appeared healthy.
+- Root cause: all three single-query modules ignored their realtime query error state.
+- Required remediation: surface sanitized retryable errors before empty safety states and retain the existing refresh callback.
+- Implementation notes: all three modules now render ErrorState with retryable realtime refresh actions.
+- Test plan: focused safety boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/safety-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 477 files/3,237 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `ab367ebd`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0360 - Medical Records hid active-medication read failures from clinical records
 
