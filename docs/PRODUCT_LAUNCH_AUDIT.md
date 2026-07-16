@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0357 - Decision Engine and Health Visits hid required reads as empty states
+
+- Timestamp: 2026-07-16 07:03 America/New_York
+- Service: Decision Engine and Health Visits
+- Route: `/dashboard/decisions`, health module routes using `/dashboard/health-visits`
+- Affected files: `components/modules/decisions-module.tsx`, `components/modules/health-visits-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members, household managers, and health-history users
+- Scenario: a failed decision or option read could show no decisions; a failed health-visit read could show an empty medical history.
+- Severity: P1
+- Launch impact: families could make choices without available trade-offs or miss health-history and follow-up context.
+- Root cause: both modules ignored realtime query errors; Decision Engine also failed to coordinate its paired decision/options reads.
+- Resolution: Decision Engine now coordinates both reads and retries them together; Health Visits renders sanitized retryable ErrorState UI before its empty history.
+- Supabase impact: no schema change; existing family-scoped reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 474 test files, 3,230 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `59b280ae`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed household verification
+
 ### PLA-0356 - Behavior insights hid behavior-log read failures as no logged behavior
 
 - Timestamp: 2026-07-16 06:56 America/New_York
