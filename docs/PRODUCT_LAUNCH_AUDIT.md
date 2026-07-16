@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0403 - Dashboard Briefing hid Operating Index snapshot read failures as an empty recap
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/briefing`.
+- Finding: a failed `family_operating_index` read silently removed the persisted “since yesterday” recap while the rest of the briefing rendered normally.
+- Repair: the route now preserves the snapshot read error, logs it, and returns a retryable page failure before rendering the briefing.
+- Evidence: focused Briefing boundary suite (1 assertion), full 509 test files/3,269 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `c56b870e`.
+- Remaining launch gate: validate authenticated family RLS, Operating Index availability, and deployed retry behavior; shared reasoning-context and broader dashboard gates remain open.
+
 ### PLA-0402 - Dashboard Activity hid source and chore-enrichment read failures as an incomplete feed
 
 - Status: Resolved in source; live and deployed verification remain open.

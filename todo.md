@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:30:00 -04:00
+- Last updated: 2026-07-16 12:35:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `463c5b60` makes Dashboard Activity fail closed on source and chore-title read failures after `49a5ec33` repaired Dashboard Home; live provider and deployment evidence remains open
+- Commit: `c56b870e` makes Dashboard Briefing fail closed on Operating Index snapshot read failures after `463c5b60` repaired Dashboard Activity; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0403 - Dashboard Briefing hid Operating Index snapshot read failures as an empty recap
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / daily briefing / Supabase read boundary
+- Feature: Dashboard Briefing
+- Route: `/dashboard/briefing`
+- File or files: `app/(app)/dashboard/briefing/page.tsx`, `tests/briefing-read-boundary.test.ts`
+- Database objects: `family_operating_index`
+- Affected roles: authenticated family members
+- Scenario: the persisted Operating Index snapshot query could fail while the briefing silently omitted the “since yesterday” recap.
+- Launch impact: users could receive an incomplete briefing without knowing the saved trend data was unavailable.
+- Root cause: the route discarded the snapshot read error and treated a failed read like an empty history.
+- Required remediation: preserve the snapshot error and render a retryable failure before building the briefing recap.
+- Implementation notes: added a route-level ErrorState boundary, explicit snapshot error handling, and a focused regression test.
+- Test plan: focused Briefing boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (509 files/3,269 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `c56b870e`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Dashboard Briefing no longer silently drops the persisted recap after an Operating Index read failure.
+- Remaining dependencies: verify authenticated family RLS, snapshot availability, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0402 - Dashboard Activity hid source and chore-enrichment read failures as an incomplete feed
 
