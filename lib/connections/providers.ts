@@ -1,4 +1,4 @@
-// Family API — the orchestration hub (North Star pillar #9). Bubaly's long-term
+// Family API â€” the orchestration hub (North Star pillar #9). Bubaly's long-term
 // role is to CONNECT the services a family already uses (calendars, email,
 // banking, grocery, smart home) rather than replace them. This module is the
 // pure, tested provider registry + the logic that merges the catalog with a
@@ -44,8 +44,11 @@ export const PROVIDERS: Provider[] = [
 
 export const PROVIDERS_BY_ID: Record<string, Provider> = Object.fromEntries(PROVIDERS.map((p) => [p.id, p]));
 
+/** Providers with a real user-facing OAuth/setup route today. */
+export const CONNECTABLE_PROVIDERS: Provider[] = PROVIDERS.filter((p) => p.syncProvider);
+
 export const CONNECTION_STATUS_LABELS: Record<ConnectionStatus, string> = {
-  connected: 'Connected', syncing: 'Syncing…', error: 'Needs attention', disconnected: 'Not connected',
+  connected: 'Connected', syncing: 'Syncingâ€¦', error: 'Needs attention', disconnected: 'Not connected',
 };
 
 /** A saved connection row (subset the merge needs). */
@@ -71,7 +74,7 @@ export function mergeConnections(rows: ConnectionLike[]): ProviderState[] {
     // A live connection wins over a disconnected record for the same provider.
     if (!prev || (prev.status === 'disconnected' && r.status !== 'disconnected')) byProvider.set(r.provider, r);
   }
-  return PROVIDERS.map((p) => {
+  return CONNECTABLE_PROVIDERS.map((p) => {
     const row = byProvider.get(p.id);
     const status: ConnectionStatus = row && ['connected', 'syncing', 'error'].includes(row.status)
       ? (row.status as ConnectionStatus) : 'disconnected';
