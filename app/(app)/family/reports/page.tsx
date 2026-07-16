@@ -1,16 +1,33 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { BarChart3, CheckCircle2, CreditCard, GraduationCap, Trophy, HeartPulse, Gauge } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { gatherSignals } from '@/lib/family/signals';
+import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, ScoreRing, LevelBadge } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Reports' };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <h1 className="text-2xl font-bold tracking-tight">Family Reports</h1>
+      <ErrorState message="Could not load family reports from Supabase. Refresh and try again." />
+      <Link href="/family/reports" className="text-sm font-medium text-brand-text underline">Refresh family reports</Link>
+    </div>
+  );
+}
+
 export default async function FamilyReportsPage() {
   const ctx = await requireUserContext();
-  const { stress, completion, counts } = await gatherSignals(ctx.active.familyId);
+  const result = await gatherSignalsResult(ctx.active.familyId);
+  if (result.error || !result.data) {
+    console.error('[family-reports] required read failed', result.error);
+    return <ReadFailure />;
+  }
+  const { stress, completion, counts } = result.data;
   const taskRate = counts.totalTasks > 0 ? Math.round((counts.doneTasks / counts.totalTasks) * 100) : 100;
 
   return (
