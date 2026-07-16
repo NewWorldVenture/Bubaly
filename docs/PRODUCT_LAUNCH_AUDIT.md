@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0402 - Dashboard Activity hid source and chore-enrichment read failures as an incomplete feed
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/activity`.
+- Finding: family members, announcements, events, approved chores, photos, notes, groceries, or chore-title enrichment could fail while the activity feed rendered from partial or empty data.
+- Repair: the route now preserves every primary source error and the secondary chore-title error, logging and returning a retryable page failure before building feed items.
+- Evidence: focused Activity page boundary suite (1 assertion), full 508 test files/3,268 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `463c5b60`.
+- Remaining launch gate: validate authenticated family RLS, activity source availability, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0401 - Dashboard Home hid preference read failures as the wrong dashboard
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -13,7 +23,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Surface: `/dashboard` without an explicit `view` query.
 - Finding: a failed `user_preferences` read silently selected the AI dashboard, hiding the user's saved default view state.
 - Repair: the default dashboard route now preserves the preference error and returns a retryable page failure; explicit `?view=family` and `?view=personal` routes remain independent.
-- Evidence: focused Dashboard Home boundary suite (1 assertion), full 507 test files/3,267 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `49a5ec33`.
+- Evidence: focused Dashboard Home boundary suite (1 assertion), full 507 test files/3,267 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `49a5ec33`; published to `main` and verified by remote marker readback.
 - Remaining launch gate: validate authenticated preference RLS, saved-view persistence, explicit view routing, and deployed retry behavior; broader dashboard and deployment gates remain open.
 
 ### PLA-0400 - Family Operations and Reports hid shared-signal read failures as healthy summaries

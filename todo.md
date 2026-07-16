@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:25:00 -04:00
+- Last updated: 2026-07-16 12:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `49a5ec33` makes Dashboard Home fail closed on saved preference read failures after `dd3c2929` repaired Family Operations and Reports; live provider and deployment evidence remains open
+- Commit: `463c5b60` makes Dashboard Activity fail closed on source and chore-title read failures after `49a5ec33` repaired Dashboard Home; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -23,9 +23,30 @@
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
-#### TODO-0401 - Dashboard Home hid preference read failures as the wrong dashboard
+#### TODO-0402 - Dashboard Activity hid source and chore-enrichment read failures as an incomplete feed
 
 - Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / activity feed / Supabase read boundary
+- Feature: Dashboard Activity
+- Route: `/dashboard/activity`
+- File or files: `app/(app)/dashboard/activity/page.tsx`, `tests/activity-page-read-boundary.test.ts`
+- Database objects: `family_members`, `family_announcements`, `calendar_events`, `chore_assignments`, `family_photos`, `notes`, `grocery_items`, `chores`
+- Affected roles: authenticated family members
+- Scenario: any activity source or chore-title enrichment query could fail while the route rendered a partial feed.
+- Launch impact: users could miss household activity while seeing an apparently healthy timeline.
+- Root cause: the route destructured only `data` from parallel responses and discarded all read errors, including the secondary chore lookup.
+- Required remediation: preserve every source and enrichment error and render a retryable failure before building feed items.
+- Implementation notes: added a route-level ErrorState boundary, explicit source/enrichment error checks, and a focused regression test.
+- Test plan: focused Activity page boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (508 files/3,268 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `463c5b60`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Dashboard Activity no longer renders partial data after a failed source or chore-title read.
+- Remaining dependencies: verify authenticated family RLS, source availability, and deployed retry behavior; continue the dashboard audit.
+
+#### TODO-0401 - Dashboard Home hid preference read failures as the wrong dashboard
+
+- Status: `[x]` Completed in code, tested, committed, pushed to the audit branch, and published to `main` with remote marker readback.
 - Severity: P1
 - Category: Dashboard / default view selection / Supabase read boundary
 - Feature: Dashboard Home
