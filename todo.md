@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:41:58 -04:00
+- Last updated: 2026-07-16 09:50:36 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2dde5f16` makes Super Admin Visitor Intelligence fail closed on analytics read failures after `0a4b83cd` repaired Workload Balance; live provider and deployment evidence remains open
+- Commit: `deb07a24` makes Super Admin Lead Scores fail closed on score/contact read failures after `2dde5f16` repaired Visitor Intelligence; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0378 - Lead Scores hid score and contact failures as an empty leaderboard
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing CRM / Supabase read boundary
+- Feature: Lead Scores
+- Route: `/admin/marketing/lead-scores`
+- File or files: `app/(app)/admin/marketing/lead-scores/page.tsx`, `tests/admin-lead-scores-read-boundary.test.ts`
+- Database objects: `crm_lead_scores` and `crm_contacts`
+- Affected roles: Super Admin
+- Scenario: a failed score or contact join query was caught and rendered as no scores, allowing operators to confuse backend failure with an empty CRM.
+- Launch impact: lead prioritization and recompute decisions could be made from incomplete or missing data.
+- Root cause: the page discarded Supabase error objects and used an empty fallback for required reads.
+- Required remediation: check both score and joined-contact reads, preserve failures, and render a retryable error state.
+- Implementation notes: added an explicit ReadFailure state, validated the score query before deriving rows, and validated the contact join before rendering lifecycle and identity fields.
+- Test plan: focused Lead Scores boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (484 files/3,244 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `deb07a24`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Lead Scores now fails visibly on either required read failure instead of showing a fabricated empty state.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the page and workflow audit.
 
 #### TODO-0377 - Visitor Intelligence hid analytics failures as zero metrics
 

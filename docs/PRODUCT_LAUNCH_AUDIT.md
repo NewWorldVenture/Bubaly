@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0378 - Lead Scores hid score and contact failures as an empty leaderboard
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/lead-scores`.
+- Finding: the score query and required contact join could fail while the page rendered an empty leaderboard and zero stats.
+- Repair: score and contact reads now retain their error state and return a retryable page-level failure instead of deriving rows from missing data.
+- Evidence: focused Lead Scores boundary suite (1 assertion), full 484 test files/3,244 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `deb07a24`.
+- Remaining launch gate: validate live Super Admin authorization, CRM table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0377 - Visitor Intelligence hid analytics failures as zero metrics
 
 - Status: Resolved in source; live and deployed verification remain open.
