@@ -877,3 +877,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Build gate verified GREEN; observability items logged as dependencies
 - Remaining dependencies (A-20 not yet DONE): wire centralized error monitoring (Sentry DSN — owner) ; add `/api/health` readiness probe; Playwright E2E smoke on the critical flows (login → dashboard → wallet → checkout) in staging; perf budget check on the heaviest routes; backup/restore runbook verification.
+
+### PLA-0550 - A-19 mobile/responsive/a11y: primitives VERIFIED sound, Modal contract locked
+
+- Timestamp: 2026-07-16 23:38 UTC
+- Service: A-19 Mobile / responsive / a11y / browser
+- Route: shared UI primitives + app-wide component layer
+- Affected files: `tests/modal-a11y-contract.test.ts` (new); verification only elsewhere
+- Role: all users (keyboard / screen-reader / mobile)
+- Scenario: static a11y + responsive sweep of the shared primitives that determine the app's accessibility ceiling.
+- Severity: n/a (no defect found; regression lock added)
+- Findings (VERIFIED):
+  - Root `app/layout.tsx` exports a proper `viewport` (themeColor, `initialScale: 1`, `viewportFit: 'cover'` for safe-area handling).
+  - **0** raw `<img>` tags without `alt` across `app/` + `components/`; UI controls carry `aria-label` (e.g. avatar-picker, modal close).
+  - The shared **Modal** (used app-wide) is a complete WAI-ARIA dialog: `role="dialog"` + `aria-modal` + `aria-labelledby`/`aria-describedby` (stable `useId`), focus moved in on open, **focus trap** (Tab/Shift-Tab wrap), **Escape** to close, focus **restored to the trigger** on close, background scroll-lock, labelled icon-only close button.
+  - The Modal is also **mobile-responsive**: bottom-sheet on mobile (`items-end`) → centered dialog on desktop (`sm:items-center`), `env(safe-area-inset-bottom)` padding so the action row clears the home indicator, `max-h-[85dvh]` + `overflow-y-auto` sized to the dynamic viewport.
+  - The app is mobile-first broadly: 362 files use `sm:`/`md:`/`lg:` responsive utilities; a brand-contrast contract test already guards text/solid-color reuse.
+- Resolution: no code change. Added `tests/modal-a11y-contract.test.ts` (5 tests) locking the dialog a11y contract + the mobile bottom-sheet/safe-area/dvh layout against regression.
+- Supabase impact: none.
+- Tests run: `tests/modal-a11y-contract.test.ts` 5/5; existing `a11y.test.ts` + `brand-contrast-contract.test.ts` green; tsc/eslint clean.
+- Validation evidence: 5/5 pass; eslint exit 0.
+- Commit: pending (this push)
+- Status: Verified; regression lock added
+- Remaining dependencies (A-19 not yet DONE): LIVE browser a11y pass (axe/Playwright) on the top flows — needs the app running with real creds; keyboard-only walkthrough of forms/menus/toasts; screen-reader spot-check; visual responsive check at 320/768/1280 widths; reduced-motion honoring.
