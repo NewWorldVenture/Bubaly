@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0359 - Health and Medications hid required clinical reads as partial history
+
+- Timestamp: 2026-07-16 07:14 America/New_York
+- Service: Health Dashboard and Medications
+- Route: `/dashboard/health`, `/dashboard/medications`
+- Affected files: `components/modules/health-module.tsx`, `components/modules/medications-module.tsx`, `tests/health-read-boundaries.test.ts`
+- Role: authenticated family members, household managers, and health-history users
+- Scenario: symptom/goal reads and medication schedule/dose reads could fail while the UI derived health summaries, adherence, or empty states from partial arrays.
+- Severity: P1
+- Launch impact: families could miss symptoms, goals, medication schedules, dose history, or clinical follow-up context.
+- Root cause: both modules ignored secondary realtime query loading/error state; Medications only guarded the medication list.
+- Resolution: Health now coordinates six reads; Medications coordinates medication, schedule, and dose reads. Both render sanitized retryable ErrorState UI before derived clinical states.
+- Supabase impact: no schema change; existing family-scoped clinical reads now have explicit failure contracts.
+- Tests run: `tests/health-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 476 test files, 3,233 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `32dc4248`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed health verification
+
 ### PLA-0358 - Finances summary hid account and planning read failures as zero metrics
 
 - Timestamp: 2026-07-16 07:09 America/New_York
