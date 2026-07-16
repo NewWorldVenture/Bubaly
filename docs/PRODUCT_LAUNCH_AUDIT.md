@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0387 - Admin Settings hid administrator-count read failures as zero access holders
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/settings`.
+- Finding: the `super_admins` count could fail while the page rendered zero administrators and presented the system as readable.
+- Repair: the Supabase error is checked before building system status; failures return a retryable page state.
+- Evidence: focused Admin Settings boundary suite (1 assertion), full 493 test files/3,253 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `0f91564a`.
+- Remaining launch gate: validate live Super Admin authorization, settings table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0386 - Admin Management hid administrator read failures as zero admins
 
 - Status: Resolved in source; live and deployed verification remain open.
