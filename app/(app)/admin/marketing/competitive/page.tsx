@@ -6,6 +6,7 @@ import {
   rankKeywordOpportunities, keywordOpportunity, summarizeBacklinks, type BacklinkLike,
 } from '@/lib/marketing/competitive';
 import type { Tables } from '@/lib/database.types';
+import { ErrorState } from '@/components/ui/states';
 import {
   saveCompetitorAction, deleteCompetitorAction,
   saveKeywordAction, deleteKeywordAction,
@@ -22,16 +23,33 @@ type Backlink = Tables<'backlinks'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-black sm:text-2xl">Competitive Intelligence</h1>
+      <ErrorState message="Could not load competitive intelligence from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/competitive" className="text-sm font-medium text-brand-text underline">Refresh competitive intelligence</a>
+    </div>
+  );
+}
+
 export default async function CompetitivePage() {
   const supabase = createServiceClient();
-  const [{ data: competitors }, { data: keywords }, { data: backlinks }] = await Promise.all([
-    supabase.from('competitors').select('*').order('ranking', { nullsFirst: false }).limit(200),
-    supabase.from('keyword_intel').select('*').limit(500),
-    supabase.from('backlinks').select('*').order('created_at', { ascending: false }).limit(500),
-  ]);
-  const comps = (competitors ?? []) as Competitor[];
-  const kws = rankKeywordOpportunities((keywords ?? []) as Keyword[]);
-  const links = (backlinks ?? []) as Backlink[];
+  let results;
+  try {
+    results = await Promise.all([
+      supabase.from('competitors').select('*').order('ranking', { nullsFirst: false }).limit(200),
+      supabase.from('keyword_intel').select('*').limit(500),
+      supabase.from('backlinks').select('*').order('created_at', { ascending: false }).limit(500),
+    ]);
+  } catch {
+    return <ReadFailure />;
+  }
+  if (results.some((result) => result.error)) return <ReadFailure />;
+  const [competitorsResult, keywordsResult, backlinksResult] = results;
+  const comps = (competitorsResult.data ?? []) as Competitor[];
+  const kws = rankKeywordOpportunities((keywordsResult.data ?? []) as Keyword[]);
+  const links = (backlinksResult.data ?? []) as Backlink[];
   const bl = summarizeBacklinks(links as unknown as BacklinkLike[]);
 
   const stats = [
