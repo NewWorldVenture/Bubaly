@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 06:51:06 -04:00
+- Last updated: 2026-07-16 06:56:09 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `632f677d` adds Location read failure handling after Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `42625b69` adds Behavior read failure handling after Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0356 - Behavior insights hid behavior-log read failures as no logged behavior
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Household behavior / Supabase failure handling
+- Feature: Behavior and Parenting Insights
+- Route: `/dashboard/behavior`
+- File or files: `components/modules/behavior-module.tsx`, `tests/behavior-read-boundary.test.ts`
+- Database objects: `behavior_logs`
+- Affected roles: authenticated family members and household managers
+- Scenario: a failed behavior-log read could render “No behavior logged yet,” indistinguishable from a household with no recorded behavior.
+- Launch impact: parents could lose visibility into behavior history and the insight context built from it.
+- Root cause: the module ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Required remediation: surface a sanitized retryable error before rendering behavior summaries or the empty state.
+- Implementation notes: Behavior now renders an ErrorState with its realtime refresh callback on read failure.
+- Test plan: focused behavior boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/behavior-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 473 files/3,228 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `42625b69`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
 

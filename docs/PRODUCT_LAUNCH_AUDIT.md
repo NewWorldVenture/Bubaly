@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0356 - Behavior insights hid behavior-log read failures as no logged behavior
+
+- Timestamp: 2026-07-16 06:56 America/New_York
+- Service: Behavior and Parenting Insights
+- Route: `/dashboard/behavior`
+- Affected files: `components/modules/behavior-module.tsx`, `tests/behavior-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: a failed `behavior_logs` read could render “No behavior logged yet,” indistinguishable from a household with no recorded behavior.
+- Severity: P1
+- Launch impact: parents could lose visibility into behavior history and the insight context built from it.
+- Root cause: the module ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Resolution: Behavior now renders sanitized retryable ErrorState UI before behavior summaries and the empty state on any read failure.
+- Supabase impact: no schema change; the existing family-scoped behavior read now has an explicit failure contract.
+- Tests run: `tests/behavior-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 473 test files, 3,228 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `42625b69`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed behavior verification
+
 ### PLA-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
 
 - Timestamp: 2026-07-16 06:51 America/New_York
