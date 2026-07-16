@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0399 - Family Stress hid signal, member, and logged-input read failures as a healthy forecast
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/family-stress`.
+- Finding: signal, active-member, or logged-stress-input reads could fail while the forecast, member selector, and “No signals” state rendered as healthy.
+- Repair: the route now preserves all required Supabase errors and returns a retryable page failure before exposing the forecast or logging controls.
+- Evidence: focused Family Stress boundary suite (1 assertion), full 505 test files/3,265 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `c4c3cb5f`.
+- Remaining launch gate: validate authenticated family RLS, member ownership, stress-input writes, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0398 - Family Automation hid rules and run-feed read failures as healthy defaults
 
 - Status: Resolved in source; live and deployed verification remain open.

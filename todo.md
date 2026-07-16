@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:00:00 -04:00
+- Last updated: 2026-07-16 12:10:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `4a01fc5e` makes Family Automation fail closed on rule and run-feed read failures after `ae763b67` repaired Contact Timeline; live provider and deployment evidence remains open
+- Commit: `c4c3cb5f` makes Family Stress fail closed on signal and logged-input read failures after `4a01fc5e` repaired Family Automation; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0399 - Family Stress hid signal, member, and logged-input read failures as a healthy forecast
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Family Stress / Supabase read boundary
+- Feature: Family Stress Prediction
+- Route: `/dashboard/family-stress`
+- File or files: `app/(app)/dashboard/family-stress/page.tsx`, `tests/family-stress-read-boundary.test.ts`
+- Database objects: shared signal sources, `family_members`, `family_stress_signals`
+- Affected roles: authenticated family members; member selector and signal logging controls
+- Scenario: signal, active-member, or logged-input reads could fail while the forecast and logging form rendered healthy or empty states.
+- Launch impact: families could make planning decisions from an incomplete stress forecast or log signals against incomplete member state.
+- Root cause: the route discarded signal-helper exceptions and member/stress-signal query errors, then used empty fallbacks.
+- Required remediation: preserve all required read errors and render a retryable page-level failure before exposing forecast or logging controls.
+- Implementation notes: switched to `gatherSignalsResult`, coordinated all three read results, added a route-level ReadFailure state, and added a focused regression test.
+- Test plan: focused Family Stress boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (505 files/3,265 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `c4c3cb5f`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Family Stress no longer presents a healthy forecast after a failed required read.
+- Remaining dependencies: verify authenticated family RLS, member ownership, stress-input writes, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0398 - Family Automation hid rules and run-feed read failures as healthy defaults
 

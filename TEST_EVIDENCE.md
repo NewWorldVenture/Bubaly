@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Stress Read Boundaries
+
+- Focused Family Stress boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run`: 505 test files, 3,265 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Family Stress now fails visibly when signal, active-member, or logged-input reads cannot be read instead of presenting a healthy forecast or empty input history.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `c4c3cb5f`.
+
 ## Latest Local Evidence - Family Automation Read Boundaries
 
 - Focused Family Automation boundary suite: 1 file, 1 assertion passed.
