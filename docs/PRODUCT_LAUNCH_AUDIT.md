@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0395 - Family Assistant hid context and count failures as zero signals
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/agents`.
+- Finding: calendar, meal, member, activity, and ten count reads could fail while agent briefings rendered zero operational signals.
+- Repair: all required context and count results now retain their errors and the route returns a retryable page failure before deriving briefings.
+- Evidence: focused Family Assistant boundary suite (1 assertion), full 501 test files/3,261 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `d43b15c4`.
+- Remaining launch gate: validate authenticated family RLS, agent context availability, reasoning behavior, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
 
 - Status: Resolved in source; live and deployed verification remain open.
