@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:56:46 -04:00
+- Last updated: 2026-07-16 10:03:46 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `1c028718` makes Super Admin Onboarding Audit fail closed on progress read failures after `deb07a24` repaired Lead Scores; live provider and deployment evidence remains open
+- Commit: `c8ef7399` makes Super Admin Customer Intelligence fail closed on analytics read failures after `1c028718` repaired Onboarding Audit; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0380 - Customer Intelligence hid analytics failures as zero attribution metrics
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing attribution / Supabase read boundary
+- Feature: Customer Intelligence
+- Route: `/admin/marketing/intelligence`
+- File or files: `app/(app)/admin/marketing/intelligence/page.tsx`, `tests/admin-customer-intelligence-read-boundary.test.ts`
+- Database objects: `mkt_visitors`, `mkt_sessions`, and `mkt_touchpoints`
+- Affected roles: Super Admin
+- Scenario: visitor, session, or touchpoint failures were discarded while the route rendered zero counts and an empty attribution report.
+- Launch impact: acquisition and conversion decisions could be made from incomplete telemetry while the admin page appeared healthy.
+- Root cause: the route destructured Supabase results without checking error objects.
+- Required remediation: preserve all four query results, check every error, and render a retryable error state before calculating attribution.
+- Implementation notes: wrapped the read batch for thrown failures, checked returned errors, and only derive channels, conversions, and models after successful reads.
+- Test plan: focused Customer Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (486 files/3,246 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `c8ef7399`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Customer Intelligence now fails visibly on any required telemetry read failure instead of presenting zero attribution metrics.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the page and workflow audit.
 
 #### TODO-0379 - Onboarding Audit hid progress failures as a healthy zero-run funnel
 

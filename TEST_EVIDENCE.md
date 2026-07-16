@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Customer Intelligence Read Boundary
+
+- Focused Customer Intelligence boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 486 test files, 3,246 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes after removing a generated `.next` OneDrive readlink artifact; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Customer Intelligence now fails visibly when any visitor, session, or touchpoint query fails instead of deriving zero attribution metrics.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `c8ef7399`.
+
 ## Latest Local Evidence - Onboarding Audit Read Boundary
 
 - Focused Onboarding Audit boundary suite: 1 file, 1 assertion passed.

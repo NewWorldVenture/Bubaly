@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0380 - Customer Intelligence hid analytics failures as zero attribution metrics
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/intelligence`.
+- Finding: visitor, session, and touchpoint reads could fail while the route rendered zero counts, no channels, and no attribution rows.
+- Repair: all four Supabase results are checked before channel, conversion, and attribution calculations; thrown failures also render a retryable state.
+- Evidence: focused Customer Intelligence boundary suite (1 assertion), full 486 test files/3,246 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `c8ef7399`.
+- Remaining launch gate: validate live Super Admin authorization, telemetry table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0379 - Onboarding Audit hid progress failures as a healthy zero-run funnel
 
 - Status: Resolved in source; live and deployed verification remain open.
