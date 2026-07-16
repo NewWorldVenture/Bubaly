@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0451 - Recipes module dropped every Supabase write error — "Marked as made" toasted on failure, delete closed the viewer on failure (A-10)
+
+- Timestamp: 2026-07-16 21:29 UTC
+- Service: Meals / Groceries / Food (A-10) — Recipes module
+- Route: `/dashboard/meals` recipes tab / recipe viewer (`components/modules/recipes-module.tsx`)
+- Affected files: `components/modules/recipes-module.tsx`, `tests/recipes-module-write-boundary.test.ts` (new)
+- Role: all family roles with the Food feature
+- Scenario: a recipe favorite toggle, "mark made today", or delete write fails for a real reason (RLS denial, offline, constraint) while the UI reports success
+- Severity: P2 (silent write failure / UI lies about persisted state)
+- Launch impact: three writes fired with `await supabase…` and no `error` capture. `toggleFavorite` silently no-op'd the star; **`markMade` toasted "Marked as made today!" and `deleteRecipe` closed the recipe viewer as if the row were gone** — both while the write may have failed, so the user believes state persisted when it did not (times-made never incremented; the "deleted" recipe reappears on next load)
+- Root cause: `const { error }` was never destructured at the three write sites; the sibling `addItemsToList` / `addToGrocery` / modal-save paths in the same file already guard correctly, so this was an inconsistency, not a missing pattern
+- Resolution: all three now `const { error } = await …; if (error) return toastError(describeDbError(error));` **before** any success toast / viewer close, matching the rest of the module. `markMade`'s success toast and `deleteRecipe`'s `setViewing(null)` are now strictly after the error guard
+- Supabase impact: none — writes unchanged; genuine failures now surface via toast and the optimistic UI transition is withheld on failure
+- Tests run: `tests/recipes-module-write-boundary.test.ts` (5 — each of the 3 writes captures+toasts error; markMade success and deleteRecipe close are ordered after the guard); `tsc --noEmit` clean; `eslint` clean on touched files
+- Validation evidence: guard test extracts each function body and asserts `const { error } = await` + `if (error) return toastError(describeDbError(error))`, and that the success/close calls land after the guard offset
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-10 increment by agent-02); A-10 unit remains In-progress (CRUD/AI write sweep continuing, live cross-family RLS + ≥500-row seed still open)
+- Remaining dependencies: live cross-family RLS proof on meals/recipes/grocery/pantry; confirm ≥500-row relational seed for the A-10 tables
+
 ### PLA-0442 - A-11 documents pipeline verified tenant-isolated across DB + Storage (guarded)
 
 - Timestamp: 2026-07-16 21:28 UTC

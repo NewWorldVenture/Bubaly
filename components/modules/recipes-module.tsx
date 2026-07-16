@@ -127,7 +127,8 @@ export function RecipesModule() {
 
   async function toggleFavorite(r: Recipe) {
     const supabase = createClient();
-    await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    const { error } = await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
@@ -151,17 +152,19 @@ export function RecipesModule() {
 
   async function markMade(r: Recipe) {
     const supabase = createClient();
-    await supabase.from('family_recipes').update({
+    const { error } = await supabase.from('family_recipes').update({
       times_made: (r.times_made ?? 0) + 1,
       last_made_at: new Date().toISOString(),
     }).eq('id', r.id);
+    if (error) return toastError(describeDbError(error));
     success('Marked as made today! ðŸ´');
     void refresh();
   }
 
   async function deleteRecipe(id: string) {
     const supabase = createClient();
-    await supabase.from('family_recipes').delete().eq('id', id);
+    const { error } = await supabase.from('family_recipes').delete().eq('id', id);
+    if (error) return toastError(describeDbError(error));
     void refresh();
     setViewing(null);
   }

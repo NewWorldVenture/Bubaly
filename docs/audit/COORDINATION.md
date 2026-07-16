@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 21:28 UTC** · by `agent-03`
+Last board update: **2026-07-16 21:29 UTC** · by `agent-02`
 
 ---
 
@@ -46,7 +46,7 @@ Last board update: **2026-07-16 21:28 UTC** · by `agent-03`
 |--------|-----------------|------------------|----------------------|
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
-| `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food+meals read boundaries (PLA-0418/0433) | 2026-07-16 20:55 | 2026-07-16 21:12 |
+| `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
 | `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 documents/storage RLS verify (PLA-0442); silent-failure sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-16 21:28 |
 | `agent-04` | _free — claim me_ | | |
 
@@ -98,7 +98,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-07 | `agent-01` | IN_REVIEW | 2026-07-16 21:22 | 2026-07-16 21:26 | `PLA-0450` | FOUND+FIXED HIGH sec bug: child could self-approve a chore and mint a reward (approve/reject actions lacked a role gate; RLS is family-scoped). Added isManager gate + guard test. Open: RLS-level status restriction, allowance/points flows |
 | A-08 | `agent-01` | IN_REVIEW | 2026-07-16 21:16 | 2026-07-16 21:20 | `PLA-0440` | Money-safety PROVEN live: overspend prevented + hold idempotent (FOR UPDATE lock), ledger conserves every cent, reserve RPC service_role-only. New self-contained probe + guard (4 tests). Open: allowance/goal/transfer flows, approval-hold role matrix, live Issuing |
 | A-09 | `agent-01` | IN_REVIEW | 2026-07-16 21:01 | 2026-07-16 21:12 | `a5fa39e3` | VERIFIED: webhook(sig/replay/retry/self-heal), checkout(auth/RBAC/validate/rate-limit/trusted-url), all-routes RBAC, slug↔planLevel, downgrade rule (Plus→Basic only; Free unreachable via change-plan — already tested), /pay flow wired. 14 new guards. OPEN ONLY: live Stripe test-mode smoke (needs keys) |
-| A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:16 | `6f4e0e4e`+ | Food hub (PLA-0418) + Meals module (PLA-0433) + Nutrition/Favorites views (PLA-0435) read boundaries; grocery/pantry verified fail-visible. Remaining: CRUD/AI writes, live RLS, seed |
+| A-10 | `agent-02` | IN_REVIEW | 2026-07-16 20:55 | 2026-07-16 21:29 | `6f4e0e4e`+ | Read boundaries: food hub (PLA-0418), meals (PLA-0433), nutrition/favorites (PLA-0435). Write boundary: recipes toggleFav/markMade/delete (PLA-0451). grocery/pantry/meals writes verified fail-visible. Remaining: live cross-family RLS, ≥500-row seed audit |
 | A-11 | `agent-03` | IN_REVIEW | 2026-07-16 21:24 | 2026-07-16 21:28 | `pending` | Documents pipeline verified tenant-isolated (DB+Storage RLS) + client error/orphan-safety; guard added (PLA-0442). Open: messages sub-surface, live storage cross-family probe, doc seed
 | A-12 | — | OPEN | | | | |
 | A-13 | — | OPEN | | | | |
