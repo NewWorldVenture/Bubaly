@@ -91,15 +91,15 @@ export function MedicationsModule() {
   }, []);
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: meds, loading: medsLoading, error: medsError } = useRealtimeQuery<Medication>({
+  const { data: meds, loading: medsLoading, error: medsError, refresh: refreshMeds } = useRealtimeQuery<Medication>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).order('is_active', { ascending: false }).order('name'),
   });
-  const { data: schedules } = useRealtimeQuery<Schedule>({
+  const { data: schedules, loading: schedulesLoading, error: schedulesError, refresh: refreshSchedules } = useRealtimeQuery<Schedule>({
     table: 'medication_schedules', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
-  const { data: doses } = useRealtimeQuery<Dose>({
+  const { data: doses, loading: dosesLoading, error: dosesError, refresh: refreshDoses } = useRealtimeQuery<Dose>({
     table: 'medication_doses', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart),
   });
@@ -266,8 +266,10 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
-  if (medsLoading) return <SkeletonList count={5} />;
-  if (medsError) return <ErrorState message={typeof medsError === 'string' ? medsError : 'Failed to load medications'} />;
+  const loading = medsLoading || schedulesLoading || dosesLoading;
+  const readError = medsError || schedulesError || dosesError;
+  if (loading) return <SkeletonList count={5} />;
+  if (readError) return <ErrorState message="Could not load medication data. Refresh and try again." onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
 
   return (
     <div>

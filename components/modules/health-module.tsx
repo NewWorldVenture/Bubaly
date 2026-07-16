@@ -120,32 +120,32 @@ export function HealthModule() {
   const todayISO = useMemo(() => todayStart(), []);
 
   // ── Data queries ──────────────────────────────────────────
-  const { data: metrics, loading: metricsLoading, error: metricsError } = useRealtimeQuery<HealthMetric>({
+  const { data: metrics, loading: metricsLoading, error: metricsError, refresh: refreshMetrics } = useRealtimeQuery<HealthMetric>({
     table: 'health_metrics', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_metrics').select('*').eq('family_id', familyId).gte('recorded_at', weekAgo).order('recorded_at', { ascending: false }),
   });
 
-  const { data: workouts, loading: workoutsLoading, error: workoutsError } = useRealtimeQuery<WorkoutLog>({
+  const { data: workouts, loading: workoutsLoading, error: workoutsError, refresh: refreshWorkouts } = useRealtimeQuery<WorkoutLog>({
     table: 'workout_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('workout_logs').select('*').eq('family_id', familyId).order('recorded_at', { ascending: false }).limit(10),
   });
 
-  const { data: appointments, loading: apptLoading, error: apptError } = useRealtimeQuery<Appointment>({
+  const { data: appointments, loading: apptLoading, error: apptError, refresh: refreshAppointments } = useRealtimeQuery<Appointment>({
     table: 'appointments', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).order('starts_at').limit(6),
   });
 
-  const { data: reminders, loading: remLoading, error: remError } = useRealtimeQuery<Reminder>({
+  const { data: reminders, loading: remLoading, error: remError, refresh: refreshReminders } = useRealtimeQuery<Reminder>({
     table: 'reminders', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).limit(4),
   });
 
-  const { data: symptoms } = useRealtimeQuery<SymptomLog>({
+  const { data: symptoms, loading: symptomsLoading, error: symptomsError, refresh: refreshSymptoms } = useRealtimeQuery<SymptomLog>({
     table: 'symptom_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('symptom_logs').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(50),
   });
 
-  const { data: goals } = useRealtimeQuery<HealthGoal>({
+  const { data: goals, loading: goalsLoading, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<HealthGoal>({
     table: 'health_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_goals').select('*').eq('family_id', familyId).eq('is_active', true),
   });
@@ -163,8 +163,9 @@ export function HealthModule() {
   );
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const loading = metricsLoading || workoutsLoading || apptLoading || remLoading;
-  const error = metricsError || workoutsError || apptError || remError;
+  const loading = metricsLoading || workoutsLoading || apptLoading || remLoading || symptomsLoading || goalsLoading;
+  const error = metricsError || workoutsError || apptError || remError || symptomsError || goalsError;
+  const refresh = () => { void refreshMetrics(); void refreshWorkouts(); void refreshAppointments(); void refreshReminders(); void refreshSymptoms(); void refreshGoals(); };
 
   // ── Derived data ──────────────────────────────────────────
   const todayMetrics = useMemo(() => metrics.filter((m) => m.recorded_at >= todayISO), [metrics, todayISO]);
@@ -491,7 +492,7 @@ export function HealthModule() {
 
   // ── Loading / Error ──────────────────────────────────────
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} />;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
 
