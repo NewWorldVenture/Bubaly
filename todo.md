@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:33:09 -04:00
+- Last updated: 2026-07-16 06:37:56 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `b72a02d2` adds family check-in read safety after weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `00128cc4` adds driving-safety and Find Phone read failure handling after Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0353 - Driving safety and Find Phone hid family location reads as empty or partial data
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Driving Safety and Find Phone
+- Route: `/dashboard/family/driving-safety`, `/dashboard/family/find-phone`
+- File or files: `components/family/driving-safety-view.tsx`, `components/family/find-phone-view.tsx`, `tests/family-safety-read-boundaries.test.ts`
+- Database objects: `driving_trips`, `member_locations`, and `family_places`
+- Affected roles: authenticated family members and safety operators
+- Scenario: driving-trip reads could fail while the page showed no trips or zeroed summary metrics; Find Phone could fail on locations or saved places while presenting partial device data.
+- Launch impact: families could miss driving-safety activity or make decisions from an incomplete location view.
+- Root cause: both views ignored `useRealtimeQuery` errors; Find Phone also rendered from one query while its related saved-place read failed.
+- Required remediation: surface sanitized retryable errors before empty or partial states and retry all required reads together.
+- Implementation notes: Driving Safety now renders an ErrorState with its realtime refresh callback. Find Phone tracks both location/place queries and retries them as a unit.
+- Test plan: focused safety boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-safety-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 471 files/3,225 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `00128cc4`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0352 - Family check-in feed hid safety read failures as no check-ins
 
@@ -41,7 +62,7 @@
 - Test plan: focused check-in boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
 - Tests performed: `tests/family-check-in-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
 - Evidence: full local gate passed with 470 files/3,223 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
-- Resolution: source repair validated locally in commit `b72a02d2`; documentation and remote publication remain pending for this increment.
+- Resolution: source repair validated locally in commit `b72a02d2`; audit evidence was stamped in `ce9822ad` and the source, test, and docs were published to remote `main` in the Family Check In audit increment.
 - Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0351 - Weather and packing views hid failed trip dependencies as empty plans
@@ -199,30 +220,7 @@
 - Severity: P1
 - Category: Family integrations / conflict resolution / Supabase failure handling
 - Feature: Family Sync conflicts and connected accounts
-- Route: `/dashboard/sync/conflicts`, `/dashboard/sync/accounts`, `/dashboard/sync/accounts/[provider]`
-- File or files: `app/(app)/dashboard/sync/conflicts/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-route-read-boundaries.test.ts`
-- Database objects: `sync_conflicts` and `sync_accounts`
-- Affected roles: authenticated family members and household integration operators
-- Scenario: conflict or connected-account reads could fail while the UI rendered â€œNo open conflictsâ€ or â€œNot connectedâ€.
-- Launch impact: families could miss records requiring manual resolution or believe provider credentials were absent when data was unavailable.
-- Root cause: query errors were discarded before empty-state and provider-status rendering.
-- Required remediation: preserve read errors, log diagnostics server-side, and render sanitized retry states before showing conflict or account status.
-- Implementation notes: all three routes now fail visibly with route-specific retry links.
-- Test plan: focused Sync route-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/sync-route-read-boundaries.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: full local gate passed with 463 files/3,209 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `ec14b828`; documentation stamp and push pending.
-- Remaining dependencies: provider callbacks, conflict-resolution actions, RLS, browser, backup, and deployed verification.
-
-#### TODO-0343 - Family Sync showed zero health and history after required reads failed
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Family integrations / sync observability / Supabase failure handling
-- Feature: Family Sync hub and history
-- Route: `/dashboard/sync`, `/dashboard/sync/history`
-- File or files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/history/page.tsx`, `tests/sync-read-boundary.test.ts`
-- Database objects: `sync_connections`…113263 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Route: `/dashboard/sync/conflicts`, `/dashboard/sync/accounts`, `/d…113811 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
