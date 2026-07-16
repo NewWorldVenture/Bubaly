@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0356 - Behavior insights hid behavior-log read failures as no logged behavior
+
+- Timestamp: 2026-07-16 06:56 America/New_York
+- Service: Behavior and Parenting Insights
+- Route: `/dashboard/behavior`
+- Affected files: `components/modules/behavior-module.tsx`, `tests/behavior-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: a failed `behavior_logs` read could render â€œNo behavior logged yet,â€ indistinguishable from a household with no recorded behavior.
+- Severity: P1
+- Launch impact: parents could lose visibility into behavior history and the insight context built from it.
+- Root cause: the module ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Resolution: Behavior now renders sanitized retryable ErrorState UI before behavior summaries and the empty state on any read failure.
+- Supabase impact: no schema change; the existing family-scoped behavior read now has an explicit failure contract.
+- Tests run: `tests/behavior-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 473 test files, 3,228 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `42625b69`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed behavior verification
+
 ### PLA-0355 - Location map hid coordinate, geofence, and history read failures as no sharing
 
 - Timestamp: 2026-07-16 06:51 America/New_York
@@ -212,24 +231,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: `tests/connections-ui-boundary.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
 - Validation evidence: 463 test files, 3,210 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
 - Commit: `299e2608`
-- Status: Resolved in code; live provider callbacks, RLS, role, browser, and deployed evidence remains open
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Connections verification
-
-### PLA-0344 - Sync conflict and account routes hid required read failures
-
-- Timestamp: 2026-07-15 16:21 America/New_York
-- Service: Family Sync conflict resolution and connected accounts
-- Route: `/dashboard/sync/conflicts`, `/dashboard/sync/accounts`, `/dashboard/sync/accounts/[provider]`
-- Affected files: `app/(app)/dashboard/sync/conflicts/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-route-read-boundaries.test.ts`
-- Role: authenticated family members and household integration operators
-- Scenario: conflict or connected-account reads could fail while the UI rendered â€œNo open conflictsâ€ or â€œNot connectedâ€.
-- Severity: P1
-- Launch impact: families could miss records requiring manual resolution or believe provider credentials were absent when data was unavailable.
-- Root cause: query errors were discarded before empty-state and provider-status rendering.
-- Resolution: all three routes now log failures and render sanitized retry states before showing conflict or account status.
-- Supabase impact: no schema change; family-scoped sync conflict and account reads now have explicit failure contracts.
-- Tests run: `tests/sync-route-read-boundaries.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Validation …24761 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Status: Resolved in code; live provider callbacks, RLS, role, …25158 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
