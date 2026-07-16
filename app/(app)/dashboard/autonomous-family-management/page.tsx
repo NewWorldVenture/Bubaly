@@ -7,16 +7,27 @@ import {
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { gatherSignals } from '@/lib/family/signals';
+import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, StatTile, LevelBadge } from '@/components/family/shell';
 import { RecommendationActions, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Autonomous Management' };
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = { high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500' };
+
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <h1 className="text-2xl font-bold tracking-tight">Autonomous Family Management</h1>
+      <ErrorState message="Could not load autonomous family management data from Supabase. Refresh and try again." />
+      <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">Refresh autonomous management</Link>
+    </div>
+  );
+}
 
 export default async function AutonomousManagementPage() {
   const ctx = await requireUserContext();
@@ -24,13 +35,21 @@ export default async function AutonomousManagementPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [{ stress, completion, actions, counts }, recs, rules, pendingRuns, doneRuns] = await Promise.all([
-    gatherSignals(familyId),
+  const [signals, recs, rules, pendingRuns, doneRuns] = await Promise.all([
+    gatherSignalsResult(familyId),
     supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8),
     supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed']).order('created_at', { ascending: false }).limit(6),
   ]);
+
+  const readError = signals.error ?? recs.error ?? rules.error ?? pendingRuns.error ?? doneRuns.error;
+  if (readError || !signals.data) {
+    console.error('[dashboard-autonomous-family-management] required read failed', readError);
+    return <ReadFailure />;
+  }
+
+  const { stress, completion, actions, counts } = signals.data;
 
   const monitoring = [
     { label: 'Tasks & chores', value: `${counts.openTasks} open` },
