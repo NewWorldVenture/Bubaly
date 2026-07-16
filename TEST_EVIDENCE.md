@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Health and Medication Read Boundaries
+
+- Focused health boundary suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 476 test files, 3,233 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Health now retries six required reads; Medications now retries medication, schedule, and dose reads before derived clinical metrics.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Finances Read Boundary
 
 - Focused finance boundary suite: 1 file, 1 assertion passed.
@@ -265,21 +279,7 @@ Audit date: 2026-07-15
 - `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
 - `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
 - `git diff --check`: passed.
-- `/admin/sync` now checks all provider, connection, dead-letter, and webhook-signature reads before rendering operational metrics.
-- Live provider callback, retry/dead-letter, RLS, role, browser, backup, and deployment evidence remain open.
-
-## Latest Local Evidence - Admin Command Center Read Boundary
-
-- Focused admin overview suite: 1 file, 1 test passed.
-- Full `npm.cmd test`: 459 test files, 3,205 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `git diff --check`: passed.
-- `/admin` now preserves all required dashboard query failures and recent-activity actor failures instead of rendering zero/empty command-center metric…26858 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `/admin/sync` now checks all provider, conne…27112 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
