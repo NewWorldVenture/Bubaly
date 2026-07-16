@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0361 - Devices, Immunizations, and Security hid safety reads as empty states
+
+- Timestamp: 2026-07-16 07:34 America/New_York
+- Service: Smart Home Devices, Immunizations, and Home Security
+- Route: device, immunization, and security module routes under `/dashboard`
+- Affected files: `components/modules/devices-module.tsx`, `components/modules/immunizations-module.tsx`, `components/modules/security-module.tsx`, `tests/safety-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed device, immunization, or security-event reads fell through to empty safety states after loading.
+- Severity: P1
+- Launch impact: families could miss connected-device status, vaccine records, or home-security events while the UI appeared healthy.
+- Root cause: all three single-query modules ignored their realtime query error state.
+- Resolution: all three now render sanitized retryable ErrorState UI before their empty safety states.
+- Supabase impact: no schema change; existing family-scoped safety reads now have explicit failure contracts.
+- Tests run: `tests/safety-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 477 test files, 3,237 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `ab367ebd`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed safety verification
+
 ### PLA-0360 - Medical Records hid active-medication read failures from clinical records
 
 - Timestamp: 2026-07-16 07:27 America/New_York
