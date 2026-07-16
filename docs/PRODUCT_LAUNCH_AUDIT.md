@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0411 - Auto and Home record lists rendered a misleading empty state on read failure
+
+- Timestamp: 2026-07-16 20:29 UTC
+- Service: Auto/Vehicles and Home/Household record lists
+- Route: `/dashboard/auto/*` (vehicles, licenses, registration, insurance, rentals, service, accident, overview), `/dashboard/home/*` (warranties, pros, service, maintenance, diagnose)
+- Affected files: `lib/auto/queries.ts`, `lib/home/queries.ts`, `tests/module-queries-read-boundary.test.ts`
+- Role: any family member viewing their vehicle or household records
+- Scenario: a record list read fails (RLS denial, drifted table, outage) while a dedicated Auto/Home page loads
+- Severity: P1
+- Launch impact: the shared read helpers (`fam<T>()` in Auto; the four getters + `getHomeOverview` in Home) discarded the PostgREST `error` and returned `data ?? []`, so a failed read rendered a confident empty state — "you have no vehicles / no warranties" — when the records were merely unreadable, risking the user re-entering data or believing records were lost (the read-side analog of the PLA-0409/0410 write defect)
+- Root cause: `const { data } = await q; return data ?? []` dropped `error`; every consumer is a dedicated page with no try/catch, so the empty array flowed straight to the list UI
+- Resolution: both libs now fail closed on read error — log via `console.error('[auto|home/queries] read failed', { table, familyId, error })` and throw a clear "Could not load your … records from Supabase. Refresh and try again." so the page surfaces a visible failure instead of a fake-empty list; verified every getter's consumers are dedicated pages (no cross-module aggregation), and the reasoning/operating-index aggregators that read these tables independently already `.catch`-degrade, so no aggregation surface regresses
+- Supabase impact: none; reads unchanged, only their failures now fail closed and are observable
+- Tests run: `tests/module-queries-read-boundary.test.ts` (auto getVehicles + home getWarranties throw on error, getVehicles/getAssets return rows on success), full suite 515 files / 3,291 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a mocked failing client and asserts the getters reject with the fail-closed message; success path returns the rows
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`; live per-role RLS verification of the surfaced error remains a standing dependency
+- Remaining dependencies: authenticated per-role read verification (LB-005 adjacent); other module record-list libs to be triaged next with the same fail-closed pattern
+
 ### PLA-0410 - Auto, Paperwork, and Contacts CRUD reported success while silently losing user data
 
 - Timestamp: 2026-07-16 20:23 UTC

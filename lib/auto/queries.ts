@@ -15,7 +15,15 @@ async function fam<T>(table: string, familyId: string, order?: { col: string; as
   const supabase = await createServer();
   let q = supabase.from(table as 'vehicles').select('*').eq('family_id', familyId).is('deleted_at', null);
   if (order) q = q.order(order.col, { ascending: order.asc ?? true, nullsFirst: false });
-  const { data } = await q;
+  const { data, error } = await q;
+  // Fail closed: these are source-of-truth records. A swallowed read error would
+  // render an empty list — "you have no vehicles" — when the data is really just
+  // unreadable, so the caller (a dedicated Auto page with no try/catch) must show
+  // a visible error instead of a misleading empty state.
+  if (error) {
+    console.error('[auto/queries] read failed', { table, familyId, error });
+    throw new Error('Could not load your vehicle records from Supabase. Refresh and try again.');
+  }
   return (data ?? []) as unknown as T[];
 }
 
