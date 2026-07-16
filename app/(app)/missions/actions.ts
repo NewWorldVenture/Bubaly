@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
@@ -271,6 +272,11 @@ async function finalizeApproval(
 /** Parent approves a submission, optionally overriding the AI's reward. */
 export async function approveSubmissionAction(formData: FormData): Promise<void> {
   const ctx = await requireUserContext();
+  // Approving a submission mints a wallet reward, so only a family manager
+  // (parent/adult) may do it — a child must never approve their own chore.
+  // RLS on chore_submissions is family-scoped (any member), so this app-level
+  // gate is the authorization boundary; it must not be removed.
+  if (!isManager(ctx.active.role)) return;
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const submissionId = str(formData, 'submission_id');
@@ -308,6 +314,9 @@ export async function approveSubmissionAction(formData: FormData): Promise<void>
 /** Parent rejects or asks for a redo. */
 export async function rejectSubmissionAction(formData: FormData): Promise<void> {
   const ctx = await requireUserContext();
+  // Reviewing (reject / request redo) is a manager decision — a child must not
+  // adjudicate their own submission. Mirrors approveSubmissionAction's gate.
+  if (!isManager(ctx.active.role)) return;
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const submissionId = str(formData, 'submission_id');

@@ -48,6 +48,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: A-16 tenant-isolation sub-invariant Verified + guarded; A-16 unit remains In-progress (live delivery/schedule/retry matrix, and extending the live probe's per-table read-check to notifications/family_reminders, still open)
 - Remaining dependencies: add notifications/family_reminders to the A-03 live read-probe's table list (coordinate with A-03 owner); live cron delivery verification
 
+### PLA-0450 - A-07 SECURITY: a child could approve their own chore submission and mint a wallet reward
+
+- Timestamp: 2026-07-16 21:26 UTC
+- Service: Chores / Missions / rewards (A-07)
+- Route: `/missions` (server actions `approveSubmissionAction`, `rejectSubmissionAction`)
+- Affected files: `app/(app)/missions/actions.ts`, `tests/chore-approval-authz.test.ts` (new)
+- Role: **child / teen** (any non-manager family member with a login)
+- Scenario: a child submits a chore, then invokes `approveSubmissionAction` with their own `submission_id`
+- Severity: **HIGH** (privilege escalation → self-authorized payout / money integrity)
+- Launch impact: `approveSubmissionAction` (and `rejectSubmissionAction`) only called `requireUserContext()` + scoped by `family_id`; they did **not** check the caller's role. RLS on `chore_submissions` is `is_family_member(family_id)` for ALL ops, and children get real Supabase auth sessions (`child-login-actions.ts`), so a child could flip their own submission to `approved`, which runs `finalizeApproval → applyCompletionRewards` and credits their wallet — i.e. approve-your-own-chore and pay yourself. They could likewise reject/redo others' work.
+- Root cause: missing server-side authorization; the "Parent approves" contract was enforced only by hiding the button in the UI (client-side), not on the server.
+- Resolution: added `if (!isManager(ctx.active.role)) return;` at the top of both `approveSubmissionAction` and `rejectSubmissionAction` (manager = parent/adult), before any state change. Documented as the authorization boundary (RLS can't distinguish roles here). Auto-approval via `submitProofAction` is unaffected — it is gated by parent-configured `canAutoApprove`, not a child action.
+- Supabase impact: none (app-layer authz). Follow-up recommended: tighten `chore_submissions`/`chore_assignments` UPDATE RLS to managers for status changes as defense-in-depth.
+- Tests run: `tests/chore-approval-authz.test.ts` (4, new — locks the gate in); existing `chore-reward-persistence` / `chore-state-transition-persistence` / `chores-logic` / `chores-dashboard` (42) still pass; tsc + eslint clean.
+- Validation evidence: static guard asserts the `isManager` gate precedes `finalizeApproval`; roles helper confirms manager = parent/adult only.
+- Commit: (this increment)
+- Status: RESOLVED and pushed to `main`
+- Remaining dependencies: consider RLS-level restriction of chore status writes to managers; add a live harness test that a child role cannot approve once role-scoped RLS exists.
+
 ### PLA-0440 - A-08 wallet money-safety verified: overspend prevention + hold idempotency (PAY-1) proven live
 
 - Timestamp: 2026-07-16 21:18 UTC
