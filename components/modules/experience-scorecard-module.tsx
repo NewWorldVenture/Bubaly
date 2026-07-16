@@ -10,7 +10,7 @@ import { Gauge, TrendingUp, TrendingDown, Minus, AlertTriangle, ClipboardCheck }
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
   rollUpScorecard, EXPERIENCE_DIMENSIONS, DIMENSION_KEYS,
@@ -44,7 +44,7 @@ function Delta({ delta }: { delta: number | null }) {
 export function ExperienceScorecardModule() {
   const { familyId } = useApp();
 
-  const { data, loading } = useRealtimeQuery<Row>({
+  const { data, loading, error, refresh } = useRealtimeQuery<Row>({
     table: 'experience_audits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('experience_audits').select('*').eq('family_id', familyId).order('audited_on', { ascending: false }),
   });
@@ -66,6 +66,7 @@ export function ExperienceScorecardModule() {
   }, [data]);
 
   if (loading) return <SkeletonList count={5} />;
+  if (error) return <ErrorState message="Could not load the experience scorecard. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-6">

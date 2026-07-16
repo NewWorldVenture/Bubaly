@@ -17,7 +17,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -47,15 +47,17 @@ export function GraphModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: entityRows, loading: le } = useRealtimeQuery<EntityRow>({
+  const { data: entityRows, loading: entityLoading, error: entityError, refresh: refreshEntities } = useRealtimeQuery<EntityRow>({
     table: 'graph_entities', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('graph_entities').select('*').eq('family_id', familyId),
   });
-  const { data: edgeRows, loading: ld } = useRealtimeQuery<EdgeRow>({
+  const { data: edgeRows, loading: edgeLoading, error: edgeError, refresh: refreshEdges } = useRealtimeQuery<EdgeRow>({
     table: 'graph_edges', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('graph_edges').select('*').eq('family_id', familyId),
   });
-  const loading = le || ld;
+  const loading = entityLoading || edgeLoading;
+  const error = entityError || edgeError;
+  const refresh = () => { void refreshEntities(); void refreshEdges(); };
 
   const graph: Graph = useMemo(() => ({
     entities: (entityRows ?? []).map((e) => ({
@@ -115,6 +117,8 @@ export function GraphModule() {
 
       {loading ? (
         <SkeletonList count={4} />
+      ) : error ? (
+        <ErrorState message="Could not load the knowledge graph. Refresh and try again." onRetry={refresh} />
       ) : graph.entities.length === 0 ? (
         <EmptyState onAdd={() => setAddEntity(true)} onRebuild={rebuildFromData} projecting={projecting} />
       ) : (

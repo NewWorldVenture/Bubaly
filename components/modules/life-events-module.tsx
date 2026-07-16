@@ -20,7 +20,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
@@ -45,18 +45,22 @@ export function LifeEventsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: facts, loading: lf } = useRealtimeQuery<Fact>({
+  const { data: facts, loading: factsLoading, error: factsError, refresh: refreshFacts } = useRealtimeQuery<Fact>({
     table: 'family_facts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_facts').select('*').eq('family_id', familyId).order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }),
   });
-  const { data: plans, loading: lp } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'life_event_plans', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('life_event_plans').select('*').eq('family_id', familyId).order('event_date', { ascending: true }),
   });
-  const { data: items } = useRealtimeQuery<Item>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<Item>({
     table: 'life_event_plan_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('life_event_plan_items').select('*').eq('family_id', familyId).order('sort', { ascending: true }),
   });
+
+  const loading = factsLoading || plansLoading || itemsLoading;
+  const error = factsError || plansError || itemsError;
+  const refresh = () => { void refreshFacts(); void refreshPlans(); void refreshItems(); };
 
   const [factModal, setFactModal] = useState<{ open: true; editing: Fact | null } | null>(null);
   const [startTemplate, setStartTemplate] = useState<string | null>(null);
@@ -101,7 +105,8 @@ export function LifeEventsModule() {
     if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
-  if (lf || lp) return <SkeletonList count={5} />;
+  if (loading) return <SkeletonList count={5} />;
+  if (error) return <ErrorState message="Could not load life and milestones data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-8">

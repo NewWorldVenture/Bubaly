@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import {
   buildTree, treeStats, groupByGeneration, relationshipLabel, lifespan,
@@ -46,7 +46,7 @@ export function FamilyTreeModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: nodes, loading } = useRealtimeQuery<Node>({
+  const { data: nodes, loading, error, refresh } = useRealtimeQuery<Node>({
     table: 'family_tree_nodes', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_tree_nodes').select('*').eq('family_id', familyId).order('created_at', { ascending: true }),
   });
@@ -132,6 +132,7 @@ export function FamilyTreeModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load the family tree. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

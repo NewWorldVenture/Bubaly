@@ -13,7 +13,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import {
   usd, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
@@ -35,14 +35,18 @@ export function ExpensesModule() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const memberName = (id: string | null) => (id ? memberById.get(id)?.display_name ?? 'Member' : '—');
 
-  const { data: splits, loading } = useRealtimeQuery<SplitRow>({
+  const { data: splits, loading: splitsLoading, error: splitsError, refresh: refreshSplits } = useRealtimeQuery<SplitRow>({
     table: 'expense_splits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('expense_splits').select('*').eq('family_id', familyId).order('spent_on', { ascending: false }),
   });
-  const { data: shares } = useRealtimeQuery<Share>({
+  const { data: shares, loading: sharesLoading, error: sharesError, refresh: refreshShares } = useRealtimeQuery<Share>({
     table: 'expense_split_shares', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('expense_split_shares').select('*').eq('family_id', familyId),
   });
+
+  const loading = splitsLoading || sharesLoading;
+  const error = splitsError || sharesError;
+  const refresh = () => { void refreshSplits(); void refreshShares(); };
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
@@ -132,6 +136,7 @@ export function ExpensesModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load shared expenses. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

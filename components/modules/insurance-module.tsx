@@ -15,7 +15,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -65,6 +65,7 @@ export function InsuranceModule() {
   const memberName = (id: string | null) => (id ? members.find((m) => m.id === id)?.display_name ?? null : null);
 
   if (policies.loading) return <SkeletonList />;
+  if (policies.error) return <ErrorState message="Could not load insurance policies. Refresh and try again." onRetry={policies.refresh} />;
 
   return (
     <div className="space-y-6">
