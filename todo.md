@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:50:36 -04:00
+- Last updated: 2026-07-16 09:56:46 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `deb07a24` makes Super Admin Lead Scores fail closed on score/contact read failures after `2dde5f16` repaired Visitor Intelligence; live provider and deployment evidence remains open
+- Commit: `1c028718` makes Super Admin Onboarding Audit fail closed on progress read failures after `deb07a24` repaired Lead Scores; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0379 - Onboarding Audit hid progress failures as a healthy zero-run funnel
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / onboarding analytics / Supabase read boundary
+- Feature: Onboarding Audit
+- Route: `/admin/onboarding`
+- File or files: `app/(app)/admin/onboarding/page.tsx`, `tests/admin-onboarding-read-boundary.test.ts`
+- Database objects: `onboarding_progress`
+- Affected roles: Super Admin
+- Scenario: an onboarding progress read failure was caught and rendered as a valid zero-run funnel with 0% rates.
+- Launch impact: operators could believe onboarding was healthy or empty while the telemetry table was unavailable.
+- Root cause: the page discarded the Supabase error object and used an empty fallback for a required audit read.
+- Required remediation: preserve the progress query error and render a retryable error state before calculating funnel metrics.
+- Implementation notes: added an explicit ReadFailure state, checked the query result, and only call `analyzeOnboarding` after a successful read.
+- Test plan: focused Onboarding Audit boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (485 files/3,245 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `1c028718`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Onboarding Audit now fails visibly on a required progress read failure instead of presenting a fabricated empty funnel.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the onboarding workflow and role audit.
 
 #### TODO-0378 - Lead Scores hid score and contact failures as an empty leaderboard
 

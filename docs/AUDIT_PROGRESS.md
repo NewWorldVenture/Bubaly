@@ -14,7 +14,7 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: Lead Scores read-boundary repair validated with 484 test files and 3,244 tests;
+Latest increment: Onboarding Audit read-boundary repair validated with 485 test files and 3,245 tests;
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
 
@@ -25,7 +25,7 @@ not yet complete.
 | A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 477 Vitest files, 3,237 tests; 250-route production build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 230 migration audit through 0214; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
 | A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Auth/admin shell failure contracts, OAuth membership fail-closed handling, Admin Security/Auth Admin read-boundary handling, middleware public/internal API boundary tests, tenant/RLS contracts, migrations 0211/0212, and incomplete-family context fail-closed handling; live Auth Admin and cross-tenant probes still open | Apply 0211/0212, test every role/family boundary/session edge, and run live RLS paths |
-| A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization, per-user family claim, locked first-family provisioning contracts, and fail-closed profile/compatibility provisioning reads and writes; focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |
+| A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization, per-user family claim, locked first-family provisioning contracts, fail-closed profile/compatibility provisioning reads and writes, and retryable Super Admin Onboarding Audit reads; focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |
 | A-05 | Home and dashboard command surfaces | 3 | In progress | Existing route and component tests plus retryable Announcements, Contacts, Screen Time, Celebrations, Household Binder, Knowledge Graph, Family Tree, Scorecard, Life & Milestones, Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, Concierge, Voice, Next Actions, Voting, Weekend, Tax Vault, Subscriptions, Trip Memories, Routines, Intelligence, Briefing, and Workload reads; explicit unavailable App Store state; honest Independence empty state | Verify every dashboard action, empty state, mobile state and error |
 | A-06 | Calendar, planning, routines and sync | 5 | In progress | Supabase feature notes and focused unit coverage | Verify CRUD, recurrence, provider sync, conflicts and permissions |
 | A-07 | Chores, missions, rewards and proof review | 5 | In progress | Transition persistence repair and regression tests | Complete page, role, upload, dispute and notification audit |
