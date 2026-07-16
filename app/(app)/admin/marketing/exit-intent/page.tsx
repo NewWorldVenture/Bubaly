@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LogOut, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch } from '@/lib/marketing/personalization';
 import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/marketing/exit-intent';
@@ -15,6 +17,16 @@ type Offer = Tables<'marketing_exit_intent'>;
 
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-black sm:text-2xl">Exit-Intent Popups</h1>
+      <ErrorState message="Could not load exit-intent offers from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">Refresh exit-intent offers</Link>
+    </div>
+  );
+}
 
 function matchSummary(m: AudienceMatch): string {
   const p: string[] = [];
@@ -29,13 +41,17 @@ function matchSummary(m: AudienceMatch): string {
 
 export default async function ExitIntentPage() {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_exit_intent')
     .select('*')
     .is('deleted_at', null)
     .order('priority', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(200);
+  if (error) {
+    console.error('[admin-marketing-exit-intent] offer read failed', error);
+    return <ReadFailure />;
+  }
   const offers = (data ?? []) as Offer[];
   const stats = summarizeExitIntent(offers);
 
