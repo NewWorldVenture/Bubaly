@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Onboarding Audit Read Boundary
+
+- Focused Onboarding Audit boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 485 test files, 3,245 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes after removing a generated `.next` OneDrive readlink artifact; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Onboarding Audit now fails visibly when `onboarding_progress` cannot be read instead of calculating zero-valued funnel rates.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `1c028718`.
+
 ## Latest Local Evidence - Lead Scores Read Boundary
 
 - Focused Lead Scores boundary suite: 1 file, 1 assertion passed.
