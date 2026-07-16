@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0381 - Competitive Intelligence hid CRUD read failures as an empty dataset
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/marketing/competitive`.
+- Finding: competitor, keyword, or backlink read failures could be masked while active CRUD controls remained available over empty collections.
+- Repair: all three Supabase results are checked before rendering collections or CRUD controls; thrown failures also return a retryable state.
+- Evidence: focused Competitive Intelligence boundary suite (1 assertion), full 487 test files/3,247 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `9c5edb3e`.
+- Remaining launch gate: validate live Super Admin authorization, SEO table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0380 - Customer Intelligence hid analytics failures as zero attribution metrics
 
 - Status: Resolved in source; live and deployed verification remain open.

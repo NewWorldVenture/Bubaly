@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:03:46 -04:00
+- Last updated: 2026-07-16 10:11:42 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `c8ef7399` makes Super Admin Customer Intelligence fail closed on analytics read failures after `1c028718` repaired Onboarding Audit; live provider and deployment evidence remains open
+- Commit: `9c5edb3e` makes Super Admin Competitive Intelligence fail closed on CRUD read failures after `c8ef7399` repaired Customer Intelligence; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0381 - Competitive Intelligence hid CRUD read failures as an empty dataset
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / marketing SEO intelligence / Supabase read boundary
+- Feature: Competitive Intelligence
+- Route: `/admin/marketing/competitive`
+- File or files: `app/(app)/admin/marketing/competitive/page.tsx`, `tests/admin-competitive-intelligence-read-boundary.test.ts`
+- Database objects: `competitors`, `keyword_intel`, and `backlinks`
+- Affected roles: Super Admin
+- Scenario: any competitor, keyword, or backlink query could fail while the page rendered an empty dataset alongside active CRUD controls.
+- Launch impact: operators could add, delete, or interpret SEO intelligence against incomplete state.
+- Root cause: three Supabase results were destructured without checking their error objects.
+- Required remediation: preserve all query results, fail visibly on any error, and only render CRUD collections after a successful read batch.
+- Implementation notes: wrapped the read batch for thrown failures, checked all three returned errors, and added a retryable ReadFailure state.
+- Test plan: focused Competitive Intelligence boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (487 files/3,247 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `9c5edb3e`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Competitive Intelligence no longer exposes CRUD controls over a failed or fabricated empty dataset.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and SEO audit.
 
 #### TODO-0380 - Customer Intelligence hid analytics failures as zero attribution metrics
 
