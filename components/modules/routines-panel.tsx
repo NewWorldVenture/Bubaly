@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/states';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
@@ -58,11 +59,11 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: templates, refresh: refreshTemplates } = useRealtimeQuery<Template>({
+  const { data: templates, loading: templatesLoading, error: templatesError, refresh: refreshTemplates } = useRealtimeQuery<Template>({
     table: 'routine_templates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('routine_templates').select('*').eq('family_id', familyId).order('created_at'),
   });
-  const { data: items, refresh: refreshItems } = useRealtimeQuery<Item>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<Item>({
     table: 'routine_template_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('routine_template_items').select('*').eq('family_id', familyId).order('sort_order').order('start_minutes'),
   });
@@ -72,6 +73,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     for (const it of items) { if (!m.has(it.template_id)) m.set(it.template_id, []); m.get(it.template_id)!.push(it); }
     return m;
   }, [items]);
+
+  const loading = templatesLoading || itemsLoading;
+  const error = templatesError || itemsError;
 
   // Detected routines the family hasn't already saved (dedupe by title+weekday).
   const savedKeys = useMemo(() => {
@@ -107,6 +111,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
       refreshAll();
     });
   }
+
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading routines…</div>;
+  if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {
     const its = itemsByTemplate.get(t.id) ?? [];

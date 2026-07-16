@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { usd } from '@/lib/finance/splits';
@@ -28,7 +28,7 @@ export function TaxVaultModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: docs, loading } = useRealtimeQuery<TaxDoc>({
+  const { data: docs, loading, error, refresh } = useRealtimeQuery<TaxDoc>({
     table: 'tax_documents', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('tax_documents').select('*').eq('family_id', familyId).order('tax_year', { ascending: false }).order('created_at', { ascending: false }),
   });
@@ -84,6 +84,7 @@ export function TaxVaultModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load tax documents. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

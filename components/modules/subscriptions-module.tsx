@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { usd } from '@/lib/finance/splits';
@@ -30,7 +30,7 @@ export function SubscriptionsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: subs, loading } = useRealtimeQuery<Sub>({
+  const { data: subs, loading, error, refresh } = useRealtimeQuery<Sub>({
     table: 'subscriptions_tracked', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('subscriptions_tracked').select('*').eq('family_id', familyId).order('status').order('name'),
   });
@@ -80,6 +80,7 @@ export function SubscriptionsModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load subscriptions. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

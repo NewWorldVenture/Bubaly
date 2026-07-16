@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { groupByTrip } from '@/lib/vacations/memories';
@@ -27,11 +27,11 @@ export function TripMemoriesModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: memories, loading } = useRealtimeQuery<Memory>({
+  const { data: memories, loading: memoriesLoading, error: memoriesError, refresh: refreshMemories } = useRealtimeQuery<Memory>({
     table: 'trip_memories', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('trip_memories').select('*').eq('family_id', familyId).order('memory_date', { ascending: false }),
   });
-  const { data: vacations } = useRealtimeQuery<VacationLite>({
+  const { data: vacations, loading: vacationsLoading, error: vacationsError, refresh: refreshVacations } = useRealtimeQuery<VacationLite>({
     table: 'vacations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacations').select('id, title').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -43,6 +43,9 @@ export function TripMemoriesModule() {
   const all = useMemo(() => memories ?? [], [memories]);
   const groups = useMemo(() => groupByTrip(all), [all]);
   const vacName = (id: string) => (vacations ?? []).find((v) => v.id === id)?.title ?? 'Trip';
+  const loading = memoriesLoading || vacationsLoading;
+  const error = memoriesError || vacationsError;
+  const refresh = () => { void refreshMemories(); void refreshVacations(); };
 
   // Lazily sign photo URLs once memories load.
   useMemo(() => {
@@ -100,6 +103,7 @@ export function TripMemoriesModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load trip memories. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

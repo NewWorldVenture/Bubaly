@@ -27,6 +27,10 @@ const voiceSource = readFileSync('components/modules/voice-module.tsx', 'utf8');
 const nextActionsSource = readFileSync('components/modules/next-actions-module.tsx', 'utf8');
 const votingSource = readFileSync('components/modules/voting-module.tsx', 'utf8');
 const weekendSource = readFileSync('components/modules/weekend-module.tsx', 'utf8');
+const taxVaultSource = readFileSync('components/modules/tax-vault-module.tsx', 'utf8');
+const subscriptionsSource = readFileSync('components/modules/subscriptions-module.tsx', 'utf8');
+const tripMemoriesSource = readFileSync('components/modules/trip-memories-module.tsx', 'utf8');
+const routinesSource = readFileSync('components/modules/routines-panel.tsx', 'utf8');
 
 describe('household read boundaries', () => {
   it('coordinates decision and option failures before the Decision Engine empty state', () => {
@@ -91,5 +95,13 @@ describe('household read boundaries', () => {
     expect(votingSource).toContain('void refreshPolls(); void refreshOptions(); void refreshVotes(); void refreshVacations(); void refreshBudgets();');
     expect(votingSource).toContain('Could not load family voting data. Refresh and try again.');
     expect(weekendSource).toContain('Could not load weekend planner data. Refresh and try again.');
+  });
+
+  it('fails closed on tax, subscription, trip-memory, and routine reads', () => {
+    expect(taxVaultSource).toContain('Could not load tax documents. Refresh and try again.');
+    expect(subscriptionsSource).toContain('Could not load subscriptions. Refresh and try again.');
+    expect(tripMemoriesSource).toContain('void refreshMemories(); void refreshVacations();');
+    expect(tripMemoriesSource).toContain('Could not load trip memories. Refresh and try again.');
+    expect(routinesSource).toContain('Could not load routines. Refresh and try again.');
   });
 });
