@@ -15,7 +15,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -84,7 +84,12 @@ export function PetsModule() {
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
 
-  if (pets.loading) return <SkeletonList />;
+  const loading = pets.loading || records.loading;
+  const error = pets.error || records.error;
+  const refresh = () => { void pets.refresh(); void records.refresh(); };
+
+  if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load pet care data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
@@ -155,7 +160,7 @@ export function PetsModule() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{pet.name}</p>
                   <p className="truncate text-xs text-muted">
-                    {meta.label}{pet.breed ? ` · ${pet.breed}` : ''}{age ? ` · ${age}` : ''}
+                    {meta.label}{pet.breed ? ` Â· ${pet.breed}` : ''}{age ? ` Â· ${age}` : ''}
                   </p>
                   {nextDue && (
                     <span className={cn('mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[nextDue.urgency])}>
@@ -270,7 +275,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
           <Field label="Vet name">{(id) => <Input id={id} name="vet_name" placeholder="Dr. Smith" />}</Field>
           <Field label="Vet phone">{(id) => <Input id={id} name="vet_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Allergies, behavior, diet…" />}</Field>
+        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Allergies, behavior, dietâ€¦" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>Add pet</Button>
@@ -308,7 +313,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
   }
 
   return (
-    <Modal open title={`Add care · ${pet.name}`} onClose={onClose}>
+    <Modal open title={`Add care Â· ${pet.name}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Type">{(id) => <Select id={id} name="kind" defaultValue="vet_visit">{CARE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
@@ -319,8 +324,8 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
           <Field label="Next due" hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
           <Field label="Dose / amount">{(id) => <Input id={id} name="dose" placeholder="1 tablet" />}</Field>
         </div>
-        <Field label="Weight (kg)" hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" step="0.1" min="0" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Vet remarks, reactions…" />}</Field>
+        <Field label="Weight (kg)" hint="Optional â€” for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" step="0.1" min="0" />}</Field>
+        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Vet remarks, reactionsâ€¦" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>Save record</Button>
@@ -347,7 +352,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
         <div className="flex items-center gap-4">
           <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-brand/10 text-4xl">{meta.emoji}</span>
           <div className="min-w-0">
-            <p className="text-sm text-muted">{meta.label}{pet.breed ? ` · ${pet.breed}` : ''}</p>
+            <p className="text-sm text-muted">{meta.label}{pet.breed ? ` Â· ${pet.breed}` : ''}</p>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
               {age && <span>{age} old</span>}
               {pet.color && <span>{pet.color}</span>}
@@ -385,8 +390,8 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{r.title}</p>
                       <p className="text-xs text-muted">
-                        {fmtDate(r.record_date)}{r.dose ? ` · ${r.dose}` : ''}
-                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>· next {fmtDate(r.next_due)}</span>}
+                        {fmtDate(r.record_date)}{r.dose ? ` Â· ${r.dose}` : ''}
+                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>Â· next {fmtDate(r.next_due)}</span>}
                       </p>
                     </div>
                     <button onClick={() => deleteRecord(r.id)} aria-label="Delete record" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
