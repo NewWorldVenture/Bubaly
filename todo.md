@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:33:41 -04:00
+- Last updated: 2026-07-16 08:42:44 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `faf75b75` makes wallet card availability explicit and removes the Visa-like non-issued child-card art after `9682ff06` added fail-closed Intelligence preferences and Briefing Kitchen Mode context reads; live provider and deployment evidence remains open
+- Commit: `2c474f5a` removes disconnected Google Drive and Dropbox document-import actions after `faf75b75` made wallet card availability explicit and removed Visa-like non-issued child-card art; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0369 - Documents exposed cloud-import buttons without provider adapters
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Documents / integration integrity / disconnected UI
+- Feature: Family Documents quick actions
+- Route: dashboard Files module
+- File or files: `components/modules/documents-module.tsx`, `tests/documents-import-actions.test.ts`
+- Database objects: `documents` and family document storage
+- Affected roles: authenticated family members
+- Scenario: Google Drive and Dropbox quick actions were clickable but only displayed a toast because no provider adapter existed.
+- Launch impact: users could reasonably believe an import had started when no import workflow existed.
+- Root cause: roadmap integrations were exposed in a production quick-action list before OAuth/provider adapters were implemented.
+- Required remediation: remove disconnected cloud-provider actions while retaining the supported upload, folder, and scan actions; add provider integrations only when their OAuth, storage, retry, and tenant controls are complete.
+- Implementation notes: removed both dead actions, their unused icons, and the `comingSoon` toast helper; local upload, folder creation, and document scanning remain available.
+- Test plan: focused document action contract, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused document/wallet contracts (4 assertions); full Vitest (479 files/3,248 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source repair validated in commit `2c474f5a`; local branch pushed; known build warnings remain; live integration/deployment evidence remains open.
+- Resolution: Files no longer exposes clickable actions that cannot execute.
+- Remaining dependencies: implement and verify Google Drive/Dropbox adapters before reintroducing those import actions.
 
 #### TODO-0368 - Wallet card surfaces implied an issued payment card before provider setup
 
