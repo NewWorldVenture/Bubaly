@@ -18,7 +18,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { SkeletonList } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
@@ -78,23 +78,23 @@ export function FinancesModule() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
-  const { data: accounts, loading: la, refresh: refreshAccounts } = useRealtimeQuery<Account>({
+  const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
     table: 'financial_accounts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at'),
   });
-  const { data: txns, loading: lt, refresh: refreshTxns } = useRealtimeQuery<Txn>({
+  const { data: txns, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
-  const { data: budgets } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading: lb, error: budgetsError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId),
   });
-  const { data: bills } = useRealtimeQuery<Bill>({
+  const { data: bills, loading: lbi, error: billsError, refresh: refreshBills } = useRealtimeQuery<Bill>({
     table: 'bills', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('bills').select('*').eq('family_id', familyId).order('due_date'),
   });
-  const { data: goals } = useRealtimeQuery<Goal>({
+  const { data: goals, loading: lg, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('savings_goals').select('*').eq('family_id', familyId).order('created_at'),
   });
@@ -161,7 +161,10 @@ export function FinancesModule() {
     return `Your biggest category this month is ${top.category} at ${usd(top.total)}. Set a budget to stay on track.`;
   }, [spendByCat]);
 
-  if (la || lt) return <SkeletonList count={6} />;
+  const loading = la || lt || lb || lbi || lg;
+  const readError = accountsError || txnsError || budgetsError || billsError || goalsError;
+  if (loading) return <SkeletonList count={6} />;
+  if (readError) return <ErrorState message="Could not load financial data. Refresh and try again." onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
 
   const STATS = [
     { label: 'Total Balance', value: usd(totalBalance), sub: netThisMonth >= 0 ? `${usd(Math.abs(netThisMonth))} this month` : `${usd(Math.abs(netThisMonth))} this month`, up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
