@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:56:18 -04:00
+- Last updated: 2026-07-16 08:06:12 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `d8a0213a` adds daily household read failure handling for Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities after the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `0b228692` adds coordination read failure handling for Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner after Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0365 - Coordination modules hid failed reads as empty or partial states
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Planning, AI, and coordination / Supabase failure handling
+- Feature: Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/concierge-module.tsx`, `components/modules/voice-module.tsx`, `components/modules/next-actions-module.tsx`, `components/modules/voting-module.tsx`, `components/modules/weekend-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `concierge_plans`, `voice_commands`, `calendar_events`, `todo_items`, `opportunities`, `family_polls`, `family_poll_options`, `family_poll_votes`, `vacations`, `budgets`, `weekend_events`, `weekend_plans`, `weekend_searches`, and `weekend_feeds`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed incomplete history, or allowed planning, voting, and weekend summaries to derive from partial query results.
+- Launch impact: families could miss saved plans, voice captures, next actions, poll options/votes, budgets, or local events while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Required remediation: surface sanitized retryable errors before empty/derived states and refresh every required query together.
+- Implementation notes: Next Actions, Voting, and Weekend Planner coordinate all dependent reads; Concierge and Voice History now use shared ErrorState retry behavior.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (7 focused assertions); full Vitest; typecheck; lint; dependency audit (0 vulnerabilities); clean production build; migration audit (230 numbered files through `0214`); schema probes (11/11); diff check.
+- Evidence: full local gate passed with 477 files/3,242 tests and a clean 250-route build; known webpack cache serialization and Supabase Edge-runtime warnings remain.
+- Resolution: source repair validated in commit `0b228692`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed coordination verification.
 
 #### TODO-0364 - Daily household modules hid failed reads as empty or partial states
 
