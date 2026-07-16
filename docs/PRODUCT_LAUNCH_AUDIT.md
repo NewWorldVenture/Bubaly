@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0434 - Push dispatch silently dropped every push on a read failure and risked duplicate pushes (A-16)
+
+- Timestamp: 2026-07-16 21:16 UTC
+- Service: Notifications delivery — web-push dispatch (A-16)
+- Route: `app/api/cron/notifications`, `app/api/cron/push-scan`, `app/api/notifications/generate` → `lib/server/push.ts` (`dispatchPendingPushes`)
+- Affected files: `lib/server/push.ts`, `tests/push-dispatch-read-boundary.test.ts`
+- Role: every member with a registered push device
+- Scenario: the pending-push read, the whole-family member fan-out read, or the `pushed_at` stamp write fails (RLS, drifted table, outage)
+- Severity: P2
+- Launch impact: `dispatchPendingPushes` discarded the pending-push read error and returned `{ notifications: 0 }` — indistinguishable from an empty queue — so a broken `notifications` read silently dropped **every** push with no signal. The whole-family fan-out `family_members` read dropped its error (a broken read silently skipped whole-family pushes), and the `pushed_at` stamp write was unchecked (a lost stamp re-pushes the same notification every cron run = duplicate-push spam)
+- Root cause: `const { data } = await …` / bare `await …update(...)` dropped the PostgREST `error` at all three sites
+- Resolution: the pending-push read now **fails closed** — logs `[push] pending-push read failed` and throws, which the caller (cron / on-demand, both already try/catch-and-count push dispatch failures) surfaces instead of hiding; the fan-out member read logs `[push] family_members read failed for fan-out` and degrades (skips that family only); the `pushed_at` stamp logs `[push] pushed_at stamp failed` on error so the duplicate-push path is diagnosable
+- Supabase impact: none; reads/writes unchanged, only their failures surfaced/observable
+- Tests run: `tests/push-dispatch-read-boundary.test.ts` (throws on read error; returns empty result on a genuinely empty queue), full suite 523 files / 3,334 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a fake client erroring the pending read and asserts `dispatchPendingPushes` rejects with "Pending-push read failed"; empty-queue path resolves to a zeroed result
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-16 increment by agent-03); A-16 unit remains In-progress (delivery/schedule/retry/live-cron matrix still open)
+- Remaining dependencies: live push delivery + duplicate-suppression verification; route `[push]`/`[notifications]` signals into monitoring (A-20 / LB-008 adjacent)
+
 ### PLA-0433 - Meals module secondary reads swallowed failures into silent empty lists (A-10)
 
 - Timestamp: 2026-07-16 21:12 UTC

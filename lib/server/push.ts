@@ -140,18 +140,29 @@ export async function dispatchPendingPushes(
     .order('created_at', { ascending: true })
     .limit(opts.limit ?? 200);
   if (opts.familyId) q = q.eq('family_id', opts.familyId);
-  const { data: rows } = await q;
+  const { data: rows, error: rowsError } = await q;
+  // Fail closed on the pending-push read: a swallowed error would return "0
+  // notifications" indistinguishable from a genuinely empty queue, silently
+  // dropping every push. The caller (cron / on-demand) counts a thrown dispatch
+  // failure, so this surfaces instead of hiding.
+  if (rowsError) {
+    console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error: rowsError });
+    throw new Error('Pending-push read failed.');
+  }
   if (!rows || rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
 
   // Cache family member user ids for whole-family notifications.
   const familyMembers = new Map<string, string[]>();
   async function membersOf(familyId: string): Promise<string[]> {
     if (familyMembers.has(familyId)) return familyMembers.get(familyId)!;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('family_members')
       .select('user_id')
       .eq('family_id', familyId)
       .eq('is_active', true);
+    // Degrade (skip this family's fan-out) but log — a broken member read would
+    // otherwise silently drop whole-family pushes with no signal.
+    if (error) console.error('[push] family_members read failed for fan-out', { familyId, error });
     const ids = (data ?? []).map((m) => m.user_id).filter((id): id is string => Boolean(id));
     familyMembers.set(familyId, ids);
     return ids;
@@ -163,7 +174,10 @@ export async function dispatchPendingPushes(
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
     const r = await sendPushToUsers(supabase, recipients, { title: n.title, body: n.body, url });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
-    await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
+    // Stamp pushed_at so this notification isn't pushed again next run. If the
+    // stamp is silently lost the same push re-fires every cron — log it.
+    const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
+    if (stampError) console.error('[push] pushed_at stamp failed', { notificationId: n.id, error: stampError });
   }
   return { notifications: rows.length, result: totals };
 }

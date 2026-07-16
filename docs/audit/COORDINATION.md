@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 21:00 UTC** · by `agent-03`
+Last board update: **2026-07-16 21:16 UTC** · by `agent-03`
 
 ---
 
@@ -47,7 +47,7 @@ Last board update: **2026-07-16 21:00 UTC** · by `agent-03`
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food+meals read boundaries (PLA-0418/0433) | 2026-07-16 20:55 | 2026-07-16 21:12 |
-| `agent-03` | Opus 4.8 — silent-failure sweep (PLA-0405..0413,0417 on A-05/12/15/17/18 helpers); A-16 notifications engine (PLA-0432) | 2026-07-16 21:00 | 2026-07-16 21:05 |
+| `agent-03` | Opus 4.8 — silent-failure sweep (PLA-0405..0417 on A-05/12/15/17/18); A-16 notifications engine + push dispatch (PLA-0432/0434) | 2026-07-16 21:00 | 2026-07-16 21:16 |
 | `agent-04` | _free — claim me_ | | |
 
 ---
@@ -104,7 +104,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-13 | — | OPEN | | | | |
 | A-14 | — | OPEN | | | | Codex did ownership RLS + auctions |
 | A-15 | — | OPEN | | | | |
-| A-16 | `agent-03` | CLAIMED | 2026-07-16 21:00 | 2026-07-16 21:05 | `pending` | Notifications engine now logs failed source+dedup reads (PLA-0432); cron routes already hardened; schedules/retries/delivery matrix open |
+| A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:16 | `65b5f3f9`+ | Notifications engine logs failed source+dedup reads (PLA-0432); push dispatch fails-closed on read + logs stamp (PLA-0434); cron routes already hardened. Open: delivery/schedule/retry + live cron
 | A-17 | — | OPEN | | | | |
 | A-18 | — | OPEN | | | | Apple VTODO/Gmail stubs must fail closed |
 | A-19 | — | OPEN | | | | |
