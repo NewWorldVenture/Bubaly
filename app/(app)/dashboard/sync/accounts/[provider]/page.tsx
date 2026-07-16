@@ -55,7 +55,7 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
     docsHref: 'https://support.apple.com/en-us/HT204397',
     steps: [
       'Create an app-specific password at appleid.apple.com â†’ Sign-In and Security.',
-      'Enter it here to enable CalDAV sync for Apple Calendar and Reminders.',
+      'Enter it here to enable CalDAV sync for Apple Calendar.',
       'You can also publish a public ICS feed that Apple Calendar subscribes to.',
       'Apple Notes has no public API â€” notes stay internal to bubaly.',
     ],
