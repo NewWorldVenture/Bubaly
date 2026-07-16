@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Connections Adapter Cleanup
+
+- Stale-reference scan: no runtime references to the deleted `lib/connections/adapter` or `lib/connections/adapters` layer.
+- Remaining Connections provider suite: 1 file, 11 assertions passed.
+- Full `npm.cmd test -- --run`: 480 test files, 3,238 tests passed. The count is lower because the removed dead layer's 14 tests were deleted with it.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- The real `lib/sync` registry remains the only production integration path.
+- Live OAuth callbacks, provider sync, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `23cd749b`.
+
 ## Latest Local Evidence - Connections Runtime Catalog
 
 - Focused connection provider and adapter suites: 2 files, 25 assertions passed.
