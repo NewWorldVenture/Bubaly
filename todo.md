@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:13:48 -04:00
+- Last updated: 2026-07-16 08:22:36 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0cecf444` adds read failure handling for Tax Vault, Subscriptions, Trip Memories, and Routines after coordination reads for Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner, plus Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `9682ff06` adds fail-closed Intelligence preferences and Briefing Kitchen Mode context reads after Tax Vault, Subscriptions, Trip Memories, Routines, Concierge Plans, Voice History, Next Actions, Group Voting, Weekend Planner, Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, Utilities, the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0367 - Intelligence and Briefing context reads hid failures as safe-looking defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: AI context and privacy controls / Supabase failure handling
+- Feature: Intelligence Network preferences and Briefing Kitchen Mode
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/intelligence-module.tsx`, `components/modules/briefing-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `network_consent`, `calendar_events`, and `reminders`
+- Affected roles: authenticated family members and household managers
+- Scenario: a failed consent read could silently appear as privacy-disabled defaults, while failed event/reminder reads could leave Kitchen Mode looking current with incomplete context.
+- Launch impact: users could make privacy decisions from unverified state or miss time-sensitive household context while the interface appeared healthy.
+- Root cause: both surfaces ignored realtime query errors; Kitchen Mode also lacked a coordinated retry for its two context reads.
+- Required remediation: fail visibly on consent/context read failures and retry every required context query together.
+- Implementation notes: Intelligence now blocks the controls behind a retryable ErrorState; Briefing Kitchen Mode retries calendar and reminder reads together before rendering.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (9 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
+- Evidence: full local gate passed with 477 files/3,244 tests and a clean 250-route build; known webpack cache serialization and Supabase Edge-runtime warnings remain.
+- Resolution: source repair validated in commit `9682ff06`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed AI/context verification.
 
 #### TODO-0366 - Tax, subscription, memory, and routine reads hid failures as empty state
 
