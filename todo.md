@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:10:00 -04:00
+- Last updated: 2026-07-16 11:15:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `db158e01` makes Marketplace Selling fail closed on listing/signal read failures after `f86dd8a2` repaired Live Auctions; live provider and deployment evidence remains open
+- Commit: `071bfd7c` makes Marketplace Deals fail closed on listing read failures after `db158e01` repaired Selling; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0393 - Deals hid listing read failures as no standout deals
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Marketplace / deal discovery / Supabase read boundary
+- Feature: Deals
+- Route: `/marketplace/deals`
+- File or files: `app/(app)/marketplace/deals/page.tsx`, `tests/marketplace-deals-read-boundary.test.ts`
+- Database objects: `marketplace_listings`
+- Affected roles: authenticated family members with marketplace reachability
+- Scenario: the listing query could fail while the route rendered no standout deals and skipped comparable-price analysis.
+- Launch impact: buyers could miss discounted inventory while the page appeared healthy and empty.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required listing feed.
+- Required remediation: preserve the query error and render a retryable page-level failure before building price bands or the empty state.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Deals boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (499 files/3,259 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `071bfd7c`; local branch pushed; known build warnings remain; live Auth, RLS, browser, payment, and deployment evidence remain open.
+- Resolution: Deals no longer presents a fabricated empty feed after a failed listing read.
+- Remaining dependencies: verify authenticated reachability, price-coach data, and deployed retry behavior; continue the Marketplace audit.
 
 #### TODO-0392 - Selling hid listing and seller-signal read failures as zero activity
 

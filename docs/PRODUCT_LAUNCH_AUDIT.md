@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0393 - Deals hid listing read failures as no standout deals
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/marketplace/deals`.
+- Finding: the deal-feed listing query could fail while price-coach logic rendered “No standout deals right now.”
+- Repair: the Supabase error is checked before building comparable price bands or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Deals boundary suite (1 assertion), full 499 test files/3,259 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `071bfd7c`.
+- Remaining launch gate: validate authenticated marketplace reachability, listing availability, price-coach data, and deployed retry behavior; broader payment and deployment gates remain open.
+
 ### PLA-0392 - Selling hid listing and seller-signal read failures as zero activity
 
 - Status: Resolved in source; live and deployed verification remain open.
