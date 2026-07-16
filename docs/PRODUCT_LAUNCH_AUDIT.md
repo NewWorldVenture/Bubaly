@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0391 - Live Auctions hid listing read failures as an empty marketplace
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/marketplace/auctions`.
+- Finding: the marketplace listing query could fail while the route rendered â€œNo live auctions right nowâ€ and zero operational stats.
+- Repair: the Supabase error is checked before deriving auction stats or rendering the empty state; failures return a retryable page state.
+- Evidence: focused Live Auctions boundary suite (1 assertion), full 497 test files/3,257 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `f86dd8a2`.
+- Remaining launch gate: validate authenticated family reachability, marketplace RLS, listing availability, and deployed retry behavior; broader payment and deployment gates remain open.
+
 ### PLA-0390 - Referrals hid settings and activity read failures as defaults or no activity
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -222,17 +232,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1.
 - Surface: Family Documents quick actions.
 - Finding: Google Drive and Dropbox buttons were clickable but only fired a â€œnot connectedâ€ toast because no provider adapters existed.
-- Repair: removed both disconnected actions, unused icons, and the dead `comingSoon` helper; supported upload, folder creation, and scan actions remain visible.
-- Evidence: `tests/documents-import-actions.test.ts`, full 479 test files/3,248 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `2c474f5a`.
-- Remaining launch gate: implement OAuth, storage, retry, and tenant controls before reintroducing cloud-import actions.
-
-### PLA-0368 - Wallet card surfaces implied an issued payment card before provider setup
-
-- Status: Resolved in source; live provider and deployed verification remain open.
-- Severity: P1.
-- Surface: `/wallet/cards` and `/wallet/children/[childId]`.
-- Finding: provider-disabled card mode used â€œcoming soonâ€ copy, and child detail rendered Visa-like preview art without explicitly stating that no card had been issued.
-- Repair: provider-disabled mode now says spending cards are unavailable until configured; …35375 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Repair: removed both disconnected actions, unused icons, and the dead `comingSoon` helper; supported upload, fold…35594 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
