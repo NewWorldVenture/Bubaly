@@ -1,6 +1,6 @@
 'use client';
 
-// Life & Milestones (T9) — two halves that deepen the felt moat:
+// Life & Milestones (T9) â€” two halves that deepen the felt moat:
 //  1. "What Bubaly has learned": the family's accumulated preferences, routines
 //     and traditions (family_facts), shown back to them and fully editable.
 //  2. Life-event playbooks: one-tap templates (New Baby, Moving, School Start,
@@ -20,7 +20,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
@@ -45,18 +45,22 @@ export function LifeEventsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: facts, loading: lf } = useRealtimeQuery<Fact>({
+  const { data: facts, loading: factsLoading, error: factsError, refresh: refreshFacts } = useRealtimeQuery<Fact>({
     table: 'family_facts', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_facts').select('*').eq('family_id', familyId).order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }),
   });
-  const { data: plans, loading: lp } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'life_event_plans', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('life_event_plans').select('*').eq('family_id', familyId).order('event_date', { ascending: true }),
   });
-  const { data: items } = useRealtimeQuery<Item>({
+  const { data: items, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useRealtimeQuery<Item>({
     table: 'life_event_plan_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('life_event_plan_items').select('*').eq('family_id', familyId).order('sort', { ascending: true }),
   });
+
+  const loading = factsLoading || plansLoading || itemsLoading;
+  const error = factsError || plansError || itemsError;
+  const refresh = () => { void refreshFacts(); void refreshPlans(); void refreshItems(); };
 
   const [factModal, setFactModal] = useState<{ open: true; editing: Fact | null } | null>(null);
   const [startTemplate, setStartTemplate] = useState<string | null>(null);
@@ -79,7 +83,7 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success('Playbook started — your checklist is ready');
+    success('Playbook started â€” your checklist is ready');
     setStartTemplate(null);
   }
 
@@ -101,23 +105,24 @@ export function LifeEventsModule() {
     if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
-  if (lf || lp) return <SkeletonList count={5} />;
+  if (loading) return <SkeletonList count={5} />;
+  if (error) return <ErrorState message="Could not load life and milestones data. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Life & Milestones"
-        description="What Bubaly has learned about your family — and one-tap playbooks for the big moments."
+        description="What Bubaly has learned about your family â€” and one-tap playbooks for the big moments."
       />
 
-      {/* ── What Bubaly has learned ─────────────────────────────────────────── */}
+      {/* â”€â”€ What Bubaly has learned â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> What Bubaly has learned</h2>
           <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {learned.length === 0 ? (
-          <EmptyState icon={Sparkles} title="Bubaly is still getting to know you" description="Preferences, routines and traditions you save here show up across the app — add the first thing your family always does." />
+          <EmptyState icon={Sparkles} title="Bubaly is still getting to know you" description="Preferences, routines and traditions you save here show up across the app â€” add the first thing your family always does." />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {learned.map((f) => (
@@ -141,7 +146,7 @@ export function LifeEventsModule() {
         )}
       </section>
 
-      {/* ── Life-event playbooks ────────────────────────────────────────────── */}
+      {/* â”€â”€ Life-event playbooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Start a life-event playbook</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,7 +168,7 @@ export function LifeEventsModule() {
         </div>
       </section>
 
-      {/* ── Active plans ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Active plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activePlans.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Your playbooks</h2>
@@ -180,7 +185,7 @@ export function LifeEventsModule() {
                       <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4.5 w-4.5" /></span>
                       <div>
                         <p className="font-semibold">{p.title}{p.status === 'completed' && <span className="ml-2 text-xs text-emerald-400">complete</span>}</p>
-                        <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} · {done}/{pItems.length} done</p>
+                        <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} Â· {done}/{pItems.length} done</p>
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-xs">
@@ -301,7 +306,7 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
         <Field label="Notes (optional)">{(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Add'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : editing ? 'Save' : 'Add'}</Button>
         </div>
       </form>
     </Modal>
