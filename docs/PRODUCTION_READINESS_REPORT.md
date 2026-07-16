@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 11:50 America/New_York
+Audit snapshot: 2026-07-16 12:00 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 503 Vitest files and 3,263 tests pass in the latest full local gate.
+- 504 Vitest files and 3,264 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -15,6 +15,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   read failures and renders a retryable state before showing monitoring, risk, or approval controls.
 - Contact Timeline now preserves contact, interaction, and communication read failures and renders a retryable
   state before building relationship health or timeline views.
+- Family Automation now preserves rules and pending/recent automation-run read failures and renders a retryable
+  state before exposing metrics, approval actions, or CRUD controls.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
   goal funding is published in migration `0208` and commit `7a20e160`.
 - Wallet activation now fails closed on disclosure, member, child-wallet, bucket, and rule provisioning
