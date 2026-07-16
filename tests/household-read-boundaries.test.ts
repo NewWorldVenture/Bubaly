@@ -8,6 +8,12 @@ const contactsSource = readFileSync('components/modules/contacts-module.tsx', 'u
 const screenTimeSource = readFileSync('components/modules/screen-time-module.tsx', 'utf8');
 const celebrationsSource = readFileSync('components/modules/celebrations-module.tsx', 'utf8');
 const binderSource = readFileSync('components/modules/binder-module.tsx', 'utf8');
+const graphSource = readFileSync('components/modules/graph-module.tsx', 'utf8');
+const familyTreeSource = readFileSync('components/modules/family-tree-module.tsx', 'utf8');
+const scorecardSource = readFileSync('components/modules/experience-scorecard-module.tsx', 'utf8');
+const expensesSource = readFileSync('components/modules/expenses-module.tsx', 'utf8');
+const insuranceSource = readFileSync('components/modules/insurance-module.tsx', 'utf8');
+const lifeEventsSource = readFileSync('components/modules/life-events-module.tsx', 'utf8');
 
 describe('household read boundaries', () => {
   it('coordinates decision and option failures before the Decision Engine empty state', () => {
@@ -37,5 +43,18 @@ describe('household read boundaries', () => {
     expect(screenTimeSource).toContain('Could not load screen time data. Refresh and try again.');
     expect(celebrationsSource).toContain('Could not load celebrations. Refresh and try again.');
     expect(binderSource).toContain('Could not load household binder data. Refresh and try again.');
+  });
+
+  it('fails closed on graph, family-tree, scorecard, expense, insurance, and life-event reads', () => {
+    expect(graphSource).toContain('error: entityError, refresh: refreshEntities');
+    expect(graphSource).toContain('error: edgeError, refresh: refreshEdges');
+    expect(graphSource).toContain('Could not load the knowledge graph. Refresh and try again.');
+    expect(familyTreeSource).toContain('Could not load the family tree. Refresh and try again.');
+    expect(scorecardSource).toContain('Could not load the experience scorecard. Refresh and try again.');
+    expect(expensesSource).toContain('void refreshSplits(); void refreshShares();');
+    expect(expensesSource).toContain('Could not load shared expenses. Refresh and try again.');
+    expect(insuranceSource).toContain('onRetry={policies.refresh}');
+    expect(lifeEventsSource).toContain('void refreshFacts(); void refreshPlans(); void refreshItems();');
+    expect(lifeEventsSource).toContain('Could not load life and milestones data. Refresh and try again.');
   });
 });
