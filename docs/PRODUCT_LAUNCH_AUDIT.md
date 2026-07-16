@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0357 - Decision Engine and Health Visits hid required reads as empty states
+
+- Timestamp: 2026-07-16 07:03 America/New_York
+- Service: Decision Engine and Health Visits
+- Route: `/dashboard/decisions`, health module routes using `/dashboard/health-visits`
+- Affected files: `components/modules/decisions-module.tsx`, `components/modules/health-visits-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members, household managers, and health-history users
+- Scenario: a failed decision or option read could show no decisions; a failed health-visit read could show an empty medical history.
+- Severity: P1
+- Launch impact: families could make choices without available trade-offs or miss health-history and follow-up context.
+- Root cause: both modules ignored realtime query errors; Decision Engine also failed to coordinate its paired decision/options reads.
+- Resolution: Decision Engine now coordinates both reads and retries them together; Health Visits renders sanitized retryable ErrorState UI before its empty history.
+- Supabase impact: no schema change; existing family-scoped reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 474 test files, 3,230 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `59b280ae`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed household verification
+
 ### PLA-0356 - Behavior insights hid behavior-log read failures as no logged behavior
 
 - Timestamp: 2026-07-16 06:56 America/New_York
@@ -211,27 +230,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; existing family-scoped report reads now have an explicit failure contract.
 - Tests run: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
 - Validation evidence: 464 test files, 3,212 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `194e4ecb`
-- Status: Resolved in code; documentation and remote publication pending for this increment
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Vacation Reports verification
-
-### PLA-0345 - Connections hub hid family connection read failures as disconnected providers
-
-- Timestamp: 2026-07-15 16:34 America/New_York
-- Service: Family Connections hub and integration directory
-- Route: `/dashboard/connections`
-- Affected files: `components/modules/connections-module.tsx`, `tests/connections-ui-boundary.test.ts`
-- Role: authenticated family members and household integration operators
-- Scenario: the realtime `family_connections` query could fail while the module rendered every provider as disconnected or showed an empty connection summary.
-- Severity: P1
-- Launch impact: families could mistake unavailable connection data for revoked credentials and make incorrect setup decisions.
-- Root cause: the module ignored the `useRealtimeQuery` error state even though the hook preserved real read failures.
-- Resolution: Connections now renders a sanitized retryable ErrorState and wires retry to the query refresh callback before deriving provider statuses.
-- Supabase impact: no schema change; the existing family-scoped realtime read now has visible UI failure handling.
-- Tests run: `tests/connections-ui-boundary.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Validation evidence: 463 test files, 3,210 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `299e2608`
-- Status: Resolved in code; live provider callbacks, RLS, role, …25158 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Commit: `194e4ecb…25599 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
