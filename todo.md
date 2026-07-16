@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:05:00 -04:00
+- Last updated: 2026-07-16 11:10:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `f86dd8a2` makes Marketplace Live Auctions fail closed on listing read failures after `2b06e789` repaired Referrals; live provider and deployment evidence remains open
+- Commit: `db158e01` makes Marketplace Selling fail closed on listing/signal read failures after `f86dd8a2` repaired Live Auctions; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0392 - Selling hid listing and seller-signal read failures as zero activity
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Marketplace / seller cockpit / Supabase read boundary
+- Feature: Selling
+- Route: `/marketplace/selling`
+- File or files: `app/(app)/marketplace/selling/page.tsx`, `tests/marketplace-selling-read-boundary.test.ts`
+- Database objects: `marketplace_listings`, `marketplace_saves`, `marketplace_offers`, `marketplace_negotiations`, `marketplace_questions`, `marketplace_handoffs`, `marketplace_orders`
+- Affected roles: authenticated seller family members
+- Scenario: any required listing or seller-signal read could fail while the cockpit showed zero listings or activity.
+- Launch impact: sellers could miss offers, questions, handoffs, bids, or overdue returns while the page appeared healthy.
+- Root cause: the route discarded all query errors and derived rankings from empty fallbacks.
+- Required remediation: preserve the listing and signal results, fail visibly on any required error, and only derive seller signals after a successful batch.
+- Implementation notes: coordinated the listing and six dependent signal reads and added a ReadFailure state.
+- Test plan: focused Selling boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (498 files/3,258 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `db158e01`; local branch pushed; known build warnings remain; live Auth, RLS, browser, payment, and deployment evidence remain open.
+- Resolution: Selling no longer presents zero seller activity after a failed listing or signal read.
+- Remaining dependencies: verify authenticated seller RLS, buyer/seller workflows, and deployed retry behavior; continue the Marketplace audit.
 
 #### TODO-0391 - Live Auctions hid listing read failures as an empty marketplace
 
