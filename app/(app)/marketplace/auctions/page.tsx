@@ -4,13 +4,24 @@ import { Gavel, Clock, Flame, TrendingUp } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import { auctionStatus, timeLeft, reserveMet, type AuctionListing } from '@/lib/marketplace/auction';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Live Auctions Â· Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" /> Live Auctions</h1>
+      <ErrorState message="Could not load live auctions from Supabase. Refresh and try again." />
+      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">Refresh auctions</Link>
+    </div>
+  );
+}
 
 type Row = {
   id: string; title: string; photo_url: string | null; category: string;
@@ -19,7 +30,7 @@ type Row = {
   auction_starts_at: string | null; auction_ends_at: string | null;
 };
 
-/** Live auctions board — the eBay-beating surface: ending-soon first, with live
+/** Live auctions board â€” the eBay-beating surface: ending-soon first, with live
  *  countdowns, bid counts, reserve state, and Buy-It-Now flags. */
 export default async function AuctionsPage() {
   const ctx = await requireUserContext();
@@ -27,13 +38,17 @@ export default async function AuctionsPage() {
   const now = new Date();
 
   // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
-  const { data } = await sb
+  const { data, error } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, reserve_cents, buy_now_cents, auction_starts_at, auction_ends_at')
     .eq('sale_format', 'auction').eq('status', 'available')
     .gt('auction_ends_at', now.toISOString())
     .order('auction_ends_at', { ascending: true })
     .limit(60);
+  if (error) {
+    console.error('[marketplace-auctions] listing read failed', error);
+    return <ReadFailure />;
+  }
 
   const rows = (data ?? []) as Row[];
   const toAuction = (r: Row): AuctionListing => ({
@@ -52,7 +67,7 @@ export default async function AuctionsPage() {
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
             <Gavel className="h-6 w-6 text-brand-text" /> Live Auctions
           </h1>
-          <p className="mt-1 text-sm text-muted">Bid on what your community is selling — proxy bids keep you in front, and last-second bids extend the clock.</p>
+          <p className="mt-1 text-sm text-muted">Bid on what your community is selling â€” proxy bids keep you in front, and last-second bids extend the clock.</p>
         </div>
         <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 self-start rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 sm:self-auto">
           <TrendingUp className="h-4 w-4" /> Sell at auction
@@ -62,9 +77,9 @@ export default async function AuctionsPage() {
       {/* Stats */}
       <div className="grid-stats mb-5">
         {[
-          { label: 'Live now', value: rows.length, icon: '🔨' },
-          { label: 'Ending soon', value: endingSoon, icon: '🔥' },
-          { label: 'With bids', value: withBids, icon: '📈' },
+          { label: 'Live now', value: rows.length, icon: 'ðŸ”¨' },
+          { label: 'Ending soon', value: endingSoon, icon: 'ðŸ”¥' },
+          { label: 'With bids', value: withBids, icon: 'ðŸ“ˆ' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -77,7 +92,7 @@ export default async function AuctionsPage() {
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Gavel className="mx-auto h-8 w-8 text-muted/40" />
           <p className="mt-3 text-sm font-semibold">No live auctions right now</p>
-          <p className="mt-1 text-sm text-muted">Be the first — list an item at auction and let your community bid it up.</p>
+          <p className="mt-1 text-sm text-muted">Be the first â€” list an item at auction and let your community bid it up.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
