@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
@@ -38,7 +38,7 @@ export function CelebrationsModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: dates, loading } = useRealtimeQuery<FamilyDate>({
+  const { data: dates, loading, error, refresh } = useRealtimeQuery<FamilyDate>({
     table: 'family_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_dates').select('*').eq('family_id', familyId),
   });
@@ -97,6 +97,8 @@ export function CelebrationsModule() {
 
       {loading ? (
         <SkeletonList />
+      ) : error ? (
+        <ErrorState message="Could not load celebrations. Refresh and try again." onRetry={refresh} />
       ) : upcoming.length === 0 ? (
         <EmptyState icon={Gift} title="No upcoming celebrations" description="Add birthdays in family member profiles, or add a custom date here." />
       ) : (
@@ -109,7 +111,7 @@ export function CelebrationsModule() {
               <li key={c.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${soon ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40'}`}>
                 <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${KIND_TINT[c.kind]}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">· turning {c.turning}</span> : null}</p>
+                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">Â· turning {c.turning}</span> : null}</p>
                   <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
