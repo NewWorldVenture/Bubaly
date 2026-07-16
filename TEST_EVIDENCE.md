@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Marketplace Selling Read Boundaries
+
+- Focused Selling boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 498 test files, 3,258 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Selling now fails visibly when its listing or seller-signal reads fail instead of presenting zero seller activity.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `db158e01`.
+
 ## Latest Local Evidence - Marketplace Live Auctions Read Boundary
 
 - Focused Live Auctions boundary suite: 1 file, 1 assertion passed.
@@ -272,18 +284,7 @@ Audit date: 2026-07-15
 - Focused wallet card contract and Stripe capability suite: 2 files, 21 assertions passed.
 - Full `npm.cmd test -- --run`: 478 test files, 3,246 tests passed.
 - `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Disabled wallet card mode now states that spending cards are unavailable until the family card program is configured; the child wallet shows a non-issued preview with real ledger balance and no payment-card number/brand simulation.
-- Live Stripe Issuing capability, RLS/feature-flag state, browser, backup, and deployment evidence remain open.
-- Source commit: `faf75b75`.
-
-## Latest Local Evidence - Intelligence and Briefing Read Boundaries
-
-- Focused household boundary suite: 1 file, 9 assertions passed.
-- Full `npm.cmd test -- --run`: 477 test files, 3,244 tests passed.
-- `npm.cmd run typeche…33856 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice …34058 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
