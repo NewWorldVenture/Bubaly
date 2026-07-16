@@ -2,10 +2,21 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { createCampaign } from '../../actions';
 
 export const metadata: Metadata = { title: 'Marketing · New Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
+
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-3">
+      <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">&lt;- Back to campaigns</Link>
+      <ErrorState message="Could not load campaign segments from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/campaigns/new" className="text-sm font-medium text-brand-text underline">Refresh campaign form</Link>
+    </div>
+  );
+}
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const CHANNELS = ['email', 'sms', 'social', 'ads', 'seo', 'aeo', 'content', 'referral', 'multi'];
@@ -13,7 +24,11 @@ const TYPES = ['campaign', 'launch', 're_engagement', 'win_back', 'referral', 'f
 
 export default async function NewCampaignPage() {
   const supabase = createServiceClient();
-  const { data: segments } = await supabase.from('marketing_segments').select('id, name').is('deleted_at', null).order('name');
+  const { data: segments, error } = await supabase.from('marketing_segments').select('id, name').is('deleted_at', null).order('name');
+  if (error) {
+    console.error('[admin-marketing-campaign-new] segment read failed', error);
+    return <ReadFailure />;
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
