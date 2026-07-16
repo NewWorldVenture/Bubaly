@@ -12,9 +12,16 @@ type DB = SupabaseClient<Database>;
 const SETTINGS_KEY = 'referral_program';
 
 /** Read the program config from marketing_settings (falls back to defaults). */
+export async function getReferralConfigResult(supabase: DB): Promise<{ config: ReferralConfig; error: Error | null }> {
+  const { data, error } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
+  return {
+    config: data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG,
+    error: error ? new Error('Referral program settings read failed') : null,
+  };
+}
+
 export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
-  const { data } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
-  return data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG;
+  return (await getReferralConfigResult(supabase)).config;
 }
 
 /** Persist program config (admin only — caller must be gated). */
