@@ -8,6 +8,7 @@ import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
 
@@ -17,9 +18,13 @@ export default async function BriefingPage() {
 
   // The evening tab shows the Operating Index "since yesterday" recap (pillar
   // #5) — diff the two most recent daily snapshots. Silent on the first reading.
-  const { data: foiSnaps } = await supabase.from('family_operating_index')
+  const { data: foiSnaps, error: foiError } = await supabase.from('family_operating_index')
     .select('composite, dimensions, suggestions, as_of_date')
     .eq('family_id', ctx.active.familyId).order('as_of_date', { ascending: false }).limit(2);
+  if (foiError) {
+    console.error('[dashboard/briefing] operating index read failed', foiError);
+    return <ErrorState message="Could not load your daily briefing from Supabase. Refresh and try again." />;
+  }
 
   const toView = (row: { composite: number; dimensions: unknown; suggestions: unknown }): SnapshotView => ({
     composite: row.composite,
