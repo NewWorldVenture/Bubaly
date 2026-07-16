@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0395 - Family Assistant hid context and count failures as zero signals
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/agents`.
+- Finding: calendar, meal, member, activity, and ten count reads could fail while agent briefings rendered zero operational signals.
+- Repair: all required context and count results now retain their errors and the route returns a retryable page failure before deriving briefings.
+- Evidence: focused Family Assistant boundary suite (1 assertion), full 501 test files/3,261 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `d43b15c4`.
+- Remaining launch gate: validate authenticated family RLS, agent context availability, reasoning behavior, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -221,17 +231,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in source; live provider and deployed verification remain open.
 - Severity: P1.
 - Surface: internal `lib/connections` adapter layer and `/dashboard/connections` integration boundary.
-- Finding: planned adapters returned â€œnot available yet,â€ had no production callers, and duplicated the authoritative `lib/sync` registry.
-- Repair: deleted the dead contract, planned Google/Gmail adapters, registry, and their tests; stale-reference scan is clean. The real `lib/sync` path remains unchanged.
-- Evidence: remaining Connections provider suite, full 480 test files/3,238 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `23cd749b`.
-- Remaining launch gate: validate the real Google/Microsoft/Apple OAuth and sync flows in live sandbox/deployed environments; implement future providers before exposing them.
-
-### PLA-0372 - Connections hub exposed providers without live setup routes
-
-- Status: Resolved in source; live provider and deployed verification remain open.
-- Severity: P1.
-- Surface: `/dashboard/connections`.
-- Finding: the user-facing directory included Gmail, Plaid, grocery, and smart-home services without liv…36240 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Finding: planned adapters returned â€œnot available yet,â€ had no production callers, and duplicated the authorit…36457 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
