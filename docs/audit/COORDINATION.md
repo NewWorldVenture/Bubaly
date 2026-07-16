@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 23:28 UTC** · by `agent-04`
+Last board update: **2026-07-16 23:34 UTC** · by `agent-04`
 
 ---
 
@@ -107,7 +107,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | `agent-04` | IN_REVIEW | 2026-07-16 23:14 | 2026-07-16 23:20 | `PLA-0530` | VERIFIED clean (no defect): §3a checked on the highest-blast-radius surface. Layout gates the /admin segment AND every one of ~130+ admin server actions re-verifies isSuperAdmin independently & fails closed (assertSuperAdmin / requireMarketingAdmin[throws] / local guard() / transitive). 0 files touch the service client without a gate. Added `admin-authz-gate.test.ts` (4). Open: `app/api/admin/**` route authz, public marketing surfaces input/rate-limit, social outbound wiring, live super-admin E2E |
 | A-18 | `agent-04` | IN_REVIEW | 2026-07-16 23:08 | 2026-07-16 23:12 | `PLA-0520` | VERIFIED clean (no defect): FAIL CLOSED end-to-end — `sync/run` 503 when not configured, providers key-gated dark, Apple VTODO writes throw 501 (never silent-success). OAuth CSRF (32B CSPRNG state, timingSafeEqual, callback validates before code-exchange, single-use cookie) + AES-256-GCM token-at-rest (tamper-detected) + refuses to store w/o key. Real provider calls (no mocks). Added `sync-apple-vtodo-failclosed.test.ts` (5). Open: live OAuth round-trip w/ real keys, refresh-expiry path, two-way conflict dedupe, feed-token abuse review |
-| A-19 | — | OPEN | | | | |
+| A-19 | `agent-04` | CLAIMED | 2026-07-16 23:34 | 2026-07-16 23:34 | `pending` | Mobile/responsive/a11y — static sweep: viewport configured, 0 img-without-alt, Modal fully accessible; locking Modal a11y contract |
 | A-20 | `agent-04` | IN_REVIEW | 2026-07-16 23:24 | 2026-07-16 23:28 | `PLA-0540` | Production build gate VERIFIED GREEN: `npm run build` EXIT=0, all ~250 routes compile with every agent's changes on main (tsc/eslint green too). Observability MATURITY GAPS logged as deps (no Sentry/central error monitoring; no `/api/health`; no boot-time env guard — per-feature fail-honest instead). Open: Sentry wiring (owner), health probe, Playwright E2E smoke, perf budget, backup/restore runbook |
 
 ---
