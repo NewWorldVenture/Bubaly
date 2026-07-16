@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0353 - Driving Safety and Find Phone hid family location read failures
+
+- Timestamp: 2026-07-16 06:37 America/New_York
+- Service: Driving Safety and Find Phone
+- Route: `/dashboard/family/driving-safety`, `/dashboard/family/find-phone`
+- Affected files: `components/family/driving-safety-view.tsx`, `components/family/find-phone-view.tsx`, `tests/family-safety-read-boundaries.test.ts`
+- Role: authenticated family members and safety operators
+- Scenario: driving-trip reads could fail while the page showed no trips or zeroed summary metrics; Find Phone could show partial device data when locations or saved places failed.
+- Severity: P1
+- Launch impact: families could miss driving-safety activity or use incomplete location data.
+- Root cause: both views ignored `useRealtimeQuery` errors; Find Phone did not coordinate its location and saved-place read failures.
+- Resolution: both views now render sanitized retryable ErrorState UI before empty/partial states; Find Phone retries both required reads together.
+- Supabase impact: no schema change; existing family-scoped reads now have explicit failure contracts.
+- Tests run: `tests/family-safety-read-boundaries.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 471 test files, 3,225 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `00128cc4`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed family-safety verification
+
 ### PLA-0352 - Family check-in feed hid safety read failures as no check-ins
 
 - Timestamp: 2026-07-15 17:33 America/New_York
@@ -22,7 +41,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: `tests/family-check-in-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
 - Validation evidence: 470 test files, 3,223 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
 - Commit: `b72a02d2`
-- Status: Resolved in code; documentation and remote publication pending for this increment
+- Status: Resolved in code; audit evidence was stamped in `ce9822ad` and the source, test, and docs were published to remote `main`
 - Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Check In verification
 
 ### PLA-0351 - Weather and packing views hid failed trip dependencies as empty plans
