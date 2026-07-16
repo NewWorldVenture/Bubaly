@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Social Audit Read Boundary
+
+- Focused Social Audit boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 490 test files, 3,250 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes after removing a generated `.next` OneDrive readlink artifact; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Social Audit now fails visibly when its `social_audit_logs` read fails instead of rendering an empty history.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `80a790c6`.
+
 ## Latest Local Evidence - Personalization and Exit-Intent Read Boundaries
 
 - Focused Personalization and Exit-Intent boundary suites: 2 files, 2 assertions passed.

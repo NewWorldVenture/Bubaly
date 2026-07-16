@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0384 - Social Audit hid audit-log read failures as an empty history
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/audit`.
+- Finding: the audit-log query could fail while the page rendered “No audit entries yet,” masking an unavailable operational history.
+- Repair: the Supabase error is checked before rendering the empty state or audit rows; failures return a retryable page state.
+- Evidence: focused Social Audit boundary suite (1 assertion), full 490 test files/3,250 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `80a790c6`.
+- Remaining launch gate: validate live Super Admin authorization, audit-trigger table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0383 - Exit-Intent hid offer read failures as an empty editor
 
 - Status: Resolved in source; live and deployed verification remain open.
