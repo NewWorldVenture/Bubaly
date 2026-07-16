@@ -725,3 +725,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main`; remote migration application remains a dependency
 - Remaining dependencies: reconcile/apply migration remotely, then run authenticated wallet concurrency smoke
 
+
+### PLA-0490 - Kitchen Display kiosk crashed on nullable strings → endless "Reconnecting…" loop
+
+- Timestamp: 2026-07-16 22:25 UTC
+- Service: A-05 Home / dashboard command surfaces (Kitchen Display kiosk)
+- Route: `/display` (bubaly.com/display)
+- Affected files: `lib/display/imagery.ts`, `components/display/display-grid.tsx`, `app/(app)/display/page.tsx`, `tests/display-render.test.ts`
+- Role: any signed-in family member on the always-on kitchen screen
+- Scenario: a family with a planned meal whose `meal_type` is null (nullable in `meal_plans`), or any member/recipe/event carrying a null string, opens `/display`
+- Severity: P1 (launch blocker — a paid Family Basic surface was 100% down for the affected family, user-reported 3×)
+- Launch impact: the kiosk never rendered; the client error boundary caught the throw and auto-retried every 15s forever (the "Reconnecting in Ns" screen)
+- Root cause: React error boundaries CANNOT catch a throw during SSR, so a single `null.toLowerCase()` / `null.split()` in the client component's server render deterministically crashed the whole page on every retry. `mealImage()` did `mealType.toLowerCase()` unguarded (the prod-reachable culprit — `meal_type` is nullable); `display-grid` did `member.display_name.split(' ')[0]` (latent — column is NOT NULL, defense-in-depth).
+- Resolution: `mealImage` → `(mealType ?? '').toLowerCase()`; `firstName()` helper for display_name; `display_name ?? 'Member'` coerced at the data source. Render is now provably total.
+- Supabase impact: none (read-only render hardening; no schema/migration change). Follow-up data-integrity option: `family_recipes`/`meal_plans` nullable-string review.
+- Tests run: new SSR reproduction harness `tests/display-render.test.ts` (9 cases via `renderToStaticMarkup`: normal · malformed dates · empty · null string fields · missing-member assignees · every widget + service tiles across all sizes · untrusted tiles jsonb · photos + all settings shapes · large+unicode) — the null-meal_type case reproduced the exact prod throw before the fix; tsc/eslint/build green
+- Validation evidence: `tests/display-render.test.ts` (9/9), production build green, Vercel preview DEPLOYED
+- Commit: `39e47f37` (+ prior `e92fd897`)
+- Status: Resolved in code and pushed to `main`; deployed to Vercel
+- Remaining dependencies: cross-cutting `.display_name.split(...)` / `.toLowerCase()` on nullable fields exists in ~20 other modules (school, sports, documents, messages, home, kids, family, briefing…) — broadcast to unit owners as a crash class (see COORDINATION §3b)

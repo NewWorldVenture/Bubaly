@@ -48,7 +48,7 @@ Last board update: **2026-07-16 21:31 UTC** · by `agent-03`
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
 | `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs/storage RLS PLA-0442; found `family-media` bucket gap → LB-009/PLA-0461); sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-16 21:31 |
-| `agent-04` | _free — claim me_ | | |
+| `agent-04` | Fable 5 — A-05 display kiosk: SSR total-render fix (PLA-0490, null meal_type/display_name crash → reconnect loop); crash-class broadcast §3b | 2026-07-16 22:20 | 2026-07-16 22:28 |
 
 ---
 
@@ -147,6 +147,26 @@ on shared `family_places` = likely manager-only), `dashboard/contact-center`,
 `dashboard/migrate`. Each unit owner: gate only the child-must-not-do actions + add an authz guard test.
 
 ---
+
+## 3b. ⚠️ Cross-cutting crash class — null string → SSR throw → error-boundary loop
+
+**Class:** a client component's SERVER render calls `.split()` / `.toLowerCase()` /
+`.charAt()` on a **nullable DB string** (e.g. `meal_type`, `category`, and any
+field the type claims non-null but the column allows null). React error
+boundaries **cannot catch an SSR throw**, so one null row crashes the whole route
+on every render — and if an `error.tsx` auto-retries (kiosk pattern), it loops
+forever. Found live on `/display` (PLA-0490, `mealImage(meal_type)`).
+
+**Every agent: grep your unit's render path for `.split(`/`.toLowerCase(`/`.charAt(`
+on values that come from Supabase columns** and confirm the column is NOT NULL or
+the access is guarded (`(x ?? '')`). Reproduce with an SSR harness like
+`tests/display-render.test.ts` (`renderToStaticMarkup`, feed null string fields).
+Known suspects (`.display_name.split(' ')[0]` unguarded, though that column is
+NOT NULL so low-risk): `components/modules/{school,sports,documents,messages,
+family,briefing,locator,passwords}-module.tsx`, `app/(app)/{home,kids}/`,
+`components/dashboard/family-dashboard.tsx`. Prefer guarding at use + coercing at
+the data source; a `NOT NULL` backfill migration is the permanent root fix where
+the column is genuinely nullable.
 
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
