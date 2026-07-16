@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 09:02:43 -04:00
+- Last updated: 2026-07-16 09:08:43 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `9eb160b0` hides unsupported connection providers from the runtime hub after `14f0d14b` replaced the Independence empty-state roadmap phrase with “No badges yet”; live provider and deployment evidence remains open
+- Commit: `23cd749b` removes the unreachable planned Connections adapter layer after `9eb160b0` hid unsupported providers from the runtime hub; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0373 - Dead Connections adapter layer duplicated the real sync registry
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Connections / integration architecture / dead code
+- Feature: Provider adapter registry
+- Route: internal `lib/connections` layer; user-facing runtime is `/dashboard/connections`
+- File or files: deleted `lib/connections/adapter.ts`, `lib/connections/adapters/index.ts`, `lib/connections/adapters/google-calendar.ts`, `lib/connections/adapters/gmail.ts`, and `tests/connections-adapter.test.ts`
+- Database objects: none; the deleted layer had no production caller
+- Affected roles: all authenticated users indirectly through integration maintenance risk
+- Scenario: a planned adapter contract returned “not available yet,” was referenced only by its own tests, and duplicated the real `lib/sync/registry.ts` path used by `/api/sync/*`.
+- Launch impact: future changes could be made against the wrong registry, leaving provider setup apparently healthy but disconnected from the actual sync engine.
+- Root cause: an abandoned R9 contract layer remained after the provider-agnostic `lib/sync` implementation became authoritative.
+- Required remediation: remove the unreachable duplicate layer and keep one production integration registry; expose only live setup routes in the Connections hub.
+- Implementation notes: deleted the unused contract, planned Google/Gmail adapters, registry, and their tests; no runtime references remain. The real Google/Microsoft/Apple sync implementation under `lib/sync` is unchanged.
+- Test plan: stale-reference scan, remaining Connections provider suite, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: no stale runtime references; Connections provider suite (11 assertions); full Vitest (480 files/3,238 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source cleanup validated in commit `23cd749b`; local branch pushed; known build warnings remain; live OAuth, RLS, browser, and deployment evidence remain open.
+- Resolution: production has one authoritative sync registry and no unreachable adapter tests or TODO implementations.
+- Remaining dependencies: live verification of the real `lib/sync` providers and implementation of future providers before exposing them.
 
 #### TODO-0372 - Connections hub exposed providers without live setup routes
 
