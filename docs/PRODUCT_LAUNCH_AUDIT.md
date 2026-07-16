@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0384 - Social Audit hid audit-log read failures as an empty history
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/audit`.
+- Finding: the audit-log query could fail while the page rendered â€œNo audit entries yet,â€ masking an unavailable operational history.
+- Repair: the Supabase error is checked before rendering the empty state or audit rows; failures return a retryable page state.
+- Evidence: focused Social Audit boundary suite (1 assertion), full 490 test files/3,250 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `80a790c6`.
+- Remaining launch gate: validate live Super Admin authorization, audit-trigger table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0383 - Exit-Intent hid offer read failures as an empty editor
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -215,13 +225,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: P1
 - Launch impact: families could miss saved plans, voice captures, next actions, poll options/votes, budgets, or local events while the UI appeared usable.
 - Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
-- Resolution: all five modules now surface retryable ErrorState UI; Next Actions, Voting, and Weekend Planner coordinate every required read before rendering derived state.
-- Supabase impact: no schema change; existing family-scoped planning, AI, voting, and local-event reads now have explicit failure contracts.
-- Tests run: `tests/household-read-boundaries.test.ts` (7 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Validation evidence: 477 test files, 3,242 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `0b228692`
-- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
-- Remaining dependencies: provider sandbox callbacks,…33859 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+-…34072 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
