@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:30:00 -04:00
+- Last updated: 2026-07-16 11:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `d43b15c4` makes Family Assistant fail closed on context/count read failures after `384acfbd` repaired Family Intelligence; live provider and deployment evidence remains open
+- Commit: `f04895cd` makes Autonomous Family Management fail closed on signal and automation read failures after `d43b15c4` repaired Family Assistant; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0396 - Autonomous Family Management hid signal and automation read failures as healthy defaults
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Autonomous Family Management / Supabase read boundary
+- Feature: Autonomous Family Management
+- Route: `/dashboard/autonomous-family-management`
+- File or files: `app/(app)/dashboard/autonomous-family-management/page.tsx`, `lib/family/signals.ts`, `tests/autonomous-family-management-read-boundary.test.ts`
+- Database objects: `calendar_events`, `appointments`, `chore_assignments`, `bills`, `school_events`, `sports_events`, `family_routines`, `meal_plans`, `grocery_items`, `family_ai_recommendations`, `family_automation_rules`, `family_automation_runs`
+- Affected roles: authenticated family members; manager-only approval controls
+- Scenario: required signal, recommendation, rule, and automation-run reads could fail while the dashboard rendered healthy monitoring, zero metrics, or incomplete approvals.
+- Launch impact: families could miss risk signals or act on an incomplete automation queue while the assistant appeared healthy.
+- Root cause: the shared signal collector converted failed reads to empty-derived counts, and the page discarded errors from its recommendation and automation queries.
+- Required remediation: preserve all required read errors and render a retryable page-level failure before deriving monitoring, recommendations, risk metrics, or approval controls.
+- Implementation notes: added `gatherSignalsResult`, fail-closed compatibility for existing callers, coordinated page-level error handling, and a focused regression test.
+- Test plan: focused Autonomous Family Management boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (502 files/3,262 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `f04895cd`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Autonomous Family Management no longer presents healthy defaults after a failed required signal or automation read.
+- Remaining dependencies: verify authenticated family RLS, signal availability, approval behavior, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0395 - Family Assistant hid context and count failures as zero signals
 

@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Autonomous Family Management Read Boundaries
+
+- Focused Autonomous Family Management boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run`: 502 test files, 3,262 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Autonomous Family Management now fails visibly when required family signals, recommendations, rules, or automation runs cannot be read instead of presenting healthy zero-valued monitoring and approval controls.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `f04895cd`.
+
 ## Latest Local Evidence - Family Assistant Read Boundaries
 
 - Focused Family Assistant boundary suite: 1 file, 1 assertion passed.
