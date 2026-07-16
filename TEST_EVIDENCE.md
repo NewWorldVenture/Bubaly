@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Settings Read Boundary
+
+- Focused Admin Settings boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 493 test files, 3,253 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Admin Settings now fails visibly when the `super_admins` count cannot be read instead of rendering zero access holders.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `0f91564a`.
+
 ## Latest Local Evidence - Admin Management Read Boundary
 
 - Focused Admin Management boundary suite: 1 file, 1 assertion passed.
@@ -268,18 +280,7 @@ Audit date: 2026-07-15
 - `git diff --check`: passed before commit.
 - Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities now surface retryable read failures before empty or derived states.
 - Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
-- Source commit: `d8a0213a`.
-
-## Latest Local Evidence - Household Insight Read Boundaries
-
-- Focused household boundary suite: 1 file, 5 assertions passed.
-- Full `npm.cmd test -- --run`: 477 test files, 3,240 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones now surface retryable read failures before empty or derived states.
-- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain …32830 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Source commit: `d8a0…33033 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
