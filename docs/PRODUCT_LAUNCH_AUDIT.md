@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0386 - Admin Management hid administrator read failures as zero admins
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/admins`.
+- Finding: the `admin_users` query could fail while the page rendered zero administrators and retained access-management controls.
+- Repair: the Supabase error is checked before calculating role counts, filters, or admin-management controls; failures return a retryable page state.
+- Evidence: focused Admin Management boundary suite (1 assertion), full 492 test files/3,252 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `b465cf71`.
+- Remaining launch gate: validate live Super Admin authorization, admin table availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0385 - Social Usage hid usage-event read failures as an empty meter
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -217,18 +227,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Launch impact: families could miss tax records, recurring charges, travel memories, or saved routines while the UI appeared usable.
 - Root cause: modules ignored realtime query errors; Trip Memories and Routines also lacked coordinated loading and retry behavior across dependent reads.
 - Resolution: all four surfaces now expose retryable ErrorState UI; Trip Memories and Routines coordinate every required read before rendering derived state.
-- Supabase impact: no schema change; existing family-scoped record, travel, and routine reads now have explicit failure contracts.
-- Tests run: `tests/household-read-boundaries.test.ts` (8 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
-- Validation evidence: 477 test files, 3,243 tests, 250-route build, and diff check passed; known build warnings remain documented.
-- Commit: `0cecf444`
-- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed records/routines verification
-
-### PLA-0365 - Coordination modules hid failed reads as empty or partial states
-
-- Timestamp: 2026-07-16 08:06 America/New_York
-- Service: Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner
-- Route: corresponding family modul…34280 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Supabase impact: no schema change; existing family-scoped record, trave…34493 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
