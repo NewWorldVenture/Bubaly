@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { SkeletonList } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -84,15 +84,15 @@ export function LocatorModule() {
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
-  const { data: locations, loading, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
+  const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
     table: 'member_locations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('member_locations').select('*').eq('family_id', familyId),
   });
-  const { data: places, refresh: refreshPlaces } = useRealtimeQuery<Place>({
+  const { data: places, loading: placesLoading, error: placesError, refresh: refreshPlaces } = useRealtimeQuery<Place>({
     table: 'family_places', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_places').select('*').eq('family_id', familyId).order('name'),
   });
-  const { data: events, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
+  const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
     table: 'location_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('location_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }).limit(120),
   });
@@ -132,6 +132,9 @@ export function LocatorModule() {
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
   }, [selfMember, locByMember]);
+
+  const loading = locationsLoading || placesLoading || eventsLoading;
+  const readError = locationsError || placesError || eventsError;
 
   function placeLabel(l: MemberLocation | undefined): string {
     if (!l || !l.is_sharing) return 'Not sharing';
@@ -207,6 +210,7 @@ export function LocatorModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
+  if (readError) return <ErrorState message="Could not load family location data. Refresh and try again." onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
 
   const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
