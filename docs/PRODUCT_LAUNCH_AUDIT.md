@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0371 - Independence empty state used roadmap language
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P2.
+- Surface: Independence badge collection.
+- Finding: an empty collection rendered â€œFirst badge coming soon,â€ which described a roadmap rather than current data.
+- Repair: changed the empty state to â€œNo badges yet â€” start a skill above.â€
+- Evidence: `tests/independence-empty-state.test.ts`, full 481 test files/3,250 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `14f0d14b`.
+- Remaining launch gate: verify live progress reads and deployed UI copy.
+
 ### PLA-0370 - App Store advertised unavailable catalog entries as â€œComing soonâ€
 
 - Status: Resolved in source; live catalog and deployed verification remain open.
