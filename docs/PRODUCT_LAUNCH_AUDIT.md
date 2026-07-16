@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0388 - Social Providers hid provider-catalog read failures as enabled defaults
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/admin/social/providers`.
+- Finding: the `social_providers` query could fail while every capability card defaulted to â€œDB enabled: yes.â€
+- Repair: the Supabase error is checked before building the enabled-provider map; failures return a retryable page state.
+- Evidence: focused Social Providers boundary suite (1 assertion), full 494 test files/3,254 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `51423350`.
+- Remaining launch gate: validate live Super Admin authorization, provider catalog availability, and deployed retry behavior; Auth Admin and broader launch blockers remain open.
+
 ### PLA-0387 - Admin Settings hid administrator-count read failures as zero access holders
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -219,18 +229,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Root cause: both surfaces ignored realtime query errors; Kitchen Mode also lacked a coordinated retry for its two context reads.
 - Resolution: Intelligence now blocks controls behind a retryable ErrorState; Briefing Kitchen Mode retries calendar and reminder reads together before rendering.
 - Supabase impact: no schema change; existing consent and household context reads now have explicit failure contracts.
-- Tests run: `tests/household-read-boundaries.test.ts` (9 focused assertions); full Vitest; typecheck; lint; clean production build; diff check.
-- Validation evidence: 477 test files, 3,244 tests, 250-route build, and diff check passed; known build warnings remain documented.
-- Commit: `9682ff06`
-- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed AI/context verification
-
-### PLA-0366 - Tax, subscription, memory, and routine reads hid failures as empty state
-
-- Timestamp: 2026-07-16 08:13 America/New_York
-- Service: Tax Vault, Subscriptions, Trip Memories, and Routines
-- Route: corresponding family module routes under `/dashboard`
-- Affected files: `components/modules/tax-vault-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/trip-memories-module…34699 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Tests run: `tests/household-read-boundaries.test.ts` (9 focused assertions); full Vitest; typecheck; lint;…34908 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
