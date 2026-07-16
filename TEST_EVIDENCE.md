@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Visitor Intelligence Read Boundary
+
+- Focused Visitor Intelligence boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 483 test files, 3,243 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes after removing a generated `.next` OneDrive readlink artifact; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Visitor Intelligence now fails visibly when any of its eleven analytics count reads fail instead of rendering zero-valued operational metrics.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `2dde5f16`.
+
 ## Latest Local Evidence - Workload Read Boundary
 
 - Focused Workload boundary and balance suites: 2 files, 11 assertions passed.
