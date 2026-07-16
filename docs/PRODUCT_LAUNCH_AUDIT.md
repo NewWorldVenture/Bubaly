@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0363 - Household insight modules hid failed reads as empty or partial states
+
+- Timestamp: 2026-07-16 07:50 America/New_York
+- Service: Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones
+- Route: corresponding family module routes under `/dashboard`
+- Affected files: `components/modules/graph-module.tsx`, `components/modules/family-tree-module.tsx`, `components/modules/experience-scorecard-module.tsx`, `components/modules/expenses-module.tsx`, `components/modules/insurance-module.tsx`, `components/modules/life-events-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state or allowed graph, scorecard, settlement, policy, or playbook summaries to derive from partial query results.
+- Severity: P1
+- Launch impact: families could miss relationship data, household financial obligations, insurance coverage, or life-event plans while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Resolution: all six modules now surface retryable ErrorState UI; Graph, Expenses, and Life & Milestones coordinate every required read before rendering derived state.
+- Supabase impact: no schema change; existing family-scoped insight, finance, coverage, and planning reads now have explicit failure contracts.
+- Tests run: `tests/household-read-boundaries.test.ts` (5 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 477 test files, 3,240 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `468611d5`
+- Status: Resolved in code; branch pushed, with `main` publication and live verification tracked separately
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed household insight verification
+
 ### PLA-0362 - Household modules hid failed reads as empty or partial states
 
 - Timestamp: 2026-07-16 07:41 America/New_York
