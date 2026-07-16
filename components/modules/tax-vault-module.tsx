@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { usd } from '@/lib/finance/splits';
@@ -28,7 +28,7 @@ export function TaxVaultModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: docs, loading } = useRealtimeQuery<TaxDoc>({
+  const { data: docs, loading, error, refresh } = useRealtimeQuery<TaxDoc>({
     table: 'tax_documents', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('tax_documents').select('*').eq('family_id', familyId).order('tax_year', { ascending: false }).order('created_at', { ascending: false }),
   });
@@ -84,6 +84,7 @@ export function TaxVaultModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load tax documents. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -102,7 +103,7 @@ export function TaxVaultModule() {
         return (
           <div key={year}>
             <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-sm font-semibold">{year} <span className="text-xs font-normal text-muted">· {yearDocs.length} docs</span></h4>
+              <h4 className="text-sm font-semibold">{year} <span className="text-xs font-normal text-muted">Â· {yearDocs.length} docs</span></h4>
               {deductible > 0 && <span className="text-xs text-muted">Deductible logged: <span className="font-semibold text-success">{usd(deductible)}</span></span>}
             </div>
             <div className="space-y-2">
@@ -114,7 +115,7 @@ export function TaxVaultModule() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{d.name}</p>
                       <p className="text-xs text-muted">
-                        {taxCategoryLabel(d.category)}{d.amount_cents != null ? ` · ${usd(d.amount_cents)}` : ''}{m ? ` · ${m.display_name}` : ''} · {fmtDate(d.created_at)}
+                        {taxCategoryLabel(d.category)}{d.amount_cents != null ? ` Â· ${usd(d.amount_cents)}` : ''}{m ? ` Â· ${m.display_name}` : ''} Â· {fmtDate(d.created_at)}
                       </p>
                     </div>
                     {d.storage_path && <button onClick={() => download(d.storage_path!)} className="text-muted hover:text-brand-text" aria-label="Download"><Download className="h-4 w-4" /></button>}
@@ -130,14 +131,14 @@ export function TaxVaultModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title="Add tax document">
           <form onSubmit={save} className="space-y-3">
-            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="2025 W-2 — Acme Corp" />}</Field>
+            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="2025 W-2 â€” Acme Corp" />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Tax year">{(id) => <Input id={id} type="number" value={form.tax_year} onChange={(e) => setForm({ ...form, tax_year: e.target.value })} />}</Field>
               <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{TAX_CATEGORIES.map((c) => <option key={c} value={c}>{taxCategoryLabel(c)}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Amount ($, optional)">{(id) => <Input id={id} type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
-              <Field label="Member (optional)">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">— None —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label="Member (optional)">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">â€” None â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
             <Field label="File (optional, stored privately)">
               {(id) => <input id={id} type="file" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
