@@ -806,3 +806,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Verified; regression lock added
 - Remaining dependencies (A-15 not yet DONE): live E2E with a real OPENAI_API_KEY (streaming + a real tool round + approval path); `admin/ai` settings-route authz (super-admin scope); voice transcribe/speak provider wiring + size limits review; prompt-injection review of tool arguments end-to-end.
+
+### PLA-0520 - A-18 third-party sync: fail-closed + OAuth CSRF + token-crypto VERIFIED, VTODO lock added
+
+- Timestamp: 2026-07-16 23:06 UTC
+- Service: A-18 Third-party integrations (calendar/reminder sync)
+- Route: `app/api/sync/*`, `lib/sync/*`, `lib/connections/*`
+- Affected files: `tests/sync-apple-vtodo-failclosed.test.ts` (new); verification only elsewhere
+- Role: authenticated family member connecting an external calendar account
+- Scenario: audited the sync platform for the board's standing concern — "Apple VTODO / Gmail stubs must fail closed" — plus OAuth CSRF and token-at-rest security.
+- Severity: n/a (no defect found; coverage-gap lock added)
+- Findings (VERIFIED):
+  - FAIL CLOSED end-to-end: `app/api/sync/run` returns **503** when `adapter.isConfigured()` is false; the registry filters unconfigured adapters out of the connectable surface; Apple/Microsoft providers are key-gated dark (`APPLE_SYNC_ENABLED`, `MICROSOFT_SYNC_CLIENT_ID/SECRET`) so no network call fires until an owner provisions.
+  - Apple iCloud Reminders (VTODO) is an unfinished follow-up and fails closed honestly: `insertTask`/`patchTask`/`deleteTask` throw `SyncApiError(501)`, `defaultTaskListId()` returns null (engine disables task sync), `listTasks()` returns `[]` — no stub ever reports a fake success. (Calendar sync via CalDAV is fully implemented.)
+  - OAuth CSRF: 32-byte CSPRNG state, provider-scoped `httpOnly` cookie, `timingSafeEqual` comparison; the callback validates `verifySyncOAuthState(returned, cookie)` BEFORE exchanging the code and clears the state cookie (single-use) on every exit. Refuses to store tokens without `SYNC_TOKEN_KEY` (`error=no_encryption_key`).
+  - Token-at-rest: `lib/sync/crypto.ts` uses AES-256-GCM with a per-encryption random IV + auth tag; plaintext never lands in a column; tamper is detected (decrypt throws).
+  - Genuine wiring: Google (REST + delta), Apple (CalDAV sync-collection), Microsoft (Graph + delta) adapters make real provider calls via `fetchExternal`; the pure mappers/parsers are unit-tested offline. No mocks in the shipped path.
+- Resolution: no code change required. Added `tests/sync-apple-vtodo-failclosed.test.ts` (5 tests) to close the one coverage gap — the VTODO write path must throw 501 and the read path must advertise "no task sync". OAuth-CSRF and crypto-tamper were already locked (`tests/sync-oauth-csrf.test.ts`, `tests/sync-crypto.test.ts`).
+- Supabase impact: none.
+- Tests run: `tests/sync-apple-vtodo-failclosed.test.ts` 5/5; `sync-oauth-csrf` + `sync-crypto` + `sync-apple` 33/33; tsc/eslint clean.
+- Validation evidence: 5/5 + 33/33 pass; `tsc --noEmit` clean; eslint exit 0.
+- Commit: pending (this push)
+- Status: Verified; regression lock added
+- Remaining dependencies (A-18 not yet DONE): live OAuth round-trip with real provider keys (Google/Microsoft) in a staging env; token-refresh expiry path under real 401; conflict-resolution + dedupe correctness under a real two-way sync; feed-token (`app/api/sync/feeds/[token]`) rate-limit/abuse review.

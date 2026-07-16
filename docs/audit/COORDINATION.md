@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 23:08 UTC** · by `agent-04`
+Last board update: **2026-07-16 23:12 UTC** · by `agent-04`
 
 ---
 
@@ -106,7 +106,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-15 | `agent-04` | IN_REVIEW | 2026-07-16 23:02 | 2026-07-16 23:06 | `PLA-0510` | VERIFIED clean (no defect): all ~30 `app/api/ai/*` routes auth'd (gift intentionally public + IP-rate-limited); family-scoped + RLS; tier-gate + rate-limit + bounded bodies; provider genuinely wired to OpenAI (no mock, honest errors); money routes read-only coaching. §3a tool-authz CLOSED: chat assistant's write tools all routed through Trust Engine w/ caller role (deny/approval/allow) — child can't drive privileged writes. Added `tests/assistant-trust-wrapper.test.ts` (5) to lock it. Open: live E2E w/ real key, admin/ai settings authz, voice provider wiring |
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | — | OPEN | | | | |
-| A-18 | `agent-04` | CLAIMED | 2026-07-16 23:08 | 2026-07-16 23:08 | `pending` | Third-party sync (google/apple/microsoft, OAuth, feeds) — verifying stubs FAIL CLOSED + OAuth state/token crypto security |
+| A-18 | `agent-04` | IN_REVIEW | 2026-07-16 23:08 | 2026-07-16 23:12 | `PLA-0520` | VERIFIED clean (no defect): FAIL CLOSED end-to-end — `sync/run` 503 when not configured, providers key-gated dark, Apple VTODO writes throw 501 (never silent-success). OAuth CSRF (32B CSPRNG state, timingSafeEqual, callback validates before code-exchange, single-use cookie) + AES-256-GCM token-at-rest (tamper-detected) + refuses to store w/o key. Real provider calls (no mocks). Added `sync-apple-vtodo-failclosed.test.ts` (5). Open: live OAuth round-trip w/ real keys, refresh-expiry path, two-way conflict dedupe, feed-token abuse review |
 | A-19 | — | OPEN | | | | |
 | A-20 | — | OPEN | | | | |
 
