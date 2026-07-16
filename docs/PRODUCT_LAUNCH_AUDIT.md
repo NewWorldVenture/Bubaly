@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
+
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/family-signals`.
+- Finding: the family-signal query could fail while the route rendered no active or hidden intelligence signals.
+- Repair: the Supabase error is checked before deriving active/hidden signal views; failures return a retryable page state.
+- Evidence: focused Family Intelligence boundary suite (1 assertion), full 500 test files/3,260 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `384acfbd`.
+- Remaining launch gate: validate authenticated family RLS, signal availability, and deployed retry behavior; broader dashboard and deployment gates remain open.
+
 ### PLA-0393 - Deals hid listing read failures as no standout deals
 
 - Status: Resolved in source; live and deployed verification remain open.
@@ -221,17 +231,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in source; live provider and deployed verification remain open.
 - Severity: P1.
 - Surface: `/dashboard/connections`.
-- Finding: the user-facing directory included Gmail, Plaid, grocery, and smart-home services without live setup/sync routes.
-- Repair: added `CONNECTABLE_PROVIDERS`, made the runtime merge use it, and updated the hub copy to supported calendar services only. Future providers remain internal until their full integration path exists.
-- Evidence: focused connection suites, full 481 test files/3,252 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `9eb160b0`.
-- Remaining launch gate: live OAuth callbacks, provider sync, RLS/role, and deployed browser verification for the supported calendar routes; implement remaining providers before exposing them.
-
-### PLA-0371 - Independence empty state used roadmap language
-
-- Status: Resolved in source; live and deployed verification remain open.
-- Severity: P2.
-- Surface: Independence badge collection.
-- Finding: an empty collection rend…36034 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Finding: the user-facing directory included Gmail, Plaid, grocery, and smart-home services without liv…36240 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
