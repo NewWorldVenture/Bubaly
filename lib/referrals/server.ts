@@ -12,12 +12,19 @@ type DB = SupabaseClient<Database>;
 const SETTINGS_KEY = 'referral_program';
 
 /** Read the program config from marketing_settings (falls back to defaults). */
-export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
-  const { data } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
-  return data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG;
+export async function getReferralConfigResult(supabase: DB): Promise<{ config: ReferralConfig; error: Error | null }> {
+  const { data, error } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
+  return {
+    config: data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG,
+    error: error ? new Error('Referral program settings read failed') : null,
+  };
 }
 
-/** Persist program config (admin only — caller must be gated). */
+export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
+  return (await getReferralConfigResult(supabase)).config;
+}
+
+/** Persist program config (admin only â€” caller must be gated). */
 export async function setReferralConfig(supabase: DB, config: ReferralConfig, actorId: string | null): Promise<void> {
   const { data, error } = await supabase.from('marketing_settings').upsert(
     { key: SETTINGS_KEY, value: config as unknown as Database['public']['Tables']['marketing_settings']['Insert']['value'], updated_by: actorId },
@@ -53,7 +60,7 @@ export async function getOrCreateReferralCode(
     if (error?.code === '23505') {
       const { data: now } = await service.from('referral_codes').select('code').eq('family_id', familyId).maybeSingle();
       if (now) return now.code;
-      continue; // code collision — try a fresh code
+      continue; // code collision â€” try a fresh code
     }
     if (error) throw new Error(error.message);
   }
@@ -115,7 +122,7 @@ export async function applyReferralCode(input: {
 
 /**
  * Mark a referred family's referral as converted when it first becomes paid.
- * Safe to call from the Stripe webhook on every subscription event — it only
+ * Safe to call from the Stripe webhook on every subscription event â€” it only
  * acts on a still-'signed_up' referral and is otherwise a no-op.
  */
 export async function markReferralConverted(service: DB, referredFamilyId: string): Promise<void> {
