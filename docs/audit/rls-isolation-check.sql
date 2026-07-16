@@ -108,4 +108,23 @@ begin
   perform set_config('role','postgres', true);
 end $$;
 
+-- ── Invariant 5: provisioning RPCs reject cross-USER callers ────────────────
+-- ensure_family_for_user / onboarding_claim_family provision or claim a family
+-- for p_user_id; they must reject any caller whose auth.uid() != p_user_id
+-- (except service_role), or one user could seize another's family.
+do $$
+declare a boolean := false; b boolean := false;
+begin
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000b2', true);
+  perform set_config('request.jwt.claim.role','authenticated', true);
+  begin perform public.ensure_family_for_user('00000000-0000-4000-8000-000000000001','Stolen');
+  exception when others then a := (sqlerrm ilike '%not authorized%'); end;
+  begin perform public.onboarding_claim_family('00000000-0000-4000-8000-000000000001','Stolen','UTC');
+  exception when others then b := (sqlerrm ilike '%not authorized%'); end;
+  if not (a and b) then raise exception 'A-03 FAIL: a provisioning RPC accepted a cross-user caller (ensure=%, claim=%)', a, b; end if;
+  raise notice 'A-03 OK: provisioning RPCs reject cross-user callers';
+  perform set_config('role','postgres', true);
+end $$;
+
 select 'A-03 tenant-isolation probe: ALL INVARIANTS PASSED' as result;

@@ -34,6 +34,12 @@ describe('A-03 tenant-isolation RLS probe is present and encodes its invariants'
     expect(sql).toContain('cross-family caller');
   });
 
+  it('asserts provisioning RPCs reject cross-user callers', () => {
+    expect(sql).toContain('ensure_family_for_user');
+    expect(sql).toContain('onboarding_claim_family');
+    expect(sql).toContain('cross-user caller');
+  });
+
   it('is wired to the shared harness runner', () => {
     const harness = readFileSync('docs/audit/verify-pg.sh', 'utf8');
     expect(harness).toContain('authenticated');
