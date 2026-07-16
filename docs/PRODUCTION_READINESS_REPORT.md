@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 07:56 America/New_York
+Audit snapshot: 2026-07-16 08:06 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 477 Vitest files and 3,241 tests pass in the latest full local gate.
+- 477 Vitest files and 3,242 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -61,6 +61,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities now fail visibly on required
   read failures; dependent planning, media, care, list, task, and utility reads retry together before empty or
   derived states are rendered. Live provider, RLS, browser, backup, and deployment evidence remains open.
+- Concierge Plans, Voice History, Next Actions, Group Voting, and Weekend Planner now fail visibly on required
+  read failures; dependent planning, voting, budget, and event reads retry together before empty or derived
+  coordination state is rendered. Live provider, RLS, browser, backup, and deployment evidence remains open.
 - Vacation Reports now waits for trips, expenses, budgets, and travel scores together, and shows a retryable
   failure state instead of calculating financial summaries from partial reads.
 - Trip Overview now waits for all 17 trip, itinerary, finance, weather, and recommendation reads together,
