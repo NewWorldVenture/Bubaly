@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 07:09 America/New_York
+Audit snapshot: 2026-07-16 07:14 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 475 Vitest files and 3,231 tests pass in the latest full local gate.
+- 476 Vitest files and 3,233 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -80,6 +80,9 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   error before an empty medical history.
 - Finances now coordinates account, transaction, budget, bill, and savings-goal reads and renders a retryable
   failure state instead of calculating misleading zero-valued financial metrics from partial data.
+- Health now coordinates metrics, workouts, appointments, reminders, symptoms, and goals; Medications now
+  coordinates medication, schedule, and dose reads. Both surfaces render retryable errors before derived
+  history, summary, or adherence UI when any required read fails.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.
