@@ -7,12 +7,12 @@ import {
 // known limitations so a future "upgrade" that fakes support for a non-existent
 // API breaks the build instead of shipping a lie to users.
 describe('honest provider capabilities', () => {
-  it('Google Keep has no API — google notes unsupported', () => {
+  it('Google Keep has no API â€” google notes unsupported', () => {
     expect(isSupported('google', 'note')).toBe(false);
     expect(getCapability('google', 'note').mechanism).toBe('none');
   });
 
-  it('Apple Notes has no API — apple notes unsupported', () => {
+  it('Apple Notes has no API â€” apple notes unsupported', () => {
     expect(isSupported('apple', 'note')).toBe(false);
   });
 
@@ -38,9 +38,10 @@ describe('honest provider capabilities', () => {
     expect(supportsTwoWay('microsoft', 'note')).toBe(true);
   });
 
-  it('Apple calendar/reminder sync is CalDAV-based', () => {
+  it('Apple calendar is CalDAV-based while Reminders remain unsupported', () => {
     expect(getCapability('apple', 'calendar').mechanism).toBe('caldav');
-    expect(getCapability('apple', 'reminder').mechanism).toBe('caldav');
+    expect(isSupported('apple', 'reminder')).toBe(false);
+    expect(getCapability('apple', 'reminder').mechanism).toBe('none');
   });
 
   it('internal provider supports everything two-way', () => {
