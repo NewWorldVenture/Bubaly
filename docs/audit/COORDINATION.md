@@ -112,6 +112,28 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 
 ---
 
+## 3a. ⚠️ Cross-cutting security pattern — CHECK YOUR UNIT
+
+**Class:** a state-changing **server action** on a sensitive/family-scoped table
+that only calls `requireUserContext()` + filters by `family_id`, with **no role
+gate**. Because RLS on most family tables is `is_family_member(family_id)` FOR ALL
+(any member) and **children have real Supabase logins**, a child can drive these
+actions — the UI hiding the button is NOT authorization.
+
+**Found + fixed (scattered — some modules gate, some don't):**
+- A-07 chores `approveSubmissionAction`/`rejectSubmissionAction` → child self-approved a reward (PLA-0450).
+- A-12 guardian: 11 mutation actions → child could disable their own safety rules (PLA-0470).
+- A-08 wallet: **correctly** gated already (every money action checks `isManager`). ✅
+
+**Every agent: grep your unit's `actions.ts` for `requireUserContext` and confirm
+each mutation that a child must not perform is followed by a role gate**
+(`isManager(ctx.active.role)` = parent/adult, or `isAdmin` = parent-only). Add a
+static guard test (see `tests/{chore-approval,guardian}-authz.test.ts`). Likely
+suspects: A-06 calendar deletes, A-10 meal-plan/grocery deletes, A-13 vacations,
+A-17 admin, A-11 file deletes.
+
+---
+
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
 - [ ] Every route in the unit server-renders without hitting an error boundary.
