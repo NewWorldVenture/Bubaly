@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { DEVICE_TYPES, DEVICE_INTEGRATIONS, DEVICE_STATUSES, integrationLabel, summarizeDevices, groupByRoom, type DeviceLike } from '@/lib/home/devices';
 import type { Tables } from '@/lib/database.types';
 
@@ -23,7 +23,7 @@ export function DevicesModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: devices, loading } = useRealtimeQuery<Device>({
+  const { data: devices, loading, error, refresh } = useRealtimeQuery<Device>({
     table: 'smart_devices', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('smart_devices').select('*').eq('family_id', familyId).order('room').order('name'),
   });
@@ -59,6 +59,7 @@ export function DevicesModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load family devices. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">

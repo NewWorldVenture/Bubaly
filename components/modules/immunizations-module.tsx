@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
@@ -31,7 +31,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: shots, loading } = useRealtimeQuery<Immunization>({
+  const { data: shots, loading, error, refresh } = useRealtimeQuery<Immunization>({
     table: 'immunizations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('immunizations').select('*').eq('family_id', familyId),
   });
@@ -111,6 +111,8 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
       {loading ? (
         <SkeletonList />
+      ) : error ? (
+        <ErrorState message="Could not load immunization records. Refresh and try again." onRetry={refresh} />
       ) : scoped.length === 0 ? (
         <EmptyState icon={Syringe} title="No immunizations recorded" description="Track vaccines and next-due dates — handy for school, camp, and travel forms." />
       ) : (

@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SECURITY_KINDS, SECURITY_SEVERITIES, severityMeta, sortEvents, summarizeSecurity, type EventLike } from '@/lib/home/security';
 import type { Tables } from '@/lib/database.types';
@@ -22,7 +22,7 @@ export function SecurityModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: events, loading } = useRealtimeQuery<Event>({
+  const { data: events, loading, error, refresh } = useRealtimeQuery<Event>({
     table: 'home_security_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('home_security_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
   });
@@ -79,6 +79,7 @@ export function SecurityModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load security events. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
