@@ -18,7 +18,7 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 
 | ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
 | --- | --- | ---: | --- | --- | --- |
-| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 473 Vitest files, 3,228 tests; 250-route production build; lint/typecheck/audit | Keep green after every repair |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 474 Vitest files, 3,230 tests; 250-route production build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 230 migration audit through 0214; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
 | A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Auth/admin shell failure contracts, OAuth membership fail-closed handling, Admin Security/Auth Admin read-boundary handling, middleware public/internal API boundary tests, tenant/RLS contracts, migrations 0211/0212, and incomplete-family context fail-closed handling; live Auth Admin and cross-tenant probes still open | Apply 0211/0212, test every role/family boundary/session edge, and run live RLS paths |
 | A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization, per-user family claim, locked first-family provisioning contracts, and fail-closed profile/compatibility provisioning reads and writes; focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |
