@@ -5,31 +5,46 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { ErrorState } from '@/components/ui/states';
 import {
   priceBand, assessPrice, dealLabel, discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = { title: 'Deals · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Deals Â· Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <PageHeader title="Deals" description="Deal discovery is temporarily unavailable." />
+      <ErrorState message="Could not load marketplace deals from Supabase. Refresh and try again." />
+      <Link href="/marketplace/deals" className="text-sm font-medium text-brand-text underline">Refresh deals</Link>
+    </div>
+  );
+}
+
 type Row = { id: string; title: string; photo_url: string | null; category: string; condition: string | null; price_cents: number };
 
-/** Deals feed — reachable, available sale listings priced at or below their
+/** Deals feed â€” reachable, available sale listings priced at or below their
  *  category's comp band, ranked by how far below the median they sit. Turns the
  *  Price Coach from a per-item check into a discovery surface. */
 export default async function DealsPage() {
   await requireUserContext();
   const sb = await createServer();
 
-  const { data } = await sb
+  const { data, error } = await sb
     .from('marketplace_listings')
     .select('id, title, photo_url, category, condition, price_cents')
     .eq('kind', 'sell').eq('status', 'available').gt('price_cents', 0)
     .order('created_at', { ascending: false })
     .limit(400);
+  if (error) {
+    console.error('[marketplace-deals] listing read failed', error);
+    return <ReadFailure />;
+  }
 
   const rows = (data ?? []) as Row[];
 
@@ -56,13 +71,13 @@ export default async function DealsPage() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Deals" description="Items priced below what similar things go for right now — biggest savings first, based on comparable listings." />
+      <PageHeader title="Deals" description="Items priced below what similar things go for right now â€” biggest savings first, based on comparable listings." />
 
       {deals.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Tag className="mx-auto h-8 w-8 text-muted/40" />
           <p className="mt-3 text-sm font-semibold">No standout deals right now</p>
-          <p className="mt-1 text-sm text-muted">When something is listed below its typical price, it’ll surface here. Check back soon.</p>
+          <p className="mt-1 text-sm text-muted">When something is listed below its typical price, itâ€™ll surface here. Check back soon.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -87,7 +102,7 @@ export default async function DealsPage() {
                       d.verdict.tone === 'ok' ? 'text-emerald-500' : 'text-sky-500')}>{d.verdict.text}</span>
                   )}
                 </div>
-                <p className="mt-0.5 text-[10px] text-muted">Similar: ${Math.round(d.low / 100)}–${Math.round(d.high / 100)}</p>
+                <p className="mt-0.5 text-[10px] text-muted">Similar: ${Math.round(d.low / 100)}â€“${Math.round(d.high / 100)}</p>
               </div>
             </Link>
           ))}
