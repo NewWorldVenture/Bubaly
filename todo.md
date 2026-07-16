@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:41:58 -04:00
+- Last updated: 2026-07-16 07:50:04 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `943990b3` adds household read failure handling for Announcements, Contacts, Screen Time, Celebrations, and the Household Binder after Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `468611d5` adds household insight read failure handling for the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones after Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0363 - Household insight modules hid failed reads as empty or partial states
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Household insight and finance / Supabase failure handling
+- Feature: Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/graph-module.tsx`, `components/modules/family-tree-module.tsx`, `components/modules/experience-scorecard-module.tsx`, `components/modules/expenses-module.tsx`, `components/modules/insurance-module.tsx`, `components/modules/life-events-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `graph_entities`, `graph_edges`, `family_tree_nodes`, `experience_audits`, `expense_splits`, `expense_split_shares`, `family_insurance_policies`, `family_facts`, `life_event_plans`, and `life_event_plan_items`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state or allowed graph, scorecard, settlement, policy, or playbook summaries to derive from partial query results.
+- Launch impact: families could miss relationship data, household financial obligations, insurance coverage, or life-event plans while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Required remediation: surface sanitized retryable errors before empty/derived states and refresh every required query together.
+- Implementation notes: Graph, Expenses, and Life & Milestones coordinate all dependent reads; Family Tree, Experience Scorecard, and Insurance now use shared ErrorState retry behavior.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (5 focused assertions); full Vitest; typecheck; lint; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 477 files/3,240 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated in commit `468611d5`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed household insight verification.
 
 #### TODO-0362 - Household modules hid failed reads as empty or partial states
 
