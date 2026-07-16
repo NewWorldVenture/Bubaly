@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Zap, Bell, Plus, CheckCircle2, Clock, ToggleRight, ToggleLeft } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -8,9 +9,20 @@ import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Automation' };
 export const dynamic = 'force-dynamic';
+
+function ReadFailure() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <h1 className="text-2xl font-bold tracking-tight">Family Life Automation</h1>
+      <ErrorState message="Could not load family automation data from Supabase. Refresh and try again." />
+      <Link href="/dashboard/family-automation" className="text-sm font-medium text-brand-text underline">Refresh family automation</Link>
+    </div>
+  );
+}
 
 const TRIGGERS = [
   { value: 'task_overdue', label: 'Task overdue' },
@@ -38,11 +50,21 @@ export default async function FamilyAutomationPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [{ data: rules }, { data: pending }, { data: recent }] = await Promise.all([
+  const [rulesResult, pendingResult, recentResult] = await Promise.all([
     supabase.from('family_automation_rules').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed', 'skipped']).order('created_at', { ascending: false }).limit(8),
   ]);
+
+  const readError = rulesResult.error ?? pendingResult.error ?? recentResult.error;
+  if (readError) {
+    console.error('[dashboard-family-automation] required read failed', readError);
+    return <ReadFailure />;
+  }
+
+  const rules = rulesResult.data;
+  const pending = pendingResult.data;
+  const recent = recentResult.data;
 
   const enabled = (rules ?? []).filter((r) => r.is_enabled).length;
 
