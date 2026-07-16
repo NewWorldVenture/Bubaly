@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Assistant Read Boundaries
+
+- Focused Family Assistant boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 501 test files, 3,261 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Family Assistant now fails visibly when any required context or count read fails instead of deriving zero-valued briefings.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `d43b15c4`.
+
 ## Latest Local Evidence - Family Intelligence Read Boundary
 
 - Focused Family Intelligence boundary suite: 1 file, 1 assertion passed.
@@ -272,20 +284,7 @@ Audit date: 2026-07-15
 - Focused Independence empty-state contract: 1 file, 1 assertion passed.
 - Full `npm.cmd test -- --run`: 481 test files, 3,250 tests passed.
 - `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `git diff --check`: passed before commit.
-- Independence now says â€œNo badges yetâ€ for an empty collection instead of using roadmap copy.
-- Live progress reads, browser, backup, and deployment evidence remain open.
-- Source commit: `14f0d14b`.
-
-## Latest Local Evidence - App Store Availability
-
-- Focused App Store availability contract: 1 file, 1 assertion passed.
-- Full `npm.cmd test -- --run`: 480 test files, 3,249 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- Clean `npm.cmd …34465 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.j…34671 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
