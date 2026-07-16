@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import {
   Activity, ArrowRight, ClipboardList, KeyRound, Plus,
   Shield, ShieldCheck, UserCog, UserPlus, Users,
@@ -6,7 +7,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { AdminRowActions } from '@/components/admin/admin-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
@@ -16,6 +17,16 @@ export const metadata: Metadata = { title: 'Admin Management', robots: { index: 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 12;
+
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin</h1>
+      <ErrorState message="Could not load administrators from Supabase. Refresh and try again." />
+      <Link href="/admin/admins" className="text-sm font-medium text-brand-text underline">Refresh administrators</Link>
+    </div>
+  );
+}
 
 const TABS = [
   { key: 'users',    label: 'Admin Users' },
@@ -78,14 +89,18 @@ export default async function AdminManagementPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'users';
   const supabase = createServiceClient();
 
-  const { data: allAdmins } = await supabase
+  const { data: allAdmins, error } = await supabase
     .from('admin_users')
     .select('*')
     .order('joined_at', { ascending: false });
+  if (error) {
+    console.error('[admin-admins] administrator read failed', error);
+    return <ReadFailure />;
+  }
 
   const admins = allAdmins ?? [];
 
-  // ── Stats ──────────────────────────────────────────────────────────
+  // â”€â”€ Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const total         = admins.length;
   const superAdmins   = admins.filter((a) => a.admin_role === 'super_administrator').length;
   const administrators = admins.filter((a) => a.admin_role === 'administrator').length;
@@ -203,7 +218,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                               <div className="flex items-center gap-2.5">
                                 <AvatarInitials name={admin.full_name ?? admin.email} size={32} />
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium">{admin.full_name ?? '—'}</p>
+                                  <p className="truncate font-medium">{admin.full_name ?? 'â€”'}</p>
                                   <p className="truncate text-xs text-muted">{admin.email}</p>
                                 </div>
                               </div>
@@ -214,7 +229,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted max-w-[180px]">
-                              <p className="truncate">{admin.permissions.join(', ') || '—'}</p>
+                              <p className="truncate">{admin.permissions.join(', ') || 'â€”'}</p>
                             </td>
                             <td className="px-3 py-2.5">
                               <span className="flex items-center gap-1.5 text-xs">
@@ -228,7 +243,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                                   <p>{fmtDate(admin.last_active_at, 'MMM d, yyyy')}</p>
                                   <p>{fmtDate(admin.last_active_at, 'hh:mm a')}</p>
                                 </>
-                              ) : '—'}
+                              ) : 'â€”'}
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted whitespace-nowrap">
                               <p>{fmtDate(admin.joined_at, 'MMM d, yyyy')}</p>
@@ -251,7 +266,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                 <div className="flex gap-1">
                   {pageSafe > 1 && (
                     <a href={`/admin/admins?${new URLSearchParams({ ...hiddenParams, page: String(pageSafe - 1) })}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated">‹</a>
+                      className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated">â€¹</a>
                   )}
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
                     <a key={p} href={`/admin/admins?${new URLSearchParams({ ...hiddenParams, page: String(p) })}`}
@@ -261,7 +276,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   ))}
                   {pageSafe < totalPages && (
                     <a href={`/admin/admins?${new URLSearchParams({ ...hiddenParams, page: String(pageSafe + 1) })}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated">›</a>
+                      className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated">â€º</a>
                   )}
                 </div>
               </div>
@@ -305,7 +320,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                 })}
               </ul>
               <a href="/admin/admins?tab=activity" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
-                View all activity →
+                View all activity â†’
               </a>
             </Card>
 
