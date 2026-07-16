@@ -6,15 +6,15 @@ import { installAppAction, uninstallAppAction } from '@/app/(app)/dashboard/app-
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
-export function InstallButton({ appId, installed: initial, comingSoon = false }: {
-  appId: string; installed: boolean; comingSoon?: boolean;
+export function InstallButton({ appId, installed: initial, available = true }: {
+  appId: string; installed: boolean; available?: boolean;
 }) {
   const [installed, setInstalled] = useState(initial);
   const [pending, start] = useTransition();
   const { success, error: toastError } = useToast();
 
-  if (comingSoon) {
-    return <span className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted">Coming soon</span>;
+  if (!available) {
+    return <span className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted">Unavailable</span>;
   }
 
   const toggle = () => {
