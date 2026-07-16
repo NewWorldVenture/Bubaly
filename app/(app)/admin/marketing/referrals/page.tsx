@@ -1,24 +1,43 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Gift, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
-import { getReferralConfig } from '@/lib/referrals/server';
+import { getReferralConfigResult } from '@/lib/referrals/server';
 import { ReferralSettingsForm } from './settings-form';
 import { saveReferralConfigAction } from './actions';
 
 export const metadata: Metadata = { title: 'Referrals', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold tracking-tight">Referrals</h1>
+      <ErrorState message="Could not load referral settings and activity from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/referrals" className="text-sm font-medium text-brand-text underline">Refresh referrals</Link>
+    </div>
+  );
+}
+
 export default async function AdminReferralsPage() {
   const supabase = createServiceClient();
-  const config = await getReferralConfig(supabase);
-
-  const { data: referrals } = await supabase
-    .from('referrals')
-    .select('id, code, referrer_family_id, referred_email, status, referrer_reward_cents, created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const [configResult, referralsResult] = await Promise.all([
+    getReferralConfigResult(supabase),
+    supabase
+      .from('referrals')
+      .select('id, code, referrer_family_id, referred_email, status, referrer_reward_cents, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100),
+  ]);
+  if (configResult.error || referralsResult.error) {
+    console.error('[admin-marketing-referrals] referral read failed', configResult.error ?? referralsResult.error);
+    return <ReadFailure />;
+  }
+  const config = configResult.config;
+  const { data: referrals } = referralsResult;
   const rows = referrals ?? [];
 
   const converted = rows.filter((r) => r.status === 'converted' || r.status === 'rewarded');
@@ -39,7 +58,7 @@ export default async function AdminReferralsPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Viral referral loop — families invite families and both earn a credit on conversion.</p>
+      <p className="text-sm text-muted">Viral referral loop â€” families invite families and both earn a credit on conversion.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -66,9 +85,9 @@ export default async function AdminReferralsPage() {
                   {rows.slice(0, 25).map((r) => (
                     <tr key={r.id} className="border-t border-border">
                       <td className="py-2 font-mono text-xs">{r.code}</td>
-                      <td className="py-2">{r.referred_email || '—'}</td>
+                      <td className="py-2">{r.referred_email || 'â€”'}</td>
                       <td className="py-2 capitalize">{r.status.replace('_', ' ')}</td>
-                      <td className="py-2 text-right tabular-nums">{(r.status === 'converted' || r.status === 'rewarded') ? fmtMoney(r.referrer_reward_cents) : '—'}</td>
+                      <td className="py-2 text-right tabular-nums">{(r.status === 'converted' || r.status === 'rewarded') ? fmtMoney(r.referrer_reward_cents) : 'â€”'}</td>
                       <td className="py-2 text-right text-muted">{fmtDate(r.created_at)}</td>
                     </tr>
                   ))}
