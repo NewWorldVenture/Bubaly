@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 10:30:00 -04:00
+- Last updated: 2026-07-16 10:35:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `80a790c6` makes Super Admin Social Audit fail closed on read failures after `03012c8c` repaired Personalization and Exit-Intent; live provider and deployment evidence remains open
+- Commit: `ee26e70c` makes Super Admin Social Usage fail closed on read failures after `80a790c6` repaired Social Audit; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0385 - Social Usage hid usage-event read failures as an empty meter
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Super Admin / social operations / Supabase read boundary
+- Feature: Social Usage
+- Route: `/admin/social/usage`
+- File or files: `app/(app)/admin/social/usage/page.tsx`, `tests/admin-social-usage-read-boundary.test.ts`
+- Database objects: `social_usage_events`
+- Affected roles: Super Admin
+- Scenario: the usage-event query could fail while the page rendered no metering activity and a healthy empty state.
+- Launch impact: operators could mistake a usage-data outage for no activity and lose visibility into metered social operations.
+- Root cause: the route discarded the Supabase error object and used an empty fallback for a required operational read.
+- Required remediation: preserve the query error and render a retryable page-level failure before calculating totals or the empty state.
+- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
+- Test plan: focused Social Usage boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (491 files/3,251 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `ee26e70c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
+- Resolution: Social Usage no longer presents a fabricated empty meter after a failed usage-event read.
+- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and social audit.
 
 #### TODO-0384 - Social Audit hid audit-log read failures as an empty history
 
@@ -204,25 +225,7 @@
 - Scenario: a required workload query could fail while the page rendered empty arrays; snapshot save failures were returned from a fire-and-forget action and never shown to the user.
 - Launch impact: a household could see a plausible but incomplete workload report and believe trend history was current.
 - Root cause: Supabase read errors were not checked, and the snapshot action result was discarded by the client.
-- Required remediation: check every required query, render a retryable error state on failure, and surface snapshot-save failures through the existing toast path.
-- Implementation notes: moved snapshot history into the required query set, added a page-level error boundary, replaced the roadmap-style save error, and handled the server action result in the client.
-- Test plan: focused workload boundary and balance suites; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused Workload suites (11 assertions); full Vitest (482 files/3,242 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `0a4b83cd`; local branch pushed; known build warnings remain; live RLS, browser, and deployment evidence remain open.
-- Resolution: Workload Balance now fails visibly on required read failure and reports snapshot persistence errors instead of presenting empty or silently degraded state.
-- Remaining dependencies: verify live workload RLS and browser behavior, and complete the broader route audit.
-
-#### TODO-0374 - Sync account pages exposed Amazon without a real account adapter
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Sync / third-party integration integrity / route exposure
-- Feature: Sync hub and connected account setup
-- Route: `/dashboard/sync`, `/dashboard/sync/accounts`, `/dashboard/sync/accounts/[provider]`
-- File or files: `app/(app)/dashboard/sync/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-connectable-surface.test.ts`
-- Database objects: `sync_accounts`, `sync_connections`, `sync_calendars`, `sync_conflicts`, and `sync_job_runs`
-- Affected roles: authenticated family members
-- Scenario: Amazon/Alexa was listed …129473 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Required remediation: check every required query, render a retryable error state on failure, and surface snapshot-save failures through the …129920 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
