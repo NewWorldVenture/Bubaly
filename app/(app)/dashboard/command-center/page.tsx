@@ -11,6 +11,7 @@ import { fmtTime, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Command Center' };
 export const dynamic = 'force-dynamic';
@@ -31,13 +32,7 @@ export default async function CommandCenterPage() {
   const weekEnd = new Date(start); weekEnd.setDate(weekEnd.getDate() + 7);
   const in30 = new Date(start); in30.setDate(in30.getDate() + 30);
 
-  const [
-    { data: members },
-    { data: events },
-    { data: openChores },
-    { data: mealPlans },
-    { data: expiringDocs },
-  ] = await Promise.all([
+  const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await Promise.all([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
       .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
@@ -49,11 +44,35 @@ export default async function CommandCenterPage() {
       .not('expires_at', 'is', null).gte('expires_at', now.toISOString()).lte('expires_at', in30.toISOString()),
   ]);
 
+  const readError = [
+    membersResult.error,
+    eventsResult.error,
+    openChoresResult.error,
+    mealPlansResult.error,
+    expiringDocsResult.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[dashboard/command-center] command center read failed', readError);
+    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+  }
+
+  const { data: members } = membersResult;
+  const { data: events } = eventsResult;
+  const { data: openChores } = openChoresResult;
+  const { data: mealPlans } = mealPlansResult;
+  const { data: expiringDocs } = expiringDocsResult;
+
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
   // Evening "what changed" recap — the same FOI diff shown on the Operating
   // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
-  const { change } = await loadOperatingIndex(supabase, familyId, now);
+  let change;
+  try {
+    ({ change } = await loadOperatingIndex(supabase, familyId, now));
+  } catch (error) {
+    console.error('[dashboard/command-center] operating index read failed', error);
+    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+  }
 
   // ── Schedule conflict detection (overlapping timed events) ──
   const timed = (events ?? []).filter((e) => !e.all_day);
