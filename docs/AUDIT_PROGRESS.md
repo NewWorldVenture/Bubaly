@@ -53,4 +53,3 @@ Current calculation: `10 / 100 * 100 = 10.0%`
 
 Every 30 minutes of active work produces a dated record under `docs/progress/` with the calculation,
 completed evidence, blockers, validation state, and next plan.
-
