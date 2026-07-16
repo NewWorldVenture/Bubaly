@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0520 - A-12/A-05 SECURITY: a child could delete/disable family geofences (location safety alerts)
+
+- Timestamp: 2026-07-16 23:10 UTC
+- Service: Location / geofences (locator) — safety (A-12; file under A-05 `dashboard/`)
+- Route: `/dashboard/locator` (server actions `savePlace`, `deletePlace`, `setGeofenceEnabled`)
+- Affected files: `app/(app)/dashboard/locator/actions.ts`, `tests/locator-places-authz.test.ts` (new)
+- Role: **child / teen** (any non-manager family member with a login)
+- Scenario: a child edits/deletes a shared `family_places` geofence, or toggles its geofence off
+- Severity: **HIGH** (child-safety: silences arrival/departure alerts)
+- Launch impact: `family_places` geofences drive "arrived at / left <place>" alerts to the family. Their RLS is `is_family_member(family_id)` FOR ALL (migration 0042), and the actions only called `requireUserContext()` — no role gate — so a child could delete the "School" geofence or disable its alerts, stopping the notifications watching them. Third instance of the cross-cutting authz pattern (see COORDINATION §3a; cf. PLA-0450 chores, PLA-0470 guardian).
+- Root cause: missing server-side authorization on shared-config mutations.
+- Resolution: gated `savePlace`/`deletePlace`/`setGeofenceEnabled` on `isManager(c.active.role)` before touching `family_places`. Deliberately left `updateMyLocation` and `setLocationSharing` self-service (a member posts their OWN location / controls their OWN sharing — not escalation).
+- Supabase impact: none (app-layer authz). Follow-up: manager-scoped WRITE RLS on `family_places` as defense-in-depth.
+- Tests run: `tests/locator-places-authz.test.ts` (5, new — asserts the 3 shared mutations gate AND the 2 self-only ones do not); tsc + eslint clean.
+- Validation evidence: 5/5 green; gate precedes every `from('family_places')` write; self-only actions unchanged.
+- Commit: `4a644cce`
+- Status: RESOLVED and pushed to `main`
+- Remaining dependencies: manager-scoped RLS on `family_places`; coordinate with A-05 owner (locator lives under `dashboard/`).
+
 ### PLA-0480 - A-06 calendar verified: wiring, tenant isolation, collaborative authz, and SSRF-safe ICS import
 
 - Timestamp: 2026-07-16 22:02 UTC
