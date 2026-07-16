@@ -6,22 +6,36 @@ import {
   analyzeOnboarding, formatDuration, TTV_GOAL_SEC, type OnboardingRow,
 } from '@/lib/onboarding/ttv-audit';
 import { cn } from '@/lib/utils/cn';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Onboarding Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+function ReadFailure() {
+  return (
+    <div className="space-y-5 p-4 sm:p-6">
+      <h1 className="text-xl font-black sm:text-2xl">Onboarding Audit</h1>
+      <ErrorState message="Could not load onboarding audit data from Supabase. Refresh and try again." />
+      <a href="/admin/onboarding" className="text-sm font-medium text-brand-text underline">Refresh onboarding audit</a>
+    </div>
+  );
+}
+
 export default async function OnboardingAuditPage() {
   const supabase = createServiceClient();
 
-  let rows: OnboardingRow[] = [];
+  let progressResult;
   try {
-    const { data } = await supabase
+    progressResult = await supabase
       .from('onboarding_progress')
       .select('created_at, completed_at, status, value_engaged, steps_completed')
       .order('created_at', { ascending: false })
       .limit(5000);
-    rows = (data ?? []) as OnboardingRow[];
-  } catch { /* table not present */ }
+  } catch {
+    return <ReadFailure />;
+  }
+  if (progressResult.error) return <ReadFailure />;
+  const rows = (progressResult.data ?? []) as OnboardingRow[];
 
   const a = analyzeOnboarding(rows);
   const maxFunnel = Math.max(1, ...a.stepFunnel.map((s) => s.count));
