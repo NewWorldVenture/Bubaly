@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
@@ -32,7 +32,7 @@ export function BehaviorModule() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: logs, loading } = useRealtimeQuery<Log>({
+  const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'behavior_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
   });
@@ -95,6 +95,7 @@ export function BehaviorModule() {
   }
 
   if (loading) return <SkeletonList />;
+  if (error) return <ErrorState message="Could not load behavior logs. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
