@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 11:20:00 -04:00
+- Last updated: 2026-07-16 11:30:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `384acfbd` makes Family Intelligence fail closed on signal read failures after `071bfd7c` repaired Marketplace Deals; live provider and deployment evidence remains open
+- Commit: `d43b15c4` makes Family Assistant fail closed on context/count read failures after `384acfbd` repaired Family Intelligence; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0395 - Family Assistant hid context and count failures as zero signals
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard / Family Assistant / Supabase read boundary
+- Feature: Family Assistant
+- Route: `/dashboard/agents`
+- File or files: `app/(app)/dashboard/agents/page.tsx`, `tests/dashboard-agents-read-boundary.test.ts`
+- Database objects: `calendar_events`, `meal_plans`, `family_members`, `agent_activity`, `grocery_items`, `bills`, `subscriptions_tracked`, `chore_assignments`, `documents`, `maintenance_tasks`, `vacations`, `approval_requests`, `family_photos`
+- Affected roles: authenticated family members
+- Scenario: required context and count queries could fail while agent briefings rendered zero-valued signals and activity.
+- Launch impact: families could miss bills, chores, trips, approvals, memories, or schedule conflicts while the assistant appeared healthy.
+- Root cause: count helper converted every error to zero and array reads were rendered from empty fallbacks without checking errors.
+- Required remediation: preserve all required errors and render a retryable page-level failure before running agent reasoning.
+- Implementation notes: changed count results to `{ value, error }`, checked the complete read batch, and added a ReadFailure state.
+- Test plan: focused Family Assistant boundary suite; full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (501 files/3,261 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `d43b15c4`; local branch pushed; known build warnings remain; live Auth, RLS, browser, and deployment evidence remain open.
+- Resolution: Family Assistant no longer derives zero-valued briefings after a failed required read.
+- Remaining dependencies: verify authenticated family RLS, agent context/reasoning, and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0394 - Family Intelligence hid signal read failures as an empty intelligence screen
 
@@ -208,32 +229,7 @@
 - Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
 - Test plan: focused Admin Management boundary suite; full Vitest, typecheck, lint, production build, and diff check.
 - Tests performed: focused suite (1 assertion); full Vitest (492 files/3,252 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `b465cf71`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Admin Management no longer presents zero administrators after a failed `admin_users` read.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the authorization workflow audit.
-
-#### TODO-0385 - Social Usage hid usage-event read failures as an empty meter
-
-- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
-- Severity: P1
-- Category: Super Admin / social operations / Supabase read boundary
-- Feature: Social Usage
-- Route: `/admin/social/usage`
-- File or files: `app/(app)/admin/social/usage/page.tsx`, `tests/admin-social-usage-read-boundary.test.ts`
-- Database objects: `social_usage_events`
-- Affected roles: Super Admin
-- Scenario: the usage-event query could fail while the page rendered no metering activity and a healthy empty state.
-- Launch impact: operators could mistake a usage-data outage for no activity and lose visibility into metered social operations.
-- Root cause: the route discarded the Supabase error object and used an empty fallback for a required operational read.
-- Required remediation: preserve the query error and render a retryable page-level failure before calculating totals or the empty state.
-- Implementation notes: added a ReadFailure state, refresh link, and explicit error logging.
-- Test plan: focused Social Usage boundary suite; full Vitest, typecheck, lint, production build, and diff check.
-- Tests performed: focused suite (1 assertion); full Vitest (491 files/3,251 tests); typecheck; lint; clean 250-route build; diff check.
-- Evidence: source repair validated in commit `ee26e70c`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evidence remain open.
-- Resolution: Social Usage no longer presents a fabricated empty meter after a failed usage-event read.
-- Remaining dependencies: verify live Super Admin permissions and deployed retry behavior; continue the admin workflow and social audit.
-
-#### TODO-0384 - Social A…134044 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- Evidence: source repair validated in commit `b465cf71`; local branch pushed; known build warnings remain; live Auth, permissions, browser, and deployment evid…134566 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
