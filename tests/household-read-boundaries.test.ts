@@ -31,6 +31,8 @@ const taxVaultSource = readFileSync('components/modules/tax-vault-module.tsx', '
 const subscriptionsSource = readFileSync('components/modules/subscriptions-module.tsx', 'utf8');
 const tripMemoriesSource = readFileSync('components/modules/trip-memories-module.tsx', 'utf8');
 const routinesSource = readFileSync('components/modules/routines-panel.tsx', 'utf8');
+const intelligenceSource = readFileSync('components/modules/intelligence-module.tsx', 'utf8');
+const briefingSource = readFileSync('components/modules/briefing-module.tsx', 'utf8');
 
 describe('household read boundaries', () => {
   it('coordinates decision and option failures before the Decision Engine empty state', () => {
@@ -103,5 +105,12 @@ describe('household read boundaries', () => {
     expect(tripMemoriesSource).toContain('void refreshMemories(); void refreshVacations();');
     expect(tripMemoriesSource).toContain('Could not load trip memories. Refresh and try again.');
     expect(routinesSource).toContain('Could not load routines. Refresh and try again.');
+  });
+
+  it('fails closed on intelligence preferences and Kitchen Mode context reads', () => {
+    expect(intelligenceSource).toContain('Could not load intelligence preferences. Refresh and try again.');
+    expect(intelligenceSource).toContain('onRetry={refresh}');
+    expect(briefingSource).toContain('void refreshEvents(); void refreshReminders();');
+    expect(briefingSource).toContain('Could not load Kitchen Mode context. Refresh and try again.');
   });
 });
