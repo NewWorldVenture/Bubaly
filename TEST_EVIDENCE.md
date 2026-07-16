@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Sync Account Provider Surface
+
+- Focused Sync surface, route-boundary, and capability suites: 3 files, 14 assertions passed.
+- Full `npm.cmd test -- --run`: 481 test files, 3,240 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Sync account setup now exposes only Google, Microsoft, and Apple; Amazon remains documented in the capability matrix as export-only ICS, not account sync.
+- Live OAuth callbacks, provider sync, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `05bc83e4`.
+
 ## Latest Local Evidence - Connections Adapter Cleanup
 
 - Stale-reference scan: no runtime references to the deleted `lib/connections/adapter` or `lib/connections/adapters` layer.
