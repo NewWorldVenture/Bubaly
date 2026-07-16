@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:50:04 -04:00
+- Last updated: 2026-07-16 07:56:18 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `468611d5` adds household insight read failure handling for the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, and Life & Milestones after Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `d8a0213a` adds daily household read failure handling for Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities after the Knowledge Graph, Family Tree, Experience Scorecard, Expenses, Insurance, Life & Milestones, Announcements, Contacts, Screen Time, Celebrations, Household Binder, Devices, Immunizations, Security, Medical Records, Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0364 - Daily household modules hid failed reads as empty or partial states
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Daily household operations / Supabase failure handling
+- Feature: Prep Plans, Photos, Pets, Recipes, Reminders, Shopping, Todos, and Utilities
+- Route: corresponding family module routes under `/dashboard`
+- File or files: `components/modules/planning-module.tsx`, `components/modules/photos-module.tsx`, `components/modules/pets-module.tsx`, `components/modules/recipes-module.tsx`, `components/modules/reminders-module.tsx`, `components/modules/shopping-module.tsx`, `components/modules/todos-module.tsx`, `components/modules/utilities-module.tsx`, `tests/household-read-boundaries.test.ts`
+- Database objects: `prep_plans`, `prep_plan_steps`, `family_albums`, `family_photos`, `pets`, `pet_care_records`, `family_recipes`, `reminder_lists`, `family_reminders`, `grocery_lists`, `grocery_items`, `todo_lists`, `todo_items`, and `utility_bills`
+- Affected roles: authenticated family members and household managers
+- Scenario: failed reads either rendered a healthy empty state, exposed a raw error without recovery, or allowed dependent list/media/care state to render from partial query results.
+- Launch impact: families could miss preparation plans, photos, pet care, recipes, reminders, shopping items, tasks, or utility cost history while the UI appeared usable.
+- Root cause: modules ignored realtime query errors; multi-query surfaces also lacked coordinated loading and retry behavior.
+- Required remediation: surface sanitized retryable errors before empty/derived states and refresh every required query together.
+- Implementation notes: Prep Plans, Photos, Pets, Reminders, Shopping, and Todos coordinate dependent reads; Recipes and Utilities now use shared ErrorState retry behavior.
+- Test plan: focused household boundary suite, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/household-read-boundaries.test.ts` (6 focused assertions); full Vitest; typecheck; lint; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 477 files/3,241 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated in commit `d8a0213a`; live provider, RLS, browser, backup, and deployed verification remain open.
+- Remaining dependencies: live provider callbacks, cross-family RLS, browser, backup, and deployed daily household verification.
 
 #### TODO-0363 - Household insight modules hid failed reads as empty or partial states
 
