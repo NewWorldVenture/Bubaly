@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import {
   Activity, ArrowRight, ClipboardList, KeyRound, Plus,
   Shield, ShieldCheck, UserCog, UserPlus, Users,
@@ -6,7 +7,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { AdminRowActions } from '@/components/admin/admin-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
@@ -16,6 +17,16 @@ export const metadata: Metadata = { title: 'Admin Management', robots: { index: 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 12;
+
+function ReadFailure() {
+  return (
+    <div className="module-page">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin</h1>
+      <ErrorState message="Could not load administrators from Supabase. Refresh and try again." />
+      <Link href="/admin/admins" className="text-sm font-medium text-brand-text underline">Refresh administrators</Link>
+    </div>
+  );
+}
 
 const TABS = [
   { key: 'users',    label: 'Admin Users' },
@@ -78,10 +89,14 @@ export default async function AdminManagementPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'users';
   const supabase = createServiceClient();
 
-  const { data: allAdmins } = await supabase
+  const { data: allAdmins, error } = await supabase
     .from('admin_users')
     .select('*')
     .order('joined_at', { ascending: false });
+  if (error) {
+    console.error('[admin-admins] administrator read failed', error);
+    return <ReadFailure />;
+  }
 
   const admins = allAdmins ?? [];
 
