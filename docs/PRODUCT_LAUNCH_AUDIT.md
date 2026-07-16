@@ -6,6 +6,16 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0370 - App Store advertised unavailable catalog entries as “Coming soon”
+
+- Status: Resolved in source; live catalog and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/app-store`.
+- Finding: catalog entries with `coming_soon` status rendered a roadmap label in the install-control position instead of a clear unavailable state.
+- Repair: renamed the control prop to `available` and changed the non-installable label to `Unavailable`; available entries retain the real install/uninstall action.
+- Evidence: `tests/appstore-availability.test.ts`, full 480 test files/3,249 tests, typecheck, lint, clean 250-route build, and `git diff --check` passed; source commit `916ee059`.
+- Remaining launch gate: verify live catalog status policy and deployed App Store behavior.
+
 ### PLA-0369 - Documents exposed cloud-import buttons without provider adapters
 
 - Status: Resolved in source; provider implementation and deployed verification remain open.
