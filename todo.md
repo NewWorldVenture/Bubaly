@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 07:14:58 -04:00
+- Last updated: 2026-07-16 07:27:46 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `32dc4248` adds Health and Medications read failure handling after Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `eb3ff4b8` adds Medical Records read failure handling after Health and Medications, Finances, Decision Engine, Health Visits, Behavior, Location, Play Dates, Driving Safety, Find Phone, Family Check In, weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0360 - Medical Records hid active-medication read failures from clinical records
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Health / Supabase failure handling
+- Feature: Medical Records
+- Route: `/dashboard/medical-records` and kind-specific medical-records routes
+- File or files: `components/modules/medical-records-module.tsx`, `tests/health-read-boundaries.test.ts`
+- Database objects: `health_providers`, `insurance_policies`, `medical_profiles`, and active `medications`
+- Affected roles: authenticated family members, household managers, and health-history users
+- Scenario: the active-medications read could fail while providers, insurance, and medical profiles rendered as healthy, leaving medication context incomplete.
+- Launch impact: families could view a partial clinical record while believing all related medical data was current.
+- Root cause: the module excluded medication loading/error state from its existing three-query gate.
+- Required remediation: include the active-medication read in loading/error handling and retry all four required reads together.
+- Implementation notes: Medical Records now tracks medication loading/error state and coordinates provider, policy, profile, and medication refresh actions.
+- Test plan: focused health boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/health-read-boundaries.test.ts` (3 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 476 files/3,234 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `eb3ff4b8`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0359 - Health and Medications hid required clinical reads as partial history
 
