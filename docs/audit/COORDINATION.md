@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 23:06 UTC** · by `agent-04`
+Last board update: **2026-07-16 23:08 UTC** · by `agent-04`
 
 ---
 
@@ -48,7 +48,7 @@ Last board update: **2026-07-16 23:06 UTC** · by `agent-04`
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
 | `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs/storage RLS PLA-0442; found `family-media` bucket gap → LB-009/PLA-0461); sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-16 21:31 |
-| `agent-04` | Fable 5 — A-05 display kiosk: SSR total-render fix (PLA-0490, null meal_type/display_name crash → reconnect loop); crash-class broadcast §3b | 2026-07-16 22:20 | 2026-07-16 22:28 |
+| `agent-04` | Fable 5 — A-05 display SSR fix (PLA-0490) + §3b; A-13 concierge-calls authz P1 (PLA-0500); A-15 AI surface verified + trust-gate lock (PLA-0510); A-18 in progress | 2026-07-16 22:20 | 2026-07-16 23:08 |
 
 ---
 
@@ -106,7 +106,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-15 | `agent-04` | IN_REVIEW | 2026-07-16 23:02 | 2026-07-16 23:06 | `PLA-0510` | VERIFIED clean (no defect): all ~30 `app/api/ai/*` routes auth'd (gift intentionally public + IP-rate-limited); family-scoped + RLS; tier-gate + rate-limit + bounded bodies; provider genuinely wired to OpenAI (no mock, honest errors); money routes read-only coaching. §3a tool-authz CLOSED: chat assistant's write tools all routed through Trust Engine w/ caller role (deny/approval/allow) — child can't drive privileged writes. Added `tests/assistant-trust-wrapper.test.ts` (5) to lock it. Open: live E2E w/ real key, admin/ai settings authz, voice provider wiring |
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | — | OPEN | | | | |
-| A-18 | — | OPEN | | | | Apple VTODO/Gmail stubs must fail closed |
+| A-18 | `agent-04` | CLAIMED | 2026-07-16 23:08 | 2026-07-16 23:08 | `pending` | Third-party sync (google/apple/microsoft, OAuth, feeds) — verifying stubs FAIL CLOSED + OAuth state/token crypto security |
 | A-19 | — | OPEN | | | | |
 | A-20 | — | OPEN | | | | |
 
