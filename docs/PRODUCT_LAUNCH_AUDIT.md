@@ -854,3 +854,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Verified; regression guard added
 - Remaining dependencies (A-17 not yet DONE): admin API route handlers (`app/api/admin/**` if any) authz sweep; marketing PUBLIC surfaces (landing pages / forms / lead capture) input-validation + rate-limit review; social-post outbound integration wiring; live super-admin E2E.
+
+### PLA-0540 - A-20 build/deploy gate GREEN; observability maturity gaps noted
+
+- Timestamp: 2026-07-16 23:26 UTC
+- Service: A-20 E2E / perf / observability / backups / deploy
+- Route: whole-app production build + observability config
+- Affected files: none (verification); temp build logs removed, not committed
+- Role: deploy/ops
+- Scenario: exercised the single most important launch gate — a clean `next build` — and swept the observability surface.
+- Severity: n/a for the build (green); the observability items are launch-maturity dependencies, not code defects.
+- Findings:
+  - **Production build GREEN**: `npm run build` compiles all ~250 routes with `EXIT=0` (full route manifest emitted, middleware 91.3 kB, shared JS 103 kB). All agents' changes currently on `main` compile. (Note: this harness's piped/background invocations of the build spuriously fail with empty output — the build only succeeds/reports correctly when run foreground with output redirected to a file; the code itself is clean. `tsc --noEmit` and eslint are also green.)
+  - Observability maturity gaps (dependencies for launch, owner decisions — NOT code bugs):
+    - No centralized error monitoring (Sentry/Datadog): errors go to `console.error` → Vercel logs only; no aggregation/alerting. Only `lib/reasoning/context.ts` references capture-style handling.
+    - No general platform health/readiness endpoint (only `app/api/ai/health` + `app/api/guardian/status`).
+    - No centralized boot-time env-var validation; instead per-feature fail-honest (e.g. `SYNC_TOKEN_KEY` throws, `OPENAI_API_KEY` → honest 503) — acceptable but not a single startup guard.
+- Resolution: no code change. Recorded the build-gate result and the observability dependencies for the launch-readiness report.
+- Supabase impact: none.
+- Tests run: production build (EXIT=0); tsc/eslint green; full vitest suite green earlier (1 timeout flake, passes isolated).
+- Validation evidence: `npm run build` EXIT=0 with complete route manifest.
+- Commit: pending (this push)
+- Status: Build gate verified GREEN; observability items logged as dependencies
+- Remaining dependencies (A-20 not yet DONE): wire centralized error monitoring (Sentry DSN — owner) ; add `/api/health` readiness probe; Playwright E2E smoke on the critical flows (login → dashboard → wallet → checkout) in staging; perf budget check on the heaviest routes; backup/restore runbook verification.
