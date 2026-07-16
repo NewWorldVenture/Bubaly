@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0358 - Finances summary hid account and planning read failures as zero metrics
+
+- Timestamp: 2026-07-16 07:09 America/New_York
+- Service: Finances
+- Route: `/dashboard/finances`
+- Affected files: `components/modules/finances-module.tsx`, `tests/finances-read-boundary.test.ts`
+- Role: authenticated family members and household managers
+- Scenario: any of five required finance reads could fail while the summary derived balances, spending, and upcoming obligations from empty fallback arrays.
+- Severity: P1
+- Launch impact: families could see misleading zero balances or make financial decisions from incomplete data.
+- Root cause: the module only waited on account and transaction loading and ignored every query error.
+- Resolution: Finances now coordinates all five reads and renders sanitized retryable ErrorState UI before financial metrics; retry refreshes the complete read set.
+- Supabase impact: no schema change; existing family-scoped financial reads now have an explicit page-level failure contract.
+- Tests run: `tests/finances-read-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Validation evidence: 475 test files, 3,231 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `541c1a40`
+- Status: Resolved in code; documentation and remote publication pending for this increment
+- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed finance verification
+
 ### PLA-0357 - Decision Engine and Health Visits hid required reads as empty states
 
 - Timestamp: 2026-07-16 07:03 America/New_York
@@ -212,25 +231,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: `tests/trip-overview-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
 - Validation evidence: 465 test files, 3,214 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
 - Commit: `f36ea6c5`
-- Status: Resolved in code; documentation and remote publication pending for this increment
-- Remaining dependencies: provider sandbox callbacks, cross-family RLS, browser, backup, and deployed Trip Overview verification
-
-### PLA-0346 - Vacation reports hid incomplete financial and travel-score reads
-
-- Timestamp: 2026-07-15 16:58 America/New_York
-- Service: Vacation Reports
-- Route: `/dashboard/vacations/reports`
-- Affected files: `components/vacations/vacations-reports.tsx`, `tests/vacations-reports-boundary.test.ts`
-- Role: authenticated family members and household trip planners
-- Scenario: expense, budget, or travel-score reads could fail while the report rendered trip counts and partial financial totals as if complete.
-- Severity: P1
-- Launch impact: families could make travel budget decisions from incomplete or stale report data.
-- Root cause: only the trips query exposed loading state; secondary report reads ignored their loading and error contracts.
-- Resolution: Vacation Reports now tracks all four required reads, waits for complete data, and renders a sanitized retryable ErrorState before deriving totals or charts.
-- Supabase impact: no schema change; existing family-scoped report reads now have an explicit failure contract.
-- Tests run: `tests/vacations-reports-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
-- Validation evidence: 464 test files, 3,212 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
-- Commit: `194e4ecb…25599 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- Status: Resolved in…26001 tokens truncated…-plan`, `/api/billing/cancel`, `/api/billing/portal`
 - Affected files: `app/api/billing/checkout/route.ts`, `app/api/billing/change-plan/route.ts`, `app/api/billing/cancel/route.ts`, `app/api/billing/portal/route.ts`, `tests/billing-read-boundary.test.ts`
 - Role: authenticated family manager or billing administrator
 - Scenario: required billing customer or subscription reads failed while the route could continue as though billing state were absent; secondary customer, tracking, and optimistic-sync write failures were not surfaced consistently
