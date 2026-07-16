@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Social Audit Read Boundary
+
+- Focused Social Audit boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd test -- --run`: 490 test files, 3,250 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes after removing a generated `.next` OneDrive readlink artifact; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Social Audit now fails visibly when its `social_audit_logs` read fails instead of rendering an empty history.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `80a790c6`.
+
 ## Latest Local Evidence - Personalization and Exit-Intent Read Boundaries
 
 - Focused Personalization and Exit-Intent boundary suites: 2 files, 2 assertions passed.
@@ -268,19 +280,7 @@ Audit date: 2026-07-15
 - Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
 - `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
 - `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `git diff --check`: passed before commit.
-- Devices, Immunizations, and Security now surface retryable failures before their empty safety states.
-- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
-
-## Latest Local Evidence - Medical Records Read Boundary
-
-- Focused health boundary suite: 1 file, 3 assertions passed.
-- Full `npm.cmd test`: 476 test files, 3,234 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
-- `npm.cmd run db:audit:migrations`: passed with 230 nu…32198 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `git di…32413 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
