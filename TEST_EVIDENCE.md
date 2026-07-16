@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Play Dates Read Boundary
+
+- Focused family-safety suite: 1 file, 3 assertions passed.
+- Full `npm.cmd test`: 471 test files, 3,226 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- Play Dates now surfaces a retryable error when the family-scoped `play_dates` read fails, before rendering its empty schedule.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Family Safety Location Read Boundaries
 
 - Focused safety boundary suite: 1 file, 2 assertions passed.
@@ -267,21 +281,7 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - Plan changes and cancellations now expose provider-updated/local-sync-pending state instead of false full success; billing portal and cancellation input boundaries are explicit.
 - Stripe Checkout completion upserts its tracking row using signed session metadata, repairing a missing pre-checkout tracking insert.
-- Live Stripe test-mode mutations, completion/replay/idempotency, refund, connected-account, and deployed Supabase evidence remain open.
-
-## Latest Local Evidence - Stripe Webhook Money-State Boundaries
-
-- Focused Stripe/webhook suites: 3 files, 19 tests passed.
-- Full `npm.cmd test`: 455 test files, 3,198 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
-- `npm.cmd run build`: passed and generated 250 routes.
-- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
-- `npm.cmd run db:audit:schema`: all 11 required probes passed.
-- `git diff --check`: passed.
-- Stripe capture now requires debit persistence before hold release; authorization response and card mapping failures propagate for retry; unknown billing prices fail closed rather than becoming Free.
-- Live Stripe signature, replay/idempotency, refund, connected-account, and deployed Supabase evidence remain open.…25607 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Live Stripe test-mode mutations, completion/replay/idempotency, refund, connected-account, and deployed Supabase evidence rem…25855 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
