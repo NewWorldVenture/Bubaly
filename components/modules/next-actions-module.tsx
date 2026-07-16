@@ -1,6 +1,6 @@
 'use client';
 
-// Predictive Planning — "Next Best Actions". Merges the family's upcoming events,
+// Predictive Planning â€” "Next Best Actions". Merges the family's upcoming events,
 // open tasks, and time-boxed opportunities into ONE prioritized worklist so the
 // answer to "what should we do next?" is a real, ranked, one-tap list. 100%
 // Supabase via useRealtimeQuery; ranking is the pure lib/opportunities/next-actions.
@@ -14,7 +14,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { cn } from '@/lib/utils/cn';
@@ -46,7 +46,7 @@ export function NextActionsModule() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const journey = useJourney('next_actions');
-  // Telemetry: the journey is "land here → clear an action". Starts on mount;
+  // Telemetry: the journey is "land here â†’ clear an action". Starts on mount;
   // completes when the first task is cleared below.
   useEffect(() => {
     journey.start();
@@ -56,15 +56,15 @@ export function NextActionsModule() {
   // 45-day horizon keeps the list focused on what's actually actionable soon.
   const horizon = dayKey(new Date(Date.now() + 45 * 86_400_000));
 
-  const { data: events, loading: le } = useRealtimeQuery<Event>({
+  const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId),
   });
-  const { data: tasks, loading: lt } = useRealtimeQuery<Task>({
+  const { data: tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useRealtimeQuery<Task>({
     table: 'todo_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', false),
   });
-  const { data: opps, loading: lo } = useRealtimeQuery<Opp>({
+  const { data: opps, loading: oppsLoading, error: oppsError, refresh: refreshOpps } = useRealtimeQuery<Opp>({
     table: 'opportunities', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('opportunities').select('*').eq('family_id', familyId),
   });
@@ -94,7 +94,9 @@ export function NextActionsModule() {
     return rankNextActions(inputs, today);
   }, [events, tasks, opps, today, horizon]);
 
-  const loading = le || lt || lo;
+  const loading = eventsLoading || tasksLoading || oppsLoading;
+  const error = eventsError || tasksError || oppsError;
+  const refresh = () => { void refreshEvents(); void refreshTasks(); void refreshOpps(); };
   const grouped = useMemo(() => {
     const m = new Map<string, typeof ranked>();
     for (const a of ranked) {
@@ -111,10 +113,11 @@ export function NextActionsModule() {
       .update({ is_done: true, completed_at: new Date().toISOString() }).eq('id', taskId);
     if (err) { toastError(describeDbError(err)); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
-    success('Nice — one less thing');
+    success('Nice â€” one less thing');
   }
 
   if (loading) return <SkeletonList count={6} />;
+  if (error) return <ErrorState message="Could not load next actions. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -132,7 +135,7 @@ export function NextActionsModule() {
             <Target className="h-4 w-4 text-brand-text" />
             {needAttention > 0
               ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} attention today. {ranked.length} total in your queue.</span>
-              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming — nothing overdue. Nicely ahead.</span>}
+              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming â€” nothing overdue. Nicely ahead.</span>}
           </div>
 
           <div className="space-y-6">
@@ -144,7 +147,7 @@ export function NextActionsModule() {
                   <h2 className={cn('mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide',
                     urgent ? 'text-rose-300' : 'text-muted')}>
                     {urgent && <AlertCircle className="h-3.5 w-3.5" />}
-                    {BUCKET_LABELS[bucket]} <span className="opacity-60">· {items.length}</span>
+                    {BUCKET_LABELS[bucket]} <span className="opacity-60">Â· {items.length}</span>
                   </h2>
                   <ul className="space-y-2">
                     {items.map((a) => {
@@ -159,7 +162,7 @@ export function NextActionsModule() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-fg">{a.title}</p>
-                            <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} · {a.reason}</p>
+                            <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} Â· {a.reason}</p>
                           </div>
                           {isTask && (
                             <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label="Mark done" title="Mark done"
