@@ -38,9 +38,10 @@ describe('honest provider capabilities', () => {
     expect(supportsTwoWay('microsoft', 'note')).toBe(true);
   });
 
-  it('Apple calendar/reminder sync is CalDAV-based', () => {
+  it('Apple calendar is CalDAV-based while Reminders remain unsupported', () => {
     expect(getCapability('apple', 'calendar').mechanism).toBe('caldav');
-    expect(getCapability('apple', 'reminder').mechanism).toBe('caldav');
+    expect(isSupported('apple', 'reminder')).toBe(false);
+    expect(getCapability('apple', 'reminder').mechanism).toBe('none');
   });
 
   it('internal provider supports everything two-way', () => {

@@ -67,12 +67,7 @@ export const CAPABILITIES: Record<SyncProvider, ProviderCapabilities> = {
       mechanism: 'caldav',
       limitation: 'Requires an app-specific password for CalDAV. A public ICS feed is also available to subscribe.',
     },
-    reminder: {
-      read: true,
-      write: true,
-      mechanism: 'caldav',
-      limitation: 'Apple Reminders sync over CalDAV (VTODO) using an app-specific password.',
-    },
+    reminder: NONE('Apple Reminders VTODO sync is not enabled yet; Apple Calendar sync remains available.'),
     note: NONE('Apple Notes has no public API. Notes stay internal to bubaly.'),
   },
   amazon: {
