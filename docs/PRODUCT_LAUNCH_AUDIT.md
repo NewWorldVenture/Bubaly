@@ -43,6 +43,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: (this increment)
 - Status: Resolved and pushed to `main`; A-09 remains In-progress (live Stripe signature/replay/refund smoke, portal RBAC, and cancel/downgrade flows still open)
 - Remaining dependencies: live webhook idempotency + refund smoke against Stripe test mode
+### PLA-0418 - Food & Nutrition hub swallowed every read failure → healthy-looking empty page (A-10)
+
+- Timestamp: 2026-07-16 21:05 UTC
+- Service: Meals / Groceries / Food (A-10) — the Food & Nutrition overview hub
+- Route: `/dashboard/food`
+- Affected files: `app/(app)/dashboard/food/page.tsx`, `lib/meals/degrade-read.ts` (new), `tests/food-page-read-boundary.test.ts` (new)
+- Role: all family roles (any member with the Food feature)
+- Scenario: any of the hub's 8 fan-out reads (meal_plans, family_recipes ×2, grocery_items, pantry_items, family_food_scores, dining_out, meals) fails via RLS denial, a not-yet-migrated table, or a transient outage
+- Severity: P1 (silent read failure / misleading empty state — undiagnosable in prod)
+- Launch impact: the page's `safe()` wrapper did `try { …data ?? null } catch { return null }` — it caught only THROWN exceptions, never the resolved PostgREST `error` field, and logged nothing on either path. A real failure therefore rendered a healthy-looking-but-empty hub (empty cards, "0 recipes", "0 items") with zero signal in logs, so a partial Food-service outage or an un-applied migration would be invisible on launch
+- Root cause: the local `safe()` degrade wrapper dropped the `{ error }` field and had a silent `catch`
+- Resolution: extracted `makeDegradeRead(namespace)` (`lib/meals/degrade-read.ts`) — awaits the query, and on the resolved `error` field OR a throw logs `console.error('[food] <label> read failed|threw', …)` then degrades to `{ data: null, count: null }`. The hub is an aggregate overview, so degrade-per-card is correct — but every failure is now observable. All 8 reads pass a source label so a log names exactly which table failed
+- Supabase impact: none — the reads/queries are unchanged; only their failures are now surfaced to logs (observability)
+- Tests run: `tests/food-page-read-boundary.test.ts` (6: success passthrough, logs+degrades on error field, logs+degrades on throw, namespacing, + static wiring guards that the silent wrapper is gone and every call is labeled); `tsc --noEmit` clean; `eslint` clean on touched files; full `vitest` suite (below)
+- Validation evidence: runtime test drives a query resolving `{ data:null, error:{message:'relation "dining_out" does not exist'} }` and asserts `console.error` fired with `[food] dining_out read failed` and the result degraded to `{ data:null, count:null }`; a rejected promise asserts the `…read threw` path
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main`
+- Remaining dependencies: A-10 not yet launch-complete — the sibling routes `/dashboard/{meals,grocery,pantry,nutrition}` are thin server shells that delegate to client views (`components/meals/*`); their client-read error handling + the A-10 live-RLS/role/seed gates are the remaining audit steps under this unit
 
 ### PLA-0417 - Concierge automation approve/dismiss reported success while the run stayed pending
 
