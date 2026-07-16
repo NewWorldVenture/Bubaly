@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AgentsModule } from '@/components/modules/agents-module';
@@ -7,6 +8,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Assistant | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -14,9 +16,21 @@ export const dynamic = 'force-dynamic';
 const HOUR = 3_600_000;
 
 /** Count-only query → number (0 on any error, so a missing table never breaks the page). */
-async function count(q: PromiseLike<{ count: number | null; error: unknown }>): Promise<number> {
+type CountResult = { value: number; error: unknown | null };
+
+async function count(q: PromiseLike<{ count: number | null; error: unknown }>): Promise<CountResult> {
   const { count: n, error } = await q;
-  return error ? 0 : (n ?? 0);
+  return { value: n ?? 0, error: error ?? null };
+}
+
+function ReadFailure() {
+  return (
+    <div className="module-page space-y-4">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Family Assistant</h1>
+      <ErrorState message="Could not load Family Assistant context from Supabase. Refresh and try again." />
+      <Link href="/dashboard/agents" className="text-sm font-medium text-brand-text underline">Refresh Family Assistant</Link>
+    </div>
+  );
 }
 
 export default async function AgentsPage() {
@@ -53,6 +67,14 @@ export default async function AgentsPage() {
     count(supabase.from('approval_requests').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'pending')),
     count(supabase.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('created_at', new Date(now.getTime() - 14 * 86_400_000).toISOString())),
   ]);
+
+  const readError = weekEvents.error ?? mealPlans.error ?? members.error ?? activityRows.error
+    ?? openGrocery.error ?? billsDueSoon.error ?? subscriptions.error ?? overdueChores.error
+    ?? expiringDocs.error ?? maintenanceDue.error ?? upcomingTrips.error ?? pendingApprovals.error ?? newMemories.error;
+  if (readError) {
+    console.error('[dashboard-agents] context read failed', readError);
+    return <ReadFailure />;
+  }
 
   // Knowledge graph → relationship-level reasoning for the Chief of Staff, via the
   // ONE shared reasoning engine (R1 context + R2 insights) — the same one Calm folds
@@ -92,10 +114,11 @@ export default async function AgentsPage() {
   }).length;
 
   const context: AgentContext = {
-    eventsToday, conflicts, unassignedEvents, unplannedDinners, openGrocery,
-    billsDueSoon, subscriptions, overdueChores, expiringDocs, maintenanceDue,
-    homeworkDue: 0, medsDue: 0, upcomingAppointments, upcomingTrips, birthdaysSoon,
-    newMemories, unreadMessages: 0, pendingApprovals,
+    eventsToday, conflicts, unassignedEvents, unplannedDinners, openGrocery: openGrocery.value,
+    billsDueSoon: billsDueSoon.value, subscriptions: subscriptions.value, overdueChores: overdueChores.value,
+    expiringDocs: expiringDocs.value, maintenanceDue: maintenanceDue.value,
+    homeworkDue: 0, medsDue: 0, upcomingAppointments, upcomingTrips: upcomingTrips.value, birthdaysSoon,
+    newMemories: newMemories.value, unreadMessages: 0, pendingApprovals: pendingApprovals.value,
   };
 
   const briefings = runAllAgents(context, graphItems);
