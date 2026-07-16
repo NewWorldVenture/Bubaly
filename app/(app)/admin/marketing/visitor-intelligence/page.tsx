@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { buildFunnel, pct, type FunnelCounts } from '@/lib/marketing/visitor-funnel';
 import { CONTACT_BAND_META, type ContactBand } from '@/lib/marketing/contact-score';
 import { cn } from '@/lib/utils/cn';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Visitor Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -12,8 +13,16 @@ export const dynamic = 'force-dynamic';
 type SupabaseAdmin = ReturnType<typeof createServiceClient>;
 
 // Every count is best-effort — a table not applied yet degrades to 0, never a crash.
-async function count(admin: SupabaseAdmin, build: (q: SupabaseAdmin) => PromiseLike<{ count: number | null }>): Promise<number> {
-  try { const { count: c } = await build(admin); return c ?? 0; } catch { return 0; }
+async function count(
+  admin: SupabaseAdmin,
+  build: (q: SupabaseAdmin) => PromiseLike<{ count: number | null; error?: { message: string } | null }>,
+): Promise<{ value: number; error: string | null }> {
+  try {
+    const { count: c, error } = await build(admin);
+    return { value: c ?? 0, error: error?.message ?? null };
+  } catch (error) {
+    return { value: 0, error: error instanceof Error ? error.message : 'Unknown analytics read failure' };
+  }
 }
 
 export default async function VisitorIntelligencePage() {
@@ -37,12 +46,45 @@ export default async function VisitorIntelligencePage() {
     count(admin, (a) => a.from('mkt_consent_events').select('*', { count: 'exact', head: true }).in('category', ['marketing_email', 'marketing_sms']).eq('decision', 'granted')),
   ]);
 
-  const counts: FunnelCounts = { visitors, identified, profiled, scored, engaged };
+  const failedMetric = [
+    visitors, identified, profiled, scored, engaged,
+    cold, warm, hot, qualified, analyticsGrants, marketingGrants,
+  ].find((metric) => metric.error);
+  if (failedMetric) {
+    console.error('[visitor-intelligence] analytics read failed', failedMetric.error);
+    return (
+      <div className="space-y-5 p-4 sm:p-6">
+        <h1 className="text-xl font-black sm:text-2xl">Visitor Intelligence</h1>
+        <ErrorState message="Could not load visitor intelligence from Supabase. Refresh and try again." />
+        <a href="/admin/marketing/visitor-intelligence" className="text-sm font-medium text-brand-text underline">Refresh visitor intelligence</a>
+      </div>
+    );
+  }
+
+  const visitorCount = visitors.value;
+  const identifiedCount = identified.value;
+  const profiledCount = profiled.value;
+  const scoredCount = scored.value;
+  const engagedCount = engaged.value;
+  const coldCount = cold.value;
+  const warmCount = warm.value;
+  const hotCount = hot.value;
+  const qualifiedCount = qualified.value;
+  const analyticsGrantCount = analyticsGrants.value;
+  const marketingGrantCount = marketingGrants.value;
+
+  const counts: FunnelCounts = {
+    visitors: visitorCount,
+    identified: identifiedCount,
+    profiled: profiledCount,
+    scored: scoredCount,
+    engaged: engagedCount,
+  };
   const funnel = buildFunnel(counts);
   const bands: { band: ContactBand; n: number }[] = [
-    { band: 'cold', n: cold }, { band: 'warm', n: warm }, { band: 'hot', n: hot }, { band: 'qualified', n: qualified },
+    { band: 'cold', n: coldCount }, { band: 'warm', n: warmCount }, { band: 'hot', n: hotCount }, { band: 'qualified', n: qualifiedCount },
   ];
-  const bandTotal = cold + warm + hot + qualified;
+  const bandTotal = coldCount + warmCount + hotCount + qualifiedCount;
 
   const stageIcon: Record<string, typeof Users> = {
     visitors: Users, identified: UserCheck, profiled: ClipboardList, scored: Gauge, engaged: Flame,
@@ -115,11 +157,11 @@ export default async function VisitorIntelligencePage() {
           </h2>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-border bg-bg/40 p-3">
-              <p className="text-2xl font-black tabular-nums">{analyticsGrants.toLocaleString()}</p>
+              <p className="text-2xl font-black tabular-nums">{analyticsGrantCount.toLocaleString()}</p>
               <p className="text-xs text-muted">Analytics grants</p>
             </div>
             <div className="rounded-xl border border-border bg-bg/40 p-3">
-              <p className="text-2xl font-black tabular-nums">{marketingGrants.toLocaleString()}</p>
+              <p className="text-2xl font-black tabular-nums">{marketingGrantCount.toLocaleString()}</p>
               <p className="text-xs text-muted">Marketing opt-ins</p>
             </div>
           </div>
