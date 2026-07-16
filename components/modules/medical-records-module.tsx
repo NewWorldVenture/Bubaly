@@ -62,28 +62,29 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const canEdit = isManager(role);
   const { title, desc, provider: providerWord, Icon } = COPY[kind];
 
-  // ── Data ──────────────────────────────────────────────────
-  const { data: providers, loading: pLoading, error: pError } = useRealtimeQuery<Provider>({
+  // â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
     table: 'health_providers', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('health_providers').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }).order('name'),
   });
-  const { data: policies, loading: polLoading, error: polError } = useRealtimeQuery<Policy>({
+  const { data: policies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
     table: 'insurance_policies', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('insurance_policies').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }),
   });
-  const { data: profiles, loading: profLoading, error: profError } = useRealtimeQuery<Profile>({
+  const { data: profiles, loading: profLoading, error: profError, refresh: refreshProfiles } = useRealtimeQuery<Profile>({
     table: 'medical_profiles', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medical_profiles').select('*').eq('family_id', familyId),
   });
-  const { data: medications } = useRealtimeQuery<Tables<'medications'>>({
+  const { data: medications, loading: medsLoading, error: medsError, refresh: refreshMeds } = useRealtimeQuery<Tables<'medications'>>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const profileByMember = useMemo(() => new Map(profiles.map((p) => [p.member_id, p])), [profiles]);
-  const loading = pLoading || polLoading || profLoading;
-  const error = pError || polError || profError;
+  const loading = pLoading || polLoading || profLoading || medsLoading;
+  const error = pError || polError || profError || medsError;
+  const refresh = () => { void refreshProviders(); void refreshPolicies(); void refreshProfiles(); void refreshMeds(); };
 
   // Providers grouped: whole-family first, then per member.
   const providerGroups = useMemo(() => {
@@ -97,7 +98,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     return groups;
   }, [providers, members]);
 
-  // ── Modal state ───────────────────────────────────────────
+  // â”€â”€ Modal state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [providerForm, setProviderForm] = useState<typeof blankProvider | null>(null);
   const [policyForm, setPolicyForm] = useState<typeof blankPolicy | null>(null);
   const [profileForm, setProfileForm] = useState<typeof blankProfile | null>(null);
@@ -111,7 +112,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
 
   const checkInMember = checkInMemberId ? memberById.get(checkInMemberId) ?? null : null;
 
-  // ── CRUD ──────────────────────────────────────────────────
+  // â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function saveProvider() {
     if (!providerForm?.name) return;
     setSaving(true);
@@ -259,7 +260,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         }
       />
 
-      {/* ── Insurance ─────────────────────────────────────── */}
+      {/* â”€â”€ Insurance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> Insurance Cards</h2>
@@ -276,7 +277,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-bold">{p.insurer}</p>
-                      <p className="text-xs text-muted">{[p.plan_name, p.plan_type].filter(Boolean).join(' · ') || 'Plan'}</p>
+                      <p className="text-xs text-muted">{[p.plan_name, p.plan_type].filter(Boolean).join(' Â· ') || 'Plan'}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {p.is_primary && <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">PRIMARY</span>}
@@ -307,7 +308,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         )}
       </section>
 
-      {/* ── Providers ─────────────────────────────────────── */}
+      {/* â”€â”€ Providers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {providerWord}s</h2>
@@ -333,7 +334,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     <div key={p.id} className="flex items-center gap-3 rounded-lg bg-surface/40 p-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{p.name}{p.is_primary && <span className="ml-2 text-[10px] font-bold text-emerald-300">PRIMARY</span>}</p>
-                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || providerWord}</p>
+                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' Â· ') || providerWord}</p>
                       </div>
                       {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
@@ -351,7 +352,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         )}
       </section>
 
-      {/* ── Medical Profiles ──────────────────────────────── */}
+      {/* â”€â”€ Medical Profiles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand-text" /> Health Profiles</h2>
@@ -379,7 +380,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     {kind === 'dental' && prof.dental_notes && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">Dental</dt><dd className="font-medium">{prof.dental_notes}</dd></div>}
                   </dl>
                 ) : (
-                  <p className="text-xs text-muted">{canEdit ? 'No profile yet — click the pencil to add allergies, conditions, and emergency contacts.' : 'No profile on file.'}</p>
+                  <p className="text-xs text-muted">{canEdit ? 'No profile yet â€” click the pencil to add allergies, conditions, and emergency contacts.' : 'No profile on file.'}</p>
                 )}
               </div>
             );
@@ -387,7 +388,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         </div>
       </section>
 
-      {/* ── Provider modal ────────────────────────────────── */}
+      {/* â”€â”€ Provider modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal open={!!providerForm} title={providerForm?.id ? `Edit ${providerWord}` : `Add ${providerWord}`} onClose={() => setProviderForm(null)}>
         {providerForm && (
           <div className="space-y-3">
@@ -410,7 +411,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         )}
       </Modal>
 
-      {/* ── Insurance modal ───────────────────────────────── */}
+      {/* â”€â”€ Insurance modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal open={!!policyForm} title={policyForm?.id ? 'Edit Insurance' : 'Add Insurance'} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
         {policyForm && (
           <div className="space-y-3">
@@ -439,7 +440,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                   <p className="mb-1.5 text-xs font-medium text-muted capitalize">{side} of card</p>
                   <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={`${side} of card`} />
                   <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs font-semibold text-muted hover:text-fg">
-                    <Camera className="h-4 w-4" /> {uploading === side ? 'Uploading…' : 'Take photo / Upload'}
+                    <Camera className="h-4 w-4" /> {uploading === side ? 'Uploadingâ€¦' : 'Take photo / Upload'}
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCard(side, f); e.target.value = ''; }} />
                   </label>
                 </div>
@@ -451,7 +452,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         )}
       </Modal>
 
-      {/* ── Profile modal ─────────────────────────────────── */}
+      {/* â”€â”€ Profile modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal open={!!profileForm} title="Health Profile" description={profileForm ? memberById.get(profileForm.member_id)?.display_name : undefined} onClose={() => setProfileForm(null)} className="sm:max-w-lg">
         {profileForm && (
           <div className="space-y-3">
@@ -459,11 +460,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
               <Field label="Blood Type">{(id) => <Input id={id} value={profileForm.blood_type} onChange={(e) => setProfileForm({ ...profileForm, blood_type: e.target.value })} placeholder="O+" />}</Field>
               <Field label="Primary Physician">{(id) => <Input id={id} value={profileForm.primary_physician} onChange={(e) => setProfileForm({ ...profileForm, primary_physician: e.target.value })} placeholder="Dr. Patel" />}</Field>
             </div>
-            <Field label="Allergies">{(id) => <Textarea id={id} value={profileForm.allergies} onChange={(e) => setProfileForm({ ...profileForm, allergies: e.target.value })} rows={2} placeholder="Penicillin, peanuts…" />}</Field>
-            <Field label="Conditions">{(id) => <Textarea id={id} value={profileForm.conditions} onChange={(e) => setProfileForm({ ...profileForm, conditions: e.target.value })} rows={2} placeholder="Asthma, ADHD…" />}</Field>
-            <Field label="Current Medications">{(id) => <Textarea id={id} value={profileForm.current_medications} onChange={(e) => setProfileForm({ ...profileForm, current_medications: e.target.value })} rows={2} placeholder="Albuterol inhaler as needed…" />}</Field>
-            <Field label="Immunizations">{(id) => <Input id={id} value={profileForm.immunizations} onChange={(e) => setProfileForm({ ...profileForm, immunizations: e.target.value })} placeholder="Up to date · Flu 2025" />}</Field>
-            {kind === 'dental' && <Field label="Dental Notes">{(id) => <Textarea id={id} value={profileForm.dental_notes} onChange={(e) => setProfileForm({ ...profileForm, dental_notes: e.target.value })} rows={2} placeholder="Braces, sensitivity, last cleaning…" />}</Field>}
+            <Field label="Allergies">{(id) => <Textarea id={id} value={profileForm.allergies} onChange={(e) => setProfileForm({ ...profileForm, allergies: e.target.value })} rows={2} placeholder="Penicillin, peanutsâ€¦" />}</Field>
+            <Field label="Conditions">{(id) => <Textarea id={id} value={profileForm.conditions} onChange={(e) => setProfileForm({ ...profileForm, conditions: e.target.value })} rows={2} placeholder="Asthma, ADHDâ€¦" />}</Field>
+            <Field label="Current Medications">{(id) => <Textarea id={id} value={profileForm.current_medications} onChange={(e) => setProfileForm({ ...profileForm, current_medications: e.target.value })} rows={2} placeholder="Albuterol inhaler as neededâ€¦" />}</Field>
+            <Field label="Immunizations">{(id) => <Input id={id} value={profileForm.immunizations} onChange={(e) => setProfileForm({ ...profileForm, immunizations: e.target.value })} placeholder="Up to date Â· Flu 2025" />}</Field>
+            {kind === 'dental' && <Field label="Dental Notes">{(id) => <Textarea id={id} value={profileForm.dental_notes} onChange={(e) => setProfileForm({ ...profileForm, dental_notes: e.target.value })} rows={2} placeholder="Braces, sensitivity, last cleaningâ€¦" />}</Field>}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Preferred Pharmacy">{(id) => <Input id={id} value={profileForm.preferred_pharmacy} onChange={(e) => setProfileForm({ ...profileForm, preferred_pharmacy: e.target.value })} placeholder="Walgreens, Oak St" />}</Field>
               <Field label="Pharmacy Phone">{(id) => <Input id={id} value={profileForm.pharmacy_phone} onChange={(e) => setProfileForm({ ...profileForm, pharmacy_phone: e.target.value })} placeholder="(555) 222-3333" />}</Field>
@@ -479,8 +480,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         )}
       </Modal>
 
-      {/* ── Check-in member picker ────────────────────────── */}
-      <Modal open={checkInPicker} title="At the Doctor — Check-In" description="Who is this visit for? We'll show everything you need for the intake form." onClose={() => setCheckInPicker(false)}>
+      {/* â”€â”€ Check-in member picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <Modal open={checkInPicker} title="At the Doctor â€” Check-In" description="Who is this visit for? We'll show everything you need for the intake form." onClose={() => setCheckInPicker(false)}>
         <div className="space-y-2">
           {selfMember && (
             <button onClick={() => { setCheckInMemberId(selfMember.id); setCheckInPicker(false); }} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-elevated">
@@ -499,7 +500,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         </div>
       </Modal>
 
-      {/* ── Print sheets ──────────────────────────────────── */}
+      {/* â”€â”€ Print sheets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {infoSheet && (
         <ProviderInfoSheet kind={kind} member={infoSheet.member} providers={infoSheet.items} onClose={() => setInfoSheet(null)} />
       )}
