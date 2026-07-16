@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 08:42:44 -04:00
+- Last updated: 2026-07-16 08:48:14 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2c474f5a` removes disconnected Google Drive and Dropbox document-import actions after `faf75b75` made wallet card availability explicit and removed Visa-like non-issued child-card art; live provider and deployment evidence remains open
+- Commit: `916ee059` replaces the App Store's â€œComing soonâ€ install label with an explicit â€œUnavailableâ€ state after `2c474f5a` removed disconnected Google Drive and Dropbox document-import actions; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0370 - App Store advertised unavailable catalog entries as â€œComing soonâ€
+
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: App Store / availability integrity / user-facing copy
+- Feature: Family App Store catalog install control
+- Route: `/dashboard/app-store`
+- File or files: `components/appstore/install-button.tsx`, `app/(app)/dashboard/app-store/page.tsx`, `tests/appstore-availability.test.ts`
+- Database objects: `family_apps` and `family_app_installs`
+- Affected roles: authenticated family members
+- Scenario: catalog rows with `status = coming_soon` rendered a roadmap label in the install-control position, which could imply installability was imminent or available.
+- Launch impact: users could not distinguish a catalog listing from an installable family app.
+- Root cause: the UI prop and label encoded roadmap status rather than explicit availability.
+- Required remediation: pass a capability-neutral availability prop and render â€œUnavailableâ€ for entries that cannot be installed; keep install actions enabled only for available entries.
+- Implementation notes: renamed the control prop to `available`, changed the non-installable state to â€œUnavailable,â€ and preserved the existing status filter and install/uninstall actions.
+- Test plan: focused App Store availability contract, full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused App Store contract (1 assertion); full Vitest (480 files/3,249 tests); typecheck; lint; clean production build; diff check.
+- Evidence: source repair validated in commit `916ee059`; local branch pushed; known build warnings remain; deployed browser and live catalog evidence remain open.
+- Resolution: unavailable catalog entries no longer present as installable roadmap promises.
+- Remaining dependencies: validate catalog status/installation policy against live data and deployed UI.
 
 #### TODO-0369 - Documents exposed cloud-import buttons without provider adapters
 
