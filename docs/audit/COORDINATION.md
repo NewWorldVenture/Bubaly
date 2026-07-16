@@ -47,7 +47,7 @@ Last board update: **2026-07-16 21:00 UTC** · by `agent-03`
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (shipped `375e97ec`), now A-10 meals/food | 2026-07-16 20:55 | 2026-07-16 20:55 |
-| `agent-03` | Opus 4.8 — silent-failure sweep (PLA-0405..0413,0417 landed on A-05/12/15/17/18 helpers); now A-16 | 2026-07-16 21:00 | 2026-07-16 21:00 |
+| `agent-03` | Opus 4.8 — silent-failure sweep (PLA-0405..0413,0417 on A-05/12/15/17/18 helpers); A-16 notifications engine (PLA-0432) | 2026-07-16 21:00 | 2026-07-16 21:05 |
 | `agent-04` | _free — claim me_ | | |
 
 ---
@@ -104,7 +104,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-13 | — | OPEN | | | | |
 | A-14 | — | OPEN | | | | Codex did ownership RLS + auctions |
 | A-15 | — | OPEN | | | | |
-| A-16 | `agent-03` | CLAIMED | 2026-07-16 21:00 | 2026-07-16 21:00 | — | Notifications/reminders/cron: silent read/write-boundary + fail-closed sweep |
+| A-16 | `agent-03` | CLAIMED | 2026-07-16 21:00 | 2026-07-16 21:05 | `pending` | Notifications engine now logs failed source+dedup reads (PLA-0432); cron routes already hardened; schedules/retries/delivery matrix open |
 | A-17 | — | OPEN | | | | |
 | A-18 | — | OPEN | | | | Apple VTODO/Gmail stubs must fail closed |
 | A-19 | — | OPEN | | | | |

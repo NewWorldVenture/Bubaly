@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0432 - Notification generation engine silently skipped whole categories on a read failure (A-16)
+
+- Timestamp: 2026-07-16 21:05 UTC
+- Service: Notifications / reminders engine (A-16) — the "who needs to know" generator that feeds the notifications cron and the in-app refresh
+- Route: `app/api/cron/notifications`, `app/api/notifications/generate` → `lib/server/notifications.ts` (`generateFamilyNotifications`)
+- Affected files: `lib/server/notifications.ts`, `tests/notifications-generation-read-boundary.test.ts`
+- Role: every family member who relies on reminders/notifications
+- Scenario: any of the 13 parallel source reads (calendar, chores, reminders, documents, renewals, opportunities, medications, med schedules/doses, approvals, etc.) or the dedup reads fail (RLS, drifted table, outage)
+- Severity: P2
+- Launch impact: `generateFamilyNotifications` destructured `{ data }` from ~13 parallel source reads and both dedup reads, dropping every `error`. A silently-broken table (e.g. `medications` or `reminders`) would stop that entire notification category **forever** with no operational signal; worse, a failed dedup read left the `seen` set empty so every candidate re-inserted as a **duplicate notification** (spam)
+- Root cause: `const { data } = await …` across the source `Promise.all` and the two dedup reads discarded the PostgREST `error`
+- Resolution: degrade-but-log (partial delivery beats all-or-nothing for a notification engine) — the source reads now log `[notifications] generation source read failed { familyId, table }` per failing table while still generating the categories that succeeded, and both dedup reads log `[notifications] dedup read failed` so the duplicate-spam path is diagnosable. The final `notifications` insert already threw on error (unchanged). The upstream cron already counts per-family generation failures and returns 502
+- Supabase impact: none; reads unchanged, only their failures observable
+- Tests run: `tests/notifications-generation-read-boundary.test.ts` (a failed source read logs by table name and does not throw; clean run logs nothing), full suite 518 files / 3,309 tests, eslint clean, typecheck clean
+- Validation evidence: boundary test drives a fake client erroring `reminders` + `medications` and asserts both `generation source read failed` logs fire with the table names, and the function returns without throwing
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-16 increment by agent-03); A-16 unit remains In-progress (schedules/retries/dedup/delivery/observability matrix still open)
+- Remaining dependencies: live cron delivery + dedup verification; route the `[notifications]` signals into monitoring (A-20 / LB-008 adjacent)
+
 ### PLA-0431 - A-09 revenue invariant: guard webhook plan slugs against planLevel() drift
 
 - Timestamp: 2026-07-16 21:04 UTC

@@ -51,21 +51,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const renewalMaxKey = new Date(now.getTime() + 90 * 24 * HOUR).toISOString().slice(0, 10);
   const signupMaxKey = new Date(now.getTime() + 7 * 24 * HOUR).toISOString().slice(0, 10);
 
-  const [
-    { data: members },
-    { data: events },
-    { data: chores },
-    { data: school },
-    { data: sports },
-    { data: reminders },
-    { data: docs },
-    { data: renewalsDue },
-    { data: signupsDue },
-    { data: meds },
-    { data: medSchedules },
-    { data: medDoses },
-    { data: approvalsPending },
-  ] = await Promise.all([
+  const sourceResults = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
@@ -83,6 +69,33 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     // Pending money approvals → a "decision is waiting on you" ping for parents.
     supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', familyId).eq('status', 'pending').limit(50),
   ]);
+  // Degrade-but-log: a failed source read skips only its own notification
+  // category (partial delivery beats all-or-nothing for a "who needs to know"
+  // engine), but a silently-broken table would otherwise stop those reminders
+  // forever with no signal — so surface each read failure.
+  const SOURCE_TABLES = [
+    'family_members', 'calendar_events', 'chore_assignments', 'school_events', 'sports_events',
+    'reminders', 'documents', 'renewals', 'opportunities', 'medications',
+    'medication_schedules', 'medication_doses', 'parent_approvals',
+  ] as const;
+  sourceResults.forEach((r, i) => {
+    if (r.error) console.error('[notifications] generation source read failed', { familyId, table: SOURCE_TABLES[i], error: r.error });
+  });
+  const [
+    { data: members },
+    { data: events },
+    { data: chores },
+    { data: school },
+    { data: sports },
+    { data: reminders },
+    { data: docs },
+    { data: renewalsDue },
+    { data: signupsDue },
+    { data: meds },
+    { data: medSchedules },
+    { data: medDoses },
+    { data: approvalsPending },
+  ] = sourceResults;
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
   const managers = (members ?? []).filter((m) => m.role === 'parent' || m.role === 'adult');
@@ -260,11 +273,14 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   let rows: NotificationRow[] = [];
   if (candidates.length > 0) {
     const relatedIds = [...new Set(candidates.map((c) => c.related_id))];
-    const { data: existing } = await supabase
+    const { data: existing, error: existingErr } = await supabase
       .from('notifications')
       .select('type, related_id, user_id')
       .eq('family_id', familyId)
       .in('related_id', relatedIds);
+    // A failed dedup read leaves `seen` empty, so every candidate would pass the
+    // filter and re-insert as a duplicate — log it so that spam is diagnosable.
+    if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });
     const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
     rows = candidates
       .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
@@ -277,12 +293,14 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   let medRows: NotificationRow[] = [];
   const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, now);
   if (medReminders.length > 0) {
-    const { data: existingMed } = await supabase
+    const { data: existingMed, error: existingMedErr } = await supabase
       .from('notifications')
       .select('related_id, user_id')
       .eq('family_id', familyId)
       .eq('type', 'medication_due')
       .gte('created_at', todayStartIso);
+    // Same duplicate-spam risk as above for daily medication-due reminders.
+    if (existingMedErr) console.error('[notifications] medication dedup read failed', { familyId, error: existingMedErr });
     const seenMed = new Set((existingMed ?? []).map((e) => `${e.related_id}:${e.user_id ?? 'all'}`));
     medRows = medReminders
       .filter((r) => !seenMed.has(`${r.related_id}:${r.user_id ?? 'all'}`))
