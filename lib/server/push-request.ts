@@ -23,12 +23,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * True when a URL hostname is a private/reserved IP literal or a local name.
+ * A push endpoint is fetched server-side by the web-push library, so rejecting
+ * these blocks SSRF to internal services (metadata IPs, RFC1918, loopback,
+ * link-local) without an allowlist that would break legitimate push hosts.
+ * Real push endpoints always use a public DNS hostname (fcm.googleapis.com, …).
+ */
+export function isPrivateOrReservedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  // IPv6 loopback / unique-local (fc00::/7) / link-local (fe80::/10)
+  if (h === '::1' || h === '::' ) return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(h)) return true;
+  if (/^fe[89ab][0-9a-f]:/.test(h)) return true;
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 10 || a === 127 || a === 0) return true;                 // private / loopback / this-host
+    if (a === 169 && b === 254) return true;                          // link-local incl. cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true;                 // RFC1918
+    if (a === 192 && b === 168) return true;                          // RFC1918
+    if (a === 100 && b >= 64 && b <= 127) return true;                // CGNAT
+    // IPv4-mapped/embedded metadata written decimally is caught above.
+  }
+  return false;
+}
+
 function parseHttpsEndpoint(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim() || value.length > MAX_PUSH_ENDPOINT_LENGTH) return null;
   const endpoint = value.trim();
   try {
     const url = new URL(endpoint);
-    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    // SSRF guard: the endpoint is fetched server-side; never let it point inward.
+    if (isPrivateOrReservedHost(url.hostname)) return null;
+    return url.toString();
   } catch {
     return null;
   }

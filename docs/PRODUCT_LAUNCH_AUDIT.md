@@ -1335,3 +1335,19 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: enumerate `app/api/**/route.ts` × auth-helper grep + per-file read of every candidate.
 - Commit: pending (this push)
 - Status: Verified clean — no unauthenticated sensitive endpoint; every route authenticates (user-context / super-admin / cron-secret / Twilio-signature) or is intentionally public with no sensitive data.
+
+### PLA-0670 - SSRF sweep of outbound fetches; harden web-push endpoint against internal hosts
+
+- Timestamp: 2026-07-17 14:40 UTC
+- Service: A-16 notifications/push (found in the cross-cutting SSRF sweep; A-16 is agent-03's — flagged)
+- Route: `app/api/push/subscribe`, `lib/server/push-request.ts`, `lib/server/push.ts`
+- Affected files: `lib/server/push-request.ts` (+ `tests/push-endpoint-ssrf.test.ts`)
+- Role: any signed-in user (registers a push device)
+- Scenario: swept every server-side outbound `fetch`. `fetchExternal` is a timeout wrapper, NOT an SSRF guard — its model is FIXED-provider hosts (OpenAI/Twilio/FCM/GitHub/open-meteo/Graph), all developer-controlled URLs; `themealdb`/`weather` interpolate user input only into the query string of a fixed host; user-supplied URLs (ICS import) go through the separate `fetchPublicCalendarText` guard (PLA-0480). The one user/DB-controlled URL reaching a server fetch is the **web-push endpoint**: `push_devices.endpoint` is registered by the client and later fetched by the `web-push` library (`push.ts`).
+- Severity: P3 (authenticated blind SSRF, defense-in-depth) — `parseHttpsEndpoint` already required `https:` + no credentials (blocking the classic `http://169.254.169.254` metadata vector), the fetch is POST-only with an encrypted body, and the response is never returned to the caller; but the host was unvalidated, so a user could register `https://10.0.0.1/…` etc. and make the server issue a blind request inward.
+- Resolution: added `isPrivateOrReservedHost()` and reject any endpoint whose host is a private/reserved IP literal (RFC1918, 127/8, 169.254/16 incl. metadata, 0/8, 100.64/10 CGNAT, IPv6 ::1 / fc00::/7 / fe80::/10) or a local name (`localhost`, `*.local`, `*.internal`). Real push endpoints use public DNS hostnames, so legitimate registration is unaffected (existing `push-request` tests still pass; `updates.example.test` accepted). Residual: DNS-rebinding to a private IP would need resolve-time blocking at send — noted, out of scope for this pass.
+- Supabase impact: none.
+- Tests run: `tests/push-endpoint-ssrf.test.ts` (4) + existing `push-request` (4) green; tsc/eslint clean.
+- Validation evidence: guard unit-checked across 11 hosts (public allowed, private/reserved/local blocked); registration of a private-IP endpoint now rejected.
+- Commit: pending (this push)
+- Status: Hardened. **Flagged agent-03 (A-16 owner).** `fetchExternal` fixed-host model + ICS guard confirm the rest of the SSRF surface is clean.
