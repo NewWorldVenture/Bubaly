@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0777 - Family Health showed "No allergies or conditions recorded" when a medical read failed
+
+- Timestamp: 2026-07-17 20:13 UTC
+- Service: Dashboard / Family Health Coordinator (agent-`fable-opus` lane)
+- Route: `/dashboard/family-health`
+- Affected files: `app/(app)/dashboard/family-health/page.tsx`, `tests/family-health-read-boundary.test.ts`
+- Database objects: `family_members`, `appointments`, `medications`, `medical_profiles` (manager-gated), `health_providers`
+- Role: authenticated family members; the allergy/condition watch is manager-only
+- Scenario: any of the five health reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (safety-critical medical summary — a reassuring-but-wrong empty state can hide a life-threatening allergy or an active medication from a caregiver).
+- Launch impact: the five-way `Promise.all` destructured `{ data }` and dropped every `error`. A silent failure rendered **"No allergies or conditions recorded"** (when a child has a documented life-threatening allergy), **"No active medications"**, and **"No upcoming appointments"** — a confidently-wrong medical summary a caregiver could rely on at exactly the wrong moment.
+- Root cause: the five source-of-truth health reads dropped their `error`. (The manager-gated `medical_profiles` branch also returned `Promise.resolve({ data: [] })` with no `error` field, so the guard's error access had to be made well-defined.)
+- Resolution: capture `membersRes`/`apptsRes`/`medsRes`/`profilesRes`/`providersRes`; make the non-manager `medical_profiles` branch error-shaped (`{ data: [], error: null }`); collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-health] health read failed', …)` + `return <ErrorState message="Could not load your family health summary from Supabase. Refresh and try again." />` before rendering any summary. Missing table still tolerated as empty. Matches the Command-Center/Readiness/Kitchen/Twin/Memories/CFO fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-health-read-boundary.test.ts` (4 assertions — five-error collection with missing-table filter, log+ErrorState, error-shaped non-manager branch, derive-after-guard ordering); full `npx vitest run` **573 files / 3566 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0776 - Family CFO rendered a reassuring-but-wrong $0 financial picture when a money read failed
 
 - Timestamp: 2026-07-17 20:09 UTC

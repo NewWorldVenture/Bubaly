@@ -2,9 +2,11 @@ import type { Metadata } from 'next';
 import { Stethoscope, Pill, CalendarHeart, ShieldPlus, AlertTriangle, Syringe } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDateTime } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family Health' };
@@ -20,13 +22,32 @@ export default async function FamilyHealthPage() {
   // Health data is sensitive — surfaced only to managers in summary form here.
   const manager = isManager(ctx.active.role);
 
-  const [{ data: members }, { data: appts }, { data: meds }, { data: profiles }, { data: providers }] = await Promise.all([
+  const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8),
     supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12),
-    manager ? supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId) : Promise.resolve({ data: [] }),
+    manager ? supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
     supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8),
   ]);
+
+  // Health data is safety-critical: a dropped error would render "No allergies
+  // or conditions recorded" (when a child has a life-threatening allergy), "No
+  // active medications", or "No upcoming appointments" — a reassuring-but-wrong
+  // medical summary a caregiver could rely on. Fail closed on a real read
+  // error; a genuinely missing table (unapplied migration) is still tolerated
+  // as empty so a partial env degrades rather than hard-fails.
+  const healthError = [membersRes.error, apptsRes.error, medsRes.error, profilesRes.error, providersRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (healthError) {
+    console.error('[dashboard/family-health] health read failed', healthError);
+    return <ErrorState message="Could not load your family health summary from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const appts = apptsRes.data;
+  const meds = medsRes.data;
+  const profiles = profilesRes.data;
+  const providers = providersRes.data;
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
 
