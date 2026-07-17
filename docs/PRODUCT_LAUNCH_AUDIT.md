@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0617 - A-12: Guardian child-safety AUDIT TRAIL was silently RLS-broken (audit writes ran under the user session)
+
+- Timestamp: 2026-07-17 16:04 UTC
+- Service: Guardian / safety / contacts (A-12)
+- Route: `/guardian`, `/guardian/contacts`, `/guardian/settings` (server actions in `app/(app)/guardian/actions.ts`)
+- Affected files: `app/(app)/guardian/actions.ts`, `tests/guardian-audit-log-service-role.test.ts` (new)
+- Role: **every** role (the audit write failed regardless of who acted — these actions are manager-gated, so the actor is always a parent/adult)
+- Scenario: a parent creates/updates a Guardian contact, changes a contact's trust level, assigns/clears a guardian phone, or creates a routing rule → the action appends to `guardian_audit_log`
+- Severity: **P2 functional / compliance** (silent data loss on a child-safety audit trail; no security exposure). Found via the same SELECT-only-table sweep that surfaced PLA-0616 (`chore_approval_events`) and PLA-0612 (`chore_ai_validations`).
+- Launch impact: `guardian_audit_log` has only a `Family member can view guardian_audit_log` SELECT policy and **no authenticated INSERT policy** (service-role-write by design). All four audit inserts ran through `withGuardianTables(createServer())` — the acting parent's RLS session — and the error was swallowed (`console.error` only). So every Guardian audit event was silently RLS-denied and the child-safety **audit trail never recorded** in production (who changed a contact's trust, when a guardian phone was assigned, who created a screening rule — all lost).
+- Root cause: an append-only, service-role-by-design audit table written through the acting user's RLS session; the missing authenticated write policy is intentional, so the client was the defect.
+- Resolution: added a `logGuardianAudit` helper that writes via `withGuardianTables(createServiceClient())` (best-effort) and routed all four audit sites through it; imported `createServiceClient`. The Guardian tables need the `withGuardianTables` type augmentation because `guardian_audit_log` isn't in the generated `Database` types.
+- Supabase impact: none (no migration — app-layer client fix; takes effect on deploy).
+- Tests run: `tests/guardian-audit-log-service-role.test.ts` (3, new); existing `tests/guardian-authz.test.ts` (4) still green; full suite green; tsc 0; eslint 0.
+- Validation evidence: PG16 harness, production-accurate grants. Proven: `guardian_audit_log` has a single SELECT policy; a **manager (parent)** authenticated INSERT → `new row violates row-level security policy`; a service-role INSERT passes. Confirms the old user-session writes silently failed and the service-role fix lands the row.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`
+- Remaining dependencies: none. (Method note: 3rd and final hit from the SELECT-only-table write-client sweep; the full sweep of ~42 RLS-enabled, write-policy-less tables otherwise confirmed every other such table is written correctly via a service-role/admin client — cron routes, Stripe/Resend webhooks, and admin-console actions all verified.)
+
 ### PLA-0615 - A-03/A-16: public-route authorization boundary VERIFIED + drifted cron guard hardened
 
 - Timestamp: 2026-07-17 15:50 UTC

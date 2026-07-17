@@ -9,7 +9,11 @@ describe('Guardian safety action boundaries', () => {
     expect(actions).toContain('describeActionError');
     expect(actions).not.toMatch(/error:\s*[^\n]*\.message/);
     expect(actions).toContain("if (clashError) return actionFailure('check Guardian phone assignments', clashError);");
-    expect(actions).toContain("if (auditError) console.error('[guardian-audit]");
+    // Audit writes are best-effort and go through the service-role helper
+    // (guardian_audit_log is SELECT-only for members; the parent's session
+    // can't INSERT — see PLA-0617), logging failures rather than throwing.
+    expect(actions).toContain("if (error) console.error('[guardian-audit] write was not logged', error);");
+    expect(actions).toContain('withGuardianTables(createServiceClient())');
     expect(actions).toContain("supabase.rpc('guardian_review_suggestion'");
   });
 

@@ -1,7 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
 import { isManager } from '@/lib/constants/roles';
@@ -24,6 +24,34 @@ function guardianForbidden(): { ok: false; error: string } {
 function actionFailure<T = void>(operation: string, error: unknown): ActionResult<T> {
   console.error(`[guardian-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
+
+type GuardianAuditEntry = {
+  family_id: string;
+  actor_user_id: string;
+  actor: string;
+  action: string;
+  entity_type: string;
+  entity_id?: string;
+  detail?: Record<string, unknown>;
+};
+
+/**
+ * Append a Guardian audit event (best-effort). guardian_audit_log is SELECT-only
+ * for family members (service-role-write by design) — there is no authenticated
+ * INSERT policy, so this MUST run under the service role. These actions run in
+ * the acting parent's RLS session, and writing the audit row through that
+ * session was silently RLS-denied, so the child-safety audit trail never
+ * recorded. Route it through the service role so every event lands.
+ */
+async function logGuardianAudit(entry: GuardianAuditEntry): Promise<void> {
+  try {
+    const svc = withGuardianTables(createServiceClient());
+    const { error } = await svc.from('guardian_audit_log').insert(entry as never);
+    if (error) console.error('[guardian-audit] write was not logged', error);
+  } catch (err) {
+    console.error('[guardian-audit] write was not logged', err);
+  }
 }
 
 function reviewResult(data: unknown): ActionResult {
@@ -91,7 +119,7 @@ export async function upsertContactAction(input: {
   if (result.error) return actionFailure('save the Guardian contact', result.error);
   const id = (result.data as { id: string }).id;
 
-  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  await logGuardianAudit({
     family_id: familyId,
     actor_user_id: userId,
     actor: 'parent',
@@ -100,7 +128,6 @@ export async function upsertContactAction(input: {
     entity_id: id,
     detail: { trust_level: input.trust_level, name: input.name },
   });
-  if (auditError) console.error('[guardian-audit] contact write was not logged', auditError);
 
   revalidatePath('/guardian');
   revalidatePath('/guardian/contacts');
@@ -138,7 +165,7 @@ export async function updateContactTrustAction(
 
   if (error) return actionFailure('update contact trust', error);
 
-  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  await logGuardianAudit({
     family_id: familyId,
     actor_user_id: ctx.user.id,
     actor: 'parent',
@@ -147,7 +174,6 @@ export async function updateContactTrustAction(
     entity_id: contactId,
     detail: { trust_level: trustLevel },
   });
-  if (auditError) console.error('[guardian-audit] trust update was not logged', auditError);
 
   revalidatePath('/guardian/contacts');
   revalidatePath('/guardian');
@@ -264,7 +290,7 @@ export async function assignGuardianPhoneAction(input: {
 
   if (error) return actionFailure('assign the Guardian phone', error);
 
-  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  await logGuardianAudit({
     family_id: familyId,
     actor_user_id: ctx.user.id,
     actor: 'parent',
@@ -272,7 +298,6 @@ export async function assignGuardianPhoneAction(input: {
     entity_type: 'guardian_member_profiles',
     detail: { member_id: input.member_id, guardian_phone: phone },
   });
-  if (auditError) console.error('[guardian-audit] phone assignment was not logged', auditError);
 
   revalidatePath('/guardian/settings');
   revalidatePath('/guardian');
@@ -329,7 +354,7 @@ export async function createRuleAction(input: {
   if (error) return actionFailure('create the Guardian routing rule', error);
   const id = (data as { id: string }).id;
 
-  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  await logGuardianAudit({
     family_id: familyId,
     actor_user_id: userId,
     actor: 'parent',
@@ -338,7 +363,6 @@ export async function createRuleAction(input: {
     entity_id: id,
     detail: { name: input.name, action_routing_mode: input.action_routing_mode },
   });
-  if (auditError) console.error('[guardian-audit] rule creation was not logged', auditError);
 
   revalidatePath('/guardian/rules');
   return { ok: true, data: { id } };
