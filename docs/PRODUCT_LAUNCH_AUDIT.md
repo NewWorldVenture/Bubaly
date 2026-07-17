@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0801 - Photos: delete showed a false "Photo deleted" + could orphan a row pointing at a removed image (A-05)
+
+- Timestamp: 2026-07-17 23:50 UTC
+- Service: Home / dashboard command surfaces (A-05) — Photos module (new class: silent WRITE failure, not a read)
+- Route: `/dashboard/photos` (`components/modules/photos-module.tsx`)
+- Affected files: `components/modules/photos-module.tsx`, `tests/photos-mutation-boundary.test.ts` (new)
+- Database objects: `family_photos` (delete/update), `family-media` storage bucket
+- Role: all family roles
+- Scenario: a photo delete/favorite/caption write fails for a real reason (RLS edge, transient) 
+- Severity: P2 (data-integrity: misleading success + orphaned row/storage divergence)
+- Launch impact: `deletePhoto` removed the **storage object first**, then deleted the `family_photos` row, **dropping both errors**, and called `success('Photo deleted')` **unconditionally**. If the row delete failed after the storage removal succeeded, the result was an **orphaned library row pointing at an already-deleted image** (a permanently broken thumbnail) — while the user was told the photo was deleted. `toggleFavorite` and `updateCaption` likewise swallowed their write errors (a silent no-op that looks like it worked)
+- Root cause: fire-and-forget writes that dropped the Supabase `error`, plus a delete order (storage-before-row) that orphans the source-of-truth row on partial failure, plus an unconditional success toast
+- Resolution: `deletePhoto` now deletes the **DB row (source of truth) first**, surfaces any error via `toastError(describeDbError(error))` and returns before touching storage — so a failed delete can never orphan a row against removed storage — and only removes the storage object + shows success once the row is gone. `toggleFavorite`/`updateCaption` now capture and surface their write errors (UI still reverts via `refreshPhotos`)
+- Supabase impact: none — no schema change; write ORDER + error-handling corrected
+- Tests run: new `tests/photos-mutation-boundary.test.ts` (2 — deletePhoto row-delete + error-guard precede storage removal and the success toast; favorite/caption surface errors); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the ordered row-delete → guard → storage-remove → success, and the error captures on favorite/caption
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0800 - Kids' submit-proof page 404'd a live chore on a transient read (A-07 §3e slice)
 
 - Timestamp: 2026-07-17 23:44 UTC

@@ -150,14 +150,20 @@ export function PhotosModule() {
 
   async function toggleFavorite(photo: Photo) {
     const supabase = createClient();
-    await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    const { error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    if (error) toastError(describeDbError(error));
     void refreshPhotos();
   }
 
   async function deletePhoto(photo: Photo) {
     const supabase = createClient();
+    // Delete the DB row (the source of truth) FIRST and surface any failure —
+    // dropping this error showed a false "Photo deleted" while the photo remained.
+    // Only remove the storage object after the row is gone, so a failed delete can
+    // never orphan a library row that points at an already-removed image.
+    const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
+    if (error) { toastError(describeDbError(error)); return; }
     await supabase.storage.from('family-media').remove([photo.storage_path]);
-    await supabase.from('family_photos').delete().eq('id', photo.id);
     success('Photo deleted');
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);
@@ -165,7 +171,8 @@ export function PhotosModule() {
 
   async function updateCaption(photo: Photo, caption: string) {
     const supabase = createClient();
-    await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    const { error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    if (error) toastError(describeDbError(error));
     void refreshPhotos();
     setEditPhoto(null);
   }
