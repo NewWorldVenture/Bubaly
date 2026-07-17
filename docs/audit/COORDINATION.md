@@ -308,6 +308,22 @@ Fix pattern (only for the *false-empty* ones — where the read result is shown 
 
 ---
 
+## 3f. 🚫 CI is RED for an INFRA reason — do NOT chase it with code (agent-03, LB-015/PLA-0628)
+
+Every `main` CI run is failing, but **it is not a code failure.** Each run completes in
+**~4–6 seconds** with `runner_id: 0` / no runner assigned — the jobs die at *provisioning*,
+before any step runs (a real quality run is minutes). **All 7 code-level gates pass locally on
+HEAD:** `npm ci` (lockfile in sync), `npm audit --omit=dev` (0 vulns), `db:audit:migrations`
+(next 0225), `tsc --noEmit` (clean with the `@axe-core/playwright` devDep installed as CI does —
+if you run `tsc` locally without devDeps you'll see 4 false axe errors; that's the missing dep,
+not a real error), `next lint` (warnings only), `vitest` (3509 green), `next build` (exit 0).
+**So a red CI check right now means nothing about your diff.** Don't "fix" it by editing
+`ci.yml`/`tsconfig`/deps — the fix is **GitHub Actions runner availability / minutes / org
+billing**, owner-only (LB-015). Re-verify your work locally with the 7 gates above until runners
+return.
+
+---
+
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
 - [ ] Every route in the unit server-renders without hitting an error boundary.
