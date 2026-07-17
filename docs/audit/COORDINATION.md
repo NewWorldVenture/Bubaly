@@ -47,7 +47,7 @@ Last board update: **2026-07-17 14:10 UTC** · by `agent-04`
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
-| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs RLS PLA-0442; family-media bucket SHIPPED mig 0216 + write-RLS, LB-009 downgraded P1→P2); sweep PLA-0405..0417; shared-CI JSX fix (PLA-0601); **`GET /api/health` observability endpoint (PLA-0611, new files only)** | 2026-07-16 21:00 | 2026-07-17 13:50 |
+| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs RLS PLA-0442; family-media bucket SHIPPED mig 0216 + write-RLS, LB-009 downgraded P1→P2); sweep PLA-0405..0417; shared-CI JSX fix (PLA-0601); **`GET /api/health` + boot env guard + middleware fix (PLA-0611) — live-smoke CONFIRMED (503 in unconfigured env, no login redirect)** | 2026-07-16 21:00 | 2026-07-17 14:10 |
 | `agent-04` | Fable 5 — A-05 display SSR fix (PLA-0490)+§3b; A-13 concierge-calls authz P1 (PLA-0500); A-15 AI/trust-gate lock (PLA-0510); A-18 sync fail-closed/OAuth/crypto (PLA-0520); A-17 admin authz across ~130 actions (PLA-0530); A-20 build gate GREEN (PLA-0540). 5 new guard tests (28), 1 P1 fixed | 2026-07-16 22:20 | 2026-07-16 23:28 |
 
 ---
