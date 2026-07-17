@@ -1,4 +1,4 @@
--- 0219 — Money-integrity fix for KID INVESTING, the third family ledger (after
+-- 0220 — Money-integrity fix for KID INVESTING, the third family ledger (after
 -- the wallet 0217 and the economy 0218). The invest tables shipped (0097) with
 -- the same `"Members manage" … FOR ALL … is_family_member(family_id)` policy, so
 -- a child (real Supabase session) could INSERT/UPDATE `invest_holdings` directly

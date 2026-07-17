@@ -11,20 +11,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Timestamp: 2026-07-17 12:20 UTC
 - Service: Kid Investing (A-08 — third family ledger after wallet + economy)
 - Route: direct PostgREST `INSERT`/`UPDATE` on `public.invest_holdings`
-- Affected files: `supabase/migrations/0219_invest_ledger_write_lockdown.sql` (new), `tests/invest-ledger-write-rls.test.ts` (new)
+- Affected files: `supabase/migrations/0220_invest_ledger_write_lockdown.sql` (new), `tests/invest-ledger-write-rls.test.ts` (new)
 - Role: **child / teen** — any authenticated family member
 - Scenario: a signed-in child inserts an `invest_holdings` row for themselves, minting shares (portfolio value) without a parent-approved order
 - Severity: **HIGH** (asset integrity; educational-investing portfolio value)
 - Launch impact: the invest tables (`invest_holdings, invest_orders`) shipped (0097) with the same `"Members manage" … FOR ALL … is_family_member` policy as the wallet/economy bugs. `invest_holdings` is meant to be written only by the SECURITY DEFINER `invest_decide_order` RPC (a parent approves a pending order), but RLS let any member write it directly — a child could mint shares. Confirmed exploitable live.
 - Root cause: write RLS on the invest ledger equalled read RLS (any family member).
-- Resolution: migration **0219** restricts `invest_holdings` writes to `can_manage_family()` (the SECURITY DEFINER RPC bypasses RLS, so parent-approved orders still execute). **Exception**: `invest_orders` keeps INSERT open to members because a child legitimately places a *pending* buy/sell order (`placeInvestOrderAction`); only UPDATE/DELETE (approve/cancel) are manager-only.
+- Resolution: migration **0220** restricts `invest_holdings` writes to `can_manage_family()` (the SECURITY DEFINER RPC bypasses RLS, so parent-approved orders still execute). **Exception**: `invest_orders` keeps INSERT open to members because a child legitimately places a *pending* buy/sell order (`placeInvestOrderAction`); only UPDATE/DELETE (approve/cancel) are manager-only.
 - Supabase impact: RLS-only; additive + idempotent.
 - Tests run: PG16 harness — child `invest_holdings` INSERT → RLS error; **child `invest_orders` placement → allowed** (RLS passed; only a NOT-NULL test-data column failed); idempotent ×2. Guard `tests/invest-ledger-write-rls.test.ts` (4); migration audit clean (next 0220).
 - Validation evidence: harness transcript (holdings mint blocked, 0 survivors; order placement passed RLS).
 - Commit: (this increment)
 - Status: Fixed + pushed. **Prod exploitable until 0219 applied** (folded into pending-migrations; sibling of LB-010).
-- **Money-ledger sweep COMPLETE:** all three family ledgers with the `is_family_member FOR ALL` write vuln are now locked to managers — wallet (0217/PLA-0580 CRITICAL), economy (0218/PLA-0590 HIGH), investing (0219/PLA-0600 HIGH). The other tables using the same 0070/0071/0072/0073/0081/0085/0101 FOR-ALL loop (vacations, weekend planner/feeds, habits, home management, autopilot, social feed) are **collaborative family data** where member writes are intended (like the calendar) — reviewed, not sensitive, left as-is.
-- Remaining dependencies: apply 0219 to prod.
+- **Money-ledger sweep COMPLETE:** all three family ledgers with the `is_family_member FOR ALL` write vuln are now locked to managers — wallet (0217/PLA-0580 CRITICAL), economy (0218/PLA-0590 HIGH), investing (0220/PLA-0600 HIGH). The other tables using the same 0070/0071/0072/0073/0081/0085/0101 FOR-ALL loop (vacations, weekend planner/feeds, habits, home management, autopilot, social feed) are **collaborative family data** where member writes are intended (like the calendar) — reviewed, not sensitive, left as-is.
+- Remaining dependencies: apply 0220 to prod.
 
 ### PLA-0591 - A-11 PRIVACY (needs product decision): the family credential vault is readable by every member, incl. children
 
@@ -56,13 +56,13 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Severity: **HIGH** (integrity of the reward economy; tokens redeem for screen time / treats / cash-outs — but not real money, unlike the wallet)
 - Launch impact: the economy tables (`family_currencies, currency_transactions, economy_rewards, economy_redemptions`) shipped (0096) with the same `"Members manage" … FOR ALL … is_family_member` policy as the wallet bug (PLA-0580). Balance = Σ(credits−debits), so a child could mint unlimited tokens. Confirmed exploitable (same class as the wallet ledger).
 - Root cause: write RLS on the economy ledger equalled read RLS (any family member).
-- Resolution: migration **0219** restricts writes on the currency ledger + config + rewards to `can_manage_family()` (token AWARD is the manager-gated `awardTokensAction`; the token DEBIT goes through `decideRedemptionAction` (manager) or the `loyalty_redeem_reward` SECURITY DEFINER / service-role RPC). **Exception**: `economy_redemptions` keeps INSERT open to members because a child legitimately creates a *pending* redemption request (`requestRedemptionAction`); only its UPDATE/DELETE (approve/deny/fulfil) are manager-only.
+- Resolution: migration **0220** restricts writes on the currency ledger + config + rewards to `can_manage_family()` (token AWARD is the manager-gated `awardTokensAction`; the token DEBIT goes through `decideRedemptionAction` (manager) or the `loyalty_redeem_reward` SECURITY DEFINER / service-role RPC). **Exception**: `economy_redemptions` keeps INSERT open to members because a child legitimately creates a *pending* redemption request (`requestRedemptionAction`); only its UPDATE/DELETE (approve/deny/fulfil) are manager-only.
 - Supabase impact: RLS-only; additive + idempotent.
 - Tests run: PG16 harness — child currency mint → RLS error; **child redemption request → OK** (exception preserved); manager award → OK; idempotent ×2. Guard `tests/economy-ledger-write-rls.test.ts` (4); `economy-ledger.test.ts` still green; migration audit clean (next 0219).
 - Validation evidence: harness transcript (mint blocked, redemption request allowed, 0 survivors).
 - Commit: (this increment)
 - Status: Fixed in code + pushed. **Prod exploitable until 0218 applied** (folded into the pending-migrations list; sibling of LB-010).
-- Remaining dependencies: apply 0219 to prod.
+- Remaining dependencies: apply 0220 to prod.
 
 ### PLA-0581 - A-11: the "Secure Vault" is a label-only bucket with no protection beyond standard family RLS — OPEN (product decision)
 
@@ -1113,10 +1113,10 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Scenario: migration 0010 created `support_tickets` and `admin_users` with the comment "RLS: only service-role (admin console) reads/writes" but wrote `create policy "service_role_all" ... using (true) with check (true)` with **no `to service_role`** → the policy defaults to `TO public`, so the `authenticated` role matches an always-true qual. Any signed-in user could `supabase.from('support_tickets').select('*')` → every family's tickets (requester name/email + issue body = cross-tenant PII), and `admin_users` → the full admin roster (emails, `admin_role`, `permissions`, `status`); `with check(true)` also allowed INSERT/UPDATE/DELETE of `admin_users` rows.
 - Severity: P1 (cross-tenant PII disclosure + admin-roster exposure + admin_users tampering; not P0 — `admin_users` is not consulted in the request-path authz, which uses `super_admins`/`is_super_admin()`).
 - Root cause: RLS policy missing its `TO service_role` role qualifier (same class as the 0215/0217 write-lockdowns; here it's a READ exposure).
-- Resolution: migration **0219** drops + recreates both `service_role_all` policies `TO service_role` (client roles get no policy ⇒ default deny). The admin console reads/writes these only via `createServiceClient()` (service_role, BYPASSRLS) behind an `isSuperAdmin` gate, so no app behaviour changes. `meal_ideas` (global content catalog, no `family_id`) reviewed and intentionally public — not a leak.
+- Resolution: migration **0220** drops + recreates both `service_role_all` policies `TO service_role` (client roles get no policy ⇒ default deny). The admin console reads/writes these only via `createServiceClient()` (service_role, BYPASSRLS) behind an `isSuperAdmin` gate, so no app behaviour changes. `meal_ideas` (global content catalog, no `family_id`) reviewed and intentionally public — not a leak.
 - Supabase impact: **prod exploitable until 0218 is applied** (human-owned, LB-011). Agents do not apply prod migrations.
 - Tests run: applied 0218 to PG16 (idempotent ×2); as family-A member support_tickets 11→**0**, admin_users 12→**0**, member INSERT into admin_users **blocked**, service-role still reads all 11 (console unaffected). `tests/admin-tables-service-role-rls.test.ts` (5) + migration-version bump → 8/8; tsc/eslint clean.
 - Validation evidence: before/after harness probe (above); guard tests green.
 - Commit: pending (this push)
 - Status: Fixed in code (migration 0219 + guard); **prod apply pending (LB-011)**
-- Remaining dependencies: apply 0219 to prod; re-run the isolation probe there.
+- Remaining dependencies: apply 0220 to prod; re-run the isolation probe there.
