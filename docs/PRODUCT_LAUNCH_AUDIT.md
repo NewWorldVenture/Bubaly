@@ -101,9 +101,9 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: requires a new prod storage migration (human-owned) + a potential public→private flip
 - Tests run: static analysis — confirmed zero migrations define `family-media`; confirmed all four consumers use `getPublicUrl`; contrasted against the correctly-defined `documents` bucket (0007, family-folder RLS) verified in PLA-0442
 - Validation evidence: `grep -rn family-media supabase/migrations` → no bucket insert/policy; consumers at photos-module:105, create-memory:103, messages-module:365, reminders-module:624 all call `getPublicUrl`
-- Commit: (documentation only — no code change; fix is owner-gated)
-- Status: **OPEN** — documented as launch blocker LB-009; flagged to owner (agent-03, A-11)
-- Remaining dependencies: owner decision on public vs. signed-URL; a human-applied prod storage migration; add `family-media` to the seed/harness once defined
+- Commit: `46556214` — migration `0216_family_media_bucket.sql` ships the reproducibility + write-isolation fix (step 1). PG16-validated: applies + idempotent (×2); cross-family write PROVEN blocked (family A member allowed into A's folder, blocked from B's); authenticated SELECT family-scoped. Guard test `tests/a11-family-media-bucket.test.ts`
+- Status: **PARTIALLY RESOLVED** — bucket is now defined in version control with family-folder write RLS (fresh envs / the PG16 harness now work; cross-family writes blocked). **Read-privacy remains OPEN** under LB-009: the bucket is still `public` and consumers use `getPublicUrl`, so object URLs remain unauthenticated. The private+signed-URL switch is deferred because existing `family_photos`/`family_messages` rows store public URLs — flipping to private without a URL data-migration would break every stored link (owner decision)
+- Remaining dependencies: owner decision on public→signed-URL + a data-migration of stored public URLs; human application of `0216` to prod (per PENDING_PROD_MIGRATIONS)
 
 ### PLA-0460 - A-14 marketplace ownership/trust RPCs verified caller-gated (guarded)
 
