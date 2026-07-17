@@ -6,6 +6,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0618 - A-16: cron route ↔ vercel.json schedule 1:1 registration VERIFIED + guarded
+
+- Timestamp: 2026-07-17 17:10 UTC
+- Service: Notifications / reminders / cron (A-16)
+- Route: `vercel.json` `crons` ↔ `app/api/cron/**`
+- Affected files: `tests/cron-schedule-registration.test.ts` (new, 5 cases)
+- Role: n/a (deploy/scheduling correctness)
+- Severity: **verification (no defect) + regression guard** — complements PLA-0615 (which proved each cron route is auth-gated); this proves each is actually scheduled
+- Launch impact: a cron route is only half a job — the other half is its `vercel.json` schedule entry. Drift fails SILENTLY in prod: a route with no schedule never fires (dead reminder/digest/allowance run), and a schedule with no route 404s every tick. Verified the two are in **exact 1:1 correspondence**: 19 routes ↔ 19 schedules, zero unscheduled routes, zero orphaned schedules, all expressions well-formed 5-field cron, no duplicate paths. So every A-16 scheduled job (notifications, push-scan, wallet-allowance, chore/return reminders, digests, etc.) is genuinely wired to fire in prod.
+- Root cause: n/a (clean); the risk is future drift.
+- Resolution: added `tests/cron-schedule-registration.test.ts` — parses `vercel.json` crons, globs `app/api/cron`, and asserts perfect 1:1 (no dead jobs / no 404 ticks) + well-formed expressions + no duplicates. Self-maintaining, so a future cron route added without a schedule (or a schedule left orphaned) now fails CI.
+- Supabase impact: none.
+- Tests run: `tests/cron-schedule-registration.test.ts` 5/5 green.
+- Commit: (this increment)
+- Status: RESOLVED — A-16 cron scheduling proven complete and guarded against drift.
+- Remaining dependencies: none. (Prod firing still requires `CRON_SECRET` set in the deployment env — owner-owned config, already tracked.)
+
 ### PLA-0617 - A-12: Guardian child-safety AUDIT TRAIL was silently RLS-broken (audit writes ran under the user session)
 
 - Timestamp: 2026-07-17 16:04 UTC
