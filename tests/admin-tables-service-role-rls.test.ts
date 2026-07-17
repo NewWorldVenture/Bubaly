@@ -6,11 +6,11 @@ import { describe, expect, it } from 'vitest';
 // roles, permissions) must be reachable ONLY via the service-role client (the
 // admin console), never by a signed-in family member through PostgREST. Migration
 // 0010 mis-scoped both policies (`using(true)` with no `to service_role` → applied
-// TO public); 0218 restores service-role-only. This test locks the fix so the
+// TO public); 0219 restores service-role-only. This test locks the fix so the
 // policies can't silently regress back to a public-readable state.
 const MIG = 'supabase/migrations/0219_admin_tables_service_role_rls_lockdown.sql';
 
-describe('admin_users + support_tickets RLS is service-role-only (0218)', () => {
+describe('admin_users + support_tickets RLS is service-role-only (0219)', () => {
   const sql = readFileSync(MIG, 'utf8');
 
   for (const table of ['support_tickets', 'admin_users'] as const) {
