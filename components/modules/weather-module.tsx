@@ -83,7 +83,10 @@ export function WeatherModule() {
   const active = places.find((p) => p.key === activeKey) ?? places[0] ?? null;
 
   const loadSaved = useCallback(async () => {
-    const { data } = await supabase.from('weather_locations').select('*').eq('family_id', familyId).order('sort_order').order('created_at');
+    const { data, error } = await supabase.from('weather_locations').select('*').eq('family_id', familyId).order('sort_order').order('created_at');
+    // A transient read failure must not wipe the family's saved cities — keep the
+    // prior list (don't clobber to []) rather than flashing a false "no cities".
+    if (error) return [];
     setSaved(data ?? []);
     return data ?? [];
   }, [supabase, familyId]);

@@ -57,13 +57,15 @@ const BASELINE = new Set<string>([
   'app/(marketing)/lp/[slug]/page.tsx',
   'components/app/app-context.tsx',
   'components/concierge/plan-write-backs.tsx',
-  'components/modules/assistant-module.tsx',
+  // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message
+  // reads keep prior state on error instead of false-emptying; removed.
   'components/modules/billing-module.tsx',
   'components/modules/concierge-calls-module.tsx',
   // grocery-module fixed under A-10 (PLA-0625) — removed from baseline.
   // settings-module fixed under A-05 (PLA-0791) — profile read now captures
   // `error` + guards the destructive save; removed from baseline.
-  'components/modules/weather-module.tsx',
+  // weather-module fixed under A-05 (PLA-0792) — loadSaved keeps prior cities
+  // on a failed read instead of clobbering to []; removed.
 ]);
 
 describe('silent-empty read ratchet (PLA-0624/0625)', () => {

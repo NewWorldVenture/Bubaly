@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0792 - Weather + AI Assistant modules clobbered visible state to empty on a failed read (A-05)
+
+- Timestamp: 2026-07-17 23:06 UTC
+- Service: Home / dashboard command surfaces (A-05) — Weather module + AI Assistant module
+- Route: `/dashboard/weather` (`components/modules/weather-module.tsx`), AI Assistant surface (`components/modules/assistant-module.tsx`)
+- Affected files: `components/modules/weather-module.tsx`, `components/modules/assistant-module.tsx`, `tests/dashboard-modules-keep-prior-read.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `weather_locations` (read), `ai_conversations` (read), `ai_messages` (read)
+- Role: all family roles
+- Scenario: a client read fails transiently while the tables exist and have data
+- Severity: P3 (convenience surfaces, no data-write/loss — a false-empty flash only)
+- Launch impact: three reads dropped `error` and overwrote visible state with empty on failure — `weather.loadSaved` set `saved = data ?? []` (the family's saved cities vanish on a transient refresh error), `assistant.loadConversations` set `conversations = data ?? []` (the AI history sidebar empties), and `assistant.loadConversation` treated a failed `ai_messages` read the same as an empty conversation and rendered a fresh **greeting**, hiding the thread's real history
+- Root cause: the reads dropped their Supabase `error` and clobbered state to empty, conflating "load failed" with "no data"
+- Resolution: each read now captures `error` and keeps prior state on failure — `loadSaved` returns `[]` without calling `setSaved` (visible cities preserved); `loadConversations` returns early (sidebar preserved); `loadConversation` bails before `setConvId`/greeting so a failed read leaves the current thread intact and retryable instead of showing a misleading blank conversation. Matches the §3e keep-prior guidance for non-primary convenience reads
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/dashboard-modules-keep-prior-read.test.ts` (3 — each guard asserts the `error` capture precedes the state-clobber); `tsc --noEmit` clean; `eslint` clean on both modules; ratchet baseline pruned (`weather-module` + `assistant-module` removed)
+- Validation evidence: guards assert the ordered `if (error) return` before each `setState` clobber
+- Remaining dependencies: none agent-doable. **A-05 §3e false-empty client-read slice is now fully closed** (journeys, onboarding-funnel, settings-module, weather-module, assistant-module all handled; `independence`/`paperwork`/`money-timeline` are intentional migration-gated degradations; `app-context` is the benign keep-prior pattern)
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0791 - Settings profile: a failed profile read let a Save silently wipe the user's phone + avatar (A-05)
 
 - Timestamp: 2026-07-17 23:01 UTC
