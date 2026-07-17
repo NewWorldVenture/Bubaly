@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0580 - A-08 CRITICAL: any family member (incl. a child) could MINT money via a direct wallet_transactions insert
+
+- Timestamp: 2026-07-17 11:45 UTC
+- Service: Wallet / Bubaly Money ledger (A-08)
+- Route: direct PostgREST `INSERT` on `public.wallet_transactions` (bypasses the app entirely)
+- Affected files: `supabase/migrations/0217_wallet_ledger_write_lockdown.sql` (new), `app/(app)/missions/actions.ts` (auto-approve → service role), `tests/wallet-ledger-write-rls.test.ts` (new)
+- Role: **child / teen** — any authenticated family member
+- Scenario: a signed-in child POSTs `{family_id, direction:'credit', status:'completed', amount_cents:999999}` to `/rest/v1/wallet_transactions`
+- Severity: **CRITICAL** (money integrity + privilege escalation — unlimited spendable funds)
+- Launch impact: the wallet money tables (`family_wallets, child_wallets, wallet_buckets, wallet_transactions, wallet_rules`) shipped (migration 0088) with a single `"Members manage" … FOR ALL … USING/ WITH CHECK is_family_member(family_id)` policy. Spendable balance = Σ(completed credits − debits), so a child inserting a `completed` `credit` mints real money a Bubaly Issuing card would honour. Children have real Supabase sessions and the anon key is in the client bundle, so the manager-gated app actions were the ONLY barrier — RLS did not stop a direct write. **Proven live on the harness**: a child INSERT of a $9,999.99 completed credit succeeded (`INSERT 0 1`).
+- Root cause: write RLS on the immutable financial ledger equaled read RLS (any family member).
+- Resolution: migration **0217** keeps SELECT open to all members (a child views their own balance) but restricts INSERT/UPDATE/DELETE to `can_manage_family()` (parent/adult). Trusted server writes run with the service role and bypass RLS: allowance cron + Stripe/Issuing webhooks + the reserve-hold RPC were already service-role; the **chore auto-approve reward** was the one legitimate child-session write, so `submitProofAction` now routes `finalizeApproval` through `createServiceClient()` (the manual approve stays on the manager session).
+- Supabase impact: RLS-only; no data/columns. **Additive + idempotent.**
+- Tests run: PG16 harness — after 0217: child INSERT → "new row violates row-level security policy"; child SELECT → OK; manager INSERT → OK; service_role INSERT → OK; migration idempotent ×2. Regression: chore+wallet suites (6 files / 42 tests) green; `tsc` 0; eslint clean; new guard `tests/wallet-ledger-write-rls.test.ts` (4).
+- Validation evidence: harness transcript (mint blocked, 0 survivors, manager+service writes succeed).
+- Commit: (this increment)
+- Status: Fixed in code + pushed to `main`. **⚠️ PROD REMAINS EXPLOITABLE UNTIL 0217 IS APPLIED** — see LB-010 (P0, human-owned).
+- Remaining dependencies: apply 0217 to prod ASAP; consider moving ALL ledger writes to service-role-only as a follow-up.
+
 ### PLA-0551 - A-11 messages sub-surface verified tenant-isolated (tables + mark-read RPC), guarded
 
 - Timestamp: 2026-07-17 00:15 UTC

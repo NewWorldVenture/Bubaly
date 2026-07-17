@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
@@ -202,7 +202,11 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       return { ok: false, error: 'Could not finish the chore approval.' };
     }
     try {
-      await finalizeApproval(supabase, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      // Auto-approval is a trusted, server-decided payout and runs in the CHILD's
+      // session (the submitter). Route the reward finalization through the service
+      // role so it credits the immutable ledger under the manager-only wallet RLS
+      // (0217) — the child's session must never be the authority for a money credit.
+      await finalizeApproval(createServiceClient(), { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
       await setSubmissionStatus(supabase, familyId, submission.id, 'parent_review');
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
