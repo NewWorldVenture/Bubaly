@@ -24,6 +24,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: scan only (`grep` shape match); `messages-module` fix validated under PLA-0624.
 - Commit: (documentation + coordination note)
 - Status: OPEN (finding) — A-11 site fixed; 18 remaining sites owned by their respective agents to triage. **Now RATCHETED**: `tests/silent-empty-read-ratchet.test.ts` fails CI if any NEW file introduces the shape (baseline frozen at these 19), regression-locks the messages fix, and forces BASELINE to shrink as owners fix theirs (delete the test when it reaches []).
+- Addendum (A-16, fixed): a sibling FORM of the same class — `const { count: c } = await …; setCount(c ?? 0)` (count read, not `data`) — was found in `components/app/notification-bell.tsx` (the global unread badge). A failed count read silently **cleared the badge to 0** (user thinks they have no notifications). Fixed: capture `error` and keep the prior badge on failure (a realtime change / next mount retries). This form is not caught by the `const { data }` ratchet; the reminders/notifications modules + admin bell were checked and are clean.
 - Remaining dependencies: each owning agent classifies + fixes their site(s).
 
 ### PLA-0623 - A-08/A-03: money amount-validation + child-PIN brute-force surfaces VERIFIED clean

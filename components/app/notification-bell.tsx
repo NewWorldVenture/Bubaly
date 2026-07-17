@@ -14,12 +14,16 @@ export function NotificationBell() {
   useEffect(() => {
     const supabase = createClient();
     const load = async () => {
-      const { count: c } = await supabase
+      const { count: c, error } = await supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('is_read', false)
         .or(`user_id.eq.${userId},user_id.is.null`);
+      // On a transient read failure, keep the current badge rather than falsely
+      // clearing it to 0 (which would tell the user they have no notifications).
+      // A realtime change or the next mount will retry.
+      if (error) return;
       setCount(c ?? 0);
     };
     void load();
