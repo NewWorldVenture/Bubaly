@@ -8,11 +8,15 @@ import { Fragment } from 'react';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
 function JsonLd({ data }: { data: Record<string, unknown> }) {
+  // Today every caller passes static, developer-authored data. As defense in
+  // depth, escape `<` (as <) so a value can never break out of the
+  // <script> tag with `</script>` — the standard safe way to inline JSON-LD —
+  // in case a future caller ever passes dynamic/DB content.
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
   return (
     <script
       type="application/ld+json"
-      // JSON.stringify output is safe to inline; no user input flows in here.
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: json }}
     />
   );
 }
