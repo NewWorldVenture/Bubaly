@@ -7,6 +7,7 @@ import { coerceNutrition, type Nutrition } from '@/lib/meals/nutrition';
 import { computeFoodScore, type FoodScoreInput } from '@/lib/food/score';
 import { activeLeftovers, leftoverNudge, type LeftoverLike } from '@/lib/food/leftovers';
 import { KitchenDashboard, type KitchenData } from '@/components/modules/kitchen-dashboard';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Smart Kitchen | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,19 @@ export default async function KitchenPage() {
     supabase.from('meal_nutrition').select('subject_id, calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg')
       .eq('family_id', familyId).eq('subject_type', 'week').eq('subject_id', weekStart).maybeSingle(),
   ]);
+
+  // Source-of-truth reads (this week's plan, pantry, recipes, open grocery) must
+  // fail closed — a dropped error would render an empty kitchen that lies ("no
+  // meals planned", "pantry empty"). The newer optional tables (leftovers,
+  // nutrition) stay best-effort via isMissingTableError below. A genuinely
+  // missing core table (unapplied migration) is still tolerated as empty, so a
+  // partially-migrated env degrades rather than hard-fails.
+  const coreError = [planRes.error, pantryRes.error, recipesRes.error, groceryRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (coreError) {
+    console.error('[dashboard/kitchen] kitchen read failed', coreError);
+    return <ErrorState message="Could not load your kitchen from Supabase. Refresh and try again." />;
+  }
 
   // ── Meal plan rows → tonight + upcoming + variety ──
   type PlanRow = { plan_date: string; meal_type: string; meals: { name: string } | { name: string }[] | null };

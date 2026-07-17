@@ -6,6 +6,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0773 - Smart Kitchen rendered a false-empty kitchen from partially-failed source-of-truth reads
+
+- Timestamp: 2026-07-17 19:55 UTC
+- Service: Dashboard / Smart Kitchen (agent-`fable-opus` lane)
+- Route: `/dashboard/kitchen`
+- Affected files: `app/(app)/dashboard/kitchen/page.tsx`, `tests/kitchen-read-boundary.test.ts`
+- Database objects: `meal_plans`, `pantry_items`, `family_recipes`, `grocery_items` (core); `leftover_inventory`, `meal_nutrition` (optional/best-effort)
+- Role: authenticated family members using the Smart Kitchen
+- Scenario: any of the four source-of-truth reads (this week's meal plan, pantry, recipes, open grocery) fails to read (RLS edge, transient, connection) while the table itself exists.
+- Severity: **P1** (same reassuring-but-wrong class as PLA-0770 readiness / TODO-0404 Command Center — a false household status).
+- Launch impact: the six-way `Promise.all` destructured `planRes`/`pantryRes`/`recipesRes`/`groceryRes` but never inspected their `error`. A transient failure on any core read fell through to `?? []`, so the page rendered **"no meals planned", an empty pantry, zero recipes, and an empty grocery count** — and fed those empties into the Food Score, showing a confidently-wrong kitchen the family would act on (e.g. re-buying pantry staples that are actually stocked). The newer optional tables (`leftover_inventory`, `meal_nutrition`) were already correctly best-effort via `isMissingTableError`.
+- Root cause: the four core reads dropped their `error`.
+- Resolution: after the `Promise.all`, collect `[planRes.error, pantryRes.error, recipesRes.error, groceryRes.error].find((e) => e && !isMissingTableError(e))`, and on any real error `console.error('[dashboard/kitchen] kitchen read failed', coreError)` + `return <ErrorState message="Could not load your kitchen from Supabase. Refresh and try again." />` before building `KitchenData`. A genuinely missing core table (unapplied migration) is still tolerated as empty via `isMissingTableError`, so a partially-migrated env degrades rather than hard-fails; leftovers/nutrition stay best-effort. Matches the established Command-Center/Readiness fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/kitchen-read-boundary.test.ts` (3 assertions — core-error collection with missing-table filter, log+ErrorState, optional reads stay best-effort); full `npx vitest run` **569 files / 3553 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for the Kitchen page; the P0/P1 live blockers (LB-001..014) remain owner/live-infra.
 ### PLA-0772 - A-12 REVIEW (product/safety decision): the Guardian emergency-keyword override rings through an explicitly BLOCKED caller
 
 - Timestamp: 2026-07-17 19:45 UTC
