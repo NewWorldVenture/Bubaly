@@ -6,6 +6,44 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0591 - A-11 PRIVACY (needs product decision): the family credential vault is readable by every member, incl. children
+
+- Timestamp: 2026-07-17 12:05 UTC
+- Service: Family Vault / credentials (A-11)
+- Route: `family_credentials` reads (vault UI)
+- Affected files: `supabase/migrations/0119_family_credentials.sql` (RLS), no code change yet
+- Role: **child / teen** — any family member
+- Scenario: a child reads the family credential vault (stored passwords / account logins / PII)
+- Severity: MEDIUM (privacy) — **needs a product decision, not a unilateral fix**
+- Launch impact: `family_credentials_select` is `is_family_member(family_id)` and the table has **no per-credential visibility / owner / sensitivity column**, so EVERY stored credential (which may include parents' bank/email/utility logins) is readable by EVERY family member including young children. This may be intended for a shared vault (e.g. the WiFi password), but a single flat "all members see everything" model is risky for sensitive adult credentials.
+- Root cause: no visibility model on the vault.
+- Resolution: **DEFERRED to a product decision** (do not silently restrict — some entries are meant to be shared). Recommended: add a `visibility` (family | managers | owner) or `min_role` column defaulting to managers-only, and scope the SELECT/UPDATE policies accordingly (owner/managers always; others only when visibility=family). Logged so it is not lost.
+- Supabase impact: would be an RLS + column migration once the model is decided.
+- Tests run: n/a (finding).
+- Validation evidence: 0119 policy is `is_family_member` for select with no visibility column.
+- Commit: (documentation)
+- Status: OPEN — product decision required (owner-scoped vs. shared vault). Tracked for A-11 owner.
+- Remaining dependencies: decide the visibility model; then a migration + UI control.
+
+### PLA-0590 - A-08 economy: a child could MINT family currency via a direct currency_transactions insert
+
+- Timestamp: 2026-07-17 12:05 UTC
+- Service: Family Economy / tokens (A-08, sibling of the wallet ledger)
+- Route: direct PostgREST `INSERT` on `public.currency_transactions`
+- Affected files: `supabase/migrations/0218_economy_ledger_write_lockdown.sql` (new), `tests/economy-ledger-write-rls.test.ts` (new)
+- Role: **child / teen** — any authenticated family member
+- Scenario: a signed-in child inserts a `credit` into `currency_transactions`, minting tokens, then redeems them for parent-defined rewards
+- Severity: **HIGH** (integrity of the reward economy; tokens redeem for screen time / treats / cash-outs — but not real money, unlike the wallet)
+- Launch impact: the economy tables (`family_currencies, currency_transactions, economy_rewards, economy_redemptions`) shipped (0096) with the same `"Members manage" … FOR ALL … is_family_member` policy as the wallet bug (PLA-0580). Balance = Σ(credits−debits), so a child could mint unlimited tokens. Confirmed exploitable (same class as the wallet ledger).
+- Root cause: write RLS on the economy ledger equalled read RLS (any family member).
+- Resolution: migration **0218** restricts writes on the currency ledger + config + rewards to `can_manage_family()` (token AWARD is the manager-gated `awardTokensAction`; the token DEBIT goes through `decideRedemptionAction` (manager) or the `loyalty_redeem_reward` SECURITY DEFINER / service-role RPC). **Exception**: `economy_redemptions` keeps INSERT open to members because a child legitimately creates a *pending* redemption request (`requestRedemptionAction`); only its UPDATE/DELETE (approve/deny/fulfil) are manager-only.
+- Supabase impact: RLS-only; additive + idempotent.
+- Tests run: PG16 harness — child currency mint → RLS error; **child redemption request → OK** (exception preserved); manager award → OK; idempotent ×2. Guard `tests/economy-ledger-write-rls.test.ts` (4); `economy-ledger.test.ts` still green; migration audit clean (next 0219).
+- Validation evidence: harness transcript (mint blocked, redemption request allowed, 0 survivors).
+- Commit: (this increment)
+- Status: Fixed in code + pushed. **Prod exploitable until 0218 applied** (folded into the pending-migrations list; sibling of LB-010).
+- Remaining dependencies: apply 0218 to prod.
+
 ### PLA-0581 - A-11: the "Secure Vault" is a label-only bucket with no protection beyond standard family RLS — OPEN (product decision)
 
 - Timestamp: 2026-07-17 00:25 UTC
