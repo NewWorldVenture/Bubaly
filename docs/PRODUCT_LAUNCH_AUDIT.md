@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0785 - Trip detail writes (packing toggle/remove, dismiss recommendation) silently no-op'd on failure (A-13)
+
+- Timestamp: 2026-07-17 20:35 UTC
+- Service: Vacations / travel / concierge (A-13) — trip detail tabs (Packing, Overview)
+- Route: `/dashboard/vacations/[id]/packing` (`components/vacations/trip-packing.tsx`), `/dashboard/vacations/[id]/overview` (`components/vacations/trip-overview.tsx`)
+- Affected files: `components/vacations/trip-packing.tsx`, `components/vacations/trip-overview.tsx`, `tests/vacations-detail-write-boundary.test.ts` (new)
+- Role: all family roles with the Vacations feature
+- Scenario: a packing-item check/uncheck, a packing-item delete, or an AI-recommendation dismiss fails for a real reason (RLS denial, offline, constraint)
+- Severity: P2 (silent write failure / optimistic UI lies about persisted state)
+- Launch impact: three user-initiated writes fired `await …update/delete(...)` and **dropped the Supabase `error`**. `toggle` (packing `packed`) and `remove` (packing item) and `dismissReco` (mark an AI recommendation dismissed) all no-op'd silently on failure — the checkbox reverts / the "deleted" item reappears / the dismissed recommendation returns on the next load, with no error shown. Their sibling writes in the same files (`add`, budget `savePlanned`) already capture `{ error }` and toast it, so this was an inconsistency
+- Root cause: `await createClient().from(...).update/delete(...)` dropped the PostgREST `error` at the three sites
+- Resolution: all three now `const { error } = await …; if (error) toastError(error.message);` matching the sibling pattern. The background readiness-score auto-insert in the overview effect (non-user-initiated telemetry) was intentionally left as-is
+- Supabase impact: none — writes unchanged; genuine failures now surface via toast
+- Tests run: `tests/vacations-detail-write-boundary.test.ts` (3 — each of the 3 writes captures+toasts the error); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, `--max-old-space-size=6144`)
+- Validation evidence: guard extracts each function body and asserts the `const { error } = await` capture + `if (error) toastError(error.message)` guard
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
+- Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
 ### PLA-0784 - Vacations list + calendar rendered a failed read as "No trips yet" / an empty month (A-13)
 
 - Timestamp: 2026-07-17 20:20 UTC
