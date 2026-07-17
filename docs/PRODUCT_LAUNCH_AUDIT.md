@@ -1219,3 +1219,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: audit query output + per-function reads (this session).
 - Commit: pending (this push; doc only)
 - Status: SECURITY DEFINER surface VERIFIED clean (1 fixed defect). Broadcasting the two root-cause classes below.
+
+### PLA-0630 - Storage buckets + storage.objects RLS audited; harness shim fixed to enforce it
+
+- Timestamp: 2026-07-17 14:10 UTC
+- Service: A-11 storage (files/documents/media) — cross-cutting isolation
+- Route: `storage.buckets`, `storage.objects` policies
+- Affected files: `docs/audit/verify-pg.sh` (shim: enable RLS + grant on storage.objects)
+- Role: authenticated members uploading/reading family files
+- Scenario: audited every storage bucket's visibility + the `storage.objects` RLS policies, then made the PG16 shim actually enforce them (it created `storage.objects` without RLS, so storage isolation was previously untestable).
+- Severity: n/a for the policies (correct); see the prod-config verification item below (LB-013).
+- Findings:
+  - **Buckets**: `documents`, `chore-proof`, `marketing-assets` = **private** (family-scoped). `avatars`, `marketplace-photos`, `feedback-attachments` = **public** (intentional — avatars, listing photos, feedback images are meant to be shown). `family-media` = **public** = the already-tracked LB-009 (photos + message/reminder attachments served via unauthenticated URLs).
+  - **Policies**: private-bucket read/write is scoped by `is_family_member((storage.foldername(name))[1]::uuid)` (folder[1] = family_id) — a member can only touch their own family's folder. Public-bucket writes are `auth.uid()::text = foldername[1]` (own folder). Design is correct.
+  - **Live proof (PG16, after the shim fix)**: as a family-A member on the `documents` bucket (driver licenses / insurance / medical) — reads own doc = 1, reads family B's = **0**, unfiltered read = own only; upload into family B's folder → **"new row violates row-level security policy"**.
+  - **Harness gap fixed**: Supabase enables RLS on `storage.objects` + grants DML to `authenticated` at project creation (NOT via a migration), so the app's storage policies rely on that platform default. The `verify-pg.sh` shim created `storage.objects` WITHOUT RLS, leaving every storage policy inert — storage isolation was unverifiable. Added `alter table storage.objects enable row level security` + the client-role grants to the shim; re-bootstrap is clean (migration_fail=0) and isolation now provable.
+- Supabase impact: no schema change (harness-only). **Prod-config verification required (LB-013)**: because RLS-on-`storage.objects` is a Supabase platform default (not in migrations), a human must CONFIRM it is enabled in prod — if it were ever off, `documents`/`chore-proof`/private `family-media` objects (incl. driver licenses, insurance, medical) would be fully exposed.
+- Tests run: PG16 clean bootstrap (216 migs, migration_fail=0) + storage.objects RLS on + live cross-family documents probe.
+- Validation evidence: probe output above.
+- Commit: pending (this push)
+- Status: policies VERIFIED correct + now harness-provable; prod-config check flagged (LB-013); `family-media` public-read remains LB-009.

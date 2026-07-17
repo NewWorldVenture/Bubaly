@@ -56,6 +56,13 @@ create table if not exists storage.buckets (id text primary key, name text not n
 create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets(id),
   name text, owner uuid, metadata jsonb, created_at timestamptz default now());
 create or replace function storage.foldername(name text) returns text[] language sql immutable as $f$ select string_to_array(name,'/') $f$;
+-- Supabase ships storage.objects with RLS ENABLED + DML granted to the client
+-- roles by default (the platform does this at project creation, NOT a migration).
+-- Replicate it so the storage.objects POLICIES the migrations add are actually
+-- enforced here — otherwise storage isolation is untestable (policies inert).
+alter table storage.objects enable row level security;
+grant select, insert, update, delete on storage.objects to authenticated;
+grant select on storage.objects to anon;
 SQL
   # Migrations
   local fail=0

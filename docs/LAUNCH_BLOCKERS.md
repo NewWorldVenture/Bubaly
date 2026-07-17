@@ -20,6 +20,8 @@ they are not counted as completed audit weight.
 
 | LB-012 | P2 | **marketplace bid-as-any-family IDOR** — until migration 0221 is applied to prod, any signed-in user can call `marketplace_place_bid_unchecked` directly (SECURITY DEFINER, executable by `authenticated` via a rename that carried the grant) and place an auction bid attributed to another family, bypassing the checked wrapper's `auth.uid()` validation (PLA-0610) | Proven live on PG16: as a family-A member the direct `_unchecked` call was permitted pre-0221, "permission denied" post-0221; checked wrapper unaffected | Supabase owner (apply 0221 — human-owned) | Apply 0221; verify `authenticated` cannot EXECUTE `marketplace_place_bid_unchecked` in prod | Open |
 
+| LB-013 | P1 | **confirm RLS is enabled on `storage.objects` in prod** — the app's storage isolation (private `documents` = driver licenses/insurance/medical, `chore-proof`, `family-media`) relies ENTIRELY on Supabase's platform default of RLS-on for `storage.objects` + the family-scoped policies; RLS-on is NOT set by any migration, so if it were ever disabled every private object would be world-readable (PLA-0630) | Policies verified correct + family-isolating on PG16 (as family A: read family B's document = 0, cross-folder upload rejected); but the enable-RLS step is a Supabase platform default, absent from migrations | Supabase owner (verify + assert in prod: `storage.objects` RLS enabled) | Confirm `storage.objects` has RLS enabled in prod and a non-member cannot read another family's `documents` object | Open |
+
 ## Release Rule
 
 No production launch recommendation may be changed to Go while any P0 blocker is open or while a P1
