@@ -6,6 +6,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0551 - A-11 messages sub-surface verified tenant-isolated (tables + mark-read RPC), guarded
+
+- Timestamp: 2026-07-17 00:15 UTC
+- Service: Messages / Communications (A-11)
+- Route: `/dashboard/messages` (Family Communications), `mark_conversation_read` RPC
+- Affected files: `tests/a11-messages-rls.test.ts` (new static guard)
+- Role: any member of family B attempting to reach family A's conversations/messages
+- Scenario: confirm family messages are tenant-isolated at the DB layer and that the read-stamp RPC cannot bypass that isolation
+- Severity: (verification of a CRITICAL invariant on the A-11 messages surface — no defect found)
+- Launch impact: family conversations carry private messaging + attachments; isolation must hold at the DB layer and the RPC must not escalate. Verified + guarded so neither regresses
+- Root cause: n/a (verification)
+- Resolution: confirmed the messages contracts are sound —
+  (1) `family_conversations` + `family_messages` (migration 0014): RLS enabled, `FOR ALL` scoped to `family_id in (select family_id from family_members where user_id = auth.uid())` — a member of family B cannot read or write family A's conversations/messages (collaborative within a family by design, isolated across families);
+  (2) `mark_conversation_read` (migration 0163): declared **`security invoker`** (not definer) with a pinned `search_path = public` and only ever stamps the caller's own uid (`array_append(read_by, auth.uid())`), so it runs under the caller's family-scoped RLS and cannot mark-read another family's messages;
+  (3) module write path already error-checked + storage orphan-safe (verified in PLA-0442/0461 context). Added `tests/a11-messages-rls.test.ts` pinning the table policies + the RPC's security-invoker contract
+- Supabase impact: none (read-only verification); no schema change
+- Tests run: `tests/a11-messages-rls.test.ts` (3 — conversations RLS, messages RLS, RPC security-invoker), plus my A-11 suite; the only red in the full run is the pre-existing `tests/display-render.test.ts` (agent-04 A-05, `React is not defined`), which is out of scope and unaffected by this change
+- Validation evidence: guard asserts both tables' `family_id in (…family_members…auth.uid())` policy and that `mark_conversation_read` contains `security invoker` + `set search_path = public` and NOT `security definer`
+- Commit: (this increment)
+- Status: A-11 messages tenant-isolation Verified + guarded; A-11 unit remains In-progress (LB-009 public-read decision, live storage cross-family probe, ≥500 doc/message seed)
+- Remaining dependencies: LB-009 owner decision; extend the A-03 live probe to `family_messages` + a storage object read
+
 ### PLA-0550 - A-12 defense-in-depth: manager-only WRITE RLS on family_places + guardian_routing_rules (migration 0215)
 
 - Timestamp: 2026-07-17 00:20 UTC
