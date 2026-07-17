@@ -23,6 +23,27 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: RESOLVED — A-16 cron scheduling proven complete and guarded against drift.
 - Remaining dependencies: none. (Prod firing still requires `CRON_SECRET` set in the deployment env — owner-owned config, already tracked.)
 
+### PLA-0619 - A-03: service-role (BYPASSRLS) read/write scope VERIFIED across the whole app tree — no request-supplied-id IDOR
+
+- Timestamp: 2026-07-17 16:20 UTC
+- Service: Tenant isolation / authorization (A-03), cross-cutting
+- Route: every `createServiceClient()` call site under `app/**` (~90 files)
+- Affected files: none (verification only — complements the live isolation proof PLA-0415)
+- Role: any signed-in family member attempting to reach another family's data
+- Severity: (verification of a CRITICAL isolation invariant — no defect found)
+- Launch impact: `createServiceClient()` bypasses RLS, so any service-role query that scopes family data by a **request-supplied** id (formData/params) without verifying it against the caller would be a cross-family IDOR. Enumerated every service-client usage under `app/**` and triaged each by how it derives its scope:
+  - **Non-admin app actions/pages** — every family-data access scopes by the authenticated context: `ctx.active.familyId` (money, wallet, marketplace orders/reports, account, contact-center, feedback, missions), an explicit `member.family_id === ctx.active.familyId` membership check before acting (child-login create/reset-PIN — a request `memberId` is rejected if it isn't in the caller's family), the caller's own `owner_id`/`user_id` (settings progressive-profile `crm_contacts`), or a global singleton (`stripe_settings`, plan config). No request-supplied family/member id is ever used to scope a service query without a membership check.
+  - **`app/(app)/admin/**` console** — every flagged file is the super-admin console, which reads cross-tenant data by design behind the `(app)/admin` layout gate + per-action `isSuperAdmin`/`requireMarketingAdmin` re-checks (A-17, PLA-0530). Not IDORs.
+  - Privileged mutations additionally carry role gates (`isManager`/`isAdmin`/`isSuperAdmin`).
+- Root cause: n/a (verification + method note).
+- Resolution: n/a. Static triage of all ~90 `createServiceClient()` sites; the highest-risk money/wallet/marketplace/child-login/contact-center/feedback actions read in full. Pairs with the live cross-family isolation proof (PLA-0415: read/write/RPC all blocked cross-tenant on PG16).
+- Supabase impact: none.
+- Tests run: n/a (no code change); the existing isolation guards (`tests/rls-isolation-sweep.test.ts`, admin-authz guards) remain green.
+- Validation evidence: enumeration output + per-file scope classification (authenticated-context vs. request-input); non-admin service reads all scope to `ctx.active.familyId` / own-user / singletons; admin reads all super-admin gated.
+- Commit: (this increment)
+- Status: RESOLVED (verified — no defect). Live per-request IDOR fuzzing across all routes remains part of the owner-gated E2E pass (LB-005).
+- Remaining dependencies: none for the static boundary; live authenticated E2E is LB-005.
+
 ### PLA-0617 - A-12: Guardian child-safety AUDIT TRAIL was silently RLS-broken (audit writes ran under the user session)
 
 - Timestamp: 2026-07-17 16:04 UTC
