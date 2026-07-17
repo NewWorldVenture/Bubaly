@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
@@ -28,7 +28,11 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
   const router = useRouter();
   const { success, error: toastError } = useToast();
 
-  const { data: trips, loading } = useRealtimeQuery<Vacation>({
+  // The vacations list is the primary source-of-truth read: a genuine failure
+  // must surface + be retryable, not render as the "No trips yet" empty state
+  // (which would tell a family their planned trips vanished). Missing-table/
+  // offline are still degraded to an empty list by the hook.
+  const { data: trips, loading, error, refresh } = useRealtimeQuery<Vacation>({
     table: 'vacations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId),
   });
@@ -117,7 +121,9 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
         </Link>
       )}
 
-      {loading ? <LoadingBlock /> : sorted.length === 0 ? (
+      {loading ? <LoadingBlock /> : error ? (
+        <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
+      ) : sorted.length === 0 ? (
         <EmptyState icon={Plane} title="No trips yet" description="Create your first vacation — or let the AI builder plan one for you." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
