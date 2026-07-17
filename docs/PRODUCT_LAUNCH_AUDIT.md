@@ -6,6 +6,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0621 - A-11: all 6 Storage buckets RLS-boundary VERIFIED (sensitive = private, no cross-tenant write) + guarded
+
+- Timestamp: 2026-07-17 17:32 UTC
+- Service: Messages / files / documents / storage (A-11)
+- Route: `storage.objects` RLS across every bucket (`avatars`, `chore-proof`, `documents`, `family-media`, `feedback-attachments`, `marketplace-photos`)
+- Affected files: `tests/storage-bucket-rls-boundary.test.ts` (new, 4 cases)
+- Role: authenticated member of family A attempting to read/write family B's objects
+- Severity: **verification (no defect) + regression guard against a catastrophic PII-leak class**
+- Launch impact: extended the boundary lens (PLA-0611/0615) to Supabase Storage. Enumerated all 6 buckets and their `storage.objects` policies:
+  - **`documents`** (passports/IDs/insurance) — `public=false` (PRIVATE); SELECT/INSERT/UPDATE/DELETE all folder-scoped to `is_family_member((storage.foldername(name))[1]::uuid)`. ✓
+  - **`chore-proof`** (photos of children) — `public=false` (PRIVATE); family-scoped read/insert/delete (no UPDATE needed for write-once proof). ✓
+  - **`family-media`** — family-scoped writes (my mig 0216); read is public (already tracked as **LB-009**). ✓ (writes)
+  - **`avatars`, `marketplace-photos`, `feedback-attachments`** — public-read by design (profile pics / listings / admin feedback screenshots); writes scoped to the uploader's own `auth.uid()` folder. ✓
+  - **No cross-tenant write path** (every write checks the folder segment against membership/ownership) and **no sensitive bucket wrongly public** — the two PII-bearing buckets are both private + family-scoped.
+- Root cause: n/a (clean); the risk is a future migration silently flipping `documents`/`chore-proof` to public or dropping the folder-scope check → instant cross-tenant PII leak.
+- Resolution: added `tests/storage-bucket-rls-boundary.test.ts`, which reads the migration SQL and asserts (1) the sensitive buckets are created `public=false` and are never (re)created or `UPDATE`d to `public=true`; (2) every family-scoped bucket gates writes on `is_family_member` of the folder; (3) the sensitive buckets have a family-scoped SELECT and NOT an unconditional public SELECT. Self-maintaining against future drift.
+- Supabase impact: none (verification + guard).
+- Tests run: `tests/storage-bucket-rls-boundary.test.ts` 4/4 green.
+- Commit: (this increment)
+- Status: RESOLVED — A-11 storage tenant-isolation proven and guarded. (Residual: LB-009 family-media public→signed URLs remains an owner/product decision, unchanged.)
+- Remaining dependencies: none new.
+
 ### PLA-0618 - A-16: cron route ↔ vercel.json schedule 1:1 registration VERIFIED + guarded
 
 - Timestamp: 2026-07-17 17:10 UTC
