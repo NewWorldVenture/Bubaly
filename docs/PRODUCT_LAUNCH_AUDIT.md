@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0793 - Public marketing landing page + form 404'd on a transient read error (A-17 §3e slice)
+
+- Timestamp: 2026-07-17 23:11 UTC
+- Service: Admin / marketing / content (A-17) — public marketing landing pages + forms (cross-cutting §3e sweep item; authz for A-17 remains `agent-04`'s)
+- Route: `/lp/[slug]` (`app/(marketing)/lp/[slug]/page.tsx`), `/f/[id]` (`app/(marketing)/f/[id]/page.tsx`)
+- Affected files: `app/(marketing)/lp/[slug]/page.tsx`, `app/(marketing)/f/[id]/page.tsx`, `tests/marketing-public-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `marketing_landing_pages`, `marketing_forms` (service-role reads — no client RLS on public marketing content)
+- Role: anonymous public visitors (+ crawlers)
+- Scenario: the service-role read for a published landing page / active form fails transiently (outage, pool exhaustion) while the row genuinely exists
+- Severity: P2 (SEO + conversion — a permanent-gone 404 for a real, live page)
+- Launch impact: both loaders (`getPage` / `getForm`) destructured only `{ data }` and returned `null` on failure, and the pages do `if (!page) notFound()` — so a **transient DB error rendered a 404** for a real, published landing page or active form. A 404 is a permanent-gone signal: search engines de-index the page and paid-traffic visitors hit a dead end, all from a momentary read blip. `notFound()` should mean "this row does not exist", never "the read failed"
+- Root cause: the loaders swallowed the Supabase `error`, collapsing "genuinely missing" and "read failed" into the same `null`, which the caller maps to `notFound()` (404)
+- Resolution: both loaders now capture `{ data, error }` and `throw` on a real error (Next renders a retryable 5xx via the error boundary — no de-index), reserving `notFound()` for a truly missing/unpublished row. `generateMetadata` shares the same loader, so its transient-error path is corrected too
+- Supabase impact: none — reads unchanged; error now distinguished from absence
+- Tests run: new `tests/marketing-public-read-boundary.test.ts` (2 — each loader captures error + throws before the null-return, notFound reserved for a missing row); `tsc --noEmit` clean; `eslint` clean on both files; ratchet baseline pruned (both marketing files removed)
+- Validation evidence: guards assert the `if (error) throw` precedes `return data;` and that `notFound()` remains for the genuinely-missing case
+- Remaining dependencies: none agent-doable. Note: `app/(app)/feedback/feedback-board.tsx` (comment lazy-load) is left in the ratchet baseline — its `comments === null` reload guard makes a naive keep-prior an infinite-reload risk; deferred as a low-value cosmetic item
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-17 §3e sub-slice by agent-05; A-17 unit ownership/authz stays with agent-04)
+
 ### PLA-0792 - Weather + AI Assistant modules clobbered visible state to empty on a failed read (A-05)
 
 - Timestamp: 2026-07-17 23:06 UTC

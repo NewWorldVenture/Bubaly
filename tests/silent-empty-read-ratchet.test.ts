@@ -53,8 +53,9 @@ const BASELINE = new Set<string>([
   'app/(app)/dashboard/paperwork/page.tsx',
   'app/(app)/feedback/feedback-board.tsx',
   'app/(app)/missions/page.tsx',
-  'app/(marketing)/f/[id]/page.tsx',
-  'app/(marketing)/lp/[slug]/page.tsx',
+  // marketing lp/[slug] + f/[id] fixed under A-17 §3e slice (PLA-0793) — loaders
+  // now throw on a real read error (retryable 5xx) instead of 404-ing a live page;
+  // notFound() reserved for a genuinely missing row. Removed from baseline.
   'components/app/app-context.tsx',
   'components/concierge/plan-write-backs.tsx',
   // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message

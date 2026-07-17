@@ -12,13 +12,18 @@ export const dynamic = 'force-dynamic';
 // service-role client. Only published, non-deleted pages are servable.
 async function getPage(slug: string) {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_landing_pages')
     .select('*')
     .eq('slug', slug.toLowerCase())
     .eq('published', true)
     .is('deleted_at', null)
     .maybeSingle();
+  // Distinguish "genuinely not found" (→ 404) from a transient read failure. If we
+  // swallow the error and return null, a real published page 404s on a DB blip —
+  // a permanent-gone signal that de-indexes the page. Throw so it renders a
+  // retryable 5xx instead, and reserve notFound() for a truly missing slug.
+  if (error) throw new Error(`Failed to load landing page "${slug}": ${error.message}`);
   return data;
 }
 

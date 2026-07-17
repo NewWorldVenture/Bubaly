@@ -11,13 +11,16 @@ export const dynamic = 'force-dynamic';
 // service-role client. Only active, non-deleted forms are publicly servable.
 async function getForm(id: string) {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_forms')
     .select('*')
     .eq('id', id)
     .eq('status', 'active')
     .is('deleted_at', null)
     .maybeSingle();
+  // A transient read failure must not 404 a live form (a permanent-gone signal).
+  // Throw so it renders a retryable 5xx; reserve notFound() for a truly missing id.
+  if (error) throw new Error(`Failed to load marketing form "${id}": ${error.message}`);
   return data;
 }
 
