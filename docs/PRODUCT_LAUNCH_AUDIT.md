@@ -940,3 +940,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push; doc only)
 - Status: LIVE-verified for the public surface; a genuine DoD advance for A-19/A-20 (public routes)
 - Remaining dependencies: authed E2E (login→dashboard→wallet→Stripe checkout) + authed-route axe/overflow still need a real Supabase test login (the spec files already note "extend PUBLIC_ROUTES → authed routes once CI has a Supabase login"); the homepage `load`-event check needs egress to Unsplash/Supabase (works in real deploy).
+
+### PLA-0570 - A-13 cross-family RLS isolation PROVEN LIVE on the PG16 harness
+
+- Timestamp: 2026-07-17 00:20 UTC
+- Service: A-13 Vacations / travel / concierge
+- Route: `public.vacations`, `public.concierge_calls` (RLS)
+- Affected files: none (live DB verification via `docs/audit/verify-pg.sh`)
+- Role: authenticated member of family A attempting to reach family B's rows
+- Scenario: brought up the throwaway PG16 harness (all 216 migrations applied, migration_fail=0; SEED_ALL loaded), created a second tenant "family B" with its own vacation + concierge call as service-role, then ran every op AS family A's authenticated member under RLS.
+- Severity: n/a (verification; isolation holds)
+- Results (LIVE, run as family-A member under `set role authenticated` + anchor JWT):
+  - READ: own vacations = 12 (visible); family B's vacation by id = **0**; unfiltered `select * from vacations` = **12** (own only — RLS silently scopes); family B's concierge call = **0**.
+  - UPDATE family B's vacation → **0 rows** affected (RLS `USING` blocks; B's title still "B Secret Trip").
+  - DELETE family B's concierge call → **0 rows** (still present).
+  - INSERT a vacation carrying family B's `family_id` → **"new row violates row-level security policy for table vacations"** (WITH CHECK blocks; 0 rows injected).
+  - Post-checks confirmed family B's data completely untouched.
+- Supabase impact: none (throwaway local DB; no prod change). Faithful to prod: `authenticated` was granted table DML (as Supabase does) so the test exercised RLS, not a table-permission wall.
+- Tests run: `verify-pg.sh up` (216 migrations, migration_fail=0) + scripted cross-family READ/UPDATE/DELETE/INSERT probe.
+- Validation evidence: probe output above (READ 0 cross-tenant, UPDATE/DELETE 0 rows, INSERT RLS-rejected).
+- Commit: pending (this push; doc only)
+- Status: A-13 tenant isolation LIVE-PROVEN (complements the global PLA-0415 proof with unit-specific evidence). Corroborates that the `0070_vacations` loop policy + `0173_concierge_calls` per-op policies enforce the boundary in a real Postgres.
+- Note: SEED_ALL emitted 2 non-blocking marketplace hand-off/returns seed errors (A-14; require two seeded members for the anchor family) — flagged for A-14's owner, unrelated to A-13.
