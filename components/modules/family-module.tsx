@@ -128,6 +128,12 @@ export function FamilyModule() {
         sb.from('medical_profiles').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
         sb.from('family_credentials').select('id', { count: 'exact', head: true }).eq('family_id', familyId).is('deleted_at', null),
       ]);
+      // Supabase query errors do NOT throw — they resolve as { data: null, error }
+      // — so the surrounding try/catch never catches them and the ErrorState below
+      // was dead code for the most common failure. Surface a failed PRIMARY read
+      // (the family row: name/address/cover/code) instead of a degraded "Your
+      // Family / Not set" hub. Secondary reads (sub/counts) stay degraded.
+      if (fam.error) { setLoadError('Could not load your family hub. Refresh and try again.'); return; }
       setFamily(fam.data ?? null);
       setSub(subRes.data ?? null);
       setEvents((evRes.data ?? []) as CalEvent[]);

@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0794 - Family Hub's ErrorState was dead code: a failed families read rendered a degraded "Not set" hub (A-05)
+
+- Timestamp: 2026-07-17 23:16 UTC
+- Service: Home / dashboard command surfaces (A-05) — Family Hub
+- Route: `/family` (`components/modules/family-module.tsx`)
+- Affected files: `components/modules/family-module.tsx`, `tests/family-hub-read-boundary.test.ts` (new)
+- Database objects: `families` (primary), plus `subscriptions`/`calendar_events`/`family_albums`/counts (secondary)
+- Role: all family roles
+- Scenario: the primary `families` read fails for a real reason (transient outage, RLS/permission edge) while the family exists
+- Severity: P2 (primary-content silent failure — the family appears nameless/addressless; the built-in error UI never fires)
+- Launch impact: `load()` wrapped its reads in `try/catch` and rendered `<ErrorState onRetry>` only on a caught throw — but **Supabase query errors don't throw**, they resolve as `{ data: null, error }`. So a failed `families` read fell straight through to `setFamily(fam.data ?? null)` → `family = null`, and the hub rendered a reassuring-but-wrong "Your Family / Address: Not set / code —" instead of an error. The `ErrorState` + retry was effectively **dead code for the most common failure mode**. (No data-loss: the edit modal is correctly gated on `editOpen && family`, so an errored read can't present a blank editable form — verified + regression-locked)
+- Root cause: the error-handling assumed Supabase reads throw; query errors bypass `catch`, and the primary read's `error` field was never inspected
+- Resolution: after the `Promise.all`, check `fam.error` (the primary read) and `setLoadError(...)` + `return`, so the existing retryable `ErrorState` fires on a genuine failure. Secondary reads (subscription, counts, albums) stay gracefully degraded. A genuinely absent family row (null data, no error) still renders the normal empty/degraded hub
+- Supabase impact: none — reads unchanged; the dormant error path now actually triggers
+- Tests run: new `tests/family-hub-read-boundary.test.ts` (3 — the `fam.error` gate precedes the `setFamily` fallthrough; the `ErrorState` retry path exists; the edit modal stays gated on a non-null family); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guards assert the ordered `if (fam.error)` before `setFamily`, the ErrorState wiring, and the `editOpen && family &&` blank-overwrite lock
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0793 - Public marketing landing page + form 404'd on a transient read error (A-17 §3e slice)
 
 - Timestamp: 2026-07-17 23:11 UTC
