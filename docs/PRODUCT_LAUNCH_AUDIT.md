@@ -1195,3 +1195,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Fixed in code (0220 + guard); **prod apply pending (LB-012)**; **flagged to agent-01 (A-14 owner)** — PLA-0460 concluded bid/buy were "revoked from public", which was true but missed the surviving `authenticated` grant on the renamed `_unchecked`.
 - Remaining dependencies: apply 0221 to prod; agent-01 to confirm no other renamed-RPC ACL carryover in A-14.
+
+### PLA-0620 - SECURITY DEFINER function surface fully audited (57 funcs) — 1 bug (0221), rest CLEAN
+
+- Timestamp: 2026-07-17 01:40 UTC
+- Service: A-03 tenant isolation / A-14 marketplace / A-08 wallet (cross-cutting RLS-bypass surface)
+- Route: all `public.*` SECURITY DEFINER functions (PG16 harness)
+- Affected files: none (verification; the one fix shipped separately as 0221/PLA-0610)
+- Role: `authenticated` / `public` callers of RLS-bypassing RPCs
+- Scenario: complete audit of every SECURITY DEFINER function (they run as owner and bypass RLS) for: mutable search_path, caller reachability, and whether they validate `auth.uid()` / tie caller-supplied ids to the caller.
+- Severity: n/a (audit; the single defect found was fixed in 0221)
+- Results (all 57 SECURITY DEFINER functions):
+  - **search_path: 57/57 SET** (`SET search_path TO 'public'`) — no search-path-injection surface.
+  - **Trigger functions (8)** (`feedback_bump_*`, `handle_new_user/family`, `mark_model_dirty`, `marketplace_log_price_change`, `marketplace_offer_flip_pending`, `sync_log_change`): return `trigger`, invoked only by triggers — not directly exploitable despite the `authenticated` EXECUTE grant.
+  - **Helper/read funcs** (`is_family_member`, `is_family_admin`, `can_manage_family`, `family_role`, `social_role_for`, `social_has_permission`, `marketplace_member_id`, `is_marketplace_circle_*`): compute the CALLER's own relationship to a given family/circle via `auth.uid()` — passing another family's id only reports the caller's (non-)membership. No leak.
+  - **`public_stats`**: returns 3 global aggregate counts (families / active members / completed chores) — no PII, no per-family breakdown. Intentional.
+  - **Action RPCs** (`wallet_decide_spend/allowance`, `wallet_approve_gift`, `wallet_fund_goal`, `wallet_transfer`, `economy_decide_redemption`, `invest_decide_order`, `guardian_review_suggestion`, `marketplace_buy_now/accept_offer/decline_offer/set_listing_status/negotiation_offer/negotiation_respond/create_circle/join_circle/leave_circle`): every one gates on `auth.uid()` — wallet fns additionally enforce `p_actor_id = auth.uid()` + `can_manage_family(p_family_id)`; economy/invest/guardian DERIVE the family from the record then `can_manage_family()`; marketplace fns tie the family/member param to the caller via `is_family_member(p_family)` / `marketplace_member_id()` / ownership. Caller cannot spoof family, member, or actor.
+  - **service-role-only funcs** (`wallet_credit_child_ledger`, `wallet_reserve_card_auth`, `loyalty_award_points/redeem_reward/cancel_redemption`, `marketplace_close_auction`, `marketplace_place_bid_unchecked` [after 0221], internal helpers): not granted to `authenticated` — reachable only from server code via service-role, which validates first.
+  - **The one defect**: `marketplace_place_bid_unchecked` was executable by `authenticated` (rename ACL carryover) → fixed in 0221 (PLA-0610/LB-012).
+- Supabase impact: none (audit). No prod migration from this entry (the 0221 fix is tracked separately).
+- Tests run: PG16 harness (216 migs) + full pg_proc audit (execute-privilege × search_path × body-auth-check) + per-function body review of every action RPC.
+- Validation evidence: audit query output + per-function reads (this session).
+- Commit: pending (this push; doc only)
+- Status: SECURITY DEFINER surface VERIFIED clean (1 fixed defect). Broadcasting the two root-cause classes below.

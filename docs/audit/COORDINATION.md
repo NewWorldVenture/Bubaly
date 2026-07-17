@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-17 13:50 UTC** · by `agent-03`
+Last board update: **2026-07-17 13:50 UTC** · by `agent-04`
 
 ---
 
@@ -221,6 +221,29 @@ FOR ALL is_family_member" policy loop, applied to many tables. Full triage:
   model (PLA-0591). (A-11 owner.)
 - Health/medical + documents/driver-licenses/insurance: member-visible PII — confirm intended
   family-visibility vs. member/owner-scoping. (A-11/A-12 owners.)
+
+---
+
+## 3d. ⚠️ Two GRANT/POLICY-scoping classes (agent-04, PLA-0600/0610/0620)
+
+RLS-on / "353 tables covered" does NOT prove isolation — the POLICY or GRANT can still be
+mis-scoped. Two live-exploitable instances found + fixed this session; check your unit:
+
+1. **Policy `TO public USING(true)` when service-role was intended.** A `create policy ... using
+   (true) with check (true)` with **no `to service_role`** defaults to `TO public` → the
+   `authenticated` role matches → world-readable/writable. Found: `admin_users` + `support_tickets`
+   (world-readable PII + admin roster; mig 0219/PLA-0600/LB-011). Grep your migrations for
+   `using (true)` / `with check (true)` policies lacking a `to service_role`/role qualifier.
+2. **Renamed-object ACL carryover.** `alter function ... rename to X_unchecked` **preserves the
+   ACL**, and a later `revoke ... from public` does NOT drop a separate `authenticated` grant.
+   Found: `marketplace_place_bid_unchecked` stayed `authenticated`-executable → bid-as-any-family
+   IDOR (mig 0221/PLA-0610/LB-012). If you renamed a privileged fn to a `_raw`/`_unchecked` variant,
+   confirm `revoke execute ... from authenticated`.
+
+**Full SECURITY DEFINER surface audited (PLA-0620): 57 funcs, all search_path-set; every
+client-callable action RPC ties its family/member/actor param to `auth.uid()`; only the one above
+was exposed.** Others: verify any NEW SECURITY DEFINER RPC you add is either service-role-only or
+validates `auth.uid()` against every caller-supplied id.
 
 ---
 
