@@ -1529,3 +1529,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: PG16 constraint introspection + violation attempts (negative amount + negative shares both rejected) + balance-conservation aggregates across all three ledgers.
 - Commit: pending (doc only)
 - Status: Verified — the money ledgers are structurally sound (non-negative, conservation-safe, DB-enforced). Combined with PLA-0680 (allowance atomic claim) the money-cron + ledger surface is integrity-clean.
+
+### PLA-0710 - Mass-assignment / input-validation sweep of the mutation surface — CLEAN
+
+- Timestamp: 2026-07-17 15:30 UTC
+- Service: cross-cutting (server actions + API mutations)
+- Route: every `.insert/.update/.upsert({ ...x })` spread write (19 sites)
+- Affected files: none (verification)
+- Role: any authenticated user
+- Scenario: a write that spreads a raw request body into a DB insert (`insert({ ...body })`) lets a user set fields they shouldn't (`family_id`, `created_by`, `role`, `status`, `id`) — mass assignment. Swept every spread-write for that.
+- Severity: n/a (clean)
+- Findings:
+  - **Every spread object is a curated whitelist, not the raw body.** Automated check: for each `.insert/.update({ ...v })`, `v` is never assigned directly from `body`/`input`/`parsed`/`json`/`data` — 0 hits. Objects are built field-by-field from FormData pickers (`str(fd,'x')`, `num(fd,'x')`) or explicitly-validated inputs.
+  - **Trusted fields are overridden after the spread:** family-scoped writes do `insert({ ...row, family_id: ctx.active.familyId, created_by: ctx.user.id })`, so an injected `family_id`/`created_by` in `row` can't win; updates additionally filter `.eq('family_id', …)`.
+  - **Enum + numeric validation is consistent:** e.g. `trust/actions.ts` validates `capability`/`effect`/`subjectKind`/`approvalModel` against allowlists and clamps `required_approvals` → [1,5], `priority` → [0,1000]; money amounts are bounded by DB CHECKs (PLA-0700); request bodies are size-bounded (`readBoundedRequestJson`).
+  - Admin-marketing spread-writes (`crm_contacts`, `case_studies`, …) are super-admin-only (`requireMarketingAdmin`) and set `created_by: actorId`.
+- Supabase impact: none.
+- Tests run: pattern sweep of all spread-writes + trace of each spread var's construction (auto/trust/locator confirmed field-picked) + automated raw-body-assignment check (0 hits).
+- Commit: pending (doc only)
+- Status: Verified clean — no mass-assignment; input validation (enum allowlists, numeric clamps, bounded bodies, trusted-field override) is consistent across the mutation surface.
