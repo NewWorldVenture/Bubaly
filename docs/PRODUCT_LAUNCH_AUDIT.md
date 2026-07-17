@@ -1240,3 +1240,18 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: probe output above.
 - Commit: pending (this push)
 - Status: policies VERIFIED correct + now harness-provable; prod-config check flagged (LB-013); `family-media` public-read remains LB-009.
+
+### PLA-0640 - Anonymous (pre-login) grant surface audited — CLEAN
+
+- Timestamp: 2026-07-17 14:20 UTC
+- Service: A-03 tenant isolation (pre-auth reach)
+- Route: `GRANT ... TO anon` across migrations
+- Affected files: none (verification)
+- Role: `anon` (unauthenticated)
+- Scenario: anything granted to `anon` is reachable WITHOUT login, so a sensitive grant there is a pre-auth leak. (The PG16 shim over-grants `anon` for bootstrap convenience, so this was audited from the migrations, which are the source of truth for real grants.)
+- Severity: n/a (clean)
+- Findings: explicit `anon` grants are only — `blog_posts` SELECT (public blog), `public_stats()` EXECUTE (3 global aggregate counts), `service_descriptions` SELECT (public service catalog copy). All intentional public marketing surfaces; none exposes family data. `rate_limit_hit()` was granted to anon in 0156 but **revoked from anon** in 0179 (`revoke execute ... from public, anon`), and `rate_limit_prune()` revoked from anon+authenticated — a prior hardening that holds. No family-scoped table or privileged RPC is granted to `anon`.
+- Supabase impact: none. Real prod `anon` reach = the 3 public surfaces + RLS-gated tables where anon has an explicit grant (there are none for family data).
+- Tests run: migration grant grep + cross-check against 0179 revokes.
+- Commit: pending (this push)
+- Status: Verified clean — no sensitive pre-auth grant.
