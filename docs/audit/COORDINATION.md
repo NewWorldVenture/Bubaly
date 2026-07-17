@@ -211,9 +211,12 @@ FOR ALL is_family_member" policy loop, applied to many tables. Full triage:
   escalation; tenant isolation already proven (PLA-0415).
 
 **FLAGGED — need an owner decision / deeper check (NOT money-critical):**
-- `autopilot_suggestions` (0085): FOR-ALL, but `lib/autonomy/loop.ts` only DECIDES — a separate
-  server action/cron executes, and the actions it can take are now bounded by the ledger locks.
-  Verify the executor re-checks role before acting on a member-set `approved` status. (A-05/autonomy owner.)
+- `autopilot_suggestions` (0085): FOR-ALL is acceptable — **VERIFIED SAFE (agent-01).** Execution is
+  NOT user-status-triggered: the engine (`lib/autopilot/engine.ts`/`scan.ts`) auto-executes only
+  ENGINE-computed high-confidence (>=90) drafts, running server-side via the scan cron (service role);
+  the manual execution path (`executeQueuedRunAction`/`dismissQueuedRunAction`, concierge actions)
+  is `isManager`-gated; and the write-backs are collaborative (calendar events / reminders) with money
+  already locked (0217/0218/0220). A child flipping a suggestion's status cannot trigger a sensitive action.
 - `family_credentials` vault (0119): readable by all members incl. children — needs a `visibility`
   model (PLA-0591). (A-11 owner.)
 - Health/medical + documents/driver-licenses/insurance: member-visible PII — confirm intended
