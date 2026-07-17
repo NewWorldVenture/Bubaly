@@ -45,14 +45,16 @@ external test credentials). Either restore CI (step 0) and it runs on every push
 
 ## 5. Backup/restore + rollback drill — LB-008 (P1)
 
-Rehearse a Supabase point-in-time restore into an isolated project and a deploy rollback; capture the
-artifact. (No dedicated runbook yet — standard Supabase/Vercel ops; ping if you want it written.)
+`docs/runbooks/LB-008-backup-restore-drill.md` — restore a Supabase backup/PITR into an **isolated**
+project, validate it with `db:audit:{migrations,schema,auth}` + `/api/health`, measure RTO/RPO, and
+demonstrate a deploy rollback. (Note: Storage buckets back up separately from Postgres — confirm both.)
 
 ## 6. Third-party callback smoke — LB-006 (P1)
 
-Verify the signature-verified webhooks fire end-to-end with provider sandboxes: `/api/webhooks/stripe`,
-`/api/webhooks/money`, `/api/webhooks/resend`, and the Twilio-signed `/api/guardian/inbound/*`
-(signature verification already audited — PLA-0615). Confirm callback + retry + idempotency + outage.
+`docs/runbooks/LB-006-provider-callback-smoke.md` — smoke every signature-verified webhook with the
+provider sandboxes: `/api/webhooks/stripe` + `/api/webhooks/money` (Stripe CLI `trigger`/`resend`),
+`/api/webhooks/resend` (Svix test), the Twilio-signed `/api/guardian/inbound/*`, plus Google OAuth
+round-trip and web push. Per callback: valid→200, replay→idempotent, forged signature→4xx.
 
 ## 7. Product decisions (no code blocked on them until decided)
 
