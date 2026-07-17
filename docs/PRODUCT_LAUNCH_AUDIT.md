@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0782 - Family Economy showed every child a 0 coin balance when a ledger read failed
+
+- Timestamp: 2026-07-17 21:09 UTC
+- Service: Family Economy / kids currency (agent-`fable-opus` lane)
+- Route: `/economy`
+- Affected files: `app/(app)/economy/page.tsx`, `tests/economy-read-boundary.test.ts`
+- Database objects: `family_currencies`, `family_members`, `currency_transactions` (ledger), `economy_rewards`, `economy_redemptions`
+- Role: parents (manage) + children (view their own balances/rewards)
+- Scenario: any of the five economy reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (kids-money surface — a reassuring-but-wrong 0 balance where a child's earned coins appear to vanish, or a parent thinks a child can't afford a reward).
+- Launch impact: the five-way `Promise.all` destructured `{ data }` and dropped every `error`. Each child's balance is derived from the immutable `currency_transactions` ledger; a dropped `txns` error left the ledger empty, so `balanceFrom([])` computed **every child's balance as 0** — plus an empty currency/rewards/redemptions economy. A child would see their earned coins gone; a parent would misjudge affordability.
+- Root cause: the five source-of-truth economy reads dropped their `error`.
+- Resolution: capture `currenciesRes`/`membersRes`/`txnsRes`/`rewardsRes`/`redemptionsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[economy] family economy read failed', …)` + `return <ErrorState message="Could not load your family economy from Supabase. Refresh and try again." />` before deriving balances. A genuinely missing table (unapplied migration) is still tolerated as empty. Matches the Command-Center/CFO fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/economy-read-boundary.test.ts` (3 assertions — five-error collection with missing-table filter, log+ErrorState, ledger derived only after the guard); full `npx vitest run` **578 files / 3583 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0781 - Grandparent Portal rendered an empty portal when the member roster read failed
 
 - Timestamp: 2026-07-17 20:40 UTC
