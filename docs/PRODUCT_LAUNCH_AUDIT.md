@@ -6,6 +6,27 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0627 - A-10: cross-family RLS isolation PROVEN LIVE on PG16 (closes agent-02's last open item)
+
+- Timestamp: 2026-07-17 19:10 UTC
+- Service: Meals / groceries / food (A-10 — reclaimed)
+- Route: `storage`-less DB RLS across the A-10 family tables
+- Affected files: none (live verification via `docs/audit/verify-pg.sh`); evidence recorded here + `docs/SUPABASE_WIRING_MATRIX.md`/board
+- Role: authenticated member of family A acting on family B's A-10 data
+- Severity: **verification (isolation proof)** — the open A-10 residual agent-02 flagged ("live cross-family RLS on A-10 tables")
+- Launch impact: A-10 tables use `is_family_member(family_id)` RLS; proving it actually isolates tenants live (not just "RLS enabled") is required for launch confidence. Brought up the throwaway PG16 harness (all migrations, migration_fail=0), created a second family (B) with one row per A-10 table, then — **as the family-A anchor member under RLS, with Supabase-mirrored `grant insert/update/delete to authenticated` so RLS is the real gate** — verified:
+  - **READ**: `grocery_lists`, `grocery_items`, `meal_plans`, `meals`, `nutrition_logs`, `dining_out` → **0** family-B rows visible; own family-A data readable (1 row).
+  - **INSERT** into family B → **`ERROR: new row violates row-level security policy`** (WITH CHECK).
+  - **UPDATE** family B → **`UPDATE 0`**; **DELETE** family B → **`DELETE 0`** (USING filters them out).
+  - **own-family INSERT** (sanity) → **`INSERT 0 1`** success. Family B data intact afterward; no A-injected row leaked in.
+- Root cause: n/a (isolation holds).
+- Resolution: verified live; no code change. Combined with PLA-0626 (grocery client fix) + agent-02's read/write boundaries (0418/0433/0435/0451) + seed ≥500, the A-10 **agent-doable** surface is now complete.
+- Supabase impact: none (read-only proof on a throwaway DB; harness torn down).
+- Tests run: PG16 harness live matrix above (read 0/6 cross-family + own visible; INSERT rejected; UPDATE/DELETE 0; own INSERT ok).
+- Commit: (documentation)
+- Status: RESOLVED — A-10 cross-family isolation proven live. A-10 agent-doable scope COMPLETE; only owner/live-prod verification remains (same class as every other unit).
+- Remaining dependencies: none agent-doable for A-10.
+
 ### PLA-0626 - A-10 (reclaimed): Grocery module created a DUPLICATE list + dropped a failed insert on a transient read error
 
 - Timestamp: 2026-07-17 19:00 UTC
