@@ -115,11 +115,18 @@ export function MessagesModule() {
   // ── Load conversations ──────────────────────────────────────
   const loadConversations = useCallback(async () => {
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('family_conversations')
       .select('*')
       .eq('family_id', familyId)
       .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (error) {
+      // Fail visibly instead of showing an empty inbox on a failed load — an empty
+      // list here would make the user think they have no conversations.
+      toastError(describeDbError(error));
+      setLoadingConvs(false);
+      return;
+    }
     const rows = data ?? [];
     setConversations(rows);
     setLoadingConvs(false);
@@ -136,12 +143,15 @@ export function MessagesModule() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('family_conversations')
         .select('id')
         .eq('family_id', familyId)
         .eq('kind', 'group')
         .limit(1);
+      // If the existence check itself failed, don't treat that as "no chat" and
+      // create a DUPLICATE Family Chat — bail out and let the next load retry.
+      if (error) return;
       if (!data?.length) {
         await createConversation({
           family_id: familyId,
@@ -161,13 +171,20 @@ export function MessagesModule() {
   const loadMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('family_messages')
       .select('*')
       .eq('conversation_id', convId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .limit(200);
+    if (error) {
+      // Surface the failure rather than blanking the thread (which reads as
+      // "no messages") — keep whatever is already on screen.
+      toastError(describeDbError(error));
+      setLoadingMsgs(false);
+      return;
+    }
     setMessages(data ?? []);
     setLoadingMsgs(false);
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -241,13 +258,20 @@ export function MessagesModule() {
   // (the last-message trigger bumps family_conversations on every send).
   const loadSummaries = useCallback(async () => {
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('family_messages')
       .select('conversation_id, content, kind, attachment_name, sender_name, sender_id, created_at, read_by')
       .eq('family_id', familyId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(400);
+    if (error) {
+      // Previews/unread badges are an enhancement over the conversation list;
+      // on a failed load, surface it and keep the prior summaries rather than
+      // silently wiping every preview + unread badge to zero.
+      toastError(describeDbError(error));
+      return;
+    }
     setSummaries(summarizeConversations(data ?? [], userId));
   }, [familyId, userId]);
 

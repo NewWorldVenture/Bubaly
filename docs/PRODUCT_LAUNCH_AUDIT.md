@@ -26,6 +26,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: RESOLVED (verified — no defect).
 - Remaining dependencies: live E2E brute-force / concurrency exercise remains part of the owner-gated auth E2E (LB-005).
 
+### PLA-0624 - A-11: Messages module silently showed an EMPTY inbox on a failed load (client read errors dropped)
+
+- Timestamp: 2026-07-17 17:45 UTC
+- Service: Messages / files / documents (A-11)
+- Route: `/dashboard/messages` (`components/modules/messages-module.tsx`)
+- Affected files: `components/modules/messages-module.tsx`
+- Role: **every user** (any authenticated family member)
+- Scenario: a transient failure of a client-side read (network blip, expired session, RLS/PostgREST hiccup) while loading the Messages page
+- Severity: **MEDIUM functional/UX** — a messaging surface that lies about its state
+- Launch impact: the module's WRITE paths correctly surfaced errors (`toastError(describeDbError(...))`), but its three READ paths destructured only `{ data }` and dropped `error`, then did `data ?? []`:
+  - `loadConversations` → a failed load rendered an **empty conversation list** (user believes they have no conversations/messages)
+  - `loadMessages` → a failed load **blanked the open thread** ("no messages")
+  - `loadSummaries` → a failed load **wiped every preview + unread badge to zero**
+  Plus the "ensure Family Chat exists" check treated a failed existence query (`data` null) as "no chat" and would attempt to create a **duplicate** Family Chat on a transient error.
+- Root cause: client reads swallowed the PostgREST `{error}` and fell back to an empty array — the exact silent-failure class this audit eliminates, here on the primary A-11 surface (my earlier sweep covered server libs/actions; this was a client component).
+- Resolution: all three reads now capture `error` and `toastError(describeDbError(error))` + bail (keeping any prior on-screen state instead of wiping it to empty); the Family-Chat existence check `return`s on error so it never creates a duplicate from a failed probe. Reuses the module's existing `useToast()` error toast — consistent with its write paths.
+- Supabase impact: none (client error-handling only).
+- Tests run: `tsc --noEmit` clean (only the known `@axe-core/playwright` e2e-dep noise); `tests/messages-overview.test.ts` + `tests/a11-messages-rls.test.ts` 9/9 green (pure helpers + RLS unaffected). Documents module verified already error-surfacing (fetcher hook → `<ErrorState>`), no change needed.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`. A-11's primary UI now fails visibly on read errors.
+- Remaining dependencies: none.
+
 ### PLA-0621 - A-11: all 6 Storage buckets RLS-boundary VERIFIED (sensitive = private, no cross-tenant write) + guarded
 
 - Timestamp: 2026-07-17 17:32 UTC
