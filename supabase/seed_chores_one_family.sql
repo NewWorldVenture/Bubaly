@@ -17,8 +17,8 @@
 --      enough to populate Daily/Weekly tables, Completed grid, Approvals queue,
 --      Top Earners, Chore Streaks and Family Chore Points.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499  (active fam of
---   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
+-- TARGET FAMILY: resolved reproducibly at runtime (v_email's family → first family
+--   with a child → any). Was a hardcoded prod UUID that FK-failed off-prod. Change v_email if needed.
 --
 -- IDEMPOTENT: seeded chores are tagged in `instructions` = '[seed:chores]' and
 --   their chores + assignments are deleted before re-insert (this family only);
@@ -51,7 +51,7 @@ end $$;
 -- 2) + 3) + 4) Chore catalog, rewards, and 500 assignments --------------------
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam    uuid;   -- resolved reproducibly below (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   v_self   uuid;
@@ -112,11 +112,17 @@ declare
   r_desc  text[] := ARRAY['A scoop (or two) of your favorite','30 extra minutes of screen time','Family pizza night, your pick','Movie night with popcorn','Pick what the family eats','Pick out a new toy','Stay up 30 minutes past bedtime','A special day out of your choice'];
   r_cost  int[]  := ARRAY[50,75,150,200,120,500,100,400];
 begin
-  if not exists (select 1 from public.families where id = v_fam) then
-    raise exception 'Family % not found', v_fam;
-  end if;
-
   select id into v_uid  from auth.users where lower(email) = lower(v_email) limit 1;
+  -- Resolve the target family reproducibly (was a hardcoded prod UUID): the seed
+  -- account's family, else the first family with a non-manager member, else any.
+  select f.id into v_fam from public.families f where f.created_by = v_uid order by f.created_at limit 1;
+  if v_fam is null then
+    select fm.family_id into v_fam from public.family_members fm
+      where fm.is_active and fm.role not in ('parent','adult')
+      group by fm.family_id order by min(fm.created_at) limit 1;
+  end if;
+  if v_fam is null then select id into v_fam from public.families order by created_at limit 1; end if;
+  if v_fam is null then raise notice 'chores seed: no family found — skipping.'; return; end if;
   select id into v_self from public.family_members where family_id = v_fam and user_id = v_uid and is_active limit 1;
   select array_agg(id) into v_members from public.family_members where family_id = v_fam and is_active;
   if v_members is null then
@@ -220,5 +226,4 @@ select
   count(*) filter (where due_at::date < current_date and status not in ('approved','done')) as overdue,
   coalesce(sum(points_awarded), 0)                      as points_awarded
 from public.chore_assignments
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
-  and chore_id in (select id from public.chores where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and instructions = '[seed:chores]');
+where chore_id in (select id from public.chores where instructions = '[seed:chores]');

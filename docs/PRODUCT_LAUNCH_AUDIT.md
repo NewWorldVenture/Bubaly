@@ -1692,3 +1692,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: clean-bootstrap harness apply (500 rows, conserving, idempotent).
 - Commit: this push.
 - Status: wallet seed is now REPRODUCIBLE + verified. **Remaining for LB-014 (A-02):** wire it (and the other orphan seeds) into the SEED_ALL / harness pipeline, and author seeds for the genuinely-unseeded features (school/sports/medical/routines/grades/home). This fix de-risks the wallet slice — it's ready to wire.
+
+### PLA-0750 - Systemic root cause of the orphan seeds: ~20 `*_one_family.sql` all pinned to one prod family UUID
+
+- Timestamp: 2026-07-17 16:20 UTC
+- Service: A-02 seed baseline (LB-014 orphan-seed slice)
+- Route: `supabase/seed_*_one_family.sql`
+- Affected files: `seed_chores_one_family.sql` fixed (+ `seed_wallet_ledger_one_family.sql` in PLA-0740); ~18 remaining flagged for A-02
+- Scenario: after fixing the wallet seed (PLA-0740), checked whether the same hardcoded-prod-UUID root cause explains the whole orphan-seed set.
+- Severity: root-cause for LB-014's orphan slice
+- Findings:
+  - **~20 rich `*_one_family.sql` seeds ALL hardcode the same literal family id `92298eb2-1a9e-4bdc-9361-677b6c01b499`** — the real prod family of `newworldventurellc@gmail.com`. That family isn't in the SEED_ALL baseline / harness / any fresh env, so every one of them FK-fails off-prod. This single root cause is why the whole set is orphaned (chores, meals, finances, memories, location, tasks, messages, family, safety, life-events, roles, voice, files, group-decisions, operating-index, ai-feedback, experience-audits, meals-extras, finance-hub, …). Together they seed hundreds of rows across most day-to-day features.
+  - **Fixed + PG16-verified (2 of ~20):** `seed_wallet_ledger_one_family` (500 conserving txns, PLA-0740) and `seed_chores_one_family` (30 chores + 500 assignments) now resolve the family reproducibly and apply cleanly + idempotently on a fresh harness.
+  - **Recipe for the remaining ~18 (A-02):** in each DO block — (1) change `v_fam uuid := '92298eb2…';` → `v_fam uuid;`; (2) right after `begin`, resolve `select id into v_uid … v_email` then `v_fam` via `families.created_by = v_uid` → first family with a non-manager member → any family, with a `raise notice … return` if none; (3) delete any pre-`v_fam`-resolution `if not exists(family where id = v_fam) … raise` guard (now subsumed by the fallback chain); (4) de-hardcode the trailing VERIFY query's `family_id = '92298…'` filter (use the seed's `metadata`/`instructions` tag). Apply each on `verify-pg.sh` to confirm row counts before wiring into the pipeline.
+- Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
+- Tests run: grep census (all 20 hardcode the UUID) + harness apply of the 2 fixed seeds.
+- Commit: this push.
+- Status: root cause identified + 2 seeds fixed/verified + recipe provided. Remaining ~18 repoints + pipeline wiring = A-02 (LB-014).
