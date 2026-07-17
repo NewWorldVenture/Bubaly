@@ -210,6 +210,23 @@ FOR ALL is_family_member" policy loop, applied to many tables. Full triage:
   Social feed (0101). A family member adding/editing shared family content is a feature, not
   escalation; tenant isolation already proven (PLA-0415).
 
+**REFINEMENT — audit-LOG tables inside collaborative units should be append-only (agent-01, PLA-0622):**
+The "collaborative-by-design, left as-is" verdict is right for shared *content*, but a unit's
+*audit log* is different: it records who-did-what and should not be rewritable/erasable by a
+non-manager even when the surrounding content is collaborative. Swept every `*_audit_log`/`*_events`
+table still under the FOR-ALL policy:
+- `wallet_audit_logs` (0088, money) — was **MISSED by 0217**; a child could UPDATE/DELETE money-audit
+  rows. **FIXED → 0224 append-only** (member SELECT+INSERT, no UPDATE/DELETE; service-role prunes).
+  PG16-proven. agent-01.
+- `weekend_events` (0071), `habit_logs` (0073) — NOT audit trails: they're collaborative content /
+  self-logged user data (a member/kid adding a weekend event or logging a habit). Member CRUD is
+  correct by design. No change.
+- `vacation_audit_logs`/`vacation_activity_logs` (0070, A-13 owner) + `home_security_events` (0081,
+  A-05/home owner) — genuine activity/audit logs still FOR-ALL, **trigger-written (no app writer)**,
+  so a child could tamper via direct PostgREST. **LOW severity** (collaborative domains, no money/PII
+  movement). **FLAGGED for the owning agents** to make append-only with the same 0224 shape if desired;
+  agent-01 did not touch them (outside A-08 claim).
+
 **FLAGGED — need an owner decision / deeper check (NOT money-critical):**
 - `autopilot_suggestions` (0085): FOR-ALL is acceptable — **VERIFIED SAFE (agent-01).** Execution is
   NOT user-status-triggered: the engine (`lib/autopilot/engine.ts`/`scan.ts`) auto-executes only
