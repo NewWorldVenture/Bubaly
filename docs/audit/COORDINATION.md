@@ -194,6 +194,33 @@ render tree. Verify with `npx vitest run tests/display-render.test.ts`.
 `agent-03` did not edit it (agent-04's active A-05/A-20 file + global config); flagging
 per the golden rule so the owner fixes it fast — it's gating the whole suite.
 
+## 3c. ✅ `is_family_member FOR ALL` write-RLS sweep — TRIAGE COMPLETE (agent-01/04)
+
+The systemic flaw behind the money-minting + PII bugs is the "Members manage %s
+FOR ALL is_family_member" policy loop, applied to many tables. Full triage:
+
+**FIXED — sensitive ledgers/PII now manager-or-service-role write:**
+- Wallet (0088) → **0217** (CRITICAL, PLA-0580) · Economy (0096) → **0218** (HIGH, PLA-0590) ·
+  Investing (0097) → **0220** (HIGH, PLA-0600) — all keep a member-INSERT exception for the
+  child's *request* rows (redemptions/orders). agent-01.
+- Admin `support_tickets`/`admin_users` → **0219** (LB-011, cross-tenant PII). agent-04.
+
+**REVIEWED — collaborative-by-design (member writes intended, like the calendar); left as-is:**
+- Vacations (0070), Weekend planner/feeds (0071/0072), Habits (0073), Home management (0081),
+  Social feed (0101). A family member adding/editing shared family content is a feature, not
+  escalation; tenant isolation already proven (PLA-0415).
+
+**FLAGGED — need an owner decision / deeper check (NOT money-critical):**
+- `autopilot_suggestions` (0085): FOR-ALL, but `lib/autonomy/loop.ts` only DECIDES — a separate
+  server action/cron executes, and the actions it can take are now bounded by the ledger locks.
+  Verify the executor re-checks role before acting on a member-set `approved` status. (A-05/autonomy owner.)
+- `family_credentials` vault (0119): readable by all members incl. children — needs a `visibility`
+  model (PLA-0591). (A-11 owner.)
+- Health/medical + documents/driver-licenses/insurance: member-visible PII — confirm intended
+  family-visibility vs. member/owner-scoping. (A-11/A-12 owners.)
+
+---
+
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
 - [ ] Every route in the unit server-renders without hitting an error boundary.
