@@ -1567,3 +1567,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: pattern sweep of all spread-writes + trace of each spread var's construction (auto/trust/locator confirmed field-picked) + automated raw-body-assignment check (0 hits).
 - Commit: pending (doc only)
 - Status: Verified clean — no mass-assignment; input validation (enum allowlists, numeric clamps, bounded bodies, trusted-field override) is consistent across the mutation surface.
+
+### PLA-0720 - Seed-coverage census: wallet subsystem unseeded via SEED_ALL (flagship feature demos empty)
+
+- Timestamp: 2026-07-17 15:40 UTC
+- Service: A-08 wallet + A-02 seed baseline
+- Route: `SEED_ALL.sql` coverage of the wallet/finance tables
+- Affected files: none (finding; flagged to A-02/A-08)
+- Role: any demo / fresh-environment family
+- Scenario: censused per-table row counts for the anchor family after `SEED_ALL` on the PG16 harness, to find features that render EMPTY in a fresh env and to check the "≥500 rows per unit" DoD.
+- Severity: P2 (launch/demo quality — flagship feature shows empty; A-08 unit DoD not met via the standard seed path)
+- Findings:
+  - **Total: 71,154 family-scoped rows for the anchor** — the overall ≥500 baseline is massively exceeded. Most "empty" tables are runtime-accrual by nature (logs, audits, `*_events`, sessions, webhooks, stripe_*, social_*, invites, push_devices) and are correctly empty in seed.
+  - **But the WALLET subsystem is entirely unseeded via `SEED_ALL`:** `wallet_transactions`, `wallet_buckets`, `wallet_cards`, `wallet_rules`, `wallet_rewards`, `family_wallets`, `savings_goals`, `goals`, `rewards`, `reward_redemptions` = **0 rows for every family** (only `child_wallets` = 1). `SEED_ALL` has **0** `wallet_transactions`/`wallet_buckets` inserts. A demo family opening the Wallet sees an empty wallet — no buckets, no ledger, no goals.
+  - **Root cause = the orphan-seed pattern (same class as A-13):** the wallet-model seeds exist as STANDALONE files never wired into `SEED_ALL` — `seed_wallet_ledger_one_family.sql`, `seed_wallet_one_family.sql`, `seed_finances_one_family.sql` (in_SEED_ALL = 0). `seed_finance.sql` IS in SEED_ALL but seeds the OLDER finance model, not the `wallet_*` tables. The orphan files are also **thin** (~6/2/27 tuples), so even wired in they wouldn't meet the ≥500-row DoD for A-08's tables. Five fragmented money-seed files (`seed_finance`, `seed_finance_hub_one_family`, `seed_finances_one_family`, `seed_wallet_one_family`, `seed_wallet_ledger_one_family`) indicate seed churn in this area.
+- Supabase impact: prod demo/fresh-env wallets render empty if prod seeding runs only `SEED_ALL`.
+- Resolution (owner — A-02/A-08, not done here): consolidate the wallet seed into `SEED_ALL` (or the harness runner) and expand to a realistic set (buckets per child, a conserving ledger, goals/rewards) reaching the ≥500-row unit DoD. Not fixed here — `SEED_ALL` is A-02's monolithic pipeline and the money-seed files need de-duplication first; unilaterally wiring a thin orphan in would collide and still miss DoD.
+- Tests run: PG16 census (per-family_id table counts) + orphan-seed grep + SEED_ALL wallet-insert count (0).
+- Commit: pending (doc only)
+- Status: FLAGGED to A-02 (seed) + A-08 (wallet). Related: A-13 seed thinness (PLA-0500 remaining dep) is the same orphan-seed class.
+
+### PLA-0700-CORRECTION - conservation claim was over an empty wallet ledger
+
+- Timestamp: 2026-07-17 15:40 UTC
+- Correcting PLA-0700: its "no negative bucket balances / no overspend in the seeded ledger" result for `wallet_transactions` was **VACUOUS** — `wallet_transactions` is unseeded (0 rows, see PLA-0720), so the balance aggregate summed an empty set. This is retracted to avoid overclaiming.
+- **Still valid from PLA-0700** (data-independent): the DB CHECK constraints were proven to BITE — inserting a negative `wallet_transactions.amount_cents` and negative `invest_holdings.shares` were both rejected with "violates check constraint" even as superuser. So negative money remains structurally impossible on every code path; only the empirical "seed has no negative balances" sub-claim was vacuous. `currency_transactions` conservation (economy) did run over seeded rows (non-vacuous). Live overspend prevention remains covered by the reserve-RPC FOR UPDATE proof (agent-01 PLA-0440).
