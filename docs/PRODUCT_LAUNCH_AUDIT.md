@@ -28,6 +28,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: RESOLVED — A-11 storage tenant-isolation proven and guarded. (Residual: LB-009 family-media public→signed URLs remains an owner/product decision, unchanged.)
 - Remaining dependencies: none new.
 
+### PLA-0622 - A-08: a child could rewrite/erase the money AUDIT TRAIL (wallet_audit_logs missed by the 0217 ledger lockdown)
+
+- Timestamp: 2026-07-17 17:36 UTC
+- Service: Wallet / Bubaly Money (A-08)
+- Route: DB `wallet_audit_logs` (direct PostgREST)
+- Affected files: `supabase/migrations/0224_wallet_audit_log_append_only.sql` (new), `tests/wallet-audit-log-append-only.test.ts` (new)
+- Role: **child / teen** (any non-manager family member with a login)
+- Scenario: a child `update`/`delete public.wallet_audit_logs` directly via PostgREST (anon key ships in the client bundle)
+- Severity: **MEDIUM** integrity (money-audit-trail tamper — undermines parent oversight/forensics). No money moves: the ledger itself (`wallet_transactions`) is locked to managers/service-role by 0217.
+- Launch impact: `wallet_audit_logs` (money audit trail — wallet activation, transfers, approvals, AI-coach calls, invest decisions) shipped (0088) with the systemic `"Members manage" FOR ALL is_family_member` policy and was **not** among the tables the 0217 wallet lockdown covered (`family_wallets`/`child_wallets`/`wallet_buckets`/`wallet_transactions`/`wallet_rules`). So a signed-in child could UPDATE or DELETE audit rows directly — rewriting or erasing the money history a parent relies on to review activity (e.g. deleting the record of an action they weren't supposed to take).
+- Root cause: an append-only audit table left under the family-member FOR-ALL write policy; the ledger-lockdown migration scoped only the balance-bearing tables, not the audit log beside them.
+- Resolution: migration 0224 makes the log **append-only for clients** — drops the FOR-ALL policy, keeps `is_family_member` SELECT + INSERT (every existing append, from manager/child/RPC sessions, keeps working), and grants **no** UPDATE/DELETE policy to `authenticated`, so only the service role (BYPASSRLS retention/tooling) can alter or prune it. Chosen over a service-role-only-write refactor because ~10 app sites append via the acting user's session and there is no legitimate UPDATE/DELETE of an audit row anywhere in the code — so append-only closes the tamper vector with zero app changes and zero regression risk.
+- Supabase impact: new migration `0224` (additive, idempotent, `to_regclass`-guarded). Must be applied to prod (human-owned) — added to `docs/PENDING_PROD_MIGRATIONS.md`.
+- Tests run: `tests/wallet-audit-log-append-only.test.ts` (5, new); full suite green; tsc 0; migration audit next=0225.
+- Validation evidence: PG16 harness, production-accurate grants. Matrix proven: child SELECT → ALLOWED; child INSERT (append) → ALLOWED; child UPDATE (rewrite) → **0 rows (blocked)**; child DELETE (erase) → **0 rows (blocked)**; service-role UPDATE/DELETE → ALLOWED; seed still applies fail=0.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`; migration `0224` pending prod apply (human-owned)
+- Remaining dependencies: apply `0224` to prod. Residual (low): member INSERT stays open (an appended row is attributed via `actor_user_id` and moves no money); a future hardening could route all ~10 app appends through the service role and make the log service-role-write-only, matching the chore/guardian audit-trail fixes (PLA-0616/0617).
+
 ### PLA-0618 - A-16: cron route ↔ vercel.json schedule 1:1 registration VERIFIED + guarded
 
 - Timestamp: 2026-07-17 17:10 UTC
