@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 // stayed executable by `authenticated` — letting any signed-in user place a bid as
 // another family. 0220 revokes it from authenticated (service-role + the definer
 // wrapper only). This test locks that so the grant can't silently come back.
-const MIG = 'supabase/migrations/0220_revoke_place_bid_unchecked_from_authenticated.sql';
+const MIG = 'supabase/migrations/0221_revoke_place_bid_unchecked_from_authenticated.sql';
 
 describe('marketplace_place_bid_unchecked is not executable by authenticated (0220)', () => {
   const raw = readFileSync(MIG, 'utf8');

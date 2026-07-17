@@ -1,4 +1,4 @@
--- FamilyOS :: 0220 — revoke marketplace_place_bid_unchecked from authenticated
+-- FamilyOS :: 0221 — revoke marketplace_place_bid_unchecked from authenticated
 --
 -- P2 marketplace-integrity IDOR (PLA-0610 / LB-012). Migration 0184 hardened
 -- auction bidding by RENAMEing the raw `marketplace_place_bid` → `_unchecked`
