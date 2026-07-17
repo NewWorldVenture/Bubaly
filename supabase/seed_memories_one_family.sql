@@ -22,7 +22,7 @@
 -- REQUIRES: migration 0108_album_highlight_kind.sql applied first (it widens the
 --   family_albums.kind CHECK to allow 'highlight').
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active fam of
+-- TARGET FAMILY: resolved reproducibly at runtime.
 --   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
 --
 -- IDEMPOTENT: photos/memories are tagged 'seed:memories'; albums/events carry a
@@ -64,7 +64,7 @@ create policy "family members can manage photos"
 -- 2) + 3) + 4) Albums, 500 photos, memories, events --------------------------
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   v_uids   uuid[];   -- all member auth user_ids
@@ -204,10 +204,10 @@ end $$;
 
 -- 5) Verify the spread --------------------------------------------------------
 select
-  (select count(*) from public.family_albums where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and coalesce(description,'') like '%[seed:memories]%')                              as albums,
-  (select count(*) from public.family_albums where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and kind = 'highlight' and coalesce(description,'') like '%[seed:memories]%')      as highlights,
-  (select count(*) from public.family_photos where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and 'seed:memories' = any(tags))                                                    as media_total,
-  (select count(*) from public.family_photos where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and media_type = 'video' and 'seed:memories' = any(tags))                           as videos,
-  (select count(*) from public.family_photos where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and created_at >= date_trunc('year', now()) and 'seed:memories' = any(tags))        as media_this_year,
-  (select count(*) from public.family_memories where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and 'seed:memories' = any(tags))                                                  as memories,
-  (select count(*) from public.calendar_events where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and starts_at >= now() and coalesce(description,'') like '%[seed:memories]%')     as upcoming_events;
+  (select count(*) from public.family_albums where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and coalesce(description,'') like '%[seed:memories]%')                              as albums,
+  (select count(*) from public.family_albums where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and kind = 'highlight' and coalesce(description,'') like '%[seed:memories]%')      as highlights,
+  (select count(*) from public.family_photos where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and 'seed:memories' = any(tags))                                                    as media_total,
+  (select count(*) from public.family_photos where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and media_type = 'video' and 'seed:memories' = any(tags))                           as videos,
+  (select count(*) from public.family_photos where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and created_at >= date_trunc('year', now()) and 'seed:memories' = any(tags))        as media_this_year,
+  (select count(*) from public.family_memories where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and 'seed:memories' = any(tags))                                                  as memories,
+  (select count(*) from public.calendar_events where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and starts_at >= now() and coalesce(description,'') like '%[seed:memories]%')     as upcoming_events;

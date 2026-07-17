@@ -19,7 +19,7 @@
 
 do $$
 declare
-  v_fam     uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email   text := 'newworldventurellc@gmail.com';
   v_uid     uuid;
   v_members uuid[];
@@ -109,12 +109,12 @@ end $$;
 
 -- ── Verify row counts (polls + options + votes for the seed) ────────────────
 select 'family_polls' as tbl, count(*) from public.family_polls
-  where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and question like 'T6 · %'
+  where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and question like 'T6 · %'
 union all
 select 'family_poll_options', count(*) from public.family_poll_options o
-  where o.family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
-    and o.poll_id in (select id from public.family_polls where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and question like 'T6 · %')
+  where o.family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
+    and o.poll_id in (select id from public.family_polls where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and question like 'T6 · %')
 union all
 select 'family_poll_votes', count(*) from public.family_poll_votes v
-  where v.family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
-    and v.poll_id in (select id from public.family_polls where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and question like 'T6 · %');
+  where v.family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
+    and v.poll_id in (select id from public.family_polls where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and question like 'T6 · %');

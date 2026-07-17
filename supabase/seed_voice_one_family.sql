@@ -17,7 +17,7 @@
 --
 -- TABLE: public.voice_commands.   ROW COUNT: 500.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active family of
+-- TARGET FAMILY: resolved reproducibly at runtime.
 --   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
 --   Requires migration 0121_voice_commands.sql applied first.
 --
@@ -56,7 +56,7 @@ end $$;
 -- 2) Seed 500 voice_commands --------------------------------------------------
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   v_members uuid[];
@@ -143,5 +143,5 @@ select
   to_char(min(created_at), 'YYYY-MM-DD')               as oldest,
   to_char(max(created_at), 'YYYY-MM-DD')               as newest
 from public.voice_commands
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
+where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
   and id in (select (md5('voiceseed' || g))::uuid from generate_series(0, 499) g);

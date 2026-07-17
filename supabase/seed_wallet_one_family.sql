@@ -19,7 +19,7 @@
 -- TABLES: financial_accounts, wallet_cards, wallet_passes, wallet_rewards,
 --         transactions.   ROW COUNT: 500 transactions (+ ~14 supporting rows).
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active family of
+-- TARGET FAMILY: resolved reproducibly at runtime.
 --   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
 --   Requires migration 0113_wallet_hub.sql applied first (adds
 --   transactions.status/merchant + wallet_cards/passes/rewards).
@@ -60,7 +60,7 @@ end $$;
 -- 2) + 3) Wallet contents + 500 transactions --------------------------------
 do $$
 declare
-  v_fam  uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid  uuid;
   v_members uuid[];  n_members int;

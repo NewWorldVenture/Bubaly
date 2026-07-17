@@ -45,7 +45,7 @@ end $$;
 -- 1) – 5) Data ---------------------------------------------------------------
 do $$
 declare
-  v_fam  uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid  uuid;  v_members uuid[];  v_list uuid;
   v_break uuid[] := '{}';  v_lunch uuid[] := '{}';  v_dinner uuid[] := '{}';  v_snack uuid[] := '{}';
@@ -186,8 +186,8 @@ end $$;
 
 -- Verify ---------------------------------------------------------------------
 select
-  (select count(*) from public.meal_plans     where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as meal_plans,
-  (select count(*) from public.meals          where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes like '%[seed:meals]%') as meals,
-  (select count(*) from public.family_recipes where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and 'seed:recipes'=any(tags)) as recipes,
-  (select count(*) from public.family_recipes where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and is_favorite) as favorites,
-  (select count(*) from public.grocery_items gi join public.grocery_lists gl on gl.id=gi.list_id where gl.family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as grocery_items;
+  (select count(*) from public.meal_plans     where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as meal_plans,
+  (select count(*) from public.meals          where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes like '%[seed:meals]%') as meals,
+  (select count(*) from public.family_recipes where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and 'seed:recipes'=any(tags)) as recipes,
+  (select count(*) from public.family_recipes where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and is_favorite) as favorites,
+  (select count(*) from public.grocery_items gi join public.grocery_lists gl on gl.id=gi.list_id where gl.family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as grocery_items;

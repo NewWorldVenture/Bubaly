@@ -15,7 +15,7 @@
 
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   roles   public.member_role[] := array['parent','adult','caregiver','teen','child','guest']::public.member_role[];
   firsts  text[] := array['Ava','Liam','Mia','Noah','Emma','Ethan','Olivia','Lucas','Sophia','Mason','Isla','Leo','Nora','Kai','Ruby','Max','Ivy','Owen','Zoe','Finn'];
   lasts   text[] := array['Kramer','Rivera','Chen','Patel','Okafor','Nguyen','Silva','Brooks','Haddad','Novak'];
@@ -58,7 +58,7 @@ end $$;
 -- Verify the distribution (≈83 per role, 500 total).
 select role, count(*) as members
 from public.family_members
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
+where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
   and email like 'seed-role8-%@example.invalid'
 group by role order by members desc;
 
@@ -70,10 +70,10 @@ group by role order by members desc;
 -- Change 'child' to any of parent/adult/caregiver/teen/child/guest, then revert.
 --
 -- update public.family_members set role = 'child'
---   where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
+--   where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
 --     and user_id = (select id from auth.users where lower(email) = 'newworldventurellc@gmail.com');
 
 -- ── CLEANUP (remove the 500 roster rows when done) ──────────────────────────
 -- delete from public.family_members
---   where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
+--   where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
 --     and email like 'seed-role8-%@example.invalid';

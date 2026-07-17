@@ -9,7 +9,7 @@
 -- TABLES: safety_check_ins, driving_trips, play_dates. Requires migration
 --   0114_family_safety.sql applied first.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (newworldventurellc@gmail.com).
+-- TARGET FAMILY: resolved reproducibly at runtime.
 -- IDEMPOTENT: seeded rows are tagged ('[seed]' in note/notes) and removed before
 --   re-insert. Run: npm run db:seed:family  (or psql -f this file).
 -- VERIFY: open /dashboard/family → Check In / Driving Safety / Play Dates.
@@ -17,7 +17,7 @@
 
 do $$
 declare
-  v_fam uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid uuid; v_members uuid[]; n int; i int;
   st text; statuses text[] := ARRAY['safe','on_my_way','arrived','need_help'];

@@ -49,7 +49,7 @@ end $$;
 -- 3) + 4) + 5) Places, live locations, and 500 events ------------------------
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   v_members uuid[];
@@ -134,8 +134,8 @@ end $$;
 
 -- 6) Verify ------------------------------------------------------------------
 select
-  (select count(*) from public.location_events where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499') as events,
-  (select count(*) from public.location_events where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and event_type = 'arrived') as arrivals,
-  (select count(*) from public.location_events where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and occurred_at >= date_trunc('day', now())) as today,
-  (select count(*) from public.family_places where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499') as places,
-  (select count(*) from public.member_locations where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and is_sharing) as live_members;
+  (select count(*) from public.location_events where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as events,
+  (select count(*) from public.location_events where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and event_type = 'arrived') as arrivals,
+  (select count(*) from public.location_events where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and occurred_at >= date_trunc('day', now())) as today,
+  (select count(*) from public.family_places where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as places,
+  (select count(*) from public.member_locations where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and is_sharing) as live_members;

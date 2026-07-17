@@ -43,7 +43,7 @@ end $$;
 -- 1) – 3) Data ---------------------------------------------------------------
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid uuid; v_accts uuid[] := '{}'; a_check uuid; a_save uuid; a_credit uuid; a_invest uuid;
   v_members uuid[]; v_member uuid;
@@ -151,10 +151,10 @@ end $$;
 
 -- Verify ---------------------------------------------------------------------
 select
-  (select count(*) from public.transactions where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes like '%[seed:finance]%') as transactions,
-  (select count(*) from public.transactions where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and type='income' and notes like '%[seed:finance]%') as income_txns,
-  (select count(*) from public.transactions where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and date >= date_trunc('month', current_date) and notes like '%[seed:finance]%') as this_month,
-  (select count(*) from public.financial_accounts where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as accounts,
-  (select count(*) from public.budgets where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as budgets,
-  (select count(*) from public.bills where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as bills,
-  (select count(*) from public.savings_goals where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499') as goals;
+  (select count(*) from public.transactions where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes like '%[seed:finance]%') as transactions,
+  (select count(*) from public.transactions where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and type='income' and notes like '%[seed:finance]%') as income_txns,
+  (select count(*) from public.transactions where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and date >= date_trunc('month', current_date) and notes like '%[seed:finance]%') as this_month,
+  (select count(*) from public.financial_accounts where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as accounts,
+  (select count(*) from public.budgets where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as budgets,
+  (select count(*) from public.bills where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as bills,
+  (select count(*) from public.savings_goals where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)) as goals;

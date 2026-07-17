@@ -16,7 +16,7 @@
 --
 -- TABLES TOUCHED: public.families (profile fields), public.family_members (500).
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active fam of
+-- TARGET FAMILY: resolved reproducibly at runtime.
 --   newworldventurellc@gmail.com). Change v_fam below if needed.
 --
 -- IDEMPOTENT: seeded members carry an email like 'seed+<n>@bubaly.test'. The
@@ -50,7 +50,7 @@ create policy fm_select on public.family_members for select using (public.is_fam
 -- 2) + 3) + 4) Family profile + 500 members -----------------------------------
 do $$
 declare
-  v_fam uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   i int;  seeded int := 0;
   v_role public.member_role;  v_name text;  v_bday date;  v_active boolean;
   v_email text;  v_phone text;  v_color text;
@@ -121,4 +121,4 @@ select
   count(*) filter (where birthday is null)     as no_birthday,
   count(*) filter (where phone is null)        as no_phone
 from public.family_members
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and email like 'seed+%@bubaly.test';
+where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and email like 'seed+%@bubaly.test';

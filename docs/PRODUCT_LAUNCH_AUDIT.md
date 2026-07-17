@@ -1735,3 +1735,14 @@ commit, status, and remaining dependency. New findings must be added before or w
 - PG16-verified on a clean bootstrap: all 4 apply with no errors + idempotent ×2; `ai_feedback` seeds **600** rows and `experience_audits` **540** (both exceed the ≥500 DoD); `tasks`/`files` apply clean.
 - **6 of ~20 orphan `*_one_family.sql` seeds now reproducible + verified** (wallet, chores, tasks, files, ai_feedback, experience_audits). Remaining ~14 (incl. high-inline-ref ones: operating_index, finances, memories, meals, location, life_events, group_decisions) follow the same recipe — A-02 to finish + wire into the pipeline (LB-014). The uniform coalesce-in-DECLARE variant is the safest bulk approach (no guard handling needed).
 - Commit: this push.
+
+### PLA-0760 - Orphan one-family seeds: batch-repointed 13 more (19 of 21 now reproducible); 2 pre-existing enum bugs found
+
+- Timestamp: 2026-07-17 16:40 UTC · Service: A-02 seed (LB-014)
+- Applied the uniform coalesce-in-DECLARE reproducibility fix to the remaining pinned seeds and verified each on a clean PG16 harness (apply + idempotent; auto-reverted any that errored).
+- **13 more fixed + verified:** family, family_safety, finances, group_decisions, life_events, location, meals_extras, meals, memories, messages, roles, voice, wallet_one. Sample real row counts: meals `meal_plans`=**1022**, memories=**540**, voice_commands=**500**, life_event_plans=44. All idempotent.
+- **Total: 19 of 21 orphan `*_one_family.sql` seeds now reproducible + verified** (this batch + PLA-0740/0750/0755).
+- **2 NOT fixed — pre-existing enum-cast bugs (independent of the repoint), flagged to A-02:** `seed_finance_hub_one_family.sql:63` — `column "status" is of type bill_status but expression is of type text`; `seed_operating_index_one_family.sql:148` — `column "category" is of type event_category but expression is of type text`. These seeds fail to apply anywhere (need `::bill_status` / `::event_category` casts) — reverted my repoint on them so they don't mask the real bug.
+- Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
+- Tests run: batch apply on the harness (17 clean, 2 reverted on pre-existing enum bugs) + row-count spot checks + idempotent re-apply.
+- Commit: this push. Status: LB-014 orphan slice ~90% de-risked (19/21 reproducible + verified); remaining for A-02 = fix the 2 enum-cast seeds, then wire all into the SEED_ALL/harness pipeline.

@@ -6,7 +6,7 @@
 -- and the last ~14 days incl. today) for ONE family. Requires migration
 -- 0115_meals_hub.sql applied first.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (newworldventurellc@gmail.com).
+-- TARGET FAMILY: resolved reproducibly at runtime.
 -- IDEMPOTENT: seeded rows tagged notes='[seed]' and removed before re-insert.
 -- RUN: npm run db:seed:meals   (or psql -f this file)
 -- VERIFY: /dashboard/favorites and /dashboard/nutrition.
@@ -14,7 +14,7 @@
 
 do $$
 declare
-  v_fam uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid uuid; v_members uuid[]; n int; i int; d int;
   kinds text[] := ARRAY['recipe','restaurant','meal','snack','drink','other'];

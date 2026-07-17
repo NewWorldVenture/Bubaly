@@ -17,7 +17,7 @@
 
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   g int; k int;
@@ -99,18 +99,18 @@ end $$;
 
 -- ── Verify counts + status/progress spread ──────────────────────────────────
 select 'life_event_plans' as tbl, count(*)::text as n from public.life_event_plans
-  where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t9]'
+  where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t9]'
 union all
 select 'life_event_plan_items', count(*)::text from public.life_event_plan_items i
-  where i.plan_id in (select id from public.life_event_plans where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t9]')
+  where i.plan_id in (select id from public.life_event_plans where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t9]')
 union all
 select 'items done', count(*)::text from public.life_event_plan_items i
-  where i.is_done and i.plan_id in (select id from public.life_event_plans where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t9]')
+  where i.is_done and i.plan_id in (select id from public.life_event_plans where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t9]')
 union all
 select 'plans by status: ' || status, count(*)::text from public.life_event_plans
-  where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t9]' group by status
+  where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t9]' group by status
 union all
 select 'learned facts', count(*)::text from public.family_facts f
-  where f.family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
+  where f.family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1)
     and exists (select 1 from unnest(array['Friday tradition','Sunday dinner','Bedtime routine','Coffee order','Pizza night','Movie pick','Vacation style','Chore rhythm','Birthday tradition','Screen-time rule']::text[]) l where f.label like l || '%')
 order by tbl;
