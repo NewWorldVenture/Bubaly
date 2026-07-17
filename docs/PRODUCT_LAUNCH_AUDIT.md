@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0778 - Family Emergency Hub showed "No emergency contacts on file" when a crisis read failed
+
+- Timestamp: 2026-07-17 20:17 UTC
+- Service: Dashboard / Family Emergency Hub (agent-`fable-opus` lane)
+- Route: `/dashboard/family-emergency`
+- Affected files: `app/(app)/dashboard/family-emergency/page.tsx`, `tests/family-emergency-read-boundary.test.ts`
+- Database objects: `family_members`, `family_emergency_contacts`, `family_emergency_plans`, `medical_profiles` (manager-gated)
+- Role: authenticated family members; medical summary + add/delete gated to managers
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (crisis surface — a reassuring-but-wrong empty state can leave a caregiver with no emergency contact or hide blood type/allergies/ICE from a first responder).
+- Launch impact: the four-way `Promise.all` destructured `{ data }` and dropped every `error`. The page is billed as "everything a caregiver needs in a crisis," yet a silent failure rendered **"No emergency contacts on file"** (a caregiver mid-crisis can't reach the parent), **"No emergency plans yet"**, and **"No medical profiles recorded"** (hiding blood type, allergies, and the ICE contact from a first responder) — confidently-wrong empty states at the worst possible moment.
+- Root cause: the four source-of-truth reads dropped their `error`. (The manager-gated `medical_profiles` branch also returned `Promise.resolve({ data: [] })` with no `error` field.)
+- Resolution: capture `membersRes`/`contactsRes`/`plansRes`/`profilesRes`; make the non-manager `medical_profiles` branch error-shaped (`{ data: [], error: null }`); collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-emergency] emergency read failed', …)` + `return <ErrorState message="Could not load your family emergency hub from Supabase. Refresh and try again." />` before rendering. Missing table still tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-emergency-read-boundary.test.ts` (4 assertions — four-error collection with missing-table filter, log+ErrorState, error-shaped non-manager branch, derive-after-guard ordering); full `npx vitest run` **574 files / 3570 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0777 - Family Health showed "No allergies or conditions recorded" when a medical read failed
 
 - Timestamp: 2026-07-17 20:13 UTC

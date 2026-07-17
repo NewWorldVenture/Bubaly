@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import { Phone, ShieldAlert, MapPin, UserCheck, HeartPulse, FileText } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Emergency' };
 export const dynamic = 'force-dynamic';
@@ -18,12 +20,30 @@ export default async function FamilyEmergencyPage() {
   // Emergency + medical data is gated to managers.
   const manager = isManager(ctx.active.role);
 
-  const [{ data: members }, { data: contacts }, { data: plans }, { data: profiles }] = await Promise.all([
+  const [membersRes, contactsRes, plansRes, profilesRes] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_emergency_contacts').select('*').eq('family_id', familyId).order('priority'),
     supabase.from('family_emergency_plans').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
-    manager ? supabase.from('medical_profiles').select('member_id, blood_type, allergies, conditions, emergency_contact_name, emergency_contact_phone').eq('family_id', familyId) : Promise.resolve({ data: [] }),
+    manager ? supabase.from('medical_profiles').select('member_id, blood_type, allergies, conditions, emergency_contact_name, emergency_contact_phone').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
   ]);
+
+  // This is the crisis surface ("everything a caregiver needs in a crisis"). A
+  // dropped error would render "No emergency contacts on file", "No emergency
+  // plans yet", or "No medical profiles recorded" (hiding blood type, allergies,
+  // and the ICE contact from a first responder) — a reassuring-but-wrong empty
+  // state at exactly the worst moment. Fail closed on a real read error; a
+  // genuinely missing table (unapplied migration) is still tolerated as empty.
+  const emergencyError = [membersRes.error, contactsRes.error, plansRes.error, profilesRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (emergencyError) {
+    console.error('[dashboard/family-emergency] emergency read failed', emergencyError);
+    return <ErrorState message="Could not load your family emergency hub from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const contacts = contactsRes.data;
+  const plans = plansRes.data;
+  const profiles = profilesRes.data;
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
 
