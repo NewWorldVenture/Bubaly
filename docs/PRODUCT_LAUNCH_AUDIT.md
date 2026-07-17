@@ -1467,3 +1467,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: per-route auth grep + reads of the two money crons + their RPCs + the resend verifier; the allowance atomic claim proven on PG16 (PLA-0680).
 - Commit: pending (doc only)
 - Status: Verified — cron/webhook auth + money-cron idempotency sound after the allowance fix. Flagged A-16 owner for the notification-cron dedup follow-up.
+
+### PLA-0700 - Money-ledger data-integrity invariants VERIFIED on the harness
+
+- Timestamp: 2026-07-17 15:20 UTC
+- Service: A-08 wallet / economy / invest (data integrity)
+- Route: `wallet_transactions`, `currency_transactions`, `invest_holdings`
+- Affected files: none (verification)
+- Role: n/a (structural invariants)
+- Scenario: verified the money ledgers cannot represent impossible money — negative amounts, negative balances (overspend), or negative holdings — and that the constraints are DB-enforced (not just app-enforced), on the PG16 harness against the seeded data.
+- Severity: n/a (clean; the one data-integrity defect this thread found — allowance double-pay — is PLA-0680)
+- Findings (all hold):
+  - **DB CHECK constraints (proven to bite):** `wallet_transactions` `CHECK (amount_cents >= 0)`; `currency_transactions` `CHECK (amount > 0)`; `invest_holdings` `CHECK (shares >= 0)` + `CHECK (avg_cost_cents >= 0)`. Attempting to INSERT a negative wallet amount or negative invest shares — even as the superuser (bypassing RLS) — is rejected with "violates check constraint", so no code path (RLS, RPC, or direct) can write impossible money.
+  - **No negative balances (no overspend) in the seeded ledgers:** per-`(child_wallet, bucket)` completed-txn balances = 0 negatives; per-`(family, member)` economy balances = 0 negatives.
+  - **Amounts are unsigned + direction-encoded:** `amount_cents >= 0` with a `direction` (credit/debit) column — no mixed-sign ambiguity; reversal is modeled explicitly via `reverses_id`.
+  - **Write-time enforcement:** overspend is prevented by the reserve RPC's `FOR UPDATE` balance check (agent-01 PLA-0440), and non-manager credit-minting is blocked by the write-lockdown migrations 0217 (wallet) / 0218 (economy) / 0220 (invest) — "child mint → RLS error" (agent-01/03).
+- Supabase impact: none.
+- Tests run: PG16 constraint introspection + violation attempts (negative amount + negative shares both rejected) + balance-conservation aggregates across all three ledgers.
+- Commit: pending (doc only)
+- Status: Verified — the money ledgers are structurally sound (non-negative, conservation-safe, DB-enforced). Combined with PLA-0680 (allowance atomic claim) the money-cron + ledger surface is integrity-clean.
