@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0784 - Vacations list + calendar rendered a failed read as "No trips yet" / an empty month (A-13)
+
+- Timestamp: 2026-07-17 20:20 UTC
+- Service: Vacations / travel / concierge (A-13) — Vacations list + calendar
+- Route: `/dashboard/vacations` (`components/vacations/vacations-list.tsx`), `/dashboard/vacations/calendar` (`components/vacations/vacations-calendar.tsx`)
+- Affected files: `components/vacations/vacations-list.tsx`, `components/vacations/vacations-calendar.tsx`, `tests/vacations-views-read-boundary.test.ts` (new)
+- Role: all family roles with the Vacations feature
+- Scenario: the `vacations` read (each view's primary source-of-truth) fails for a real reason (RLS denial, transient outage) while online and the table exists
+- Severity: P2 (silent read failure / misleading empty state on primary content)
+- Launch impact: both components read `vacations` via `useRealtimeQuery` but **destructured only `{ data }`, dropping the hook's `error`**. On a genuine failure the list rendered the reassuring-but-wrong **"No trips yet"** empty state (a family's planned trips appear deleted) and the calendar rendered an **empty month** — and its **`.ics` export silently produced an empty calendar file**. Unlike an aggregate/enhancement read, `vacations` is the primary content of both views, so it must fail visibly
+- Root cause: `const { data: trips, loading } = useRealtimeQuery(...)` (list) and `const { data: trips } = useRealtimeQuery(...)` (calendar) dropped `error`/`refresh`
+- Resolution: both now capture `error, refresh`; the list renders `<ErrorState onRetry={refresh}>` **before** the "No trips yet" empty-state branch, and the calendar early-returns a retryable `ErrorState` (preserving the page heading) instead of an empty grid/export. The hook still degrades missing-table/offline to a quiet empty list. Secondary list reads (`vacation_members`, `vacation_travel_scores`) remain enhancement data and stay degraded
+- Supabase impact: none — reads unchanged; genuine failures now visible + retryable
+- Tests run: `tests/vacations-views-read-boundary.test.ts` (4 — both views destructure error+refresh; list ErrorState precedes the empty state; calendar gates on error); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, `--max-old-space-size=6144`)
+- Validation evidence: guard asserts the `error, refresh` destructures and the ordered ErrorState/empty-state gate in the list plus the `if (error)` gate in the calendar
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read-boundary surface now covers modules + vacations views
+- Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
 ### PLA-0782 - Family Economy showed every child a 0 coin balance when a ledger read failed
 
 - Timestamp: 2026-07-17 21:09 UTC
