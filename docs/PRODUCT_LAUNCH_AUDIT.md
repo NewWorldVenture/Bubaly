@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0774 - Family Digital Twin collapsed to "No family members yet" when the roster read failed
+
+- Timestamp: 2026-07-17 20:02 UTC
+- Service: Dashboard / Family Digital Twin (agent-`fable-opus` lane)
+- Route: `/dashboard/family-digital-twin`
+- Affected files: `app/(app)/dashboard/family-digital-twin/page.tsx`, `tests/family-digital-twin-read-boundary.test.ts`
+- Database objects: `family_members` (source-of-truth spine); `family_digital_twin_profiles`, `family_routines`, `school_classes`, `teams`, `goals`, `budgets`, `twin_simulations` (per-member enrichment, best-effort)
+- Role: authenticated family members using the Digital Twin
+- Scenario: the `family_members` roster read fails (RLS edge, transient, connection) while the table exists.
+- Severity: **P2** (reassuring-but-wrong empty state — a populated family sees "no members" and loses the whole feature; lower launch weight than a status/money surface).
+- Launch impact: the seven-way `Promise.all` destructured `{ data: members }` and dropped the roster's `error`. The roster is the spine of the page — every member card, the `DecisionSimulator`, and the `ActivityProjection` hang off `members ?? []`. A silent roster failure rendered **"No family members yet"** and hid the entire feature for a family that actually has members — a confidently-wrong empty state.
+- Root cause: the source-of-truth roster read dropped its `error`.
+- Resolution: capture `membersRes` from the `Promise.all`, and on `membersRes.error` `console.error('[dashboard/family-digital-twin] member read failed', …)` + `return <ErrorState message="Could not load your family from Supabase. Refresh and try again." />` before deriving `members`. The per-member enrichment reads (profiles/routines/classes/teams/goals/budgets/twin_simulations) intentionally stay best-effort — each legitimately degrades to an empty section. Matches the Command-Center/Readiness/Kitchen fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-digital-twin-read-boundary.test.ts` (3 assertions — roster result captured, log+ErrorState on failure, members derived only after the guard); full `npx vitest run` **570 files / 3556 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0773 - Smart Kitchen rendered a false-empty kitchen from partially-failed source-of-truth reads
 
 - Timestamp: 2026-07-17 19:55 UTC

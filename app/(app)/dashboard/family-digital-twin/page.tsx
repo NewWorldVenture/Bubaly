@@ -9,6 +9,7 @@ import { QuickAdd } from '@/components/family/quick-add';
 import { Avatar } from '@/components/ui/avatar';
 import { DecisionSimulator } from '@/components/twin/decision-simulator';
 import { ActivityProjection, type SavedSim } from '@/components/twin/activity-projection';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Digital Twin' };
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export default async function FamilyDigitalTwinPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [{ data: members }, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await Promise.all([
+  const [membersRes, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await Promise.all([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('family_digital_twin_profiles').select('*').eq('family_id', familyId),
     supabase.from('family_routines').select('member_id, title').eq('family_id', familyId).eq('status', 'active'),
@@ -28,6 +29,18 @@ export default async function FamilyDigitalTwinPage() {
     supabase.from('goals').select('id, title').eq('family_id', familyId).eq('is_complete', false).limit(20),
     supabase.from('budgets').select('category').eq('family_id', familyId).order('category'),
   ]);
+
+  // The member roster is the source-of-truth spine of this page — every card,
+  // the decision simulator, and the activity projection hang off it. A dropped
+  // error would collapse to "No family members yet" for a populated family (a
+  // confidently-wrong empty state), so fail closed here. The per-member
+  // enrichment reads below (profiles, routines, classes, teams, goals, budgets)
+  // stay best-effort — each legitimately degrades to an empty section.
+  if (membersRes.error) {
+    console.error('[dashboard/family-digital-twin] member read failed', membersRes.error);
+    return <ErrorState message="Could not load your family from Supabase. Refresh and try again." />;
+  }
+  const members = membersRes.data;
   const { data: savedSimRows } = await supabase
     .from('twin_simulations').select('id, activity_name, verdict, weekly_hours, created_at')
     .eq('family_id', familyId).order('created_at', { ascending: false }).limit(20);
