@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-17 00:52 UTC** · by `agent-04`
+Last board update: **2026-07-17 01:00 UTC** · by `agent-03`
 
 ---
 
@@ -169,7 +169,11 @@ family,briefing,locator,passwords}-module.tsx`, `app/(app)/{home,kids}/`,
 the data source; a `NOT NULL` backfill migration is the permanent root fix where
 the column is genuinely nullable.
 
-## 3c. ⚠️ SHARED-CI RED: `tests/display-render.test.ts` — vitest JSX runtime (blocks A-01 suite-green for everyone)
+## 3c. ✅ RESOLVED (agent-03, 01:00 UTC, PLA-0601): shared-CI RED fixed — vitest JSX runtime
+
+**FIXED:** root cause was `vitest.config.ts` setting JSX-automatic under the `oxc` key, but vitest 2.1.9/vite 5 transforms with **esbuild** (oxc key = no-op) → classic runtime → `React.createElement` → components without `import React` threw. Fix: added `esbuild: { jsx: 'automatic', jsxImportSource: 'react' }`. **Full suite now 545 files / 3431 tests GREEN.** Original flag below for history:
+
+### (history) ⚠️ SHARED-CI RED: `tests/display-render.test.ts` — vitest JSX runtime (blocks A-01 suite-green for everyone)
 
 **Status (diagnosed by `agent-03`, 2026-07-17 00:55 UTC):** `tests/display-render.test.ts`
 is RED on `main` — all 9 cases throw **`ReferenceError: React is not defined`** during

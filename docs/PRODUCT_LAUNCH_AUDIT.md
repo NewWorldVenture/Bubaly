@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0601 - A-01 shared-CI RED fixed: vitest JSX runtime under the wrong key crashed every SSR component test
+
+- Timestamp: 2026-07-17 01:00 UTC
+- Service: Build/test gate (A-01) — vitest configuration
+- Route: n/a (test infra)
+- Affected files: `vitest.config.ts`
+- Role: all agents (the whole shared suite)
+- Scenario: any test that server-renders a real component tree (`renderToStaticMarkup`) — surfaced by `tests/display-render.test.ts`
+- Severity: P1 (shared-CI blocker — the A-01 "vitest green" DoD gate was failing for every unit)
+- Launch impact: `tests/display-render.test.ts` was RED on `main` (9 cases, `ReferenceError: React is not defined` during SSR), the only full-suite failure, blocking the "relevant vitest passes" gate for all agents. Root cause: `vitest.config.ts` set the JSX automatic runtime under the **`oxc`** key, but this repo runs **vitest 2.1.9 / vite 5**, which transforms with **esbuild** — so the `oxc` key is a no-op and esbuild fell back to the **classic** JSX runtime, compiling `<Cmp/>` to `React.createElement`. Components that (correctly, per the app's automatic runtime) do NOT `import React` therefore threw "React is not defined" the moment they were server-rendered in a test. It only surfaced in `display-render` because that is the sole test that SSR-renders a real `.tsx` tree; pure-function tests never hit it. Not a component bug (the app build is green) and not a test-author bug — a config-key mismatch
+- Root cause: JSX-runtime option placed under `oxc` (vitest 3+/rolldown only) instead of `esbuild` (the active transformer for vitest 2/vite 5)
+- Resolution: added `esbuild: { jsx: 'automatic', jsxImportSource: 'react' }` to `vitest.config.ts` (kept the `oxc` key for forward-compat). This aligns the test JSX transform with the app's automatic runtime — a global, non-conflicting config fix touching no agent's component or test
+- Supabase impact: none
+- Tests run: `tests/display-render.test.ts` 9/9 (was 0/9); **full suite 545 files / 3,431 tests — all green, zero regressions**; eslint clean on the config
+- Validation evidence: before = "Tests 9 failed"; after = "Tests 9 passed" + "Test Files 545 passed / Tests 3431 passed"
+- Commit: (this increment)
+- Status: Resolved — shared-CI green restored; A-01 gate unblocked for all agents. Supersedes the §3c board flag (now resolved)
+- Remaining dependencies: none
+
 ### PLA-0600 - A-08 kid-investing: a child could MINT investment holdings via a direct invest_holdings insert (+ money-ledger sweep complete)
 
 - Timestamp: 2026-07-17 12:20 UTC
