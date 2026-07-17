@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0613 - A-07: a child could forge chore COMPLETION via a direct chore_assignments status write (sibling of PLA-0612)
+
+- Timestamp: 2026-07-17 14:20 UTC
+- Service: Chores / Missions / rewards (A-07)
+- Route: DB `chore_assignments` (direct PostgREST); no server action exposes this
+- Affected files: `supabase/migrations/0223_chore_assignment_decision_guard.sql` (new), `tests/chore-assignment-decision-guard.test.ts` (new)
+- Role: **child / teen** (any non-manager family member with a login)
+- Scenario: a child `update chore_assignments set status='approved'` directly via PostgREST (anon key ships in the client bundle)
+- Severity: **MEDIUM** integrity/accountability (mints no money — the reward is credited imperatively in `finalizeApproval` under the manager-only wallet RLS 0217, never by this status)
+- Launch impact: `chore_assignments` shipped `is_family_member` FOR ALL, and the assignment status is what the dashboard reads as done/approved (`lib/chores/dashboard.ts` `COMPLETED_STATUSES = ['approved','done']`). So a child could mark their own chore **approved/complete** without a parent — gaming the family accountability loop. Direct sibling of the `chore_submissions` forge closed in PLA-0612/0222.
+- Root cause: family-scoped write RLS with no role distinction; the only decision-status writers (`finalizeApproval → 'approved'`, `rejectSubmissionAction → 'rejected'`) already run as service-role/manager, but nothing stopped a member writing the same value directly.
+- Resolution: migration 0223 adds a `before insert or update` trigger on `chore_assignments` that blocks a transition into `approved`/`rejected` unless the caller is service-role, an unauthenticated server/migration/seed context (`auth.uid() is null`), or a family manager (`can_manage_family`). Members keep `todo`/`in_progress`/`submitted`/`done` — `done` intentionally left member-writable (it mints nothing and may back a legitimate no-proof "mark done").
+- Supabase impact: new migration `0223` (additive, idempotent, `to_regclass`-guarded). Must be applied to prod (human-owned).
+- Tests run: `tests/chore-assignment-decision-guard.test.ts` (4, new); full suite green; tsc 0; migration audit next=0224.
+- Validation evidence: PG16 harness, production-accurate grants. Matrix proven: child `approved` → BLOCKED; child `rejected` → BLOCKED; child `in_progress` → ALLOWED; manager `approved` → ALLOWED; service-role `approved` → ALLOWED; seed still applies fail=0.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`; migration `0223` pending prod apply (human-owned)
+- Remaining dependencies: apply `0223` to prod. With PLA-0612 + PLA-0613, the A-07 chore integrity surface (submission + assignment decision statuses) is closed at both the app and DB layers.
+
 ### PLA-0612 - A-07: kid chore-proof submission was RLS-broken for everyone + a child could forge an approval (two findings, one root cause)
 
 - Timestamp: 2026-07-17 14:12 UTC
