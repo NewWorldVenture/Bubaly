@@ -6,6 +6,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0611 - OBSERVABILITY GAP CLOSED: no liveness/readiness endpoint for monitors or deploy smoke (A-20)
+
+- Timestamp: 2026-07-17 13:50 UTC
+- Service: Observability / deploy health (A-20)
+- Route: **NEW** `GET /api/health` (public, unauthenticated)
+- Affected files: `app/api/health/route.ts` (new), `lib/health/status.ts` (new), `lib/health/probe.ts` (new), `tests/health-endpoint.test.ts` (new, 13 cases)
+- Role: n/a (infra — uptime monitor / load balancer / CI deploy smoke)
+- Scenario: an operator or a monitor needs a single stable URL to answer "is this deployment up AND can it reach Supabase?" without a login. A-20 logged this as an open observability gap ("no /api/health, no boot env guard").
+- Severity: P2 (production-readiness / operability — not a correctness defect, but a launch-ops requirement: LB-001 references a bespoke auth health check; there was no general readiness endpoint)
+- Launch impact: before this, there was no unauthenticated way to distinguish "process alive" from "process alive but Supabase unreachable / a required env var missing" — so a misconfigured deploy (blank `SUPABASE_SERVICE_ROLE_KEY`, unreachable DB) would serve traffic and fail opaquely deep in request handlers instead of failing a health check. No LB/uptime probe target existed.
+- Root cause: no health/readiness route in the app.
+- Resolution: added `GET /api/health`. It reports (a) required-env presence — `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — as a boot env guard, and (b) a bounded (3s abort), **RLS-independent** Supabase connectivity probe against the PostgREST `/rest/v1/` root. Returns **200 `{status:"ok"}`** only when env is complete AND the DB is reachable, else **503 `{status:"error"}`**. Security: the body reports only booleans / latency / the NAMES of any missing env vars — **never a secret value** — so it is safe to expose without auth. Decision logic is factored into pure helpers (`lib/health/status.ts`) so it is unit-tested without a live network; the single impure probe (`lib/health/probe.ts`) fails closed (never throws) on timeout/reject.
+- Supabase impact: read-only, no schema change. The probe hits the PostgREST root (the OpenAPI doc), so it depends on no table, seed, or RLS policy.
+- Tests run: `tests/health-endpoint.test.ts` — **13/13 green** (env-presence incl. blank-as-missing; status/HTTP folding; probe: no-network-when-unconfigured, 2xx-ok+latency, apikey-against-/rest/v1/ root, 5xx-unhealthy, abort→fail-closed). `tsc --noEmit` clean (only the known `@axe-core/playwright` optional-e2e-dep noise). Production `npm run build` — route present in table.
+- Commit: (this increment)
+- Status: RESOLVED — `/api/health` shipped and tested. Residual (owner): wire it as the platform's uptime-monitor / LB health-check target (Vercel/monitor config = infra, not code).
+- Remaining dependencies: none in-repo; operator points their monitor at `/api/health`.
+
 ### PLA-0610 - PRIVACY REVIEW (product decision): family-wide PII is readable by every member incl. children
 
 - Timestamp: 2026-07-17 12:55 UTC

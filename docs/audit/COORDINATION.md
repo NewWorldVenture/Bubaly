@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-17 01:10 UTC** · by `agent-04`
+Last board update: **2026-07-17 13:50 UTC** · by `agent-03`
 
 ---
 
@@ -47,7 +47,7 @@ Last board update: **2026-07-17 01:10 UTC** · by `agent-04`
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
 | `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
-| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs RLS PLA-0442; family-media bucket SHIPPED mig 0216 + write-RLS, LB-009 downgraded P1→P2); sweep PLA-0405..0417 | 2026-07-16 21:00 | 2026-07-17 00:10 |
+| `agent-03` | Opus 4.8 — A-16 (PLA-0432/0434/0441) + A-11 (docs RLS PLA-0442; family-media bucket SHIPPED mig 0216 + write-RLS, LB-009 downgraded P1→P2); sweep PLA-0405..0417; shared-CI JSX fix (PLA-0601); **`GET /api/health` observability endpoint (PLA-0611, new files only)** | 2026-07-16 21:00 | 2026-07-17 13:50 |
 | `agent-04` | Fable 5 — A-05 display SSR fix (PLA-0490)+§3b; A-13 concierge-calls authz P1 (PLA-0500); A-15 AI/trust-gate lock (PLA-0510); A-18 sync fail-closed/OAuth/crypto (PLA-0520); A-17 admin authz across ~130 actions (PLA-0530); A-20 build gate GREEN (PLA-0540). 5 new guard tests (28), 1 P1 fixed | 2026-07-16 22:20 | 2026-07-16 23:28 |
 
 ---
@@ -108,7 +108,7 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-17 | `agent-04` | IN_REVIEW | 2026-07-16 23:14 | 2026-07-16 23:20 | `PLA-0530` | VERIFIED clean (no defect): §3a checked on the highest-blast-radius surface. Layout gates the /admin segment AND every one of ~130+ admin server actions re-verifies isSuperAdmin independently & fails closed (assertSuperAdmin / requireMarketingAdmin[throws] / local guard() / transitive). 0 files touch the service client without a gate. Added `admin-authz-gate.test.ts` (4). **FOUND+FIXED P1 (PLA-0600/LB-011): `admin_users`+`support_tickets` RLS was `TO public USING(true)` (mig 0010 missing `to service_role`) → any signed-in user read all tenants' tickets (PII)+admin roster; mig 0218 locks to service-role, PG16-proven 11/12→0. NOT applied to prod (LB-011).** Open: `app/api/admin/**` authz, public marketing input/rate-limit, live super-admin E2E |
 | A-18 | `agent-04` | IN_REVIEW | 2026-07-16 23:08 | 2026-07-16 23:12 | `PLA-0520` | VERIFIED clean (no defect): FAIL CLOSED end-to-end — `sync/run` 503 when not configured, providers key-gated dark, Apple VTODO writes throw 501 (never silent-success). OAuth CSRF (32B CSPRNG state, timingSafeEqual, callback validates before code-exchange, single-use cookie) + AES-256-GCM token-at-rest (tamper-detected) + refuses to store w/o key. Real provider calls (no mocks). Added `sync-apple-vtodo-failclosed.test.ts` (5). **RLS PROVEN LIVE on PG16 (PLA-0580): all 22 sync_* family tables family-scoped; sync_tokens (encrypted OAuth store) is DENY-ALL to clients (whole-table read=0, INSERT rejected) = service-role-only.** Open: live OAuth round-trip w/ real keys, refresh-expiry, two-way conflict dedupe, feed-token abuse |
 | A-19 | `agent-04` | IN_REVIEW | 2026-07-16 23:34 | 2026-07-17 00:06 | `PLA-0550`+`PLA-0560` | Static: Modal full WAI-ARIA + mobile bottom-sheet; 0 img-without-alt; 362 files responsive; `modal-a11y-contract.test.ts` (5). **LIVE (PLA-0560): axe WCAG A/AA 24/24 across 12 public routes × dark+light = 0 serious violations; overflow 12/12 at 320/390/768/1024px.** Open: AUTHED-route axe/overflow + keyboard/SR walkthrough (needs Supabase test login) |
-| A-20 | `agent-04` | IN_REVIEW | 2026-07-16 23:24 | 2026-07-17 00:06 | `PLA-0540`+`PLA-0560` | Build gate GREEN (EXIT=0, ~250 routes). **LIVE E2E smoke RAN (PLA-0560): public.spec 14/15 (1 = sandbox-network `load` artifact, not a defect) incl. /dashboard→/login auth redirect; accessibility 24/24; overflow 12/12 = 50/51 live assertions.** Observability gaps logged (no Sentry, no /api/health, no boot env guard). Open: authed E2E (login→wallet→checkout, needs keys), Sentry (owner), perf budget, backup runbook |
+| A-20 | `agent-04` | IN_REVIEW | 2026-07-16 23:24 | 2026-07-17 00:06 | `PLA-0540`+`PLA-0560` | Build gate GREEN (EXIT=0, ~250 routes). **LIVE E2E smoke RAN (PLA-0560): public.spec 14/15 (1 = sandbox-network `load` artifact, not a defect) incl. /dashboard→/login auth redirect; accessibility 24/24; overflow 12/12 = 50/51 live assertions.** Observability gaps logged (no Sentry, no /api/health, no boot env guard). **UPDATE (agent-03, 13:50, PLA-0611): `/api/health` + boot env guard SHIPPED — new files only (`app/api/health/route.ts`, `lib/health/*`), zero overlap with agent-04's A-20 files; 13 unit tests green. Two of the three observability gaps now closed; Sentry remains owner-gated.** Open: authed E2E (login→wallet→checkout, needs keys), Sentry (owner), perf budget, backup runbook |
 
 ---
 
