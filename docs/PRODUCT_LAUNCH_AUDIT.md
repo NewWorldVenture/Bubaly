@@ -25,6 +25,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: RESOLVED in-repo and pushed to `main`.
 - Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
 
+### PLA-0783 - Trips module rendered a failed checklist read as an empty 0%-progress checklist (A-13)
+
+- Timestamp: 2026-07-17 19:55 UTC
+- Service: Vacations / travel / concierge (A-13) — Trips module
+- Route: `/dashboard/trips` (`components/modules/trips-module.tsx`)
+- Affected files: `components/modules/trips-module.tsx`, `tests/trips-module-read-boundary.test.ts` (new)
+- Role: all family roles with the Trips feature
+- Scenario: the `trips` list loads but the `trip_items` read (the per-trip packing/todo checklist) fails for a real reason (RLS denial, transient outage) while online and the table exists
+- Severity: P2 (silent read failure / misleading empty state)
+- Launch impact: the module ran two `useRealtimeQuery` reads — `trips` (gated with an `ErrorState`) and `trip_items`. The **items read discarded its `error`**, so a genuine failure rendered the trip detail view as an empty checklist showing **0% progress / no items** with no error banner and no retry — the user believes their packing/todo list was wiped, when it was only a failed read. `trip_items` is core per-trip content (drives `selectedItems`, `checklistProgress`, `progressByKind`), not an enhancement aggregate, so it must fail visibly
+- Root cause: `const { data: items } = useRealtimeQuery<TripItem>(...)` dropped the hook's `error`/`refresh`; only the `trips` read was gated
+- Resolution: capture `error: itemsError, refresh: refreshItems` from the items read (and `refresh: refreshTrips` from trips), then gate the whole view on `const loadError = error || itemsError` with a retryable `ErrorState` (`onRetry` re-runs both). Matches the sibling `trip-memories-module` combined-refresh pattern. Writes were already error-checked via `describeDbError`; the hook still degrades missing-table/offline to a quiet empty list
+- Supabase impact: none — reads unchanged; genuine failures now visible + retryable
+- Tests run: `tests/trips-module-read-boundary.test.ts` (2 — both reads destructure error+refresh; view gates on `error || itemsError` with a two-read retry); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, run with `--max-old-space-size=6144` — the default-heap run was OOM-killed under concurrent-agent load in this env, not a type error)
+- Validation evidence: guard asserts the two destructures and the `loadError`/`onRetry` gate exist; the fix mirrors the already-compiling `trip-memories` combined-refresh idiom
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed from STALE agent-04); A-13 unit remains In-progress (concierge/trip-intel client sweep + live CRUD/seed still open)
+- Remaining dependencies: finish the concierge-calls / trip-intel client read paths; live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
 ### PLA-0781 - Grandparent Portal rendered an empty portal when the member roster read failed
 
 - Timestamp: 2026-07-17 20:40 UTC
