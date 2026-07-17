@@ -31,6 +31,7 @@ export function FocusModule() {
   const [items, setItems] = useState<FocusItem[] | null>(null);
   const [index, setIndex] = useState(0);
   const [doneCount, setDoneCount] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -41,7 +42,7 @@ export function FocusModule() {
     const { data: member } = await supabase.from('family_members').select('id').eq('family_id', familyId).eq('user_id', userId).maybeSingle();
     const myMemberId = member?.id ?? null;
 
-    const [{ data: events }, { data: chores }, { data: todos }] = await Promise.all([
+    const [{ data: events, error: evErr }, { data: chores }, { data: todos, error: tdErr }] = await Promise.all([
       supabase.from('calendar_events').select('id, title, starts_at, all_day, location')
         .eq('family_id', familyId)
         .gte('starts_at', dayStart.toISOString()).lt('starts_at', dayEnd.toISOString())
@@ -54,6 +55,12 @@ export function FocusModule() {
       supabase.from('todo_items').select('id, title, is_done')
         .eq('family_id', familyId).eq('is_done', false).order('created_at').limit(20),
     ]);
+
+    // Don't render a failed read as "Nothing on your plate / Enjoy the calm" —
+    // that false-empty tells a family their day is clear when the load errored.
+    // events + todos are the primary content; a real failure surfaces an error.
+    if (evErr || tdErr) { setLoadError(true); setItems([]); return; }
+    setLoadError(false);
 
     const list: FocusItem[] = [];
     for (const e of events ?? []) {
@@ -95,7 +102,20 @@ export function FocusModule() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center px-4 text-center">
-      {total === 0 || finished ? (
+      {loadError ? (
+        <div className="flex flex-col items-center gap-5" role="alert">
+          <div className="grid h-20 w-20 place-items-center rounded-full bg-danger/10">
+            <RotateCcw className="h-10 w-10 text-danger" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Couldn’t load your day</h1>
+            <p className="mt-1 text-sm text-muted">Something went wrong reaching your events and tasks. This isn’t an empty day — try again.</p>
+          </div>
+          <button onClick={() => load()} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
+            <RotateCcw className="h-4 w-4" /> Try again
+          </button>
+        </div>
+      ) : total === 0 || finished ? (
         <div className="flex flex-col items-center gap-5">
           <div className="grid h-20 w-20 place-items-center rounded-full bg-brand/10">
             <Sparkles className="h-10 w-10 text-brand-text" />

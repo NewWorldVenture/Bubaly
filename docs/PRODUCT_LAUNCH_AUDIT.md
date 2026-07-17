@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0797 - Focus Mode told a family "Nothing on your plate — enjoy the calm" when the day's read failed (A-05)
+
+- Timestamp: 2026-07-17 23:31 UTC
+- Service: Home / dashboard command surfaces (A-05) — Focus Mode
+- Route: `/focus` (`components/modules/focus-module.tsx`)
+- Affected files: `components/modules/focus-module.tsx`, `tests/focus-mode-read-boundary.test.ts` (new)
+- Database objects: `calendar_events`, `chore_assignments`, `todo_items` (reads)
+- Role: all family roles
+- Scenario: the Promise.all that loads today's events/chores/todos fails transiently while data exists
+- Severity: P3 (convenience surface; a reassuring-but-wrong empty)
+- Launch impact: the three reads destructured only `{ data }`, so a failed read left `items = []` and rendered the "Nothing on your plate — No events or open tasks for today. Enjoy the calm." state. A family relying on Focus Mode to surface today's must-dos would be told their day is clear when the load actually failed — they could miss a real event or task
+- Root cause: the primary reads dropped their Supabase `error`, conflating "clear day" with "load failed"
+- Resolution: capture `error` on the primary `events` + `todos` reads; on a real error set a `loadError` flag and render an honest, retryable "Couldn’t load your day — this isn’t an empty day, try again" state (reusing the existing Refresh→`load()`), before the "Nothing on your plate" branch. The `member`/`chores` reads stay secondary/degraded. A genuinely empty day still shows the calm empty state
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/focus-mode-read-boundary.test.ts` (2 — captures `evErr`/`tdErr` + early error return; the error branch precedes the empty/finished branch); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the error capture on the primary reads and the ordered error-before-empty branching
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0796 - Feedback board comment thread rendered a failed read as an empty discussion (A-17 §3e slice)
 
 - Timestamp: 2026-07-17 23:25 UTC
