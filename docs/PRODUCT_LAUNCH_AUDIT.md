@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0779 - Trust & Permissions rendered every security control as "none" when a read failed
+
+- Timestamp: 2026-07-17 20:21 UTC
+- Service: Dashboard / Trust & Permissions (agent-`fable-opus` lane)
+- Route: `/dashboard/trust`
+- Affected files: `app/(app)/dashboard/trust/page.tsx`, `tests/trust-read-boundary.test.ts`
+- Database objects: `family_members`, `trust_policies`, `permission_grants`, `trust_delegations`, `approval_requests`, `emergency_sessions` (security state); `trust_audit_logs` (log view, best-effort)
+- Role: authenticated family members; management gated to managers via `canManage`
+- Scenario: any of the six security-state reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (security-state surface — a reassuring-but-wrong "none" can make a child look unrestricted, drop a pending approval, or hide an active emergency-access session).
+- Launch impact: the seven-way `Promise.all` destructured `{ data }` and dropped every `error`. A silent failure rendered **no trust policies, no permission grants, no active delegations, no pending approvals, and no active emergency sessions** — a security picture where a restricted child appears unrestricted, a pending approval request vanishes, and an elevated emergency-access session is invisible to the family managing it.
+- Root cause: the six source-of-truth security reads dropped their `error`.
+- Resolution: capture `membersRes`/`policiesRes`/`grantsRes`/`delegationsRes`/`approvalsRes`/`emergenciesRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/trust] trust read failed', …)` + `return <ErrorState message="Could not load your family trust & permissions from Supabase. Refresh and try again." />` before building `TrustData`. The `trust_audit_logs` display stays best-effort (a historical log view, consistent with audit-log leniency elsewhere). Missing table still tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/trust-read-boundary.test.ts` (4 assertions — six-error collection with missing-table filter, log+ErrorState, audit-log stays best-effort, derive-after-guard ordering); full `npx vitest run` **575 files / 3574 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0778 - Family Emergency Hub showed "No emergency contacts on file" when a crisis read failed
 
 - Timestamp: 2026-07-17 20:17 UTC

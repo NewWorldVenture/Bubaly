@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { TrustModule, type TrustData } from '@/components/modules/trust-module';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Trust & Permissions' };
 export const dynamic = 'force-dynamic';
@@ -14,12 +16,12 @@ export default async function TrustPage() {
   const nowIso = new Date().toISOString();
 
   const [
-    { data: members },
-    { data: policies },
-    { data: grants },
-    { data: delegations },
-    { data: approvals },
-    { data: emergencies },
+    membersRes,
+    policiesRes,
+    grantsRes,
+    delegationsRes,
+    approvalsRes,
+    emergenciesRes,
     { data: audit },
   ] = await Promise.all([
     supabase.from('family_members').select('id, display_name, role, color').eq('family_id', familyId).eq('is_active', true).order('created_at'),
@@ -30,6 +32,29 @@ export default async function TrustPage() {
     supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null),
     supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
   ]);
+
+  // Trust is a security-state surface: the policies, grants, delegations,
+  // pending approvals, and *active emergency sessions* are the source of truth
+  // for who can do what. A dropped error would render all of them as "none" — a
+  // reassuring-but-wrong picture where a child looks unrestricted, a pending
+  // approval vanishes, or an active emergency-access session is hidden. Fail
+  // closed on a real read error; a genuinely missing table (unapplied
+  // migration) is still tolerated as empty. The trust_audit_logs display below
+  // stays best-effort (a historical log view, consistent with audit-log
+  // leniency elsewhere).
+  const trustError = [membersRes.error, policiesRes.error, grantsRes.error, delegationsRes.error, approvalsRes.error, emergenciesRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (trustError) {
+    console.error('[dashboard/trust] trust read failed', trustError);
+    return <ErrorState message="Could not load your family trust & permissions from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const policies = policiesRes.data;
+  const grants = grantsRes.data;
+  const delegations = delegationsRes.data;
+  const approvals = approvalsRes.data;
+  const emergencies = emergenciesRes.data;
 
   const data: TrustData = {
     members: (members ?? []).map(m => ({ id: m.id, name: m.display_name, role: m.role, color: m.color })),
