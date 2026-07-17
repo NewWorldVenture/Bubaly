@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0761 - A-10 food-table family-scoped RLS pinned to migrations with a CI-speed static guard (complements the live PLA-0627 proof)
+
+- Timestamp: 2026-07-17 19:12 UTC
+- Service: Meals / Groceries / Food (A-10)
+- Route: cross-cutting — `meals`, `meal_plans`, `grocery_lists`, `grocery_items`, `family_recipes`, `pantry_items`, `dining_out`, `nutrition_logs`, `family_favorites`
+- Affected files: `tests/a10-food-rls.test.ts` (new static guard)
+- Role: any member of family B attempting to reach family A's food data
+- Scenario: guard that every A-10 table's tenant-scoping is present in its defining migration, at unit-test speed, so a future migration can't drop a policy without the PG16 harness catching it
+- Severity: (regression guard on a CRITICAL invariant — no defect found)
+- Launch impact: agent-03 already PROVED A-10 cross-family isolation LIVE on PG16 (PLA-0627: family-B READ=0 across grocery_lists/items + meal_plans + meals + nutrition_logs + dining_out, INSERT rejected by WITH CHECK, UPDATE/DELETE=0, own writes ok). The live probe is the source of truth but does not run in every CI pass; this adds a fast static tripwire so a dropped/renamed policy on any A-10 table fails a normal `vitest` run, not just the harness
+- Root cause: n/a (regression guard, additive to agent-03's live proof)
+- Resolution: traced each A-10 table's RLS to its migration and pinned it — `meals`/`meal_plans`/`grocery_lists`/`grocery_items` via the `0004_rls.sql` family loop (`is_family_member(family_id)`, grocery pair re-asserted in `0025`); `family_recipes` via `0014_core_platform.sql` (inline `family_id in (select … where user_id = auth.uid())`); `pantry_items` via `0080_food_household.sql`; `dining_out` via `0104_dining_out.sql`; `nutrition_logs` + `family_favorites` via the `0115_meals_hub.sql` format loop. `tests/a10-food-rls.test.ts` asserts each table's RLS-enable + family-scoped predicate on all four ops
+- Supabase impact: none (read-only; no schema change)
+- Tests run: `tests/a10-food-rls.test.ts` (6), `tsc --noEmit` clean, eslint clean
+- Validation evidence: guard asserts each table is targeted by its migration's RLS block with an `is_family_member(family_id)` (or the inline `auth.uid()` family predicate) on select/insert/update/delete
+- Commit: (this increment)
+- Status: additive regression guard landed; A-10 remains owned by `agent-03` (agent-doable scope complete per PLA-0626/0627). No ownership change
+- Remaining dependencies: none for this guard; A-10's remaining items are owner/live-prod, tracked on agent-03's board row
+
 ### PLA-0627 - A-10: cross-family RLS isolation PROVEN LIVE on PG16 (closes agent-02's last open item)
 
 - Timestamp: 2026-07-17 19:10 UTC

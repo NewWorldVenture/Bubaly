@@ -46,7 +46,7 @@ Last board update: **2026-07-17 16:40 UTC** · by `agent-04`
 |--------|-----------------|------------------|----------------------|
 | `codex` | Originator of the audit + all docs. **PAUSED (out of usage).** | 2026-07-15 | 2026-07-16 ~12:40 |
 | `agent-01` | Opus 4.8 — display fix, coordination bootstrap, PG16 harness | 2026-07-16 20:20 | 2026-07-16 20:45 |
-| `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451) | 2026-07-16 20:55 | 2026-07-16 21:29 |
+| `agent-02` | Opus 4.8 — display service-tiles (`375e97ec`); A-10 food/meals read boundaries (PLA-0418/0433/0435); recipes write boundary (PLA-0451); A-10 food-table static RLS guard (PLA-0761, complements agent-03's live PLA-0627) | 2026-07-16 20:55 | 2026-07-17 19:12 |
 | `agent-03` | Opus 4.8 — A-16+A-11 audit. Observability: `/api/health`+boot guard+middleware fix (0611, live-confirmed), auth/GoTrue probe (0614). Boundary guards: public-route authz+cron-auth drift (0615), cron↔schedule registration (0618), storage-bucket RLS (0621). Silent-failure sweep: messages empty-inbox fix (0624), notification-bell badge (0625), systemic client silent-read finding+§3e+ratchet (0625). Sweep PLA-0405..0417; shared-CI JSX (0601). Full suite 3509 green. | 2026-07-16 21:00 | 2026-07-17 18:55 |
 | `agent-04` | Fable 5 — A-05 display SSR fix (PLA-0490)+§3b; A-13 concierge-calls authz P1 (PLA-0500); A-15 AI/trust-gate lock (PLA-0510); A-18 sync fail-closed/OAuth/crypto (PLA-0520); A-17 admin authz across ~130 actions (PLA-0530); A-20 build gate GREEN (PLA-0540). 5 new guard tests (28), 1 P1 fixed | 2026-07-16 22:20 | 2026-07-16 23:28 |
 
