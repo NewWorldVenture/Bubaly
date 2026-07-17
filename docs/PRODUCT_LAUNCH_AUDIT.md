@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0770 - Family Readiness score computed a reassuring-but-wrong number from partially-failed reads (+ Kitchen Display crash verified fixed)
+
+- Timestamp: 2026-07-17 19:42 UTC
+- Service: Dashboard / family readiness (agent-`fable-opus` lane)
+- Route: `/dashboard/readiness`
+- Affected files: `app/(app)/dashboard/readiness/page.tsx`, `tests/readiness-read-boundary.test.ts`
+- Database objects: `chore_assignments`, `reminders`, `meal_plans`, `calendar_events`, `grocery_items`, `family_members`
+- Role: authenticated family members with the Readiness feature
+- Scenario: any of the six source-of-truth counts that feed the headline readiness score fails to read (RLS edge, transient, unapplied migration).
+- Severity: **P1** (same class as PLA/TODO-0404 Command Center — a reassuring-but-wrong household status).
+- Launch impact: the primary `Promise.all` destructured only `{ count }`/`{ data }` and discarded every `error`; a failed read became `undefined → ?? 0`, so e.g. a dropped overdue-chores read rendered as **zero overdue → an "all caught up" great-band score** the family would trust. The forward *horizon* block is deliberately best-effort (documented `cnt()` helper) and is correctly left as-is.
+- Root cause: the score's six primary reads dropped their `error`.
+- Resolution: capture each primary read result, collect `[…].find(Boolean)`, and on any error `console.error('[dashboard/readiness] readiness score read failed', …)` + `return <ErrorState message="Could not load your family readiness from Supabase. Refresh and try again." />` before computing the score. Matches the established Command-Center/Briefing fail-closed pattern exactly.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/readiness-read-boundary.test.ts` (3 assertions — primary-error collection, log+ErrorState, horizon stays best-effort); full `npx vitest run` **566 files / 3536 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- **Kitchen Display crash (side finding, verified):** the production `/display` white-screen the owner reported across builds `006d860`/`1912186`(`19121862`) was root-caused + fixed by another agent in `e92fd897` (a **null `family_members.display_name` → `.split()` throw during SSR render** — nullable column typed as `string`), guarded by an SSR `renderToStaticMarkup` harness (`tests/display-render.test.ts`). Verified on this checkout: all 27 display tests (render harness + recover + tiles) green; `.split()` sites use the null-safe `firstName()` helper; `page.tsx` coerces `display_name ?? 'Member'` at source; `Avatar` uses null-safe `initials()`. The owner's last screenshots (build `19121862`, Jul 14) **predate** `e92fd897` (Jul 16) — a refresh on current `main` resolves it. My earlier display commits (client-only shell `bf9fd32d`, serialization firewall `9dcc4d62`, tile normalization `9ed24172`, hard-reload escalation `87478162`) are defense-in-depth around that root cause.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for readiness; the P0/P1 live blockers (LB-001..014) remain owner/live-infra.
+
 ### PLA-0761 - A-10 food-table family-scoped RLS pinned to migrations with a CI-speed static guard (complements the live PLA-0627 proof)
 
 - Timestamp: 2026-07-17 19:12 UTC

@@ -7,6 +7,7 @@ import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readine
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Readiness' };
 export const dynamic = 'force-dynamic';
@@ -26,12 +27,12 @@ export default async function ReadinessPage() {
   const weekEndStr = weekEnd.toISOString().slice(0, 10);
 
   const [
-    { count: choresOverdue },
-    { count: remindersOverdue },
-    { data: meals },
-    { count: eventsUpcoming },
-    { count: groceryActive },
-    { count: activeMembers },
+    choresOverdueRes,
+    remindersOverdueRes,
+    mealsRes,
+    eventsUpcomingRes,
+    groceryActiveRes,
+    activeMembersRes,
     famPlanLevel,
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', now.toISOString()),
@@ -43,13 +44,30 @@ export default async function ReadinessPage() {
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
+  // The headline readiness SCORE is source-of-truth: if any of its six inputs
+  // failed to read, fail closed rather than compute a reassuring-but-wrong score
+  // (a dropped overdue-chores read would otherwise render as "all caught up").
+  // (The forward horizon block below is deliberately best-effort — see `cnt`.)
+  const primaryError = [
+    choresOverdueRes.error,
+    remindersOverdueRes.error,
+    mealsRes.error,
+    eventsUpcomingRes.error,
+    groceryActiveRes.error,
+    activeMembersRes.error,
+  ].find(Boolean);
+  if (primaryError) {
+    console.error('[dashboard/readiness] readiness score read failed', primaryError);
+    return <ErrorState message="Could not load your family readiness from Supabase. Refresh and try again." />;
+  }
+
   const input: ReadinessInput = {
-    choresOverdue: choresOverdue ?? 0,
-    remindersOverdue: remindersOverdue ?? 0,
-    mealsPlanned: new Set((meals ?? []).map((m) => m.plan_date)).size,
-    eventsUpcoming: eventsUpcoming ?? 0,
-    groceryActive: groceryActive ?? 0,
-    activeMembers: activeMembers ?? 0,
+    choresOverdue: choresOverdueRes.count ?? 0,
+    remindersOverdue: remindersOverdueRes.count ?? 0,
+    mealsPlanned: new Set((mealsRes.data ?? []).map((m) => m.plan_date)).size,
+    eventsUpcoming: eventsUpcomingRes.count ?? 0,
+    groceryActive: groceryActiveRes.count ?? 0,
+    activeMembers: activeMembersRes.count ?? 0,
   };
   const { score, band, factors } = computeReadiness(input);
   const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
@@ -88,7 +106,7 @@ export default async function ReadinessPage() {
       if (bS < aE && aS < bE) tomorrowConflicts++;
     }
   }
-  const plannedThisWeek = new Set((meals ?? []).map((m) => m.plan_date));
+  const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
