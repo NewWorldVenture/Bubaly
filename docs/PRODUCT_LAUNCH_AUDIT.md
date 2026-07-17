@@ -11,7 +11,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Timestamp: 2026-07-17 13:50 UTC
 - Service: Observability / deploy health (A-20)
 - Route: **NEW** `GET /api/health` (public, unauthenticated)
-- Affected files: `app/api/health/route.ts` (new), `lib/health/status.ts` (new), `lib/health/probe.ts` (new), `tests/health-endpoint.test.ts` (new, 13 cases)
+- Affected files: `app/api/health/route.ts` (new), `lib/health/status.ts` (new), `lib/health/probe.ts` (new), `tests/health-endpoint.test.ts` (new, 13 cases); **follow-up:** `instrumentation.ts` (boot env guard wired into Next's `register()`), `tests/instrumentation-boot-guard.test.ts` (new, 3 cases)
 - Role: n/a (infra — uptime monitor / load balancer / CI deploy smoke)
 - Scenario: an operator or a monitor needs a single stable URL to answer "is this deployment up AND can it reach Supabase?" without a login. A-20 logged this as an open observability gap ("no /api/health, no boot env guard").
 - Severity: P2 (production-readiness / operability — not a correctness defect, but a launch-ops requirement: LB-001 references a bespoke auth health check; there was no general readiness endpoint)
@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: read-only, no schema change. The probe hits the PostgREST root (the OpenAPI doc), so it depends on no table, seed, or RLS policy.
 - Tests run: `tests/health-endpoint.test.ts` — **13/13 green** (env-presence incl. blank-as-missing; status/HTTP folding; probe: no-network-when-unconfigured, 2xx-ok+latency, apikey-against-/rest/v1/ root, 5xx-unhealthy, abort→fail-closed). `tsc --noEmit` clean (only the known `@axe-core/playwright` optional-e2e-dep noise). Production `npm run build` — route present in table.
 - Commit: (this increment)
-- Status: RESOLVED — `/api/health` shipped and tested. Residual (owner): wire it as the platform's uptime-monitor / LB health-check target (Vercel/monitor config = infra, not code).
+- Status: RESOLVED — `/api/health` shipped and tested. **Follow-up shipped:** the boot env guard now also runs at actual server startup via `instrumentation.ts` `register()` (Node runtime only) — a missing/blank Supabase core var emits ONE greppable `[boot] MISSING REQUIRED ENV: …` line at boot instead of surfacing only on the first request. Log-only (never throws), so it cannot take down a deploy. Reuses `checkRequiredEnv` for a single source of truth with the readiness route. `tsc` clean; 3 boot-guard tests green (logs+names missing / silent when complete / no-op in edge runtime). Residual (owner): wire `/api/health` as the platform's uptime-monitor / LB health-check target (Vercel/monitor config = infra, not code).
 - Remaining dependencies: none in-repo; operator points their monitor at `/api/health`.
 
 ### PLA-0610 - PRIVACY REVIEW (product decision): family-wide PII is readable by every member incl. children
