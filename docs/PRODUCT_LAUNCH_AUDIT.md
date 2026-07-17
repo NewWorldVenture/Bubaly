@@ -1612,3 +1612,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Timestamp: 2026-07-17 15:40 UTC
 - Correcting PLA-0700: its "no negative bucket balances / no overspend in the seeded ledger" result for `wallet_transactions` was **VACUOUS** — `wallet_transactions` is unseeded (0 rows, see PLA-0720), so the balance aggregate summed an empty set. This is retracted to avoid overclaiming.
 - **Still valid from PLA-0700** (data-independent): the DB CHECK constraints were proven to BITE — inserting a negative `wallet_transactions.amount_cents` and negative `invest_holdings.shares` were both rejected with "violates check constraint" even as superuser. So negative money remains structurally impossible on every code path; only the empirical "seed has no negative balances" sub-claim was vacuous. `currency_transactions` conservation (economy) did run over seeded rows (non-vacuous). Live overspend prevention remains covered by the reserve-RPC FOR UPDATE proof (agent-01 PLA-0440).
+
+### PLA-0730 - Systemic SEED_ALL coverage gap: core day-to-day family features demo empty
+
+- Timestamp: 2026-07-17 15:50 UTC
+- Service: A-02 seed baseline (cross-cutting; affects A-05/07/08/10/12 demo quality)
+- Route: `SEED_ALL.sql` coverage
+- Affected files: none (finding; LB-014 for A-02)
+- Role: any demo / fresh-environment family
+- Scenario: extended the PLA-0720 census — checked whether the high-visibility empty feature tables are seeded in `SEED_ALL` and/or have an orphan standalone seed.
+- Severity: P2 (launch/demo quality — several flagship day-to-day features render empty)
+- Findings — two classes, both `SEED_ALL_inserts = 0`:
+  - **Genuinely unseeded (no seed anywhere — 0 in SEED_ALL, 0 orphan files):** `school_events`, `sports_events`, `medical_profiles`, `medication_schedules`, `routine_templates`, `grades`, `home_assets`. These demo completely empty (School, Sports, Health/Meds, Routines, Grades, Home sections).
+  - **Orphaned (a standalone seed exists but isn't wired into SEED_ALL):** the wallet subsystem (PLA-0720), `savings_goals`/`goals` (2 files), `family_reminders` (4 files), `maintenance_tasks` (2), `rewards` (1), `nutrition_logs` (1). Data exists; the pipeline just doesn't load it.
+  - Context: the anchor family still has 71,154 rows (PLA-0720) — SEED_ALL richly seeds the "pillar"/content tables but misses many core day-to-day surfaces. This is the orphan-seed class seen in A-13 (vacations) generalized across the app.
+- Supabase impact: prod demo/fresh-env families see empty School/Sports/Health/Routines/Wallet/Reminders/Home if prod runs only `SEED_ALL`.
+- Resolution (owner — A-02): (1) wire the existing orphan seeds into `SEED_ALL` (or the runner) after de-duplicating the fragmented money-seed files; (2) author seeds for the genuinely-unseeded features; (3) target the per-unit ≥500-row DoD. Not done here — `SEED_ALL` is A-02's monolithic pipeline and this is a baseline-wide effort, collision-prone to touch mid-audit.
+- Tests run: per-feature `SEED_ALL` insert-count + orphan-seed-file count on the checkout.
+- Commit: pending (doc only)
+- Status: FLAGGED to A-02 as LB-014. Directly addresses the directive's "validate empty states" + "≥500 relational records" gates for the affected units.
