@@ -7,6 +7,7 @@ import { Container, GradientText, PageWrap } from '@/components/marketing/visual
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
+import { blogIndexJsonLd } from '@/lib/blog/structured-data';
 
 export const metadata: Metadata = {
   title: 'Blog — Tips, Stories & Insights for Modern Families',
@@ -93,6 +94,13 @@ export default async function BlogPage({ searchParams }: Props) {
 
   return (
     <PageWrap>
+      {/* SEO: Blog (CollectionPage) structured data listing recent posts. */}
+      {!activeCategory && allPosts.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(blogIndexJsonLd(allPosts)) }}
+        />
+      )}
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (
         <Container className="pt-6">

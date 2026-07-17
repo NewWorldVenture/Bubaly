@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
+import { articleGraph } from '@/lib/blog/structured-data';
 import { HeartButton } from '@/components/blog/heart-button';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
@@ -44,17 +45,36 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPost(slug);
   if (!post) return { title: 'Post not found' };
+  const images = post.heroImageUrl
+    ? [{ url: post.heroImageUrl, alt: post.heroImageAlt ?? post.title }]
+    : [];
+  const published = (() => {
+    const d = new Date(post.date);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  })();
   return {
     title: post.title,
     description: post.excerpt,
+    keywords: post.tags,
+    authors: [{ name: post.author }],
+    category: post.category,
+    alternates: { canonical: `/blog/${post.slug}` },
     openGraph: {
       type: 'article',
       title: post.title,
       description: post.excerpt,
+      url: `/blog/${post.slug}`,
       authors: [post.author],
-      ...(post.heroImageUrl
-        ? { images: [{ url: post.heroImageUrl, alt: post.heroImageAlt ?? post.title }] }
-        : {}),
+      section: post.category,
+      tags: post.tags,
+      ...(published ? { publishedTime: published } : {}),
+      ...(images.length ? { images } : {}),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.excerpt,
+      ...(images.length ? { images: images.map((i) => i.url) } : {}),
     },
   };
 }
@@ -73,6 +93,11 @@ export default async function BlogPostPage({ params }: Params) {
 
   return (
     <>
+      {/* SEO + AEO: BlogPosting + BreadcrumbList (+ speakable) structured data. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleGraph(post)) }}
+      />
       <ReadingProgress />
 
       <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8">
