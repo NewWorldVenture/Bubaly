@@ -6,6 +6,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0772 - A-12 REVIEW (product/safety decision): the Guardian emergency-keyword override rings through an explicitly BLOCKED caller
+
+- Timestamp: 2026-07-17 19:45 UTC
+- Service: Guardian / safety / contacts (A-12)
+- Route: `lib/guardian/runDecisionPipeline` Step 7 (`lib/guardian/pipeline.ts:225-230`)
+- Affected files: none (documented review item — **not unilaterally changed**, this is a genuine safety judgment call)
+- Role: any caller to a child's guardian-screened line
+- Scenario: a parent has **blocked** a caller (trust level `blocked`, or a routing rule with `action_routing_mode='blocked'`), and that caller's initial transcript contains an emergency keyword
+- Severity: **MEDIUM** (product/safety decision — potential explicit-block bypass)
+- Finding: after Step 6 resolves `routingMode` (rule → profile → default, which may be `blocked`), Step 7 does `if (shouldEscalate) routingMode = 'immediate_ring'` **unconditionally**, where `shouldEscalate` is a regex match on `/\b(911|emergency|help me|heart attack|stroke|fire|crash|accident|hospital|police|hurt|dying)\b/i` over the initial transcript. So a caller the parent **explicitly blocked** who merely says "emergency" / "help me" / "accident" is routed to `immediate_ring` — ringing the child's phone. Those keywords are trivial for a determined/blocked harasser or scammer to include.
+- The tension: "never miss a real emergency" (escalate even from an unknown number) vs. "respect a parent's explicit block" (a blocked contact should stay blocked). The current code chooses emergency-beats-everything, including an explicit block.
+- Recommended resolution (owner decision, NOT applied): make the emergency override NOT apply when the caller is explicitly `blocked` (trust level or rule) — i.e. gate Step 7 with `&& trust !== 'blocked' && routingMode !== 'blocked'`, or route a blocked "emergency" caller to `ai_handle_first` (screen + notify the parent) rather than ringing the child directly. Emergency escalation for non-blocked callers stays as-is.
+- Supabase impact: none.
+- Tests run: n/a (no change made). The adjacent `evaluateRules` engine now has coverage (`tests/guardian-rules.test.ts`, PLA-0771).
+- Commit: (this increment — documentation only)
+- Status: OPEN — product/safety decision for the A-12 owner. Surfaced during the guardian test-coverage sweep.
+- Remaining dependencies: owner decision on emergency-vs-block precedence; then a one-line gate + a pipeline test.
+
 ### PLA-0770 - Family Readiness score computed a reassuring-but-wrong number from partially-failed reads (+ Kitchen Display crash verified fixed)
 
 - Timestamp: 2026-07-17 19:42 UTC
