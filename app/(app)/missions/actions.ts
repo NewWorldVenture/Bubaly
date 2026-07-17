@@ -149,7 +149,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     return { ok: false, error: 'Could not save your submission.' };
   }
 
-  await logChoreEvent(supabase, { familyId, assignmentId, submissionId: submission.id, actorId: assignment.member_id, action: 'submit', note });
+  await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, actorId: assignment.member_id, action: 'submit', note });
 
   // Run AI validation (degrades safely to parent review).
   let verdict: Awaited<ReturnType<typeof validateChoreSubmission>>;
@@ -195,7 +195,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
     return { ok: false, error: 'Could not update the chore submission.' };
   }
-  await logChoreEvent(supabase, { familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
+  await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
 
   // Auto-approve only when the parent set a threshold and nothing needs a human.
   const autoOk = canAutoApprove({
@@ -274,7 +274,7 @@ async function finalizeApproval(
     throw error instanceof Error ? error : new Error('Could not apply chore rewards');
   }
 
-  await logChoreEvent(supabase, {
+  await logChoreEvent({
     familyId: args.familyId, assignmentId: args.assignment.id as string, submissionId: args.submissionId,
     actorId: args.actorId, action: args.auto ? 'auto_approve' : 'approve', pointsAwarded: points, cashCents,
   });
@@ -343,7 +343,7 @@ export async function rejectSubmissionAction(formData: FormData): Promise<void> 
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
     return;
   }
-  await logChoreEvent(supabase, { familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: redo ? 'redo' : 'reject', note: str(formData, 'note') });
+  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: redo ? 'redo' : 'reject', note: str(formData, 'note') });
   revalidatePath('/missions');
   revalidatePath('/kids');
 }
@@ -373,7 +373,7 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
     if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
     return;
   }
-  await logChoreEvent(supabase, { familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
+  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
 }

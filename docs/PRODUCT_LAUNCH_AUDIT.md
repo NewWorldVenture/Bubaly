@@ -46,6 +46,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: RESOLVED — auth readiness now observable. Does NOT resolve LB-001 itself (that is the actual auth-500, owner/Supabase-operator-owned) — it makes the failure mode *detectable* from an unauthenticated probe.
 - Remaining dependencies: LB-001 root cause is owner-gated (Supabase project/operator).
 
+### PLA-0616 - A-07: chore approval AUDIT TRAIL was silently RLS-broken (logChoreEvent wrote under the user session)
+
+- Timestamp: 2026-07-17 14:30 UTC
+- Service: Chores / Missions / rewards (A-07)
+- Route: `/missions`, `/kids` (server actions `submitProofAction`, `approveSubmissionAction`, `rejectSubmissionAction`, `disputeSubmissionAction` → `logChoreEvent`)
+- Affected files: `lib/chores/server.ts`, `app/(app)/missions/actions.ts`, `tests/chore-approval-events-service-role.test.ts` (new)
+- Role: **every** role (the audit write failed regardless of who acted)
+- Scenario: any chore lifecycle event (submit / ai_validate / approve / reject / dispute) attempts to append to `chore_approval_events`
+- Severity: **P2 functional** (silent data loss — no security exposure; found via the same SELECT-only-table sweep that surfaced PLA-0612's `chore_ai_validations`)
+- Launch impact: `chore_approval_events` ships (0043) with a SELECT-only policy for family members and **no authenticated INSERT policy** ("written by the service-role engine"). But `logChoreEvent` took the caller's Supabase client and every caller passed a **user session** (a child on submit/dispute, a manager on approve/reject). So every event insert **except** the auto-approve path (which happened to run under the service role after PLA-0612) was silently RLS-denied — the write is best-effort (try/catch + console.error), so it failed invisibly and the chore **approval history / audit trail never recorded** in production.
+- Root cause: an append-only, service-role-by-design audit table written through the acting user's RLS session; the missing authenticated write policy is intentional, so the client was the defect.
+- Resolution: `logChoreEvent` now derives `createServiceClient()` internally and no longer accepts a session argument; all five callers updated to drop the client. Every lifecycle event now records regardless of who triggered it.
+- Supabase impact: none (no migration — app-layer client fix; takes effect on deploy).
+- Tests run: `tests/chore-approval-events-service-role.test.ts` (3, new); full suite green; tsc 0; eslint 0.
+- Validation evidence: PG16 harness, production-accurate grants. Proven: authenticated INSERT into `chore_approval_events` as **child** → `new row violates row-level security policy`; as **manager** → same denial (no authenticated write policy exists); service-role INSERT passes RLS. Confirms the old user-session writes silently failed and the service-role fix lands the row.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`
+- Remaining dependencies: none. (Method note: this is the 2nd hit from sweeping RLS-enabled, write-policy-less tables for app writes issued via the user session; the sweep otherwise found the remaining SELECT-only tables are written correctly via service-role/admin clients.)
+
 ### PLA-0613 - A-07: a child could forge chore COMPLETION via a direct chore_assignments status write (sibling of PLA-0612)
 
 - Timestamp: 2026-07-17 14:20 UTC

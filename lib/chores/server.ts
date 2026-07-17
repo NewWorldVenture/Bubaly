@@ -5,6 +5,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { createServiceClient } from '@/lib/supabase/server';
 import { DIFFICULTY_XP, levelForXp, nextStreak, type Difficulty } from '@/lib/chores/logic';
 
 type DB = SupabaseClient<Database>;
@@ -112,9 +113,18 @@ export async function awardBadges(supabase: DB, familyId: string, memberId: stri
   return (inserted ?? []).map((badge) => badge.badge_id);
 }
 
-/** Convenience: log an approval-audit event (best-effort). */
+/**
+ * Convenience: log an approval-audit event (best-effort).
+ *
+ * chore_approval_events is an append-only audit trail that is SELECT-only for
+ * family members (0043: "written by the service-role engine") — there is no
+ * authenticated INSERT policy, so this MUST write under the service role. The
+ * callers run in a mix of child and manager sessions; passing any of those
+ * user sessions here previously left every non-auto-approve event silently
+ * RLS-denied (the trail only recorded auto-approvals). Derive the service
+ * client internally so every event lands regardless of who triggered it.
+ */
 export async function logChoreEvent(
-  supabase: DB,
   e: {
     familyId: string; assignmentId?: string | null; submissionId?: string | null; actorId?: string | null;
     action: Database['public']['Tables']['chore_approval_events']['Insert']['action'];
@@ -122,6 +132,7 @@ export async function logChoreEvent(
   },
 ): Promise<void> {
   try {
+    const supabase = createServiceClient();
     const { error } = await supabase.from('chore_approval_events').insert({
       family_id: e.familyId,
       assignment_id: e.assignmentId ?? null,
