@@ -919,3 +919,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Verified; regression lock added
 - Remaining dependencies (A-19 not yet DONE): LIVE browser a11y pass (axe/Playwright) on the top flows — needs the app running with real creds; keyboard-only walkthrough of forms/menus/toasts; screen-reader spot-check; visual responsive check at 320/768/1280 widths; reduced-motion honoring.
+
+### PLA-0560 - A-19/A-20 LIVE E2E executed: public routes render + axe WCAG AA + responsive, 50/51 green
+
+- Timestamp: 2026-07-17 00:06 UTC
+- Service: A-19 (mobile/responsive/a11y) + A-20 (E2E/deploy)
+- Route: all 12 public routes (`/`, `/pricing`, `/features`, `/how-it-works`, `/security`, `/faq`, `/ai`, `/mobile`, `/blog`, `/contact`, `/login`, `/signup`) + `/dashboard` auth redirect
+- Affected files: none (executed the existing `tests/e2e/*.spec.ts` against a live Next server; no code change)
+- Role: anonymous visitor (public surface)
+- Scenario: FIRST live-browser verification this session — stood up `next start` (dummy Supabase env, per `scripts/run-e2e.mjs`) and drove real Chromium via Playwright. (This sandbox ships Chromium build 1194; the pinned @playwright/test 1.47 wants 1228 — ran through a throwaway local config pointing `executablePath` at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; the committed `playwright.config.ts` is unchanged for CI.)
+- Severity: n/a (verification; no defect)
+- Results (LIVE):
+  - **public.spec.ts — 14/15**: all 12 public routes return <400 with a visible heading; `/pricing` billing toggle present; **`/dashboard` redirects an anonymous user to `/login`** (auth boundary proven live). The 1 miss is `page.goto('/')` waiting on the `load` event (default) timing out at 30s because the homepage requests external Unsplash/Supabase assets the sandbox network can't reach — the SAME route passes in 1.5s with `domcontentloaded`, so it is a sandbox-network artifact, not an app defect.
+  - **accessibility.spec.ts — 24/24**: axe with WCAG 2.0/2.1/2.2 A+AA tags, reduced-motion, across all 12 routes in BOTH dark and light mode → **zero critical/serious violations**.
+  - **overflow.spec.ts — 12/12**: no horizontal overflow (≤1px) on any public route at 320 / 390 / 768 / 1024 px widths.
+  - Net: **50/51 live assertions pass**; the single failure is the documented sandbox-network `load`-event artifact.
+- Supabase impact: none (dummy creds; server logged expected `ENOTFOUND example.supabase.co` on feature-tier reads, which is the point — public routes render without a DB).
+- Tests run: `public.spec.ts` (14/15), `accessibility.spec.ts` (24/24), `overflow.spec.ts` (12/12) via `PLAYWRIGHT_SKIP_BUILD=1 npm run test:e2e` against the production build.
+- Validation evidence: live Playwright/axe run output (above).
+- Commit: pending (this push; doc only)
+- Status: LIVE-verified for the public surface; a genuine DoD advance for A-19/A-20 (public routes)
+- Remaining dependencies: authed E2E (login→dashboard→wallet→Stripe checkout) + authed-route axe/overflow still need a real Supabase test login (the spec files already note "extend PUBLIC_ROUTES → authed routes once CI has a Supabase login"); the homepage `load`-event check needs egress to Unsplash/Supabase (works in real deploy).

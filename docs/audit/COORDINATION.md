@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-16 23:38 UTC** · by `agent-04`
+Last board update: **2026-07-17 00:06 UTC** · by `agent-04`
 
 ---
 
@@ -107,8 +107,8 @@ Heartbeat > 90 min while CLAIMED/IN_REVIEW ⇒ any agent may STALE + reclaim.
 | A-16 | `agent-03` | IN_REVIEW | 2026-07-16 21:00 | 2026-07-16 21:23 | `65b5f3f9`+ | Generation (PLA-0432) + push delivery (PLA-0434) read/write boundaries hardened; email+cron already hardened; RLS tenant-scoping verified+guarded (PLA-0441). Open: live delivery/schedule/retry + add notif/reminders to A-03 live read-probe
 | A-17 | `agent-04` | IN_REVIEW | 2026-07-16 23:14 | 2026-07-16 23:20 | `PLA-0530` | VERIFIED clean (no defect): §3a checked on the highest-blast-radius surface. Layout gates the /admin segment AND every one of ~130+ admin server actions re-verifies isSuperAdmin independently & fails closed (assertSuperAdmin / requireMarketingAdmin[throws] / local guard() / transitive). 0 files touch the service client without a gate. Added `admin-authz-gate.test.ts` (4). Open: `app/api/admin/**` route authz, public marketing surfaces input/rate-limit, social outbound wiring, live super-admin E2E |
 | A-18 | `agent-04` | IN_REVIEW | 2026-07-16 23:08 | 2026-07-16 23:12 | `PLA-0520` | VERIFIED clean (no defect): FAIL CLOSED end-to-end — `sync/run` 503 when not configured, providers key-gated dark, Apple VTODO writes throw 501 (never silent-success). OAuth CSRF (32B CSPRNG state, timingSafeEqual, callback validates before code-exchange, single-use cookie) + AES-256-GCM token-at-rest (tamper-detected) + refuses to store w/o key. Real provider calls (no mocks). Added `sync-apple-vtodo-failclosed.test.ts` (5). Open: live OAuth round-trip w/ real keys, refresh-expiry path, two-way conflict dedupe, feed-token abuse review |
-| A-19 | `agent-04` | IN_REVIEW | 2026-07-16 23:34 | 2026-07-16 23:38 | `PLA-0550` | VERIFIED sound (static): viewport w/ viewportFit=cover; 0 img-without-alt; shared Modal = full WAI-ARIA dialog (role/aria-modal/labelledby, focus trap, Esc, focus restore, scroll-lock, labelled close) AND mobile bottom-sheet (safe-area-inset, dvh); 362 files responsive; brand-contrast test exists. Added `modal-a11y-contract.test.ts` (5). Open: LIVE axe/Playwright pass, keyboard/SR walkthrough, 320/768/1280 visual, reduced-motion |
-| A-20 | `agent-04` | IN_REVIEW | 2026-07-16 23:24 | 2026-07-16 23:28 | `PLA-0540` | Production build gate VERIFIED GREEN: `npm run build` EXIT=0, all ~250 routes compile with every agent's changes on main (tsc/eslint green too). Observability MATURITY GAPS logged as deps (no Sentry/central error monitoring; no `/api/health`; no boot-time env guard — per-feature fail-honest instead). Open: Sentry wiring (owner), health probe, Playwright E2E smoke, perf budget, backup/restore runbook |
+| A-19 | `agent-04` | IN_REVIEW | 2026-07-16 23:34 | 2026-07-17 00:06 | `PLA-0550`+`PLA-0560` | Static: Modal full WAI-ARIA + mobile bottom-sheet; 0 img-without-alt; 362 files responsive; `modal-a11y-contract.test.ts` (5). **LIVE (PLA-0560): axe WCAG A/AA 24/24 across 12 public routes × dark+light = 0 serious violations; overflow 12/12 at 320/390/768/1024px.** Open: AUTHED-route axe/overflow + keyboard/SR walkthrough (needs Supabase test login) |
+| A-20 | `agent-04` | IN_REVIEW | 2026-07-16 23:24 | 2026-07-17 00:06 | `PLA-0540`+`PLA-0560` | Build gate GREEN (EXIT=0, ~250 routes). **LIVE E2E smoke RAN (PLA-0560): public.spec 14/15 (1 = sandbox-network `load` artifact, not a defect) incl. /dashboard→/login auth redirect; accessibility 24/24; overflow 12/12 = 50/51 live assertions.** Observability gaps logged (no Sentry, no /api/health, no boot env guard). Open: authed E2E (login→wallet→checkout, needs keys), Sentry (owner), perf budget, backup runbook |
 
 ---
 
