@@ -11,7 +11,7 @@
 --      due dates (overdue / today / this-week / upcoming / far-future / none)
 --      so every section of the Tasks page and the summary donut render.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499  (active fam of
+-- TARGET FAMILY: resolved reproducibly at runtime (v_email's family → child family → any).
 --   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
 --
 -- IDEMPOTENT: seeded rows are tagged 'seed:tasks' and deleted before re-insert
@@ -41,7 +41,7 @@ end $$;
 -- 2) + 3) Categories and 500 tasks -------------------------------------------
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid   uuid;
   v_self  uuid;
@@ -156,4 +156,4 @@ select
   count(*) filter (where not is_done and due_date is null)                              as no_due_date,
   count(*) filter (where is_done)                                                       as completed
 from public.todo_items
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and 'seed:tasks' = any(tags);
+where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and 'seed:tasks' = any(tags);

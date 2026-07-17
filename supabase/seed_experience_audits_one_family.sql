@@ -18,7 +18,7 @@
 
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid   uuid;
 begin
@@ -97,14 +97,14 @@ end $$;
 
 -- ── Verify: total + latest-per-surface grade distribution ───────────────────
 select 'total rows' as metric, count(*)::text as value
-  from public.experience_audits where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t8]'
+  from public.experience_audits where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t8]'
 union all
 select 'surfaces', count(distinct surface_key)::text
-  from public.experience_audits where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t8]'
+  from public.experience_audits where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t8]'
 union all
 select 'latest below bar (<70)', count(*)::text from (
   select distinct on (surface_key) surface_key, score
   from public.experience_audits
-  where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes = '[seed:t8]'
+  where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes = '[seed:t8]'
   order by surface_key, audited_on desc
 ) latest where score < 70;

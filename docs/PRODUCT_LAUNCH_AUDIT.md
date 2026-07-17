@@ -1709,3 +1709,11 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: grep census (all 20 hardcode the UUID) + harness apply of the 2 fixed seeds.
 - Commit: this push.
 - Status: root cause identified + 2 seeds fixed/verified + recipe provided. Remaining ~18 repoints + pipeline wiring = A-02 (LB-014).
+
+### PLA-0755 - Orphan one-family seeds: 4 more repointed + verified (6 of ~20 now reproducible)
+
+- Timestamp: 2026-07-17 16:30 UTC · Service: A-02 seed (LB-014)
+- Applied the PLA-0750 recipe (uniform variant: resolve `v_fam` in the DECLARE via a `coalesce(email-family, first-child-family, any-family)` subquery, so the pre-existing family-exists guard just validates it — no code-move/guard-removal) to `seed_tasks`, `seed_files`, `seed_ai_feedback`, `seed_experience_audits`.
+- PG16-verified on a clean bootstrap: all 4 apply with no errors + idempotent ×2; `ai_feedback` seeds **600** rows and `experience_audits` **540** (both exceed the ≥500 DoD); `tasks`/`files` apply clean.
+- **6 of ~20 orphan `*_one_family.sql` seeds now reproducible + verified** (wallet, chores, tasks, files, ai_feedback, experience_audits). Remaining ~14 (incl. high-inline-ref ones: operating_index, finances, memories, meals, location, life_events, group_decisions) follow the same recipe — A-02 to finish + wire into the pipeline (LB-014). The uniform coalesce-in-DECLARE variant is the safest bulk approach (no guard handling needed).
+- Commit: this push.

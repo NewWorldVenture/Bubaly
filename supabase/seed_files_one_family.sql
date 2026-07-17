@@ -18,7 +18,7 @@
 --
 -- TABLES TOUCHED: public.documents (only).
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active fam of
+-- TARGET FAMILY: resolved reproducibly at runtime (v_email's family → child family → any).
 --   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
 --
 -- IDEMPOTENT: every seeded row uses a storage_path under 'seed/files/…'. The
@@ -54,7 +54,7 @@ create policy documents_delete on public.documents for delete using (public.is_f
 -- 2) + 3) 500 documents -------------------------------------------------------
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid   uuid;
   v_uids  uuid[];   -- member auth user_ids (documents.created_by)
@@ -174,4 +174,4 @@ select
   count(*) filter (where mime_type like 'video/%')                     as videos,
   pg_size_pretty(sum(size_bytes))                                      as total_size
 from public.documents
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499' and storage_path like 'seed/files/%';
+where family_id = (select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and storage_path like 'seed/files/%';
