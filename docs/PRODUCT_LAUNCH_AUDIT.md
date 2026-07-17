@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0799 - Marketplace storefront 404'd + offer inbox emptied on a transient read (A-14 §3e slice)
+
+- Timestamp: 2026-07-17 23:39 UTC
+- Service: Marketplace (A-14) — creator storefront + negotiations/offer inbox (cross-cutting §3e; A-14 ownership stays `agent-01`)
+- Route: `/marketplace/creators/[id]` (`app/(app)/marketplace/creators/[id]/page.tsx`), `/marketplace/negotiations` (`app/(app)/marketplace/negotiations/page.tsx`)
+- Affected files: both pages + `tests/marketplace-storefront-negotiations-read-boundary.test.ts` (new)
+- Database objects: `marketplace_stores` (primary), `marketplace_negotiations` (primary)
+- Role: all marketplace participants
+- Scenario: the primary store / negotiations read fails transiently while the row(s) exist
+- Severity: P3 (storefront = SEO/discovery 404; offers = money-relevant false-empty)
+- Launch impact: (1) the storefront's `store` read dropped `error`, so `if (!store) notFound()` **404'd a real, active creator storefront on a DB blip** (permanent-gone signal). (2) the negotiations inbox's read dropped `error`, so a failed read rendered "No offers going yet" — a user with **live money negotiations** (counter/accept/decline threads) would believe they have none
+- Root cause: both primary reads swallowed the Supabase `error`, conflating "genuinely absent" with "read failed"
+- Resolution: the storefront now `throw`s on a real `store` read error (retryable 5xx) and reserves `notFound()` for a truly missing store (matches the PLA-0793 marketing-page pattern); the negotiations inbox captures `negError` and early-returns a retryable `<ErrorState>` (keeping the PageHeader) before deriving the offer sections. Enrichment reads (reviews/listings/members) stay degraded
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/marketplace-storefront-negotiations-read-boundary.test.ts` (2 — storefront throws before `notFound()`; negotiations ErrorState precedes the "No offers going yet" empty state); `tsc --noEmit` clean; `eslint` clean on both pages
+- Validation evidence: guards assert the ordered `throw`/`ErrorState` before the absence branches
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-14 §3e sub-slice by agent-05; A-14 ownership stays with agent-01)
+
 ### PLA-0798 - Marketplace reviews: a failed read made a member's reputation/rating vanish (A-14 §3e slice)
 
 - Timestamp: 2026-07-17 23:35 UTC
