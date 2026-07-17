@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0776 - Family CFO rendered a reassuring-but-wrong $0 financial picture when a money read failed
+
+- Timestamp: 2026-07-17 20:09 UTC
+- Service: Dashboard / Family CFO (agent-`fable-opus` lane)
+- Route: `/dashboard/family-cfo`
+- Affected files: `app/(app)/dashboard/family-cfo/page.tsx`, `tests/family-cfo-read-boundary.test.ts`
+- Database objects: `financial_accounts`, `bills`, `savings_goals`, `transactions`, `budgets`
+- Role: authenticated family members (manager/finance view) using the Family CFO
+- Scenario: any of the five financial reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (money surface — a reassuring-but-wrong financial status can cause a missed bill payment).
+- Launch impact: the five-way `Promise.all` destructured `{ data }` and dropped every `error`. The page header literally promises "**every figure is live**," yet a silent failure rendered **Net position $0, "Due in 30 days $0", $0 spent this month, and no savings goals / no upcoming bills** — a confidently-wrong financial picture a family could act on (assume nothing is due and miss a payment, or think savings/accounts vanished).
+- Root cause: the five source-of-truth financial reads dropped their `error`.
+- Resolution: capture `accountsRes`/`billsRes`/`goalsRes`/`spendRes`/`budgetsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-cfo] finance read failed', …)` + `return <ErrorState message="Could not load your family finances from Supabase. Refresh and try again." />` before computing any figure. A genuinely missing table (unapplied migration) is still tolerated as empty so a partial env degrades. Matches the Command-Center/Readiness/Kitchen/Twin/Memories fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-cfo-read-boundary.test.ts` (3 assertions — five-error collection with missing-table filter, log+ErrorState, derive-after-guard ordering); full `npx vitest run` **572 files / 3562 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0775 - Memories showed an empty "memory lane" when the album/photo reads failed
 
 - Timestamp: 2026-07-17 20:05 UTC

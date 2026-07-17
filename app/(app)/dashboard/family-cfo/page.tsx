@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { Wallet, Receipt, PiggyBank, TrendingDown, CalendarClock, CreditCard } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family CFO' };
@@ -19,7 +21,7 @@ export default async function FamilyCfoPage() {
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + '01';
 
-  const [{ data: accounts }, { data: bills }, { data: goals }, { data: spend }, { data: budgets }] = await Promise.all([
+  const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await Promise.all([
     supabase.from('financial_accounts').select('*').eq('family_id', familyId),
     supabase.from('bills').select('*').eq('family_id', familyId).neq('status', 'paid')
       .gte('due_date', today).lte('due_date', in30).order('due_date'),
@@ -28,6 +30,25 @@ export default async function FamilyCfoPage() {
       .eq('type', 'expense').gte('date', monthStart),
     supabase.from('budgets').select('*').eq('family_id', familyId),
   ]);
+
+  // Every figure here is money and the page tells the family so ("every figure
+  // is live"). A dropped error would render Net position $0, "Due in 30 days
+  // $0", zero spend, and no goals — a reassuring-but-wrong financial picture a
+  // family could act on (miss a bill, assume savings vanished). Fail closed on
+  // a real read error; a genuinely missing table (unapplied migration) is still
+  // tolerated as empty so a partial env degrades rather than hard-fails.
+  const financeError = [accountsRes.error, billsRes.error, goalsRes.error, spendRes.error, budgetsRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (financeError) {
+    console.error('[dashboard/family-cfo] finance read failed', financeError);
+    return <ErrorState message="Could not load your family finances from Supabase. Refresh and try again." />;
+  }
+
+  const accounts = accountsRes.data;
+  const bills = billsRes.data;
+  const goals = goalsRes.data;
+  const spend = spendRes.data;
+  const budgets = budgetsRes.data;
 
   const netWorth = (accounts ?? []).reduce((s, a) => s + (a.type === 'credit' ? -Number(a.balance) : Number(a.balance)), 0);
   const upcomingTotal = (bills ?? []).reduce((s, b) => s + Number(b.amount), 0);
