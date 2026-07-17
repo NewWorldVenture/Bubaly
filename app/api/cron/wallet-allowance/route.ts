@@ -58,16 +58,23 @@ export async function GET(req: NextRequest) {
       const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence, today, 1);
       if (runs === 0) continue;
 
-      // Claim the schedule before the ledger write. If crediting fails, restore
-      // the prior schedule so the next cron run can retry without skipping pay.
-      const { error: scheduleError } = await supabase
+      // Atomically CLAIM the schedule before the ledger write. The
+      // `.lte('next_run_on', today)` predicate is the exclusivity guard: if two
+      // cron invocations overlap, both read the rule as due, but only ONE update
+      // matches a row (the first flips next_run_on into the future) — the loser
+      // matches 0 rows and skips, so an allowance can never be double-credited.
+      // If crediting then fails, we restore the prior schedule below so the next
+      // run retries without skipping pay.
+      const { data: claimed, error: scheduleError } = await supabase
         .from('allowance_rules')
         .update({ next_run_on: next, last_run_on: today })
         .eq('id', rule.id)
         .eq('family_id', rule.family_id)
+        .lte('next_run_on', today)
         .select('id')
-        .single();
+        .maybeSingle();
       if (scheduleError) throw scheduleError;
+      if (!claimed) continue; // another concurrent run already claimed this rule — do not double-pay
 
       const res = await creditChildWallet(supabase, {
         familyId: rule.family_id,

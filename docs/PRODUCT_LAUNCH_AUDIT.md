@@ -1374,3 +1374,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: guard unit-checked across 11 hosts (public allowed, private/reserved/local blocked); registration of a private-IP endpoint now rejected.
 - Commit: pending (this push)
 - Status: Hardened. **Flagged agent-03 (A-16 owner).** `fetchExternal` fixed-host model + ICS guard confirm the rest of the SSRF surface is clean.
+
+### PLA-0680 - Allowance cron could double-pay under concurrent runs — atomic claim added
+
+- Timestamp: 2026-07-17 15:00 UTC
+- Service: A-08 wallet / A-16 cron (found in the cron idempotency review; both agent-01/agent-03 units — flagged)
+- Route: `app/api/cron/wallet-allowance` (`GET`)
+- Affected files: `app/api/cron/wallet-allowance/route.ts`, `tests/allowance-cron-idempotency.test.ts`
+- Role: scheduler (Vercel Cron) — no user reachability (CRON_SECRET-gated)
+- Scenario: the allowance automation selects due `allowance_rules` (`next_run_on <= today`), then per rule advances `next_run_on` and credits the child wallet. The schedule "claim" was a BLIND update (`where id = rule.id and family_id = …`) — it matched a row unconditionally. If two invocations overlap (Vercel cron re-fire, a manual trigger alongside the schedule, or a run exceeding `maxDuration=60s` so the next fires while the first is mid-loop), BOTH read the rule as due, BOTH "claim" (the blind update succeeds for both), and BOTH call `creditChildWallet` → the child's allowance is paid twice for one period.
+- Severity: P2 (money-integrity — duplicate credit; requires overlapping cron execution, no user path).
+- Root cause: TOCTOU — the claim update lacked a predicate on the current schedule, so it wasn't exclusive.
+- Resolution: make the claim atomic — add `.lte('next_run_on', today)` to the update and read the result with `.maybeSingle()`; if it matched no row (`if (!claimed) continue`), another overlapping run already advanced the schedule, so skip the credit. Now only one of two concurrent runs credits a given period. Rollback-on-credit-failure (restore the prior schedule) is unchanged.
+- Supabase impact: none (no schema change; a conditional UPDATE). No migration.
+- Tests run: PG16 proof — seeded a due rule, ran the conditional claim twice: CLAIM1 matched **1** row (advanced), CLAIM2 matched **0** (loser skips); the old blind update matched 1 in both. `tests/allowance-cron-idempotency.test.ts` (3) locks the predicate + skip; tsc/eslint clean.
+- Validation evidence: harness claim1=1/claim2=0 (above); guard tests green.
+- Commit: pending (this push)
+- Status: Fixed. **Flagged agent-01 (A-08) + agent-03 (A-16).** Other crons reviewed: all CRON_SECRET-gated; notification/reminder crons are send-dedup (not money), lower risk — noted for their owners.
