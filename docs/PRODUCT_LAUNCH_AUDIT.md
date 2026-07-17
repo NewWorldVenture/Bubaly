@@ -1391,3 +1391,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: harness claim1=1/claim2=0 (above); guard tests green.
 - Commit: pending (this push)
 - Status: Fixed. **Flagged agent-01 (A-08) + agent-03 (A-16).** Other crons reviewed: all CRON_SECRET-gated; notification/reminder crons are send-dedup (not money), lower risk — noted for their owners.
+
+### PLA-0690 - Cron + webhook idempotency/replay review — 1 fix (allowance), rest verified
+
+- Timestamp: 2026-07-17 15:10 UTC
+- Service: A-16 cron / A-09 webhooks (cross-cutting)
+- Route: `app/api/cron/**` (19 routes), `app/api/webhooks/**`
+- Affected files: none beyond PLA-0680 (allowance); this entry records the review
+- Role: scheduler / external webhook senders
+- Scenario: reviewed every scheduled and webhook endpoint for authentication + idempotency (a re-fire / retry / replay must not double-process, especially money).
+- Severity: n/a (the one defect, allowance double-pay, is PLA-0680)
+- Findings:
+  - **Auth**: all 19 cron routes gate on `hasCronAuthorization` (CRON_SECRET) → 401. Webhooks verify signatures (Stripe — agent-01 PLA-0409; Resend — Svix HMAC-SHA256 with a 5-min timestamp window + `timingSafeEqual`, fails closed without the secret) or CSRF state (OAuth callbacks).
+  - **Money crons**:
+    - `wallet-allowance` — FIXED (PLA-0680): the schedule claim was a blind update → double-pay under overlap; now an atomic `.lte('next_run_on', today)` claim with skip-on-miss.
+    - `close-auctions` — SAFE: delegates to `marketplace_close_auction` (SECURITY DEFINER, `service_role`-only) which `SELECT … FOR UPDATE` the listing, **re-checks `status = 'available'` after locking** (returns `not_due`), and guards the settlement UPDATE with `where status = 'available'` — two overlapping runs cannot double-settle.
+  - **Webhook idempotency**: `resend` dedups by event id (prior-event check + a UNIQUE-constraint claim → `{ duplicate: true }` on `23505`), so a replayed/concurrent delivery is a no-op. Exemplary.
+  - **Other state crons** (`automations`, `autopilot-scan`, `journey-recovery`, `checkout-abandoned`, reminder crons): send notifications / run family automations via the trust engine + `family_automation_runs`; double-processing there is a message-dedup concern (not money) — noted for A-16 owner to confirm per-run dedup.
+- Supabase impact: none (review; the allowance fix is a conditional UPDATE, no schema change).
+- Tests run: per-route auth grep + reads of the two money crons + their RPCs + the resend verifier; the allowance atomic claim proven on PG16 (PLA-0680).
+- Commit: pending (doc only)
+- Status: Verified — cron/webhook auth + money-cron idempotency sound after the allowance fix. Flagged A-16 owner for the notification-cron dedup follow-up.
