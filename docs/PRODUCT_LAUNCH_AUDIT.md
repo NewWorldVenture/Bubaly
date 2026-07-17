@@ -1024,3 +1024,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push; doc only)
 - Status: A-13 tenant isolation LIVE-PROVEN (complements the global PLA-0415 proof with unit-specific evidence). Corroborates that the `0070_vacations` loop policy + `0173_concierge_calls` per-op policies enforce the boundary in a real Postgres.
 - Note: SEED_ALL emitted 2 non-blocking marketplace hand-off/returns seed errors (A-14; require two seeded members for the anchor family) — flagged for A-14's owner, unrelated to A-13.
+
+### PLA-0580 - A-15 + A-18 cross-family RLS isolation PROVEN LIVE (incl. sync_tokens deny-all)
+
+- Timestamp: 2026-07-17 00:32 UTC
+- Service: A-15 (AI assistants) + A-18 (third-party sync)
+- Route: `public.ai_conversations/ai_messages/ai_feedback`, `public.sync_*` (RLS)
+- Affected files: none (live DB verification via `docs/audit/verify-pg.sh`)
+- Role: authenticated member of family A reaching for family B's rows / the token store
+- Scenario: same PG16 harness (216 migrations, migration_fail=0), a second tenant "family B" with its own AI conversation + message, then every op run AS family A's member under RLS.
+- Severity: n/a (verification; isolation holds)
+- Results (LIVE):
+  - **Breadth (schema):** every family-scoped `ai_*` / `sync_*` table has RLS policies referencing family membership (`ai_conversations/ai_messages/ai_feedback` = 4 policies each; the 22 `sync_*` family tables = family-scoped), EXCEPT `sync_tokens`, whose single policy is `USING(false) WITH CHECK(false)` for ALL — a deliberate **deny-all to every client role**; only `service_role` (BYPASSRLS) can read/write the encrypted OAuth tokens. (`sync_providers` is a global registry with no `family_id`, correctly unscoped.)
+  - **A-15 ai_messages (data):** as family A's member — read family B's message by id = **0**; unfiltered `select` returned only family A's own 8 seeded rows (family B's not among them); INSERT carrying family B's `family_id` → **"new row violates row-level security policy for table ai_messages"** (0 injected).
+  - **A-18 sync_tokens (data):** as family A's member — `select count(*)` over the WHOLE table = **0** (deny-all: an authenticated user cannot see ANY token, even their own family's); INSERT a token → **"new row violates row-level security policy for table sync_tokens"** (0 injected). The encrypted-token store is unreachable from any client path — the strongest possible isolation for the secret store, matching PLA-0520's AES-256-GCM-at-rest finding.
+- Supabase impact: none (throwaway local DB). `authenticated` was granted table DML (as prod) so the probe exercised RLS, not a grant wall.
+- Tests run: `verify-pg.sh up` + policy-coverage query across all `ai_*`/`sync_*` tables + live READ/INSERT probe as family A.
+- Validation evidence: probe output (cross-tenant reads 0; sync_tokens whole-table read 0; both INSERTs RLS-rejected).
+- Commit: pending (this push; doc only)
+- Status: A-15 + A-18 tenant isolation LIVE-PROVEN (complements PLA-0510/PLA-0520 static findings + the global PLA-0415).
