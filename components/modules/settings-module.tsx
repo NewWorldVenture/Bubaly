@@ -83,20 +83,33 @@ export function SettingsModule() {
   // Account profile (name + phone) live in `profiles`, not in useApp() — load it
   // once so the form prefills the values captured during onboarding.
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileError, setProfileError] = useState(false);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '', avatarUrl: '' });
   useEffect(() => {
     let active = true;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', userId).maybeSingle();
+      const { data, error } = await supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', userId).maybeSingle();
       if (!active) return;
+      // A dropped read error here is destructive: the form would prefill a BLANK
+      // phone/avatar, and saveUserProfile writes `phone`/`avatar_url` unconditionally
+      // — so a Save after a transient read failure silently WIPES the user's real
+      // phone number and avatar. On error, keep the form disabled (Save gated on
+      // profileLoaded) and surface a retry instead of presenting blanks as truth.
+      if (error) {
+        setProfileError(true);
+        setProfileLoaded(false);
+        return;
+      }
       const { firstName, lastName } = splitFullName(data?.full_name ?? selfMember?.display_name ?? '');
       setProfileForm({ firstName, lastName, phone: data?.phone ?? '', avatarUrl: data?.avatar_url ?? '' });
+      setProfileError(false);
       setProfileLoaded(true);
     })();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, profileReloadKey]);
 
   // Pre-select the country dial code from the stored E.164 number (PhoneInput
   // falls back to its own locale guess when there's no saved number).
@@ -119,6 +132,9 @@ export function SettingsModule() {
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Never write when the profile never loaded — the form holds blanks, not the
+    // user's saved values, so a submit here would wipe phone/avatar (see load effect).
+    if (!profileLoaded) return;
     setSavingProfile(true);
     const res = await updateMyProfileAction(profileForm);
     setSavingProfile(false);
@@ -176,6 +192,18 @@ export function SettingsModule() {
       {/* Profile */}
       <Card>
         <h2 className="mb-4 text-base font-semibold">Your profile</h2>
+        {profileError && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+            <span className="min-w-0 flex-1">Couldn’t load your profile. Editing is disabled so your saved phone and photo aren’t overwritten with blanks.</span>
+            <button
+              type="button"
+              onClick={() => { setProfileError(false); setProfileReloadKey((k) => k + 1); }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 font-medium hover:bg-danger/10"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Try again
+            </button>
+          </div>
+        )}
         <form onSubmit={saveProfile} className="space-y-4">
           {profileLoaded && (
             <AvatarPicker

@@ -61,7 +61,8 @@ const BASELINE = new Set<string>([
   'components/modules/billing-module.tsx',
   'components/modules/concierge-calls-module.tsx',
   // grocery-module fixed under A-10 (PLA-0625) — removed from baseline.
-  'components/modules/settings-module.tsx',
+  // settings-module fixed under A-05 (PLA-0791) — profile read now captures
+  // `error` + guards the destructive save; removed from baseline.
   'components/modules/weather-module.tsx',
 ]);
 

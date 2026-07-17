@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0791 - Settings profile: a failed profile read let a Save silently wipe the user's phone + avatar (A-05)
+
+- Timestamp: 2026-07-17 23:01 UTC
+- Service: Home / dashboard command surfaces (A-05) — Settings › Your profile
+- Route: `/settings` (`components/modules/settings-module.tsx`)
+- Affected files: `components/modules/settings-module.tsx`, `tests/settings-profile-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `profiles` (read `full_name, phone, avatar_url`; write via `updateMyProfileAction` → `saveUserProfile`)
+- Role: every signed-in user (their own profile)
+- Scenario: the one-time `profiles` prefill read fails for a real reason (transient outage, RLS/permission edge) while the row exists, then the user edits their name and clicks Save
+- Severity: **P2 (silent read failure → destructive write / real data loss)**
+- Launch impact: the prefill read destructured only `{ data }` and, on failure, fell back to `phone: ''` / `avatarUrl: ''` while still calling `setProfileLoaded(true)` — presenting a blank-but-editable form. `saveUserProfile` writes `phone: normalizePhone(input.phone)` **unconditionally** and `avatar_url` whenever provided, so a Save after a transient read failure **silently overwrote the user's real phone number with empty and nulled their avatar**. The dropped read error turned into permanent data loss on the next save
+- Root cause: the profile prefill read dropped its Supabase `error` and marked the form loaded/editable regardless, so blanks were presented as the user's saved values
+- Resolution: capture `{ data, error }`; on `error` set `profileError`, keep `profileLoaded=false` (inputs + Save already gate on it, so no blank overwrite), and render a retryable `role="alert"` banner ("Editing is disabled so your saved phone and photo aren’t overwritten with blanks" + Try again → bumps a `profileReloadKey` that re-runs the effect). Added a defense-in-depth `if (!profileLoaded) return;` guard at the top of `saveProfile`. A genuinely missing/empty profile still loads normally with the `selfMember` name fallback
+- Supabase impact: none — read error-handling only; no schema/migration/write-path change (the unconditional write is now safe because the form can no longer present blanks as truth)
+- Tests run: new `tests/settings-profile-read-boundary.test.ts` (5 — error captured; load bails before `setProfileLoaded(true)` + flags error; save guards on `profileLoaded`; retryable alert; documents the unconditional-phone-write that makes the guard load-bearing); `tsc --noEmit` clean; `eslint` clean on the module; ratchet baseline pruned (`settings-module` removed)
+- Validation evidence: guards assert the `error` capture, the ordered error-bail-before-loaded, the save guard, and the retry wiring
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0790 - Super-admin analytics surfaces rendered a failed telemetry read as "no activity" (A-05)
 
 - Timestamp: 2026-07-17 22:56 UTC
