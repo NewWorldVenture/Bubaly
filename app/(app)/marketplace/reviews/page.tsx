@@ -3,6 +3,7 @@ import { Star } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { cn } from '@/lib/utils/cn';
 
@@ -24,12 +25,24 @@ export default async function MarketplaceReviewsPage() {
   const sb = await createServer();
   const selfId = ctx.active.member.id;
 
-  const { data: reviews } = await sb
+  const { data: reviews, error: reviewsError } = await sb
     .from('marketplace_reviews')
     .select('id, reviewer_member, reviewee_member, role, rating, comment, created_at, listing_id')
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: false })
     .limit(200);
+
+  // Reviews drive a member's marketplace reputation. A dropped read error would
+  // render "No reviews received yet" + "None yet" — the user's rating appears to
+  // vanish on a transient failure. Surface a retryable error instead.
+  if (reviewsError) {
+    return (
+      <div>
+        <PageHeader title="Reviews" description="Two-sided reviews — both parties rate every completed exchange." />
+        <ErrorState message="Couldn’t load your reviews. Refresh and try again." />
+      </div>
+    );
+  }
 
   const received = (reviews ?? []).filter((r) => r.reviewee_member === selfId);
   const given = (reviews ?? []).filter((r) => r.reviewer_member === selfId);

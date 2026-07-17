@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0798 - Marketplace reviews: a failed read made a member's reputation/rating vanish (A-14 §3e slice)
+
+- Timestamp: 2026-07-17 23:35 UTC
+- Service: Marketplace / trust (A-14) — reviews/reputation page (cross-cutting §3e; A-14 ownership stays `agent-01`)
+- Route: `/marketplace/reviews` (`app/(app)/marketplace/reviews/page.tsx`)
+- Affected files: `app/(app)/marketplace/reviews/page.tsx`, `tests/marketplace-reviews-read-boundary.test.ts` (new)
+- Database objects: `marketplace_reviews` (primary), `family_members` (name lookup)
+- Role: all marketplace participants
+- Scenario: the `marketplace_reviews` read fails transiently while reviews exist
+- Severity: P3 (reputation display; no money mutation)
+- Launch impact: the read destructured only `{ data: reviews }`, so a failed read rendered received/given as `[]` → "Your rating: No reviews received yet", "Received: None yet", "Given: None yet". A member's marketplace reputation (their star rating + review history) appears to vanish on a transient read failure — misleading on a trust surface where reputation gates exchanges
+- Root cause: the source-of-truth reviews read dropped its Supabase `error`, conflating "no reviews" with "read failed"
+- Resolution: capture `{ data: reviews, error: reviewsError }` and early-return a retryable `<ErrorState>` (keeping the PageHeader) before deriving `received`/`given`/`summary`. The secondary `family_members` name lookup stays degraded (falls back to "Someone")
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/marketplace-reviews-read-boundary.test.ts` (2 — captures `reviewsError`; ErrorState early-return precedes the reputation derivation); `tsc --noEmit` clean; `eslint` clean (page uses an aliased read, so it was never in the silent-read ratchet baseline)
+- Validation evidence: guards assert the error capture and the ordered ErrorState-before-derivation
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-14 §3e sub-slice by agent-05; A-14 ownership stays with agent-01)
+
 ### PLA-0797 - Focus Mode told a family "Nothing on your plate — enjoy the calm" when the day's read failed (A-05)
 
 - Timestamp: 2026-07-17 23:31 UTC
