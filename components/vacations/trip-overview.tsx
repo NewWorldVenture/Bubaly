@@ -117,7 +117,8 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   async function dismissReco(id: string) {
-    await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
+    const { error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
+    if (error) toastError(error.message);
   }
 
   if (loading) return <LoadingBlock />;

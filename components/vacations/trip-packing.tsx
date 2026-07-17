@@ -87,7 +87,8 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
 
   async function toggle(it: PackItem) {
-    await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id);
+    const { error } = await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id);
+    if (error) toastError(error.message);
   }
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +99,8 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     setForm(null);
   }
   async function remove(id: string) {
-    await createClient().from('vacation_packing_items').delete().eq('id', id);
+    const { error } = await createClient().from('vacation_packing_items').delete().eq('id', id);
+    if (error) toastError(error.message);
   }
 
   if (loading) return <LoadingBlock />;
