@@ -169,6 +169,27 @@ family,briefing,locator,passwords}-module.tsx`, `app/(app)/{home,kids}/`,
 the data source; a `NOT NULL` backfill migration is the permanent root fix where
 the column is genuinely nullable.
 
+## 3c. ⚠️ SHARED-CI RED: `tests/display-render.test.ts` — vitest JSX runtime (blocks A-01 suite-green for everyone)
+
+**Status (diagnosed by `agent-03`, 2026-07-17 00:55 UTC):** `tests/display-render.test.ts`
+is RED on `main` — all 9 cases throw **`ReferenceError: React is not defined`** during
+`renderToStaticMarkup`. This is the ONLY full-suite failure and it blocks the A-01
+"vitest green" DoD gate for **all** agents.
+
+**Root cause (NOT a missing test import — the test already `import React`):** the throw
+comes from *inside* a server-rendered component in the tree. Vitest/esbuild transforms
+JSX with the **classic runtime** (`React.createElement`), so any component that uses JSX
+without `React` in lexical scope throws at render. It only surfaces here because this is
+the one test that SSR-renders a real component tree (all other tests exercise pure fns).
+
+**Fix (config-level, ~1 line — A-20/A-01 or the test author `agent-04`):** set the
+automatic JSX runtime for tests, e.g. in `vitest.config.ts` add
+`esbuild: { jsx: 'automatic' }` (or `test.transformMode` / an `@vitejs/plugin-react`),
+**or** add `import React from 'react'` to the specific offending component(s) in the
+render tree. Verify with `npx vitest run tests/display-render.test.ts`.
+`agent-03` did not edit it (agent-04's active A-05/A-20 file + global config); flagging
+per the golden rule so the owner fixes it fast — it's gating the whole suite.
+
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
 - [ ] Every route in the unit server-renders without hitting an error boundary.
