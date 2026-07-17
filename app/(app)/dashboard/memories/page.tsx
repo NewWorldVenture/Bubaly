@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
+import { ErrorState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -58,8 +60,8 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const nowIso = now.toISOString();
 
   const [
-    { data: albumsRaw },
-    { data: photosRaw },
+    albumsRes,
+    photosRes,
     { data: members },
     { data: upcoming },
     { count: photoCount },
@@ -80,8 +82,20 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     supabase.from('family_memories').select('id', { count: 'exact', head: true }).eq('family_id', familyId).is('deleted_at', null).gte('created_at', yearStart),
   ]);
 
-  const albums = (albumsRaw ?? []) as AlbumRow[];
-  const photos = (photosRaw ?? []) as PhotoRow[];
+  // Albums + photos are the content spine of Memories — a dropped error would
+  // render "your family memory lane is empty" for a family with hundreds of
+  // photos (a confidently-wrong empty state that invites duplicate re-uploads).
+  // Fail closed on a real read error; a genuinely missing table (unapplied
+  // migration) is still tolerated as empty. The stat counts and the
+  // members/upcoming enrichment reads below stay best-effort.
+  const contentError = [albumsRes.error, photosRes.error].find((e) => e && !isMissingTableError(e));
+  if (contentError) {
+    console.error('[dashboard/memories] memories read failed', contentError);
+    return <ErrorState message="Could not load your memories from Supabase. Refresh and try again." />;
+  }
+
+  const albums = (albumsRes.data ?? []) as AlbumRow[];
+  const photos = (photosRes.data ?? []) as PhotoRow[];
   const memberList = (members ?? []) as MemberLite[];
 
   const matchesQ = (name: string) => !q || name.toLowerCase().includes(q.toLowerCase());

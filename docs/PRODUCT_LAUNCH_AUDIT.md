@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0775 - Memories showed an empty "memory lane" when the album/photo reads failed
+
+- Timestamp: 2026-07-17 20:05 UTC
+- Service: Dashboard / Memories (agent-`fable-opus` lane)
+- Route: `/dashboard/memories`
+- Affected files: `app/(app)/dashboard/memories/page.tsx`, `tests/memories-read-boundary.test.ts`
+- Database objects: `family_albums`, `family_photos` (content spine); `family_members`, `calendar_events`, and the `family_photos`/`family_albums`/`family_memories` count queries (best-effort)
+- Role: authenticated family members using Memories
+- Scenario: the `family_albums` or `family_photos` read fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a family with hundreds of photos sees an empty memory lane; core content surface but not a money/safety decision).
+- Launch impact: the eight-way `Promise.all` destructured `{ data: albumsRaw }` / `{ data: photosRaw }` and dropped their `error`. Albums + photos are the content spine — highlights, timeline, photo/video/album tabs, and "on this day" all derive from them. A silent failure rendered **"Your family memory lane is empty — add a favorite photo…"** for a populated family, a confidently-wrong empty state that also invites duplicate re-uploads.
+- Root cause: the two source-of-truth content reads dropped their `error`.
+- Resolution: capture `albumsRes` / `photosRes`, collect `[albumsRes.error, photosRes.error].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/memories] memories read failed', …)` + `return <ErrorState message="Could not load your memories from Supabase. Refresh and try again." />` before deriving `albums`/`photos`. A genuinely missing table (unapplied migration) is still tolerated as empty; the stat counts and members/upcoming enrichment reads stay best-effort. Matches the Command-Center/Readiness/Kitchen/Twin fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/memories-read-boundary.test.ts` (3 assertions — album+photo result capture with missing-table filter, log+ErrorState, derive-after-guard ordering); full `npx vitest run` **571 files / 3559 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0774 - Family Digital Twin collapsed to "No family members yet" when the roster read failed
 
 - Timestamp: 2026-07-17 20:02 UTC
