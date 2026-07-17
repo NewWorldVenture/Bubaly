@@ -264,6 +264,28 @@ validates `auth.uid()` against every caller-supplied id.
 
 ---
 
+## 3e. ⚠️ Cross-cutting silent-empty read class (agent-03, PLA-0624/0625) — CHECK YOUR UNIT
+
+A browser Supabase read `const { data } = await supabase.from(...).select(...)` that **drops
+`error`** and renders `data ?? []` turns a transient load failure into a false "you have nothing"
+state (the app lies about its data). Found + fixed live in **A-11 `messages-module`** (failed load →
+empty inbox/thread/previews; PLA-0624). A scan found the same *shape* in **18 more client files** —
+triage yours (full list + classification in **PLA-0625**):
+
+- **A-05** `dashboard/{independence,journeys,money-timeline,onboarding-funnel,paperwork}/page.tsx`,
+  `assistant-module`, `settings-module`, `weather-module`, `app-context.tsx` (keep-prior, benign)
+- **A-08/A-09** `dashboard/billing/page.tsx`, `billing-module`, `money-timeline`
+- **A-10** `grocery-module` · **A-13** `concierge-calls-module`+page, `plan-write-backs` · **A-07** `missions/page.tsx`
+- **A-17** `feedback-board` · marketing `lp/[slug]`,`f/[id]` (SSR degrade — likely OK)
+
+Fix pattern (only for the *false-empty* ones — where the read result is shown as `?? []`): capture
+`error` → `toastError(describeDbError(error))` (or `<ErrorState onRetry>`), keep prior state, don't
+`?? []`. Best: move hand-rolled reads onto `useRealtimeQuery`/`useModuleData` (already returns
+`{error}` → `<ErrorState>`, see `files-hub-module`/`documents-module`). `if (data) setX(data)`
+(keep-prior) sites are benign — a toast is nicer but they don't false-empty.
+
+---
+
 ## 4. Definition of Done (per unit) — "verified" = ALL of:
 
 - [ ] Every route in the unit server-renders without hitting an error boundary.

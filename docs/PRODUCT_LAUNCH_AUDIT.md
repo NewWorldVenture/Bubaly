@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0625 - CROSS-CUTTING (FINDING): client reads that drop `{error}` — systemic silent-empty risk, triage list for owning agents
+
+- Timestamp: 2026-07-17 18:00 UTC
+- Service: cross-cutting (client components across many units)
+- Route: any client module that reads Supabase in the browser
+- Affected files: 19 `.tsx` files (listed below) — **NOT all bugs**, a triage surface
+- Role: every user (a transient client read failure)
+- Severity: **FINDING** (variable per site: MEDIUM false-empty · LOW keep-prior · negligible acceptable-degrade)
+- Launch impact: PLA-0624 fixed a confirmed false-empty bug in `messages-module` (a failed read `data ?? []` → empty inbox that lies about state). A codebase scan shows the same *shape* — `const { data } = await supabase…` destructuring only `data`, dropping `error` — in 19 more client files. These fall into three buckets that each owner must triage:
+  - **false-empty (fix — same class as messages):** the read result is rendered as `data ?? []`/`setX(data)`, so a failed load shows an empty list. Candidates: `components/modules/{assistant,billing,grocery,settings,weather,concierge-calls}-module.tsx`, `components/concierge/plan-write-backs.tsx`, `app/(app)/dashboard/{billing,concierge-calls,independence,journeys,money-timeline,onboarding-funnel,paperwork}/page.tsx`, `app/(app)/{missions/page.tsx,feedback/feedback-board.tsx}`.
+  - **keep-prior (benign):** guarded by `if (data)` so a failed refresh keeps prior state (no false-empty) — e.g. `components/app/app-context.tsx`, `components/modules/concierge-calls-module.tsx`. Surfacing a toast would be nicer but it does not lie about state.
+  - **acceptable-degrade (SSR/marketing):** `app/(marketing)/{lp/[slug],f/[id]}/page.tsx` render server-side; empty-on-error is a tolerable public-page degrade.
+- Root cause: the browser Supabase client returns `{ data, error }`; dropping `error` + `?? []` converts a load failure into a false "you have nothing" state. The robust idiom already exists in the codebase — `useRealtimeQuery`/`useModuleData` return `{ error }` → `<ErrorState onRetry/>` (see `files-hub-module`, `documents-module`); the offenders hand-rolled their reads instead.
+- Resolution: **documented for per-owner triage — NOT unilaterally fixed** (these span A-05/A-08/A-09/A-10/A-13/A-15/A-17 modules under other agents' claims; editing them here would collide). The A-11 instance (`messages-module`) is fixed (PLA-0624). Recommended fix per false-empty site: capture `error`, `toastError(describeDbError(error))` (or `<ErrorState onRetry>`), and keep prior state instead of `?? []`. Best long-term: migrate hand-rolled reads onto `useRealtimeQuery`. A §3d coordination note points each owner at their file(s).
+- Supabase impact: none (client error-handling).
+- Tests run: scan only (`grep` shape match); `messages-module` fix validated under PLA-0624.
+- Commit: (documentation + coordination note)
+- Status: OPEN (finding) — A-11 site fixed; 18 remaining sites owned by their respective agents to triage.
+- Remaining dependencies: each owning agent classifies + fixes their site(s).
+
 ### PLA-0623 - A-08/A-03: money amount-validation + child-PIN brute-force surfaces VERIFIED clean
 
 - Timestamp: 2026-07-17 17:55 UTC
