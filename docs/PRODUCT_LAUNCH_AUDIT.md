@@ -23,7 +23,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: none (client error-handling).
 - Tests run: scan only (`grep` shape match); `messages-module` fix validated under PLA-0624.
 - Commit: (documentation + coordination note)
-- Status: OPEN (finding) — A-11 site fixed; 18 remaining sites owned by their respective agents to triage.
+- Status: OPEN (finding) — A-11 site fixed; 18 remaining sites owned by their respective agents to triage. **Now RATCHETED**: `tests/silent-empty-read-ratchet.test.ts` fails CI if any NEW file introduces the shape (baseline frozen at these 19), regression-locks the messages fix, and forces BASELINE to shrink as owners fix theirs (delete the test when it reaches []).
 - Remaining dependencies: each owning agent classifies + fixes their site(s).
 
 ### PLA-0623 - A-08/A-03: money amount-validation + child-PIN brute-force surfaces VERIFIED clean
