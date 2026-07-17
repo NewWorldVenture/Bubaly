@@ -1157,3 +1157,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending (this push)
 - Status: Fixed in code (migration 0219 + guard); **prod apply pending (LB-011)**
 - Remaining dependencies: apply 0220 to prod; re-run the isolation probe there.
+- Remaining dependencies: apply 0219 to prod; re-run the isolation probe there.
+
+### PLA-0610 - marketplace_place_bid_unchecked callable by authenticated → bid-as-any-family IDOR — FIXED in 0220
+
+- Timestamp: 2026-07-17 01:10 UTC
+- Service: A-14 Marketplace / auctions (found by agent-04 during the SECURITY DEFINER sweep; A-14 is agent-01's unit — flagged)
+- Route: `public.marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)` RPC
+- Affected files: `supabase/migrations/0220_revoke_place_bid_unchecked_from_authenticated.sql` (new), `tests/marketplace-bid-unchecked-revoke.test.ts` (new), `tests/migration-version-safety.test.ts` (bump), `docs/PENDING_PROD_MIGRATIONS.md`, `docs/LAUNCH_BLOCKERS.md` (LB-012)
+- Role: any signed-in user (`authenticated`)
+- Discovery: swept all 57 SECURITY DEFINER functions for ones taking a family/member id arg, executable by `authenticated`, whose body doesn't tie the arg to `auth.uid()`. Money/loyalty variants were service-role-only (safe); `marketplace_negotiation_offer` validates via `marketplace_member_id()` (safe); one was genuinely exposed.
+- Scenario: 0184 hardened auction bidding — it RENAMED the raw `marketplace_place_bid` → `_unchecked` and added a CHECKED wrapper `marketplace_place_bid` that verifies `auth.uid()` owns `p_bidder_member_id`/`p_bidder_family_id` before delegating. It did `revoke all ... _unchecked ... from public` + `grant ... to service_role`. But a RENAME preserves the ACL, so the `authenticated` grant from 0183's original `grant execute ... to authenticated, service_role` rode onto `_unchecked`, and `revoke ... from public` does not drop a separate role grant. So `_unchecked` stayed executable by `authenticated`: a signed-in user could call it directly (SECURITY DEFINER = RLS bypass), passing ANY `p_bidder_member_id`/`p_bidder_family_id`, and place an auction bid attributed to another family — skipping every check in the wrapper.
+- Severity: P2 (marketplace-integrity IDOR — bid/identity spoofing in auctions; not direct money loss, but can grief/manipulate auctions and attribute bids to other families).
+- Root cause: function RENAME carried a role grant that the subsequent `revoke ... from public` did not remove (missing `revoke ... from authenticated`).
+- Resolution: migration **0220** `revoke execute ... from authenticated` (+ re-assert public revoke, keep service_role). The checked `marketplace_place_bid` wrapper is SECURITY DEFINER — it calls `_unchecked` as the function owner, not the caller — so revoking the caller's grant does not affect the legitimate bid path; the app only ever calls the checked wrapper.
+- Supabase impact: **prod exploitable until 0220 is applied** (human-owned, LB-012).
+- Tests run: PG16 before/after — as a family-A member the direct `_unchecked` call was permitted pre-0220 and returned "permission denied" post-0220, while the checked wrapper still executes (returns its own `unauthorized` validation, not a permission error); idempotent ×2. `tests/marketplace-bid-unchecked-revoke.test.ts` (3) + migration-version bump; tsc/eslint clean.
+- Validation evidence: harness before/after (above); guard tests green.
+- Commit: pending (this push)
+- Status: Fixed in code (0220 + guard); **prod apply pending (LB-012)**; **flagged to agent-01 (A-14 owner)** — PLA-0460 concluded bid/buy were "revoked from public", which was true but missed the surviving `authenticated` grant on the renamed `_unchecked`.
+- Remaining dependencies: apply 0220 to prod; agent-01 to confirm no other renamed-RPC ACL carryover in A-14.
