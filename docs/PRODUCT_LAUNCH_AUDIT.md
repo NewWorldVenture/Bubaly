@@ -45,6 +45,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: additive regression guard landed; A-10 remains owned by `agent-03` (agent-doable scope complete per PLA-0626/0627). No ownership change
 - Remaining dependencies: none for this guard; A-10's remaining items are owner/live-prod, tracked on agent-03's board row
 
+### PLA-0771 - A-12: a malformed parent-entered Guardian caller-pattern regex crashed the whole call-routing engine
+
+- Timestamp: 2026-07-17 19:35 UTC
+- Service: Guardian / safety / contacts (A-12)
+- Route: `lib/guardian/rules.ts` `evaluateRules` (runs on every screened inbound call/message via the guardian pipeline)
+- Affected files: `lib/guardian/rules.ts`, `tests/guardian-rules.test.ts` (new)
+- Role: any family (a parent authors a Guardian routing rule with a caller pattern)
+- Scenario: a parent creates a rule whose `condition_caller_pattern` is not a valid regex (e.g. `(` or `[unclosed`), then a call/message arrives and the engine evaluates rules
+- Severity: **MEDIUM** reliability / child-safety (a single bad rule breaks screening for the whole family)
+- Launch impact: `matchesRule` compiled the parent-entered pattern with `new RegExp(pattern, 'i')` **unguarded**. A malformed pattern throws `SyntaxError`, which propagates out of `evaluateRules` and crashes the entire guardian routing evaluation — so *every* incoming call/message for that family fails to route correctly (either the screening endpoint 500s, or routing falls through in an unintended way), from one typo in one rule. The pattern is free-text a parent types, so this is readily triggerable.
+- Root cause: untrusted user input (a regex) compiled without a try/catch; the rules engine had no test coverage, so the edge case was never exercised.
+- Resolution: wrapped the `new RegExp(...)` in try/catch — an uncompilable pattern now simply cannot match (the rule is skipped) and evaluation continues to the next rule, instead of throwing. Added `tests/guardian-rules.test.ts` (8 cases) locking the engine's safety-critical behavior: priority ordering, overnight time windows across midnight, day/context/trust/pattern matching, AND-composition of conditions, inactive-rule skipping, fall-through, and the malformed-regex robustness case.
+- Supabase impact: none (pure engine fix).
+- Tests run: `tests/guardian-rules.test.ts` — 8/8 (the robustness case FAILED pre-fix with `SyntaxError` thrown, passes post-fix); full suite **3541** green; tsc 0; eslint 0.
+- Validation evidence: TDD — the new test reproduced the crash against the current code (`expected [Function] to not throw … 'SyntaxError: Invalid regular expression' was thrown`), then passed after the guard. Found via a test-coverage sweep of untested pure logic in my lanes.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`
+- Remaining dependencies: none. (Nice-to-have: validate the regex at rule-save time in the guardian UI/action so the parent gets immediate feedback — the engine is now crash-safe regardless.)
+
 ### PLA-0627 - A-10: cross-family RLS isolation PROVEN LIVE on PG16 (closes agent-02's last open item)
 
 - Timestamp: 2026-07-17 19:10 UTC

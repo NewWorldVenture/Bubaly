@@ -78,9 +78,16 @@ function matchesRule(rule: GuardianRule, ctx: RuleMatchContext): boolean {
   // Context match
   if (rule.condition_contexts?.length && !rule.condition_contexts.includes(ctx.currentContext)) return false;
 
-  // Caller pattern match
+  // Caller pattern match. The pattern is parent-entered free text, so a malformed
+  // regex (e.g. "(") must NOT throw and take down the whole routing pipeline — an
+  // uncompilable pattern simply cannot match.
   if (rule.condition_caller_pattern) {
-    const re = new RegExp(rule.condition_caller_pattern, 'i');
+    let re: RegExp;
+    try {
+      re = new RegExp(rule.condition_caller_pattern, 'i');
+    } catch {
+      return false;
+    }
     const phone = ctx.callerPhone ?? '';
     const name = ctx.callerName ?? '';
     if (!re.test(phone) && !re.test(name)) return false;
