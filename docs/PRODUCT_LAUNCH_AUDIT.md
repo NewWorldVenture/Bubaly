@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0781 - Grandparent Portal rendered an empty portal when the member roster read failed
+
+- Timestamp: 2026-07-17 20:40 UTC
+- Service: Dashboard / Grandparent Portal (agent-`fable-opus` lane)
+- Route: `/dashboard/grandparent-portal`
+- Affected files: `app/(app)/dashboard/grandparent-portal/page.tsx`, `tests/grandparent-portal-read-boundary.test.ts`
+- Database objects: `family_members` (roster spine); `families`, `family_photos`, `family_milestones`, `family_announcements`, `family_dates` (best-effort)
+- Role: grandparents / extended family viewing the simplified portal
+- Scenario: the `family_members` roster read fails (RLS edge, transient, connection) while the table exists.
+- Severity: **P2** (reassuring-but-wrong empty state — a grandparent sees an empty portal; the family grid, author-name resolution, and birthday celebrations all collapse).
+- Launch impact: the six-way `Promise.all` destructured `{ data: members }` and dropped the roster's `error`. The roster is the spine — the family grid, milestone/announcement author names (`memberById`), and birthday-derived celebrations all build off it. A silent failure rendered an empty portal for a grandparent.
+- Root cause: the source-of-truth roster read dropped its `error`.
+- Resolution: capture `membersRes`, and on `membersRes.error` `console.error('[dashboard/grandparent-portal] member roster read failed', …)` + `return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />` before deriving `members`. The family name and photo/milestone/announcement/date enrichment reads stay best-effort (each degrades to a hidden section). Matches the Family-Digital-Twin roster-spine pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/grandparent-portal-read-boundary.test.ts` (3 assertions — roster result captured, log+ErrorState, derive-after-guard ordering); full `npx vitest run` **577 files / 3580 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0780 - Null display_name white-screen crash class lurking in ~20 UI sites (same root as the Kitchen Display loop)
 
 - Timestamp: 2026-07-17 20:29 UTC

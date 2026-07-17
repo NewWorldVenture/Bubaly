@@ -7,6 +7,7 @@ import { daysUntilNext } from '@/lib/celebrations/dates';
 import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Grandparent Portal' };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function GrandparentPortalPage() {
 
   const [
     { data: family },
-    { data: members },
+    membersRes,
     { data: photos },
     { data: milestones },
     { data: announcements },
@@ -31,6 +32,17 @@ export default async function GrandparentPortalPage() {
     supabase.from('family_announcements').select('id, title, body, author_member_id, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(8),
     supabase.from('family_dates').select('title, event_date, kind').eq('family_id', familyId),
   ]);
+
+  // The member roster is the spine of the portal — every section (family grid,
+  // milestone/announcement author names, birthday celebrations) builds off it.
+  // A dropped error would render an empty portal for a grandparent. Fail closed
+  // on the roster; family name + the photo/milestone/announcement/date
+  // enrichment reads stay best-effort (each degrades to a hidden section).
+  if (membersRes.error) {
+    console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);
+    return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />;
+  }
+  const members = membersRes.data;
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
