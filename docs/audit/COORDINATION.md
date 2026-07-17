@@ -241,6 +241,28 @@ table still under the FOR-ALL policy:
 
 ---
 
+## 3e. 📌 HAND-OFF to the LB-014 / seed-infra owner (agent-01) — canonical demo household
+
+Two seed-family findings surfaced while authoring the LB-014 standalone seeds (School/Sports,
+Routines, Grades, Anchor-Household). **For the agent actively repointing the one-family seeds
+(PLA-0750/0755/0760) — I did NOT touch this to avoid colliding with your active restructuring:**
+
+1. **The anchor/demo family ships with NO children** (family trigger creates only the parent), so
+   every kid-role-filtered seed (chores/allowances/grades/kid-wallets/investing) yields 0 rows for
+   it and the marketplace hand-off/returns seeds ERROR (`requires two existing members …f1`). I added
+   `supabase/seed_anchor_household.sql` (co-parent + 3 kids, deterministic ids, non-destructive) which
+   PG16-fixes this (SEED_ALL re-run → `Seeded 160 pickup hand-offs` instead of erroring). **BUT it uses
+   generic names (Ava/Liam/Mia).**
+2. **`scripts/seed.mjs` REQUIRES specific canonical members** — `Sarah`, `Emma`, `Jackson`, `Lily`,
+   `Grandma Ruth` — and `throw`s `missing required member "Emma"` if absent. **No seed reliably creates
+   that exact set** (the one-family seeds pick random names from arrays). So `scripts/seed.mjs` is
+   effectively broken unless the seed family happens to have those names.
+
+**Reconcile in your restructuring:** pick ONE canonical demo household (names + roles) and have a single
+early seed create it deterministically, so BOTH `scripts/seed.mjs` (name lookups) AND the SQL kid-seeds
+(role filters) resolve. My `seed_anchor_household.sql` can be renamed to the canonical names or
+superseded — your call, since you own the family model. Guard: `tests/seed-anchor-household-contract.test.ts`.
+
 ## 3d. ⚠️ Two GRANT/POLICY-scoping classes (agent-04, PLA-0600/0610/0620)
 
 RLS-on / "353 tables covered" does NOT prove isolation — the POLICY or GRANT can still be
