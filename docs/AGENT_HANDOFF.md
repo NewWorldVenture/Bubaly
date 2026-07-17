@@ -41,30 +41,61 @@
 > docs — keep it green. Watch for control-byte corruption from concurrent writers
 > (`LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < file | wc -c` must be 0).
 >
-> **Latest verified state (2026-07-16 20:40 UTC, HEAD `40d355d4`):** full suite **515 files / 3,295
-> tests green**. Shipped this relay: PLA-0405 (de-corrupted 4 files + deduped Google/Microsoft sync
-> hash), PLA-0406/0407/0408 (reasoning-substrate observability — graph loader, family_signals read,
-> and snapshot upsert all log on failure), PLA-0409/0410 (silent write-failure fix — Home, Auto,
-> Paperwork, Contacts CRUD now throw; Locator side-effects logged), PLA-0411/0412 (misleading
-> empty-state fix — Auto, Home, and Social record-list reads now fail closed), PLA-0413 (Referrals
-> fails closed; Guardian routing-rule read failure logged). Full increment table in
-> `docs/progress/2026-07-16-20{00,10,15,20,25,30,35,40}.md`. **The `lib/` shared read/write helper
-> silent-failure sweep is complete** — remaining work is per-page inlined reads or the operator-gated
-> live blockers.
+> **Latest verified state (2026-07-17 20:35 UTC, HEAD `17f9414d` on `main`):** full suite **577 files
+> / 3,580 tests green**; `tsc` 0 (only the known optional `@axe-core/playwright` e2e noise); eslint 0
+> errors on changed files. This relay (agent-`fable-opus`) continued the **per-`page.tsx` fail-closed
+> read sweep** — the class where a source-of-truth read drops `error` and renders a reassuring-but-wrong
+> empty/healthy surface:
+> - PLA-0770 readiness score · PLA-0773 kitchen · PLA-0774 family-digital-twin roster · PLA-0775
+>   memories (albums/photos) · **PLA-0776 family-cfo (money — false $0)** · **PLA-0777 family-health
+>   (safety — hid allergies/meds)** · **PLA-0778 family-emergency (safety — hid contacts/ICE)** ·
+>   **PLA-0779 trust (security — hid policies/approvals/emergency sessions)**.
+> - **PLA-0780 (app-wide crash fix):** `family_members.display_name` is nullable (`0002_tables.sql:14`;
+>   `0212` provisions with `p_display_name default null`) but typed `string`. 23 raw
+>   `.display_name.split(' ')[0]` sites could white-screen SSR pages (the same class as the `/display`
+>   "Reconnecting…" loop `e92fd897` only fixed in display-grid). Added null-safe `firstName()` to
+>   `lib/utils/format.ts`; routed all 21 UI `.tsx` sites through it; `tests/display-name-firstname.test.ts`
+>   has a source-grep guard asserting **zero** raw `display_name.split` remain in `app/`+`components/` `.tsx`.
+>   Use `firstName(x.display_name)` for any new first-name label.
+> - **`calm` and `dining` were deliberately left intact** — both wrap every read in an explicit `safe()`
+>   best-effort helper (documented). Converting them to fail-closed would be a product-intent change, not a
+>   bug fix — don't "fix" them without owner direction.
+> - Increment snapshots: `docs/progress/2026-07-17-19{42},-20{02,06,10,14,17,21,30}.md`.
 >
-> **Silent-failure theme — both sides done for primary user data.** Writes surface failures instead
-> of faking success; reads fail closed instead of rendering a fake-empty list. Coverage: Home, Auto,
-> Paperwork, Contacts, Locator (writes) + Auto, Home, Social (reads — every `lib/*/queries.ts` record
-> lib). Remaining bare writes are intentionally best-effort audit-log/throttle/notification
-> side-effects (`wallet_audit_logs`, `child_login_throttle`, `demo_email_uses`, `audit_logs`,
-> `trust_audit_logs`) — leave them silent.
+> **Owner asks from the 2026-07-17 credentials paste (state + what's done/pending):**
+> - ✅ **OpenAI on `/admin/settings`** — the row already existed; enriched it to show the *live* resolved
+>   model + key source via `getAIConfigView`, added AI provider/model system rows, and fixed pre-existing
+>   mojibake. Shipped as **PR #322** (branch `claude/openai-admin-settings-status`) per the owner's "push
+>   PR to Main" request — **awaiting review/merge** (not on `main` yet).
+> - ⏳ **Seed 500 rows/table** — part of LB-014 (SEED_ALL coverage). Not yet done this relay; large. The
+>   independent seed pack lives in `supabase/seed/` (see LB-014 owner notes). Extend, keep it relationally
+>   valid, and re-run the PG16 harness.
+> - ⏳ **Feature-tier review (Tiers 1–7, 9; Tier 8 AI Concierge parked)** — the owner referenced an external
+>   feature list ("these features" / "my site") **that was NOT attached to the chat**, so it could not be
+>   actioned. Next agent: get the actual Tier list/screenshot from the owner before starting, then
+>   compare→build→wire→test each.
+> - ⏳ **Tier 8 AI Concierge** — tie ChatGPT + Twilio (parked by owner). OpenAI wiring reads
+>   `OPENAI_API_KEY`/`AI_MODEL` (`lib/ai/*`); Twilio reads `TWILIO_*`. Both are env-gated already.
 >
-> **Next candidates:** reads embedded directly in `page.tsx`/`server.ts` for other modules that
-> `return data ?? []` (the `lib/*/queries.ts` libs are now all fail-closed); then the role, live-RLS,
-> browser, backup, and deployment gates. The P0/P1 blockers (Auth Admin HTTP 500, remote migration
-> ledger, credential rotation, authenticated E2E, third-party callback smoke, backup/restore drill)
-> need **Supabase/Vercel operator access** and cannot be closed from the agent sandbox — leave them
-> Open and flag them to the owner.
+> > 🔐 **CREDENTIALS HANDLING (important):** the owner pasted a full set of **live** production secrets in
+> > chat (Stripe live `sk_live_…`, Supabase `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, Google, Resend,
+> > Brevo, VAPID, Ticketmaster). **None were written to the repo and none must be** — code reads them via
+> > `process.env.*` only; the platform (Vercel/Supabase) env stores hold the values. Because they were
+> > shared in cleartext, **recommend rotating the live Stripe secret key and the Supabase service-role key**.
+> > Env-var *names* the app expects are enumerated on `/admin/settings` and in `.env.example` — set values
+> > there, never in a committed file.
+>
+> **Remaining bare writes stay best-effort:** intentional audit-log/throttle/notification side-effects
+> (`wallet_audit_logs`, `child_login_throttle`, `demo_email_uses`, `audit_logs`, `trust_audit_logs`) — leave
+> them silent.
+>
+> **Next candidates (fail-closed sweep):** `grandparent-portal` (6 reads), `economy` (5, kids money),
+> `family-school`/`family-sports`/`intelligence` (4), `family-coo` fail-closed reads (its `firstName` crash
+> is already fixed; the reads still drop `error`), `profile` (4, low-stakes — member falls back to ctx).
+> Then the role, live-RLS, browser, backup, and deployment gates. The P0/P1 blockers (Auth Admin HTTP 500,
+> remote migration ledger, credential rotation, authenticated E2E, third-party callback smoke,
+> backup/restore drill) need **Supabase/Vercel operator access** and cannot be closed from the agent
+> sandbox — leave them Open and flag them to the owner.
 
 > ## 2026-07-13 AUTH SEED REPAIR — READ FIRST
 >
