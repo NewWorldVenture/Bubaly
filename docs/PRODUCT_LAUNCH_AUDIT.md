@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0795 - Family Missions showed a parent "All caught up! 🎉" when the approval queue read failed (A-07 §3e slice)
+
+- Timestamp: 2026-07-17 23:21 UTC
+- Service: Chores / missions / rewards (A-07) — Family Missions approval queue (cross-cutting §3e sweep item; A-07 ownership stays `agent-01`)
+- Route: `/missions` (`app/(app)/missions/page.tsx`)
+- Affected files: `app/(app)/missions/page.tsx`, `tests/missions-review-queue-read-boundary.test.ts` (new)
+- Database objects: `chore_submissions` (primary), plus `chores`/`family_members`/`chore_ai_validations`/`chore_disputes` (enrichment)
+- Role: parents / managers (the review queue is parent-facing)
+- Scenario: the primary `chore_submissions` read fails for a real reason (transient outage, RLS edge) while submissions exist and await review
+- Severity: P2 (parent-facing safety-relevant false-empty)
+- Launch impact: the primary read destructured only `{ data: submissions }` and rendered `subs = submissions ?? []`, so a failed read collapsed the whole page to the reassuring **"All caught up! 🎉"** empty state (and 0/0/0 stat cards). This queue is a parent's source of truth for pending kid proofs, **disputes**, and **AI safety flags** — a false-empty could hide a safety-flagged submission, so a parent believes there's nothing to review when the read actually failed
+- Root cause: the source-of-truth queue read dropped its Supabase `error`, conflating "nothing to review" with "read failed"
+- Resolution: capture `{ data: submissions, error: submissionsError }` and early-return a retryable `<ErrorState>` (keeping the page header for context) when the primary read fails, before deriving the queue/empty-state. Enrichment reads (chores/members/validations/disputes) stay gracefully degraded
+- Supabase impact: none — reads unchanged; the failure is now visible
+- Tests run: new `tests/missions-review-queue-read-boundary.test.ts` (2 — captures `submissionsError`; the ErrorState early-return precedes the "All caught up!" empty-state JSX); `tsc --noEmit` clean; `eslint` clean on the page. (Note: `missions/page.tsx` stays in the silent-read ratchet baseline — it still matches the shape via the benign per-file `createSignedUrl` storage call on line 52, which is not a false-empty)
+- Validation evidence: guards assert the error capture and the ordered ErrorState-before-empty-state
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-07 §3e sub-slice by agent-05; A-07 unit ownership stays with agent-01)
+
 ### PLA-0794 - Family Hub's ErrorState was dead code: a failed families read rendered a degraded "Not set" hub (A-05)
 
 - Timestamp: 2026-07-17 23:16 UTC
