@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0623 - A-08/A-03: money amount-validation + child-PIN brute-force surfaces VERIFIED clean
+
+- Timestamp: 2026-07-17 17:55 UTC
+- Service: Wallet / Bubaly Money (A-08) + Auth (A-03)
+- Route: money mutation actions (`wallet`/`economy`/`invest`) + `childSignInAction` (`/kid-login`)
+- Affected files: none (verification only)
+- Role: child / teen (attempting money manipulation or PIN guessing)
+- Severity: (verification of two abuse surfaces — no defect found)
+- Launch impact: two abuse vectors audited by reading the code paths end to end:
+  - **Client-supplied money amounts** — every money mutation validates server-side: `addFunds`/`setAllowance`/`createGoal`/`fundGoal` do `Math.trunc` + reject `!Number.isFinite || <= 0`; funding actions are `isManager`-gated. The two **child-callable** paths are safe by construction: `requestRedemptionAction` takes **no** client amount (the reward cost is read server-side + stock-checked), and `placeInvestOrderAction` validates `shares` (`Number.isFinite` after the ×10⁴ truncation catches overflow→Infinity, `> 0`), prices the order with the **server's** `asset.price_cents` (never a client price), and balance/holding-checks it. No negative/overflow/price-spoof vector.
+  - **Child PIN brute-force** — `childSignInAction` layers: per-IP rate limit (30/window), input-format validation, and a durable per-username throttle (`child_login_throttle`, service-role-written) evaluated **before** the password check **and even for unknown usernames** (no enumeration oracle); generic "username or PIN isn't right" errors; PIN mixed with `CHILD_LOGIN_SECRET` (offline brute-force needs the secret); throttle cleared on success. Policy `maxFails=5` per 15-min window → escalating 15-min lockout, so a 4-digit PIN (10⁴ combos) can't be exhausted (~5 tries/15 min ⇒ 20+ days minimum, before escalation). Covered by `tests/child-throttle.test.ts` + `tests/child-login-action-security.test.ts`.
+- Root cause: n/a (verification).
+- Resolution: n/a — both surfaces are correctly built; documented as audited.
+- Supabase impact: none.
+- Tests run: existing `child-throttle` + `child-login-action-security` suites remain green; no new code.
+- Validation evidence: code-path reading of every money mutation's amount handling + the full `childSignInAction` throttle/rate-limit/error-message flow and the `DEFAULT_POLICY` constants.
+- Commit: (this increment)
+- Status: RESOLVED (verified — no defect).
+- Remaining dependencies: live E2E brute-force / concurrency exercise remains part of the owner-gated auth E2E (LB-005).
+
 ### PLA-0621 - A-11: all 6 Storage buckets RLS-boundary VERIFIED (sensitive = private, no cross-tenant write) + guarded
 
 - Timestamp: 2026-07-17 17:32 UTC
