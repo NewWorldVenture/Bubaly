@@ -13,6 +13,28 @@ authoritative list.
 > sandbox). This is a **human-owned** task. This doc exists so it's one paste,
 > not a scavenger hunt.
 
+## 🔴 SECURITY MIGRATIONS — APPLY FIRST (launch-blocking)
+
+**These are the migrations that gate GO. Apply them before the feature bundle below.**
+They are additive + idempotent; each is PG16-verified live (see the linked PLA/LB
+entry). Order within this list does not matter (they touch disjoint tables), but the
+whole group should land before launch. `supabase db push` applies them in numeric
+order automatically.
+
+| Sev | Mig | Fixes (until applied, prod is exploitable) | Coupled app code? | Post-apply check (run in SQL editor) |
+|-----|-----|--------------------------------------------|-------------------|--------------------------------------|
+| **P0** | `0217` | **Wallet money-minting** — any member incl. a child can INSERT a completed credit into `wallet_transactions` and mint spendable money (LB-010/PLA-0580). | No (RLS only) | As a member session, an INSERT of a `completed` credit into `wallet_transactions` must be **rejected**; the manager-gated write policy exists: `select polname,cmd from pg_policies where tablename='wallet_transactions';` |
+| **P0** | `0224` | **Wallet audit trail tamperable** — `wallet_audit_logs` was child-writable/erasable; 0224 makes it append-only, service-role-managed (LB-010 related/PLA-0622). | No | non-service-role UPDATE/DELETE on `wallet_audit_logs` → 0 rows / denied |
+| **P1** | `0219` | **Cross-tenant PII leak** — `support_tickets` (requester name/email + issue text) and `admin_users` (emails/roles) are world-readable by any signed-in user (LB-011/PLA-0600). | No | `set role authenticated; set request.jwt.claim.sub='<any-user-uuid>'; select count(*) from support_tickets;` → **0**; same for `admin_users`; `reset role;` |
+| **P2** | `0221` | **Marketplace bid-as-any-family IDOR** — `marketplace_place_bid_unchecked` is `authenticated`-executable via a rename that carried the grant; lets a user bid as another family (LB-012/PLA-0610). | ⚠️ ships with the marketplace-auth deploy | `select has_function_privilege('authenticated','public.marketplace_place_bid_unchecked(uuid,uuid,numeric)','execute');` → **false** |
+| P2 | `0222` `0223` | **Chore forge** — a child could flip `chore_submissions`/`chore_assignments` to `approved` directly, faking the family accountability loop (PLA-0612/0613). Mints no money (0217 decoupled it). | 0222 pairs with the `submitProofAction` service-role routing (already on `main`) | non-manager UPDATE of a submission to `status='approved'` → denied by the decision-guard trigger |
+| P2 | `0216` | **family-media bucket** — defines the bucket + family-folder write RLS (LB-009). Read stays public until the signed-URL decision. | No | `select public from storage.buckets where id='family-media';` (bucket exists) |
+| P2 | `0218` | **Economy token mint** — child could INSERT economy-token credits directly; 0218 locks writes to managers (PLA-0590). | No | non-manager INSERT into the economy ledger → denied |
+
+**Fastest safe path:** run `supabase db push` (applies ALL pending migrations, security + feature, in order — every one is additive/idempotent). If applying by hand, do the P0 rows above **first**. After applying, the behavioral RLS proofs for each are recorded in `docs/PRODUCT_LAUNCH_AUDIT.md` (the linked PLA entries) — this table's checks are the quick confirmations, not the full proof.
+
+> Also required for full function (not security-blocking): set `CRON_SECRET` (all 19 cron jobs 401 without it — see the env section below) and apply the `0118–0135` feature bundle so Marketplace/Voice/Knowledge/etc. populate.
+
 ## How to apply (pick one)
 
 - **Supabase CLI (recommended):** `supabase db push` — applies every pending
