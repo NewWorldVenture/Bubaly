@@ -29,8 +29,10 @@
 -- TABLES: family_wallets, child_wallets, wallet_buckets, wallet_transactions.
 --   ROW COUNT: 500 transactions (+ supporting wallet/bucket rows, created once).
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (active family of
---   newworldventurellc@gmail.com). Change v_fam / v_email below if needed.
+-- TARGET FAMILY: resolved reproducibly at runtime (v_email's family → else the
+--   first family with a non-manager member → else any family), so this seed runs
+--   against SEED_ALL / the PG16 harness / a fresh env. It previously pinned one
+--   prod family UUID and FK-failed everywhere else. Change v_email if needed.
 --   Requires migration 0088_family_wallet.sql applied first.
 --
 -- IDEMPOTENT: every seeded row is tagged metadata->>'seed' = 'wallet_ledger'
@@ -69,7 +71,7 @@ end $$;
 -- 2) Ensure wallets + buckets, then seed 500 ledger rows ----------------------
 do $$
 declare
-  v_fam    uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam    uuid;   -- resolved reproducibly below (was a hardcoded prod UUID)
   v_email  text := 'newworldventurellc@gmail.com';
   v_uid    uuid;
   v_children uuid[];   -- child_wallet ids to attach transactions to
@@ -100,6 +102,25 @@ declare
   t        int;
 begin
   select id into v_uid from auth.users where lower(email) = lower(v_email) limit 1;
+
+  -- Resolve the target family REPRODUCIBLY instead of a hardcoded prod UUID, so
+  -- this seed works against SEED_ALL / the PG16 harness / a fresh env (previously
+  -- it pinned one prod family id and FK-failed everywhere else): prefer the seed
+  -- account's family, else the first family that has a non-manager (child/teen)
+  -- member (a wallet needs a child), else any family.
+  select f.id into v_fam from public.families f where f.created_by = v_uid order by f.created_at limit 1;
+  if v_fam is null then
+    select fm.family_id into v_fam from public.family_members fm
+      where fm.is_active and fm.role not in ('parent','adult')
+      group by fm.family_id order by min(fm.created_at) limit 1;
+  end if;
+  if v_fam is null then
+    select id into v_fam from public.families order by created_at limit 1;
+  end if;
+  if v_fam is null then
+    raise notice 'wallet ledger seed: no family found — skipping.';
+    return;
+  end if;
 
   -- the family wallet (unique per family) — created once, reused
   insert into public.family_wallets (family_id, mode, is_active, created_by)
@@ -204,5 +225,4 @@ select
   to_char(min(created_at), 'YYYY-MM-DD')               as oldest,
   to_char(max(created_at), 'YYYY-MM-DD')               as newest
 from public.wallet_transactions
-where family_id = '92298eb2-1a9e-4bdc-9361-677b6c01b499'
-  and metadata->>'seed' = 'wallet_ledger';
+where metadata->>'seed' = 'wallet_ledger';

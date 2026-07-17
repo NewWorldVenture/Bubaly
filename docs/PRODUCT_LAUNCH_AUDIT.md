@@ -1673,3 +1673,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: per-feature `SEED_ALL` insert-count + orphan-seed-file count on the checkout.
 - Commit: pending (doc only)
 - Status: FLAGGED to A-02 as LB-014. Directly addresses the directive's "validate empty states" + "≥500 relational records" gates for the affected units.
+
+### PLA-0740 - Wallet ledger seed repointed to a reproducible family (was pinned to a prod UUID) — VERIFIED 500 rows conserving
+
+- Timestamp: 2026-07-17 16:00 UTC
+- Service: A-02 seed / A-08 wallet
+- Route: `supabase/seed_wallet_ledger_one_family.sql`
+- Affected files: `supabase/seed_wallet_ledger_one_family.sql`
+- Role: demo / fresh-environment family
+- Scenario: root-caused WHY the wallet seed is orphaned (PLA-0720/LB-014) and made it reproducible.
+- Severity: fix for the LB-014 wallet slice
+- Findings + fix:
+  - Root cause: the seed hardcoded `v_fam := '92298eb2-1a9e-4bdc-9361-677b6c01b499'` — the REAL prod family id of newworldventurellc@gmail.com. That family does not exist in the SEED_ALL baseline / the PG16 harness / any fresh env, so applying the seed **FK-failed** (`family_wallets_family_id_fkey`). That is why it was never wired into SEED_ALL — it only worked against prod.
+  - Fix: resolve `v_fam` at runtime — the seed account's family (`families.created_by = v_uid`), else the first family with a non-manager (child/teen) member, else any family; skip cleanly if none. Also de-hardcoded the trailing VERIFY query. No literal family UUID remains.
+  - **Verified on a clean PG16 harness (no manual repoint):** applies with no errors, idempotent ×2, seeds **500 `wallet_transactions`** for the resolved family across 4 buckets, and the **completed-ledger conserves — 0 negative bucket balances** (this also retires the vacuous PLA-0700 wallet-conservation check: now proven on real 500-row data).
+- Supabase impact: none (standalone seed; not wired into SEED_ALL here).
+- Tests run: clean-bootstrap harness apply (500 rows, conserving, idempotent).
+- Commit: this push.
+- Status: wallet seed is now REPRODUCIBLE + verified. **Remaining for LB-014 (A-02):** wire it (and the other orphan seeds) into the SEED_ALL / harness pipeline, and author seeds for the genuinely-unseeded features (school/sports/medical/routines/grades/home). This fix de-risks the wallet slice — it's ready to wire.
