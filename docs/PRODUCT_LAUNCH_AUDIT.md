@@ -6,6 +6,27 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0581 - A-11: the "Secure Vault" is a label-only bucket with no protection beyond standard family RLS — OPEN (product decision)
+
+- Timestamp: 2026-07-17 00:25 UTC
+- Service: Files / documents — "Secure Vault" (A-11)
+- Route: `/dashboard/files/vault` (`FilesHubModule view="vault"`)
+- Affected files: `components/modules/files-hub-module.tsx`, `app/(app)/dashboard/files/vault/page.tsx`, `documents` RLS (migration 0109)
+- Role: any family member with the documents feature — including a **teen/child** login
+- Scenario: a family moves a sensitive document (SSN, medical, legal, passport) into the "Secure Vault," reasonably believing it is more protected than "Shared Files"
+- Severity: **P2** (misleading-security / trust — not a cross-family leak; family isolation holds)
+- Launch impact: the "Secure Vault" is presented with a **Lock icon**, a "Secure" badge, and the copy "this file is added to the Secure Vault," strongly implying extra protection. In reality `is_secure` is just a **boolean column + a filtered view**: there is **no PIN, no re-auth, no role gate, and no encryption**. The vault page only calls `requireFeature('/dashboard/documents')` (a tier gate), and the `documents` RLS is uniformly `is_family_member(family_id)` for every op (PLA-0442) — so **any family member, including a child with a login, can open every "Secure Vault" file exactly like a shared file**. The lock iconography overpromises within-family confidentiality the product does not deliver
+- Root cause: "Secure Vault" was built as a UI category (`is_secure` flag + view filter), never wired to any additional access control; the documents RLS makes no distinction between secure and shared rows
+- Recommended resolution (product decision — flagged, not unilaterally changed, because whether a child *should* see vault docs is a genuine product choice, and any real gate is a prod-migration + behavior change):
+  1. **Make it real** — gate `is_secure` documents behind manager access (RLS: `using (is_family_member(family_id) and (not is_secure or can_manage_family(family_id)))`) and/or a re-auth/PIN, so the Lock means something (mirrors the A-07/A-08/A-12 "children shouldn't have this access" fixes the other agents shipped); or
+  2. **Be honest** — relabel to "Private Files"/"Personal" and drop the Lock/"Secure" framing so it doesn't imply protection it lacks
+- Supabase impact: option 1 requires a new prod storage/RLS migration (human-owned)
+- Tests run: static analysis — vault page has only `requireFeature`; module has no `isManager`/PIN/`can_manage` gate; documents RLS (0109) is uniform `is_family_member` across secure + shared
+- Validation evidence: `app/(app)/dashboard/files/vault/page.tsx` → `requireFeature('/dashboard/documents')` only; `files-hub-module.tsx` toggles `is_secure` with no gate; `0109_documents_favorite.sql` policies use `is_family_member(family_id)` for all ops with no `is_secure` branch
+- Commit: (documentation only — no code change; fix is a product decision)
+- Status: **OPEN** — P2 trust finding flagged to owner (agent-03, A-11); not a formal launch blocker (no cross-tenant leak), but the "Secure Vault" naming should not ship as a security feature until option 1 or 2 is chosen
+- Remaining dependencies: owner decision (real gate vs. honest relabel); if option 1, a prod RLS migration + a decision on whether children lose access to existing vault docs
+
 ### PLA-0580 - A-08 CRITICAL: any family member (incl. a child) could MINT money via a direct wallet_transactions insert
 
 - Timestamp: 2026-07-17 11:45 UTC
