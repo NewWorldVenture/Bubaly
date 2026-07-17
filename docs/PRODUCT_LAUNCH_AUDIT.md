@@ -25,6 +25,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0790 - Super-admin analytics surfaces rendered a failed telemetry read as "no activity" (A-05)
+
+- Timestamp: 2026-07-17 22:56 UTC
+- Service: Home / dashboard command surfaces (A-05) — super-admin product analytics
+- Route: `/dashboard/journeys` (Journey Analytics), `/dashboard/onboarding-funnel` (Onboarding Funnel + Time-to-First-Value)
+- Affected files: `app/(app)/dashboard/journeys/page.tsx`, `app/(app)/dashboard/onboarding-funnel/page.tsx`, `components/family/shell.tsx` (new `MiniError`), `tests/dashboard-analytics-read-boundary.test.ts` (new)
+- Role: super-admin only (both pages `notFound()` for non-admins)
+- Scenario: a telemetry read (`journey_events`, `onboarding_events`, or `activation_events`) fails for a real reason (transient outage, RLS/permission edge) while the table exists and has data
+- Severity: P3 (internal analytics integrity — misleads product decisions, no user-data exposure)
+- Launch impact: both SSR pages destructured only `{ data }` and rendered `data ?? []`, so a failed read collapsed to a "No journey events yet" / "No onboarding activity yet" / "No activation events yet" empty state. An operator reading these dashboards (which explicitly call out the "biggest drop step" and "highest-leverage step to simplify") would conclude onboarding traffic is zero when the query actually errored — a silent false-empty on the numbers product changes are steered by
+- Root cause: the source-of-truth telemetry reads dropped their Supabase `error`; the empty-vs-error states were conflated into one `MiniEmpty`
+- Resolution: added a server-safe `MiniError` primitive to `components/family/shell.tsx` (role="alert" danger card, no client handler — SSR retries by page reload), distinct from `MiniEmpty`. `journeys` now captures `{ data, error }` and renders `MiniError` before the empty-rows branch; `onboarding-funnel` captures `error: funnelError` + `error: actError` and gates each section (funnel, TTFV) on its own error before the respective empty branch. A genuinely empty dataset still shows the honest `MiniEmpty`
+- Supabase impact: none — reads unchanged; genuine failures now surface instead of masquerading as no-data
+- Tests run: new `tests/dashboard-analytics-read-boundary.test.ts` (3 — MiniError is server-safe + role=alert; journeys error branch precedes empty branch; onboarding-funnel gates both funnel + activation reads); `eslint` clean on all 4 touched files; `tsc --noEmit` clean (exit 0)
+- Validation evidence: guard asserts the `error` destructures and the ordered error→empty branching in both pages, plus that `MiniError` carries no `onClick` (server-component safe)
+- Remaining dependencies: none agent-doable; the try/catch degrade-safe A-05 pages (`independence`, `paperwork`, `money-timeline`) intentionally swallow reads on tables behind un-applied migrations 0175/0169/0168 and are left as-is (documented decision, not a defect)
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
 ### PLA-0784 - Vacations list + calendar rendered a failed read as "No trips yet" / an empty month (A-13)
 
 - Timestamp: 2026-07-17 20:20 UTC

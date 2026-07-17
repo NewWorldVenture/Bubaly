@@ -47,9 +47,9 @@ const BASELINE = new Set<string>([
   'app/(app)/dashboard/billing/page.tsx',
   'app/(app)/dashboard/concierge-calls/page.tsx',
   'app/(app)/dashboard/independence/page.tsx',
-  'app/(app)/dashboard/journeys/page.tsx',
+  // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
+  // and render MiniError instead of a false-empty; removed from baseline.
   'app/(app)/dashboard/money-timeline/page.tsx',
-  'app/(app)/dashboard/onboarding-funnel/page.tsx',
   'app/(app)/dashboard/paperwork/page.tsx',
   'app/(app)/feedback/feedback-board.tsx',
   'app/(app)/missions/page.tsx',

@@ -4,7 +4,7 @@ import { Activity, CheckCircle2, Timer } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
-import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
+import { SectionCard, MiniEmpty, MiniError, StatTile } from '@/components/family/shell';
 import {
   summarizeJourneys, formatDuration, formatRate,
   type JourneyEventLike,
@@ -19,13 +19,15 @@ export default async function JourneysPage() {
   if (!(await isSuperAdmin())) notFound();
 
   const supabase = await createServer();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('journey_events')
     .select('journey, phase, step, duration_ms, session_id, created_at')
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: false })
     .limit(5000);
 
+  // A failed telemetry read must not masquerade as "no events" — that would tell
+  // the operator onboarding traffic is zero when the query actually errored.
   const events = (data ?? []) as JourneyEventLike[];
   const rows = summarizeJourneys(events);
   const totalStarts = rows.reduce((a, r) => a + r.starts, 0);
@@ -46,7 +48,9 @@ export default async function JourneysPage() {
       </div>
 
       <SectionCard title="Per-journey medians" description="Measured from journey_events (0124) — no estimates.">
-        {rows.length === 0 ? (
+        {error ? (
+          <MiniError text="Couldn’t load journey telemetry. Refresh to try again." />
+        ) : rows.length === 0 ? (
           <MiniEmpty icon={Activity} text="No journey events yet. Use the app (e.g. Quick Capture) to generate telemetry, then refresh." />
         ) : (
           <div className="overflow-x-auto">

@@ -1,7 +1,7 @@
 // Presentational building blocks shared by every Bubaly module page.
 // Server-safe (no client hooks) so pages stay server components.
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 export function StatTile({
@@ -60,6 +60,28 @@ export function MiniEmpty({ icon: Icon, text }: { icon: React.ComponentType<{ cl
     <div className="flex flex-col items-center justify-center py-10 text-center">
       <Icon className="h-8 w-8 text-muted/30" />
       <p className="mt-2 text-sm text-muted/60">{text}</p>
+    </div>
+  );
+}
+
+/**
+ * Server-safe error surface for a section whose read FAILED — distinct from
+ * MiniEmpty (which means "genuinely no data yet"). Showing MiniEmpty on a failed
+ * read is a false-empty: it tells the operator "0 rows" when the query errored.
+ * SSR-only (no client handler); the user retries by reloading the page.
+ */
+export function MiniError({
+  text = 'Couldn’t load this data. Refresh to try again.',
+}: {
+  text?: string;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center rounded-xl border border-danger/30 bg-danger/5 py-10 text-center"
+    >
+      <AlertTriangle className="h-8 w-8 text-danger/70" />
+      <p className="mt-2 text-sm text-danger">{text}</p>
     </div>
   );
 }
