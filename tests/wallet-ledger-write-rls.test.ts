@@ -37,9 +37,12 @@ describe('0217 wallet ledger write lockdown', () => {
 
   it('routes the chore auto-approve reward through the service role', () => {
     const missions = readFileSync('app/(app)/missions/actions.ts', 'utf8');
+    // The submit flow derives a service-role client for all server-authoritative
+    // writes (AI verdict, auto-approve payout, decision-status transitions).
+    expect(missions).toContain('const service = createServiceClient();');
     // The auto-approve branch must finalize (credit the ledger) with the service role.
     const autoBranch = missions.slice(missions.indexOf('if (autoOk && verdict.status'));
-    expect(autoBranch).toContain('finalizeApproval(createServiceClient()');
+    expect(autoBranch).toContain('finalizeApproval(service,');
     // The manual approve stays on the manager session (no service client there).
     const manual = missions.slice(missions.indexOf('export async function approveSubmissionAction'));
     const manualScope = manual.slice(0, manual.indexOf('\nexport async function', 1));

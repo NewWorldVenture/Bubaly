@@ -168,7 +168,14 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     return { ok: false, error: 'Could not review your proof. Please try again.' };
   }
 
-  const { error: validationError } = await supabase.from('chore_ai_validations').insert({
+  // The AI verdict, the auto-approve payout, and every manager-decision status
+  // transition are SERVER decisions, not the child's — they must run under the
+  // service role. chore_ai_validations is SELECT-only for members (0043: "written
+  // by the service-role engine"), and chore_submissions decision statuses are
+  // DB-guarded to managers/service-role (0222). The child's session is only the
+  // authority for creating the submission (above) and disputing it (below).
+  const service = createServiceClient();
+  const { error: validationError } = await service.from('chore_ai_validations').insert({
     family_id: familyId, submission_id: submission.id, status: verdict.status,
     quality_score: verdict.quality_score, confidence: verdict.confidence,
     recommended_reward_type: verdict.recommended_reward_type, recommended_reward_amount: verdict.recommended_reward_amount,
@@ -197,7 +204,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   });
 
   if (autoOk && verdict.status === 'approved') {
-    if (!await setSubmissionStatus(supabase, familyId, submission.id, 'approved')) {
+    if (!await setSubmissionStatus(service, familyId, submission.id, 'approved')) {
       await restoreAssignmentState(supabase, familyId, assignment);
       return { ok: false, error: 'Could not finish the chore approval.' };
     }
@@ -206,9 +213,9 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(createServiceClient(), { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
-      await setSubmissionStatus(supabase, familyId, submission.id, 'parent_review');
+      await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
         .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
       if (fallbackAssignmentError) console.error('[chore state] parent-review fallback failed', fallbackAssignmentError);
@@ -217,14 +224,14 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   } else {
     const subStatus = verdict.status === 'needs_improvement' ? 'needs_improvement'
       : verdict.status === 'rejected' ? 'rejected' : verdict.status === 'approved' ? 'parent_review' : 'parent_review';
-    if (!await setSubmissionStatus(supabase, familyId, submission.id, subStatus)) {
+    if (!await setSubmissionStatus(service, familyId, submission.id, subStatus)) {
       await restoreAssignmentState(supabase, familyId, assignment);
       return { ok: false, error: 'Could not finish the proof review.' };
     }
     const { data: submittedAssignment, error: submittedAssignmentError } = await supabase.from('chore_assignments')
       .update({ status: 'submitted' }).eq('id', assignmentId).eq('family_id', familyId).select('id').single();
     if (submittedAssignmentError || !submittedAssignment) {
-      await setSubmissionStatus(supabase, familyId, submission.id, 'pending');
+      await setSubmissionStatus(service, familyId, submission.id, 'pending');
       await restoreAssignmentState(supabase, familyId, assignment);
       return { ok: false, error: 'Could not finish the proof review.' };
     }

@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0612 - A-07: kid chore-proof submission was RLS-broken for everyone + a child could forge an approval (two findings, one root cause)
+
+- Timestamp: 2026-07-17 14:12 UTC
+- Service: Chores / Missions / rewards (A-07)
+- Route: `/missions`, `/kids` (server action `submitProofAction`; DB `chore_submissions`)
+- Affected files: `app/(app)/missions/actions.ts`, `supabase/migrations/0222_chore_submission_decision_guard.sql` (new), `tests/chore-submission-decision-guard.test.ts` (new), `tests/chore-state-transition-persistence.test.ts`, `tests/wallet-ledger-write-rls.test.ts`
+- Role: **child / teen** (any non-manager family member with a login), and — for finding 1 — *every* role
+- Scenario: (1) any kid submits chore proof → the flow inserts into `chore_ai_validations`; (2) a child `update chore_submissions set status='approved'` directly via PostgREST (anon key ships in the client bundle)
+- Severity: **P1 functional (finding 1: submission broken in prod)** + **MEDIUM integrity (finding 2: forged approval)**. Note the money path is already decoupled (0217), so finding 2 mints no money — it forges only the workflow/audit status.
+- Launch impact:
+  - **Finding 1 (broken submit):** `chore_ai_validations` has RLS enabled with a SELECT-only policy (0043 comment: "written by the service-role engine"), but `submitProofAction` inserted into it using the **child** RLS session. Proven live on the PG16 harness: that INSERT fails `new row violates row-level security policy`, so `submitProofAction` returned "Could not save the proof review." — kid chore-proof submission was broken for **every** user (no authenticated role has INSERT on that table).
+  - **Finding 2 (forge approval):** `chore_submissions` shipped with a single `is_family_member` FOR ALL policy, so a child could flip their own submission to `approved`/`rejected` directly, bypassing the manager-gated `approveSubmissionAction` (PLA-0450 closed the app action; this closes the direct-DB path). Proven live: a non-manager UPDATE to `status='approved'` succeeded pre-0222.
+- Root cause: server-authoritative writes (AI verdict, auto-approve payout, decision-status transitions) were issued under the child's RLS session instead of the service role — the same "child session used as the authority for a server decision" pattern as the 0217 wallet fix.
+- Resolution:
+  - App: `submitProofAction` now derives `const service = createServiceClient()` and routes the `chore_ai_validations` INSERT and every decision-status write (`approved`/`parent_review`/`rejected`/`needs_improvement`, plus the pending rollback) through it. The submission INSERT (`pending`) and dispute (`disputed`) stay on the child session (the only writes a member is legitimately the authority for). This fixes finding 1 outright.
+  - DB (migration 0222): a `before insert or update` trigger on `chore_submissions` blocks any transition **into** a decision status unless the caller is the service role, an unauthenticated server/migration/seed context (`auth.uid() is null`), or a family manager (`can_manage_family`). Defense-in-depth for finding 2.
+- Supabase impact: new migration `0222` (additive, idempotent, `to_regclass`-guarded). Must be applied to prod (human-owned) — see `docs/PENDING_PROD_MIGRATIONS.md`. The app fix (finding 1) needs no migration and takes effect on deploy.
+- Tests run: `tests/chore-submission-decision-guard.test.ts` (5, new); updated `chore-state-transition-persistence` + `wallet-ledger-write-rls` for the service-role routing; full suite **3456 passed**; tsc 0; eslint 0; migration audit next=0223.
+- Validation evidence: PG16 harness, production-accurate grants (`grant all ... to authenticated`/`service_role`, mirroring Supabase so RLS/triggers are the gate). Matrix proven: child self-approve UPDATE → BLOCKED; child self-approve INSERT → BLOCKED; child submit (`pending`) → ALLOWED; child dispute (`disputed`) → ALLOWED; manager approve → ALLOWED; service-role auto-approve → ALLOWED. Pre-fix: child `chore_ai_validations` INSERT → RLS-denied; child self-approve UPDATE → succeeded.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`; migration `0222` pending prod apply (human-owned)
+- Remaining dependencies: apply `0222` to prod; consider the same decision-status guard on `chore_assignments` (a child can still forge `chore_assignments.status='approved'`, which also mints no money — lower priority, noted for A-07 follow-up).
+
 ### PLA-0611 - OBSERVABILITY GAP CLOSED: no liveness/readiness endpoint for monitors or deploy smoke (A-20)
 
 - Timestamp: 2026-07-17 13:50 UTC

@@ -8,11 +8,14 @@ describe('chore state transition persistence', () => {
     expect(source).toContain('async function restoreAssignmentState(');
     expect(source).toContain('async function setSubmissionStatus(');
     expect(source).toContain(".select('id').single();");
-    expect(source).toContain("await setSubmissionStatus(supabase, familyId, submission.id, 'pending');");
+    // The AI-verdict / decision-status writes run under the service role (they are
+    // server decisions, not the child's — chore_submissions decision statuses are
+    // DB-guarded to managers/service-role by migration 0222).
+    expect(source).toContain("await setSubmissionStatus(service, familyId, submission.id, 'pending');");
   });
 
   it('does not report auto-approval after reward finalization fails', () => {
-    expect(source).toContain("await setSubmissionStatus(supabase, familyId, submission.id, 'parent_review');");
+    expect(source).toContain("await setSubmissionStatus(service, familyId, submission.id, 'parent_review');");
     expect(source).toContain("return { ok: false, error: 'Could not finish the chore approval. It was sent for parent review.' }");
   });
 
