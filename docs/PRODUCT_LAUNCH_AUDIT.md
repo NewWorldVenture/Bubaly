@@ -6,6 +6,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0614 - /api/health now probes the Supabase AUTH service (GoTrue) — surfaces the LB-001 failure mode (A-20)
+
+- Timestamp: 2026-07-17 14:30 UTC
+- Service: Observability / deploy health (A-20) — extends PLA-0611
+- Route: `GET /api/health` (adds an `auth` check to the body)
+- Affected files: `lib/health/probe.ts` (+`probeAuth`, factored a shared bounded `probe()`), `lib/health/status.ts` (+`auth` in `checks`, degraded semantics), `app/api/health/route.ts` (parallel db+auth probes), `tests/health-endpoint.test.ts` (13→19 cases)
+- Role: n/a (infra — uptime monitor / on-call)
+- Severity: P2 (observability) — directly relevant to the **P0 LB-001** ("Supabase Auth Admin users health check returns HTTP 500")
+- Launch impact: PLA-0611's health check probed PostgREST (data) only, so it could not distinguish "auth down" from "all healthy" — exactly the LB-001 condition (auth 500 while the DB is fine) was invisible. Now `/api/health` runs a bounded GoTrue `/auth/v1/health` probe in parallel and reports it as a distinct `checks.auth` result, giving on-call a direct signal for the LB-001 shape.
+- Root cause: health check covered data connectivity but not the auth service.
+- Resolution: added `probeAuth` (mirrors the RLS-independent `probeDatabase`, hits GoTrue's own `/auth/v1/health`, 3s abort, fails closed). Reworked the status fold to a **three-state** model with deliberate HTTP mapping: env-missing or **PostgREST** down → `error`/**503** (page + drop from rotation); **auth-only** outage → `degraded`/**200** (NOT 503) — GoTrue is a shared upstream, so 503-ing every instance on an auth blip would yank the whole fleet and escalate an auth-only outage into a total outage; 200+`degraded` keeps anonymous/cached traffic served while the body still flags the problem for alerting; all green → `ok`/200.
+- Supabase impact: read-only, no schema change; hits the auth service's public health route (no table/RLS dependency).
+- Tests run: `tests/health-endpoint.test.ts` **19/19 green** — incl. degraded-not-503 fold, `probeAuth` hits `/auth/v1/health` with the anon apikey, GoTrue 5xx→unhealthy (the LB-001 shape), abort→fail-closed. Build gate below.
+- Commit: (this increment)
+- Status: RESOLVED — auth readiness now observable. Does NOT resolve LB-001 itself (that is the actual auth-500, owner/Supabase-operator-owned) — it makes the failure mode *detectable* from an unauthenticated probe.
+- Remaining dependencies: LB-001 root cause is owner-gated (Supabase project/operator).
+
 ### PLA-0613 - A-07: a child could forge chore COMPLETION via a direct chore_assignments status write (sibling of PLA-0612)
 
 - Timestamp: 2026-07-17 14:20 UTC

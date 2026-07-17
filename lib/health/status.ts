@@ -34,7 +34,10 @@ export function checkRequiredEnv(env: Record<string, string | undefined>): EnvCh
   return { ok: missing.length === 0, missing };
 }
 
-export type DatabaseCheck = { ok: boolean; latencyMs: number | null; error?: string };
+// A probe result. `database` (PostgREST) and `auth` (GoTrue) share this shape.
+export type ProbeCheck = { ok: boolean; latencyMs: number | null; error?: string };
+// Retained alias for the original database-only name (back-compat for importers).
+export type DatabaseCheck = ProbeCheck;
 
 export type HealthStatus = 'ok' | 'degraded' | 'error';
 
@@ -44,36 +47,45 @@ export type HealthReport = {
   timestamp: string;
   checks: {
     env: EnvCheck;
-    database: DatabaseCheck;
+    database: ProbeCheck;
+    auth: ProbeCheck;
   };
 };
 
 /**
  * Folds the individual probe results into one overall status + HTTP code.
  *
- * - `error` / 503 when a hard dependency is broken: a required env var is missing,
- *   OR the env is configured but the database is unreachable (a monitor should
- *   page on this — the app cannot serve authenticated traffic).
- * - `degraded` / 200 when env is complete but the DB probe was skipped (e.g. env
- *   missing made the probe moot) — reserved; not emitted in the normal path.
- * - `ok` / 200 when every probe passed.
+ * - `error` / 503 — a HARD dependency is broken: a required env var is missing, OR
+ *   the env is configured but PostgREST (the data layer) is unreachable. A monitor
+ *   should page: the app cannot serve its core data, and returning 503 correctly
+ *   removes the instance from rotation.
+ * - `degraded` / **200** — env + data are healthy but the Supabase **auth** service
+ *   (GoTrue) is unreachable. This is exactly the LB-001 failure mode. It is
+ *   deliberately NOT a 503: GoTrue is a shared upstream, so failing the health
+ *   check on every instance would yank the whole fleet out of rotation and turn an
+ *   auth-only outage into a total (even anonymous-traffic) outage. 200+`degraded`
+ *   keeps healthy instances serving public/cached traffic while still signalling
+ *   the problem in the body for alerting.
+ * - `ok` / 200 — every probe passed.
  */
-export function summarizeHealth(env: EnvCheck, database: DatabaseCheck): HealthStatus {
+export function summarizeHealth(env: EnvCheck, database: ProbeCheck, auth: ProbeCheck): HealthStatus {
   if (!env.ok) return 'error';
   if (!database.ok) return 'error';
+  if (!auth.ok) return 'degraded';
   return 'ok';
 }
 
 export function buildHealthReport(
   env: EnvCheck,
-  database: DatabaseCheck,
+  database: ProbeCheck,
+  auth: ProbeCheck,
   now: Date = new Date(),
 ): HealthReport {
-  const status = summarizeHealth(env, database);
+  const status = summarizeHealth(env, database, auth);
   return {
     status,
-    httpStatus: status === 'ok' ? 200 : 503,
+    httpStatus: status === 'error' ? 503 : 200,
     timestamp: now.toISOString(),
-    checks: { env, database },
+    checks: { env, database, auth },
   };
 }
