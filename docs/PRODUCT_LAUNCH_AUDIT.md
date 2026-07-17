@@ -11,7 +11,8 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Timestamp: 2026-07-17 13:50 UTC
 - Service: Observability / deploy health (A-20)
 - Route: **NEW** `GET /api/health` (public, unauthenticated)
-- Affected files: `app/api/health/route.ts` (new), `lib/health/status.ts` (new), `lib/health/probe.ts` (new), `tests/health-endpoint.test.ts` (new, 13 cases); **follow-up:** `instrumentation.ts` (boot env guard wired into Next's `register()`), `tests/instrumentation-boot-guard.test.ts` (new, 3 cases)
+- Affected files: `app/api/health/route.ts` (new), `lib/health/status.ts` (new), `lib/health/probe.ts` (new), `tests/health-endpoint.test.ts` (new, 13 cases); **follow-up:** `instrumentation.ts` (boot env guard wired into Next's `register()`), `tests/instrumentation-boot-guard.test.ts` (new, 3 cases); **live-smoke fix:** `middleware.ts` (+`/api/health` to PUBLIC), `tests/middleware-public-api-boundary.test.ts` (regression guard)
+- Live-smoke finding (caught by running `next start` + curling the route, which unit tests could not): the middleware `PUBLIC` allowlist did NOT include `/api/health`, so the endpoint **307-redirected to `/login`** — unreachable for its entire purpose (uptime monitors / LB health checks cannot authenticate). Fixed by adding `/api/health` to `PUBLIC` (the route is read-only and secret-free, so public exposure is by design) + a regression test. This is exactly why a live probe matters beyond unit tests.
 - Role: n/a (infra — uptime monitor / load balancer / CI deploy smoke)
 - Scenario: an operator or a monitor needs a single stable URL to answer "is this deployment up AND can it reach Supabase?" without a login. A-20 logged this as an open observability gap ("no /api/health, no boot env guard").
 - Severity: P2 (production-readiness / operability — not a correctness defect, but a launch-ops requirement: LB-001 references a bespoke auth health check; there was no general readiness endpoint)

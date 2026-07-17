@@ -34,6 +34,10 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
+  // Liveness/readiness probe for uptime monitors + LB health checks. Must be
+  // reachable without a session (a monitor cannot authenticate); it is read-only
+  // and returns only booleans/latency/missing-var names — never a secret.
+  '/api/health',
   // Scheduled jobs, internal callbacks, and provider webhooks authenticate
   // themselves with a shared secret or provider signature in their route.
   '/api/cron',

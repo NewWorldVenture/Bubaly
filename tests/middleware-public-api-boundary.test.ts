@@ -19,6 +19,13 @@ describe('middleware public API boundary', () => {
     }
   });
 
+  it('keeps the health/readiness probe reachable without a session', () => {
+    // Uptime monitors + load-balancer health checks cannot authenticate, so
+    // /api/health must be in PUBLIC or middleware 307-redirects it to /login and
+    // the probe is useless. Regression guard for that exact bug.
+    expect(middleware).toContain("'/api/health'");
+  });
+
   it('keeps the route-level boundary explicit in the source', () => {
     expect(middleware).toContain('rate-limit');
     expect(middleware).toContain('Provider webhooks');
