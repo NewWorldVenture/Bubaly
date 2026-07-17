@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0600 - A-08 kid-investing: a child could MINT investment holdings via a direct invest_holdings insert (+ money-ledger sweep complete)
+
+- Timestamp: 2026-07-17 12:20 UTC
+- Service: Kid Investing (A-08 — third family ledger after wallet + economy)
+- Route: direct PostgREST `INSERT`/`UPDATE` on `public.invest_holdings`
+- Affected files: `supabase/migrations/0219_invest_ledger_write_lockdown.sql` (new), `tests/invest-ledger-write-rls.test.ts` (new)
+- Role: **child / teen** — any authenticated family member
+- Scenario: a signed-in child inserts an `invest_holdings` row for themselves, minting shares (portfolio value) without a parent-approved order
+- Severity: **HIGH** (asset integrity; educational-investing portfolio value)
+- Launch impact: the invest tables (`invest_holdings, invest_orders`) shipped (0097) with the same `"Members manage" … FOR ALL … is_family_member` policy as the wallet/economy bugs. `invest_holdings` is meant to be written only by the SECURITY DEFINER `invest_decide_order` RPC (a parent approves a pending order), but RLS let any member write it directly — a child could mint shares. Confirmed exploitable live.
+- Root cause: write RLS on the invest ledger equalled read RLS (any family member).
+- Resolution: migration **0219** restricts `invest_holdings` writes to `can_manage_family()` (the SECURITY DEFINER RPC bypasses RLS, so parent-approved orders still execute). **Exception**: `invest_orders` keeps INSERT open to members because a child legitimately places a *pending* buy/sell order (`placeInvestOrderAction`); only UPDATE/DELETE (approve/cancel) are manager-only.
+- Supabase impact: RLS-only; additive + idempotent.
+- Tests run: PG16 harness — child `invest_holdings` INSERT → RLS error; **child `invest_orders` placement → allowed** (RLS passed; only a NOT-NULL test-data column failed); idempotent ×2. Guard `tests/invest-ledger-write-rls.test.ts` (4); migration audit clean (next 0220).
+- Validation evidence: harness transcript (holdings mint blocked, 0 survivors; order placement passed RLS).
+- Commit: (this increment)
+- Status: Fixed + pushed. **Prod exploitable until 0219 applied** (folded into pending-migrations; sibling of LB-010).
+- **Money-ledger sweep COMPLETE:** all three family ledgers with the `is_family_member FOR ALL` write vuln are now locked to managers — wallet (0217/PLA-0580 CRITICAL), economy (0218/PLA-0590 HIGH), investing (0219/PLA-0600 HIGH). The other tables using the same 0070/0071/0072/0073/0081/0085/0101 FOR-ALL loop (vacations, weekend planner/feeds, habits, home management, autopilot, social feed) are **collaborative family data** where member writes are intended (like the calendar) — reviewed, not sensitive, left as-is.
+- Remaining dependencies: apply 0219 to prod.
+
 ### PLA-0591 - A-11 PRIVACY (needs product decision): the family credential vault is readable by every member, incl. children
 
 - Timestamp: 2026-07-17 12:05 UTC
