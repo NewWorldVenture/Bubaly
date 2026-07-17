@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0615 - A-03/A-16: public-route authorization boundary VERIFIED + drifted cron guard hardened
+
+- Timestamp: 2026-07-17 15:50 UTC
+- Service: Auth/tenant middleware boundary (A-03) + scheduled callbacks (A-16)
+- Route: middleware `PUBLIC` allowlist ↔ all 113 `app/api/**` routes; guardian telephony webhooks
+- Affected files: `tests/cron-auth.test.ts` (route list now globbed from disk), `tests/public-webhook-signature-boundary.test.ts` (new, 4 cases)
+- Role: unauthenticated attacker (routes reachable with NO session via the PUBLIC allowlist)
+- Severity: **verification (no live hole) + P2 test-drift fix** — complements the PLA-0611 middleware fix (that was *under*-exposure of `/api/health`; this checks the inverse, *over*-exposure)
+- Launch impact: prompted by the PLA-0611 finding that the hand-maintained `PUBLIC` allowlist had a gap, I audited the inverse risk — a privileged route wrongly *reachable* without auth (the matcher is `startsWith(prefix + '/')`, so a public prefix exposes everything beneath it). Enumerated every route under each public `/api/*` prefix:
+  - **19 cron routes** — all call `hasCronAuthorization` and return 401; the helper is fail-closed (`!!secret &&`, so an unset `CRON_SECRET` can't become a valid `Bearer undefined`). ✓
+  - **`concierge-calls/place`** (outbound-call cost) — `hasCronAuthorization` + 401. ✓
+  - **`guardian/*`** telephony — inbound voice/sms/whatsapp/screen/status/twiml verify the **Twilio HMAC-SHA1 signature** (`validateTwilioSignature`, fail-closed: `!TWILIO_AUTH_TOKEN → return false`, `timingSafeEqual`); `escalate` (SMS/call blast) is fail-closed on `GUARDIAN_INTERNAL_SECRET`/`CRON_SECRET`. ✓
+  - **`email/welcome`** — `hasInternalSecret` + 401. ✓
+  - marketing/telemetry/token routes (contact, blog, ab, mkt, lp, forms, exit-intent, services/descriptions, ai/gift, sync/feeds/[token]) — genuinely public / token-scoped / rate-limited by design; webhooks/* provider-signed; marketing/unsubscribe signed. ✓
+  - **No over-exposure found** — every publicly-reachable privileged route self-authenticates.
+- Root cause (the one concrete defect): the systemic regression guard `tests/cron-auth.test.ts` pinned a **hardcoded** cron-route list that had **drifted** — it listed 17 of the 19 routes, silently omitting `feedback-github-sync` and `return-reminders`. Both currently carry the gate, but a future removal of their gate would have passed CI unnoticed.
+- Resolution: (1) `cron-auth.test.ts` now enumerates cron routes with `readdirSync('app/api/cron')` (self-maintaining — any future cron route is covered automatically), plus a `≥19` non-empty sanity assert and a per-route `401` (acts-on-the-check, not just imports) assert. (2) New `tests/public-webhook-signature-boundary.test.ts` globs `app/api/guardian/**` and asserts every provider-facing route verifies the Twilio signature + rejects, the escalate trigger is fail-closed, and `validateTwilioSignature` itself rejects when the auth token is unset.
+- Supabase impact: none (test + verification only).
+- Tests run: `tests/cron-auth.test.ts` 4/4 (now covers all 19 cron routes) + `tests/public-webhook-signature-boundary.test.ts` 4/4 — green.
+- Commit: (this increment)
+- Status: RESOLVED — public API boundary proven clean; the cron-auth guard can no longer silently drift.
+- Remaining dependencies: none.
+
 ### PLA-0614 - /api/health now probes the Supabase AUTH service (GoTrue) — surfaces the LB-001 failure mode (A-20)
 
 - Timestamp: 2026-07-17 14:30 UTC

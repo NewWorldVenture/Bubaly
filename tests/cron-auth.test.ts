@@ -1,25 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { hasCronAuthorization, hasInternalSecret } from '@/lib/server/cron-auth';
 
+// Enumerate EVERY scheduled route from disk instead of a hand-maintained list —
+// a hardcoded list silently drifts (it once missed feedback-github-sync +
+// return-reminders), which would let a new ungated, publicly-reachable cron route
+// slip past this guard. Globbing means any cron route added later is covered
+// automatically. `concierge-calls/place` shares the same CRON_SECRET boundary.
 const cronRoutes = [
-  'app/api/cron/admin-digest/route.ts',
-  'app/api/cron/automations/route.ts',
-  'app/api/cron/autopilot-scan/route.ts',
-  'app/api/cron/calendar-feeds/route.ts',
-  'app/api/cron/checkout-abandoned/route.ts',
-  'app/api/cron/chore-reminders/route.ts',
-  'app/api/cron/close-auctions/route.ts',
-  'app/api/cron/demo-cleanup/route.ts',
-  'app/api/cron/guardian-learning/route.ts',
-  'app/api/cron/journey-recovery/route.ts',
-  'app/api/cron/model-refresh/route.ts',
-  'app/api/cron/network-aggregate/route.ts',
-  'app/api/cron/notifications/route.ts',
-  'app/api/cron/provider-sync/route.ts',
-  'app/api/cron/push-scan/route.ts',
-  'app/api/cron/wallet-allowance/route.ts',
-  'app/api/cron/weekly-digest/route.ts',
+  ...readdirSync('app/api/cron', { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => `app/api/cron/${e.name}/route.ts`),
   'app/api/concierge-calls/place/route.ts',
 ];
 
@@ -47,14 +38,21 @@ describe('scheduled callback authorization', () => {
   });
 
   it('keeps every scheduled route on the shared fail-closed helper', () => {
+    // Sanity: the glob actually resolved routes (a silently-empty list would make
+    // the loop below vacuously pass and hide a regression).
+    expect(cronRoutes.length).toBeGreaterThanOrEqual(19);
     for (const file of cronRoutes) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).toContain('hasCronAuthorization');
+      // Must both CALL the gate and ACT on it (reject) — importing without a 401
+      // would leave the privileged job publicly triggerable.
+      expect(source, file).toContain('hasCronAuthorization(');
+      expect(source, `${file} must reject unauthorized callers`).toMatch(/401/);
       expect(source, file).not.toContain('process.env.CRON_SECRET');
       expect(source, file).not.toContain('Bearer ${process.env.CRON_SECRET}');
     }
     const welcome = readFileSync('app/api/email/welcome/route.ts', 'utf8');
     expect(welcome).toContain('hasInternalSecret');
+    expect(welcome).toMatch(/401/);
     expect(welcome).not.toContain('process.env.INTERNAL_SECRET');
   });
 });
