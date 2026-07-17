@@ -1255,3 +1255,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: migration grant grep + cross-check against 0179 revokes.
 - Commit: pending (this push)
 - Status: Verified clean — no sensitive pre-auth grant.
+
+### PLA-0650 - API route auth coverage swept (113 routes) — CLEAN
+
+- Timestamp: 2026-07-17 14:30 UTC
+- Service: cross-cutting (all `app/api/**` route handlers)
+- Route: every `app/api/**/route.ts` (113 handlers)
+- Affected files: none (verification)
+- Role: all callers
+- Scenario: swept every API route for a missing authentication/verification gate (an unauthenticated sensitive endpoint is a direct bypass of the whole app-layer authz model).
+- Severity: n/a (clean)
+- Findings: 108/113 matched a standard gate on the first pass; the 5 flagged were all correctly protected by a helper the initial grep didn't name:
+  - `admin/marketing/email/send` + `admin/marketing/ai` → `requireMarketingAdmin()` (super-admin; the AI route also `enforceAIRateLimit`).
+  - `cron/demo-cleanup` → `hasCronAuthorization(req)` → 401 (Vercel Cron secret).
+  - `guardian/escalate/twiml` → `validateTwilioSignature` in production (401 otherwise), called in BOTH GET and POST — not an open text-to-TwiML reflector.
+  - `health` → intentionally public liveness/readiness; returns only booleans / latency / the NAMES of missing env vars (never a secret value), bounded 3s DB probe, `no-store`.
+  - The public-by-design `ai/gift` route (PLA-0510) remains IP-rate-limited + token-scoped + read-only.
+- Supabase impact: none.
+- Tests run: enumerate `app/api/**/route.ts` × auth-helper grep + per-file read of every candidate.
+- Commit: pending (this push)
+- Status: Verified clean — no unauthenticated sensitive endpoint; every route authenticates (user-context / super-admin / cron-secret / Twilio-signature) or is intentionally public with no sensitive data.
