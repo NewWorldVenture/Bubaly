@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0800 - Kids' submit-proof page 404'd a live chore on a transient read (A-07 §3e slice)
+
+- Timestamp: 2026-07-17 23:44 UTC
+- Service: Chores / missions (A-07) — kids' "submit your work" proof page (cross-cutting §3e; A-07 ownership stays `agent-01`)
+- Route: `/kids/submit/[assignmentId]` (`app/(app)/kids/submit/[assignmentId]/page.tsx`)
+- Affected files: `app/(app)/kids/submit/[assignmentId]/page.tsx`, `tests/kids-submit-read-boundary.test.ts` (new)
+- Database objects: `chore_assignments`, `chores` (reads)
+- Role: children submitting chore proof
+- Scenario: the assignment or chore read fails transiently while the rows exist
+- Severity: P3 (a kid-facing dead end mid-task)
+- Launch impact: both reads dropped `error`, so `if (!assignment) notFound()` / `if (!chore) notFound()` turned a transient read failure into a **404** — telling a kid the chore "doesn't exist" while they're trying to submit their work (a confusing dead end for a chore they can see on their list). Closes out the false-404 class alongside the marketing pages (PLA-0793) and marketplace storefront (PLA-0799)
+- Root cause: the reads swallowed the Supabase `error`, so `notFound()` fired on a read failure, not just a genuinely missing row
+- Resolution: capture `error` on both reads and `throw` on a real error (retryable 5xx via the error boundary), reserving `notFound()` for a truly missing assignment/chore
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/kids-submit-read-boundary.test.ts` (2 — each read throws before its `notFound()`); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the ordered `throw` before each `notFound()`. Repo-wide scan confirms **no remaining `if (!x) notFound()` fed by an error-dropping read**
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-07 §3e sub-slice by agent-05; A-07 ownership stays with agent-01)
+
 ### PLA-0799 - Marketplace storefront 404'd + offer inbox emptied on a transient read (A-14 §3e slice)
 
 - Timestamp: 2026-07-17 23:39 UTC
