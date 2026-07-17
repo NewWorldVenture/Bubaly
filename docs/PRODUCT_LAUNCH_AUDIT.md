@@ -6,6 +6,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0626 - A-10 (reclaimed): Grocery module created a DUPLICATE list + dropped a failed insert on a transient read error
+
+- Timestamp: 2026-07-17 19:00 UTC
+- Service: Meals / groceries / food (A-10 — **reclaimed from `agent-02`, STALE ~21.5h**)
+- Route: `/dashboard/grocery` (`components/modules/grocery-module.tsx`)
+- Affected files: `components/modules/grocery-module.tsx`, `tests/silent-empty-read-ratchet.test.ts` (baseline −1)
+- Role: every user
+- Scenario: a transient failure of the "find the family's active grocery list" read on mount
+- Severity: **MEDIUM functional** (data duplication + silent failure)
+- Launch impact: the mount effect read the active grocery list with `const { data } = await …limit(1)`, then `if (data?.[0]) use it; else INSERT a new list`. On a transient read error `data` is null → it fell into the `else` and **created a duplicate "Groceries" list** (same class as the messages Family-Chat bug PLA-0624). The follow-up insert also dropped its `{error}` (`const { data: created } = …`), so a failed create silently left the module with no list and no message.
+- Root cause: read `{error}` dropped → a failed existence check read as "nothing exists" → spurious create; insert `{error}` dropped → silent create failure.
+- Resolution: capture `error` on the existence read and `toastError(describeDbError(error)) + return` (no duplicate; next mount retries); capture the insert's `error` and surface it too. This was the A-10 entry in the PLA-0625 silent-read baseline — removed from the ratchet baseline now that it's fixed.
+- Supabase impact: none (client error-handling).
+- Tests run: `tsc --noEmit` clean (only the known e2e-axe noise); ratchet 3/3 (baseline now 18); A-10 food/meal/grocery suites 70/70 green.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed. A-10 client silent-read burned down by 1 (18 baseline sites remain across other units).
+- Remaining dependencies: A-10's open item (live cross-family RLS on A-10 tables) is owner/live-infra, inherited from agent-02.
+
 ### PLA-0625 - CROSS-CUTTING (FINDING): client reads that drop `{error}` — systemic silent-empty risk, triage list for owning agents
 
 - Timestamp: 2026-07-17 18:00 UTC

@@ -60,7 +60,7 @@ const BASELINE = new Set<string>([
   'components/modules/assistant-module.tsx',
   'components/modules/billing-module.tsx',
   'components/modules/concierge-calls-module.tsx',
-  'components/modules/grocery-module.tsx',
+  // grocery-module fixed under A-10 (PLA-0625) — removed from baseline.
   'components/modules/settings-module.tsx',
   'components/modules/weather-module.tsx',
 ]);

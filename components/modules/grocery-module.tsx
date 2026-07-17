@@ -45,11 +45,19 @@ export function GroceryModule() {
   useEffect(() => {
     const supabase = createClient();
     (async () => {
-      const { data } = await supabase.from('grocery_lists').select('*').eq('family_id', familyId).eq('is_archived', false).order('created_at').limit(1);
+      const { data, error } = await supabase.from('grocery_lists').select('*').eq('family_id', familyId).eq('is_archived', false).order('created_at').limit(1);
+      if (error) {
+        // Don't treat a failed existence check as "no list" and create a
+        // DUPLICATE grocery list — surface it and retry on the next mount.
+        toastError(describeDbError(error));
+        setListLoading(false);
+        return;
+      }
       if (data?.[0]) {
         setListId(data[0].id);
       } else {
-        const { data: created } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
+        const { data: created, error: createErr } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
+        if (createErr) { toastError(describeDbError(createErr)); setListLoading(false); return; }
         if (created) setListId(created.id);
       }
       setListLoading(false);
