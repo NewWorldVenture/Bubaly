@@ -12,7 +12,7 @@ import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboard
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime } from '@/lib/utils/format';
+import { fmtTime, firstName } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
@@ -180,7 +180,7 @@ export default async function HomePage() {
   const memberList = (members ?? []) as Member[];
   const memberById = new Map(memberList.map((m) => [m.id, m]));
   const me = ctx.active.member;
-  const firstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
+  const myFirstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
   // The shared demo account greets by its account name ("Welcome Bubaly Demo
   // Account") rather than the role greeting, so visitors know they're in the demo.
   const isDemoAccount = ctx.active.family.name === DEMO_ACCOUNT_NAME;
@@ -274,7 +274,7 @@ export default async function HomePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-black sm:text-3xl">
-            {isDemoAccount ? `Welcome ${DEMO_ACCOUNT_NAME}` : roleGreeting(me.role, firstName, dayPhase(now))}
+            {isDemoAccount ? `Welcome ${DEMO_ACCOUNT_NAME}` : roleGreeting(me.role, myFirstName, dayPhase(now))}
             {roleSurface(me.role).tone !== 'kid' && <span aria-hidden> 👋</span>}
           </h1>
           <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
@@ -342,7 +342,7 @@ export default async function HomePage() {
               <div key={m.id} className="flex w-16 flex-col items-center gap-1.5 text-center">
                 <Avatar name={m.display_name} color={m.color ?? undefined} size={52} className="rounded-full" />
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold">{m.display_name.split(' ')[0]}</p>
+                  <p className="truncate text-xs font-semibold">{firstName(m.display_name)}</p>
                   <p className="truncate text-[10px] text-muted">{memberTagline(m, ctx.user.id, now)}</p>
                 </div>
               </div>
@@ -473,7 +473,7 @@ export default async function HomePage() {
                     {done && <Check className="h-2.5 w-2.5" />}
                   </span>
                   <p className={cn('min-w-0 flex-1 truncate text-sm', done && 'text-muted line-through')}>{choreTitleById.get(c.chore_id) ?? 'Chore'}</p>
-                  {owner && <span className="shrink-0 text-xs text-muted">{owner.display_name.split(' ')[0]}</span>}
+                  {owner && <span className="shrink-0 text-xs text-muted">{firstName(owner.display_name)}</span>}
                 </div>
               );
             })}

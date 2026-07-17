@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
-import { fmtRelative } from '@/lib/utils/format';
+import { fmtRelative, firstName } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family COO' };
 export const dynamic = 'force-dynamic';
@@ -75,7 +75,7 @@ export default async function FamilyCooPage() {
                     <div className="h-4 w-4 shrink-0 rounded-full border-2 border-border" />
                     <span className="min-w-0 flex-1 truncate text-sm">{titleById.get(t.chore_id) ?? 'Task'}</span>
                     {t.due_at && <span className="text-xs text-muted">{fmtRelative(t.due_at)}</span>}
-                    {who && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-brand-text">{who.display_name.split(' ')[0]}</span>}
+                    {who && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-brand-text">{firstName(who.display_name)}</span>}
                   </li>
                 );
               })}
@@ -95,7 +95,7 @@ export default async function FamilyCooPage() {
                       <p className="truncate text-sm font-medium">{r.title}</p>
                       <p className="text-xs text-muted">{[r.time_of_day, r.category].filter(Boolean).join(' · ') || 'Routine'}</p>
                     </div>
-                    {who && <span className="text-xs text-muted">{who.display_name.split(' ')[0]}</span>}
+                    {who && <span className="text-xs text-muted">{firstName(who.display_name)}</span>}
                     <DeleteButton table="family_routines" id={r.id} />
                   </li>
                 );

@@ -9,7 +9,7 @@ import { isManager } from '@/lib/constants/roles';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
-import { fmtTime } from '@/lib/utils/format';
+import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -434,7 +434,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                     </div>
                     {member && (
                       <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold text-fg', ACCENT[0])}>
-                        {member.display_name.split(' ')[0]}
+                        {firstName(member.display_name)}
                       </span>
                     )}
                   </li>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import {
   MapPin, LocateFixed, Plus, Pencil, Trash2, Home, GraduationCap, Briefcase,
   Dumbbell, ShoppingBag, Navigation, Battery, Clock, Loader2, Share2, MoreHorizontal,
@@ -257,7 +258,7 @@ export function LocatorModule() {
                   active ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated/40')}>
                 <Avatar name={m.display_name} color={m.color} size={28} />
                 <span className="text-left leading-tight">
-                  <span className="block text-sm font-medium">{m.display_name.split(' ')[0]}</span>
+                  <span className="block text-sm font-medium">{firstName(m.display_name)}</span>
                   <span className="block text-[11px] text-muted">{placeLabel(l)}</span>
                 </span>
               </button>

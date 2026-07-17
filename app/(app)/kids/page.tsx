@@ -4,7 +4,7 @@ import { CheckCircle2, Star, CalendarDays, Trophy, PartyPopper } from 'lucide-re
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
-import { fmtTime } from '@/lib/utils/format';
+import { fmtTime, firstName } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'My Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -36,7 +36,7 @@ export default async function KidsPage() {
       <div className="flex items-center gap-3">
         <Avatar name={me.display_name} color={me.color} size={56} />
         <div>
-          <h1 className="text-2xl font-black">Hi {me.display_name.split(' ')[0]}! 👋</h1>
+          <h1 className="text-2xl font-black">Hi {firstName(me.display_name)}! 👋</h1>
           <p className="text-sm text-muted">Here&apos;s your day.</p>
         </div>
       </div>

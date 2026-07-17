@@ -7,6 +7,7 @@
 // category filter, favorite, empty/error/loading states, toasts, confirms.
 
 import { useMemo, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import {
   Wifi, Globe, Mail, CreditCard, KeyRound, Tv, AppWindow, BadgeCheck, Lock,
   Star, Copy, Eye, EyeOff, Pencil, Trash2, Plus, Search, ExternalLink, MoreHorizontal, Shield,
@@ -201,7 +202,7 @@ export function PasswordsModule() {
                       <p className="truncate font-semibold">{c.label}</p>
                       {c.is_favorite && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
                     </div>
-                    <p className="truncate text-xs text-muted">{meta.label}{owner ? ` · ${owner.display_name.split(' ')[0]}` : ''}</p>
+                    <p className="truncate text-xs text-muted">{meta.label}{owner ? ` · ${firstName(owner.display_name)}` : ''}</p>
                   </div>
                   <div className="relative">
                     <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={`Actions for ${c.label}`} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">

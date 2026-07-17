@@ -59,5 +59,13 @@ export function initials(name: string | null | undefined): string {
     .join('');
 }
 
+// Null-safe first-name/label. `family_members.display_name` is nullable in the
+// DB but typed `string`, so a raw `name.split(' ')[0]` throws during render for
+// a member with a null name — which white-screened the Kitchen Display (the
+// "Reconnecting…" loop). Every UI site must go through this instead.
+export function firstName(name: string | null | undefined): string {
+  return (name ?? '').trim().split(/\s+/)[0] || 'Member';
+}
+
 const CURRENCY = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 export const fmtMoney = (cents: number) => CURRENCY.format(cents / 100);

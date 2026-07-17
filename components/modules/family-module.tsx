@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import Link from 'next/link';
 import {
   Cake, Calendar as CalendarIcon, Copy, CreditCard, Clock, Edit3, FileText, HeartPulse,
@@ -302,7 +303,7 @@ export function FamilyModule() {
                         <p className="truncate text-sm font-semibold">{e.title}</p>
                         <p className="truncate text-xs text-muted">{fmtRelDay(e.starts_at)}{!e.all_day ? ` · ${fmtTime(e.starts_at)}` : ' · All Day'}</p>
                       </div>
-                      {who && <span className="shrink-0 text-xs text-muted">{who.display_name.split(' ')[0]}</span>}
+                      {who && <span className="shrink-0 text-xs text-muted">{firstName(who.display_name)}</span>}
                     </Link>
                   );
                 })}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import { Calendar, ChevronRight, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -226,7 +227,7 @@ export function SportsModule() {
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
-                            {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{member.display_name.split(' ')[0]}</span></div> : <span className="text-muted/60">&mdash;</span>}
+                            {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted/60">&mdash;</span>}
                           </td>
                           <td className="px-4 py-3.5"><span className="text-fg">{e.sport || 'Sports'}</span></td>
                           <td className="px-4 py-3.5">
@@ -272,7 +273,7 @@ export function SportsModule() {
                       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface/40 text-xl">{SPORT_EMOJIS[team.sport ?? ''] ?? SPORT_EMOJIS.default}</div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold">{team.team_name}</p>
-                        <p className="text-xs text-muted">{team.sport}{member ? ` · ${member.display_name.split(' ')[0]}` : ''}{team.season ? ` · ${team.season}` : ''}</p>
+                        <p className="text-xs text-muted">{team.sport}{member ? ` · ${firstName(member.display_name)}` : ''}{team.season ? ` · ${team.season}` : ''}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold">{recordStr}</p>

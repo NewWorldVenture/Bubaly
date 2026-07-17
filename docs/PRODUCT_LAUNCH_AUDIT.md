@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0780 - Null display_name white-screen crash class lurking in ~20 UI sites (same root as the Kitchen Display loop)
+
+- Timestamp: 2026-07-17 20:29 UTC
+- Service: Cross-cutting (home, kids, Family COO, and the school/sports/messages/documents/locator/passwords/family modules)
+- Route: `/home`, `/kids`, `/dashboard/family-coo`, and any page rendering the affected client modules
+- Affected files: `lib/utils/format.ts` (new `firstName` helper), `app/(app)/kids/page.tsx`, `app/(app)/home/page.tsx`, `app/(app)/dashboard/family-coo/page.tsx`, `components/dashboard/family-dashboard.tsx`, `components/modules/family-module.tsx`, `components/modules/school-module.tsx`, `components/modules/sports-module.tsx`, `components/modules/messages-module.tsx`, `components/modules/documents-module.tsx`, `components/modules/locator-module.tsx`, `components/modules/passwords-module.tsx`, `tests/display-name-firstname.test.ts`
+- Database objects: `family_members.display_name` (nullable `text` per `0002_tables.sql:14`; `0212_atomic_family_provisioning.sql` provisions with `p_display_name default null`)
+- Role: any family with at least one member whose `display_name` is null
+- Scenario: a member row has a null `display_name` (allowed by the schema and by atomic provisioning), then a page renders a `member.display_name.split(' ')[0]` first-name label.
+- Severity: **P1** (a single null-name member white-screens core SSR pages — exactly the crash class that root-caused the `/display` "Reconnecting…" loop in `e92fd897`, but still present app-wide).
+- Launch impact: `family_members.display_name` is nullable in the DB but typed `string`, so 23 raw `.display_name.split(' ')[0]` sites assumed non-null. In server components (`/home`, `/kids`, `/dashboard/family-coo`, `family-dashboard`) a null name throws `TypeError: Cannot read properties of null (reading 'split')` during SSR render → white screen (the error boundary can't catch an SSR throw, so it retries forever). In client modules it throws during client render. The display fix (`e92fd897`) patched only `display-grid.tsx`; the same latent bug remained in ~20 other UI sites.
+- Root cause: nullable column typed as non-null + a raw `.split()` at every first-name label site; no shared null-safe helper.
+- Resolution: added a null-safe `firstName(name: string | null | undefined)` to `lib/utils/format.ts` (mirrors the existing `initials()` and the display-grid helper: `(name ?? '').trim().split(/\s+/)[0] || 'Member'`), and routed all 21 UI `.tsx` sites through it. The two API `.ts` routes already guard with `if (m?.display_name)` and are left as-is.
+- Supabase impact: none (render-safety only; no schema change). Note the schema still permits null `display_name` — a future migration could add a default/backfill, tracked separately.
+- Tests run: new `tests/display-name-firstname.test.ts` (5 assertions — `firstName` null/blank/normal behavior + a source guard that greps `app/`+`components/` `.tsx` for the raw `display_name.split` anti-pattern and asserts zero); full `npx vitest run` **576 files / 3577 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files (pre-existing exhaustive-deps warnings unrelated).
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: optional migration to backfill/default `display_name` NOT NULL (defense in depth); the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0779 - Trust & Permissions rendered every security control as "none" when a read failed
 
 - Timestamp: 2026-07-17 20:21 UTC

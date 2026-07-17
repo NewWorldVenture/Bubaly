@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import { BookOpen, Calendar, ChevronRight, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -349,7 +350,7 @@ export function SchoolModule() {
                               </div>
                             </td>
                             <td className="px-4 py-3.5">
-                              {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{member.display_name.split(' ')[0]}</span></div> : <span className="text-muted/60">All</span>}
+                              {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted/60">All</span>}
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
@@ -428,7 +429,7 @@ export function SchoolModule() {
                       return (
                         <tr key={g.id} className="hover:bg-surface/20">
                           <td className="px-4 py-3"><p className="font-medium">{g.title ?? g.subject}</p></td>
-                          <td className="px-4 py-3">{member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={24} /><span>{member.display_name.split(' ')[0]}</span></div> : '—'}</td>
+                          <td className="px-4 py-3">{member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={24} /><span>{firstName(member.display_name)}</span></div> : '—'}</td>
                           <td className="px-4 py-3">{g.subject}</td>
                           <td className="px-4 py-3 capitalize">{g.grade_type}</td>
                           <td className="px-4 py-3">
@@ -462,13 +463,13 @@ export function SchoolModule() {
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
                   {members.slice(0, 4).map((m, i) => (
                     <button key={m.id} onClick={() => setScheduleIdx(i)} className={cn('flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition', scheduleIdx === i ? 'bg-brand text-white' : 'border border-border text-muted hover:text-fg')}>
-                      <Avatar name={m.display_name} color={m.color} size={18} />{m.display_name.split(' ')[0]}
+                      <Avatar name={m.display_name} color={m.color} size={18} />{firstName(m.display_name)}
                     </button>
                   ))}
                 </div>
               )}
               {todayClasses.length === 0 ? (
-                <EmptyState icon={BookOpen} title="No classes today" description={selectedMember ? `No classes scheduled for ${selectedMember.display_name.split(' ')[0]} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> Add Class</Button>} />
+                <EmptyState icon={BookOpen} title="No classes today" description={selectedMember ? `No classes scheduled for ${firstName(selectedMember.display_name)} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> Add Class</Button>} />
               ) : (
                 <div className="space-y-2.5">
                   {todayClasses.map((c) => (

@@ -19,7 +19,7 @@ import { GifPicker } from '@/components/messages/gif-picker';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { ROLE_LABELS } from '@/lib/constants/roles';
-import { fmtDate } from '@/lib/utils/format';
+import { fmtDate, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
   convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
@@ -1203,7 +1203,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
 
     const convName = name.trim() || (isDirect
       ? selectedMembers[0].display_name
-      : [myName, ...selectedMembers.map((m) => m.display_name.split(' ')[0])].slice(0, 3).join(', ') +
+      : [myName, ...selectedMembers.map((m) => firstName(m.display_name))].slice(0, 3).join(', ') +
         (selectedMembers.length > 2 ? ` +${selectedMembers.length - 2}` : ''));
 
     const { data, error } = await createConversation({
@@ -1238,7 +1238,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
               {selectedMembers.map((m) => (
                 <span key={m.id} className="flex items-center gap-1.5 rounded-full bg-brand/15 py-1 pl-1 pr-2 text-xs font-medium text-brand-text">
                   <Avatar name={m.display_name} color={m.color} size={18} />
-                  {m.display_name.split(' ')[0]}
+                  {firstName(m.display_name)}
                   <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-full hover:text-fg">
                     <X className="h-3 w-3" />
                   </button>
@@ -1284,7 +1284,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{g.label}</p>
                         <p className="truncate text-xs text-muted">
-                          {gm.length === 0 ? 'No members' : gm.map((m) => m.display_name.split(' ')[0]).join(', ')}
+                          {gm.length === 0 ? 'No members' : gm.map((m) => firstName(m.display_name)).join(', ')}
                         </p>
                       </div>
                       <SelectDot on={on} />

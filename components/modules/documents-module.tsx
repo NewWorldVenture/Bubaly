@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { firstName } from '@/lib/utils/format';
 import {
   ChevronLeft, ChevronRight, Download, File, FileArchive, FileText, Folder, FolderPlus,
   Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
@@ -415,7 +416,7 @@ export function DocumentsModule() {
                         </td>
                         <td className="hidden py-3 pr-4 sm:table-cell">
                           {owner ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {owner.display_name.split(' ')[0]}</span>
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {firstName(owner.display_name)}</span>
                           ) : (
                             <div className="flex -space-x-1.5">
                               {activeMembers.slice(0, 4).map((m) => <Avatar key={m.id} name={m.display_name} color={m.color} size={22} className="ring-2 ring-surface" />)}
@@ -424,7 +425,7 @@ export function DocumentsModule() {
                         </td>
                         <td className="hidden py-3 pr-4 md:table-cell">
                           <p className="text-xs">{fmtDate(doc.updated_at ?? doc.created_at)}</p>
-                          {uploader && <p className="text-[11px] text-muted">by {uploader.display_name.split(' ')[0]}</p>}
+                          {uploader && <p className="text-[11px] text-muted">by {firstName(uploader.display_name)}</p>}
                         </td>
                         <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
                         <td className="py-3">
@@ -573,7 +574,7 @@ export function DocumentsModule() {
                     <Avatar name={uploader?.display_name ?? 'Family'} color={uploader?.color} size={28} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm leading-tight">
-                        <span className="font-semibold">{uploader ? uploader.display_name.split(' ')[0] : 'Someone'}</span>
+                        <span className="font-semibold">{uploader ? firstName(uploader.display_name) : 'Someone'}</span>
                         <span className="text-muted"> {action} </span>
                       </p>
                       <div className="mt-0.5 flex items-center gap-1.5">
