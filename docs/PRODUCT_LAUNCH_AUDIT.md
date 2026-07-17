@@ -6,6 +6,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0610 - PRIVACY REVIEW (product decision): family-wide PII is readable by every member incl. children
+
+- Timestamp: 2026-07-17 12:55 UTC
+- Service: Vault / Health / Documents (A-11 / A-12)
+- Route: reads of `family_credentials`, `health_visits` (+ health_*), `documents`, `driver_licenses`, `family_insurance_policies`
+- Affected files: RLS in 0119 (credentials), 0068 (health_visits), 0109 (documents), etc. — no code change
+- Role: **child / teen** — any family member
+- Scenario: a child reads a parent's stored passwords, medical visits/diagnoses, driver licenses, insurance, or documents
+- Severity: MEDIUM (privacy) — **explicitly a PRODUCT DECISION, not a unilateral fix**
+- Launch impact: these tables use `is_family_member(family_id)` for SELECT with **no per-record visibility / owner / min-role column**, so every member (incl. young children) can read every other member's sensitive PII. Family-wide sharing is a *legitimate* design for a family-care app (parents coordinate a household record, shared WiFi password, etc.), which is why this is flagged for a decision rather than changed. But a flat "everyone sees everything" model is risky for adult credentials, medical history, and government IDs.
+- Root cause: no visibility model on family PII tables.
+- Resolution: **DEFERRED to the product owner.** Recommended pattern (backward-compatible): add a `visibility` enum (`family` | `managers` | `owner`) defaulting to `family` (preserves today's behavior — zero breakage), expose a per-record toggle in the UI, and scope SELECT to `owner OR managers OR (visibility='family')`. Ship as an additive migration once the default policy per table is chosen (e.g. credentials/IDs → `managers`, health → `family` for care coordination).
+- Supabase impact: would be an additive column + RLS migration per decision.
+- Tests run: n/a (finding). Confirmed policy shapes: `family_credentials_select` = is_family_member (0119); `health_visits` = "Members manage" FOR ALL is_family_member (0068); `documents` family-scoped (0109).
+- Commit: (documentation)
+- Status: OPEN — awaiting a product decision on the family-PII visibility model. Supersedes/aggregates PLA-0591 (credentials).
+- Remaining dependencies: decide default visibility per table → additive column + RLS + UI toggle.
+
 ### PLA-0601 - A-01 shared-CI RED fixed: vitest JSX runtime under the wrong key crashed every SSR component test
 
 - Timestamp: 2026-07-17 01:00 UTC
