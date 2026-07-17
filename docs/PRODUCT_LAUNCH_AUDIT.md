@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0550 - A-12 defense-in-depth: manager-only WRITE RLS on family_places + guardian_routing_rules (migration 0215)
+
+- Timestamp: 2026-07-17 00:20 UTC
+- Service: Guardian / location safety (A-12)
+- Route: n/a (RLS) — backs `/guardian/*` and `/dashboard/locator`
+- Affected files: `supabase/migrations/0215_safety_write_rls_hardening.sql` (new), `tests/safety-write-rls-hardening.test.ts` (new)
+- Role: child / teen (non-manager) attempting a direct write
+- Scenario: even if an app-level gate is ever missed, a signed-in child hits the table directly via PostgREST
+- Severity: (defense-in-depth for PLA-0470/0520 — hardens the DB layer under the app fixes)
+- Launch impact: `family_places` (geofences → arrival/departure alerts) and `guardian_routing_rules` (call/message screening) shipped with `is_family_member` FOR ALL, so RLS alone did not stop a child write — the app gates (PLA-0470/0520) were the only barrier. 0215 keeps SELECT open to all members (a child's device must read geofences to detect arrivals) but restricts INSERT/UPDATE/DELETE to `can_manage_family()` (parent/adult). Service-role writes (AI learning) bypass RLS and are unaffected. member_locations (self-owned) and child chore_submissions are intentionally left alone.
+- Root cause: original policies were `is_family_member` FOR ALL (write == read).
+- Resolution: split into `*_select` (is_family_member) + `*_insert/_update/_delete` (can_manage_family). Additive + idempotent (`drop policy if exists` then create).
+- Supabase impact: RLS-only; no data/columns. Migration is human-owned to apply to prod (agents cannot).
+- Tests run: PG16 harness — 0215 applies clean (migration_fail=0); **proven live on family_places**: a child member reads 9 places but INSERT is rejected ("new row violates row-level security policy") and UPDATE/DELETE affect 0 rows, while a parent INSERT succeeds and no HACK/PWNED row survives. `guardian_routing_rules` uses the identical verified policy shape in the same migration. Static guard `tests/safety-write-rls-hardening.test.ts` (5) pins the policy shape; tsc/eslint clean.
+- Validation evidence: harness output child insert→RLS error, update/delete→0 rows, parent insert→1 row, survivors=0.
+- Commit: (this increment)
+- Status: RESOLVED in code + pushed to `main`; **prod application is human-owned** (add to the pending-prod-migrations set).
+- Remaining dependencies: apply 0215 to prod; optional column-aware restriction of chore_submissions status transitions.
+
 ### PLA-0520 - A-12/A-05 SECURITY: a child could delete/disable family geofences (location safety alerts)
 
 - Timestamp: 2026-07-16 23:10 UTC
