@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0796 - Feedback board comment thread rendered a failed read as an empty discussion (A-17 §3e slice)
+
+- Timestamp: 2026-07-17 23:25 UTC
+- Service: Admin / marketing / content (A-17) — public feedback board comment thread (cross-cutting §3e; A-17 ownership stays `agent-04`)
+- Route: `/feedback` (`app/(app)/feedback/feedback-board.tsx`, `CommentThread`)
+- Affected files: `app/(app)/feedback/feedback-board.tsx`, `tests/feedback-comments-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `feedback_comments` (read)
+- Role: all signed-in users (feedback discussion)
+- Scenario: expanding an idea lazy-loads its comments and the `feedback_comments` read fails transiently
+- Severity: P3 (discussion surface; no data-write/loss)
+- Launch impact: `load()` used `try/finally` (no `catch`) and dropped the read `error`, so a failed read set `comments = data ?? [] = []` and rendered a silent empty discussion. Worse, the `comments === null && !loading` reload guard meant that once it was set to `[]` it **never retried** — the thread was stuck falsely empty until remount
+- Root cause: the read dropped its Supabase `error`, and the null-reload guard made the false-empty sticky
+- Resolution: capture `{ data, error: readErr }`; on error set a `loadError` flag and `setComments([])` (so the reload guard doesn't loop) and render "Couldn’t load the discussion. Retry" — Retry clears the flag and sets `comments` back to `null` to re-trigger the load. Success path clears `loadError`
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/feedback-comments-read-boundary.test.ts` (2 — error captured + not rendered as empty; retry re-nulls comments without an infinite loop); `tsc --noEmit` clean; `eslint` clean; ratchet baseline pruned (`feedback-board` removed)
+- Validation evidence: guards assert the `readErr` capture, the `[]`-not-loop behavior, and the retry wiring
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-17 §3e sub-slice by agent-05; A-17 ownership stays with agent-04)
+
 ### PLA-0795 - Family Missions showed a parent "All caught up! 🎉" when the approval queue read failed (A-07 §3e slice)
 
 - Timestamp: 2026-07-17 23:21 UTC
