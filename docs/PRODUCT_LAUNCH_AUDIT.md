@@ -6,6 +6,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0836 - Contact page: "Share an idea or request" gates logged-out visitors through login → /feedback
+
+- Issue ID: PLA-0836
+- Discovery timestamp: 2026-07-18 18:05 UTC · Resolution timestamp: 2026-07-18 18:08 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request**
+- Service: Public marketing — Contact
+- Feature: "Feedback is a gift" CTA
+- Route: `/contact` → `/login?redirect=/feedback` (logged-out) / `/feedback` (logged-in)
+- Affected files: `app/(marketing)/contact/page.tsx`, `tests/contact-feedback-cta-auth-gate.test.ts` (new)
+- Role: public (logged-out) + authenticated
+- Scenario: a logged-out visitor clicks "Share an idea or request" on `/contact`.
+- Severity: **LOW** (UX/consistency — the auth gate already worked; this unifies the CTA label).
+- Expected: the primary CTA reads "Share an idea or request" in both states; logged-out visitors are prompted to log in first and then land on `/feedback`.
+- Actual (before): the logged-out CTA was labelled "Log in to send an idea" (different label), though it already routed to `/login?redirect=/feedback`.
+- Root cause: n/a (label/consistency refinement of an existing, working gate).
+- Resolution: the logged-out branch now shows the **same** primary CTA — "Share an idea or request" (Gift icon, filled brand style) — linking to `/login?redirect=%2Ffeedback`, with a one-line "You’ll sign in first, then land right on the idea board." affordance so the login step isn't a surprise. The login form already honours `?redirect=` (`components/auth/login-form.tsx:28–53` → `router.push(redirectDest)`), so after auth the visitor lands on `/feedback`. Logged-in visitors still go straight to `/feedback`. Removed the now-unused `ArrowRight` import.
+- Supabase impact: none. Security/Privacy/Accessibility/Performance impact: none (uses the existing `safeInternalRedirect`-validated redirect param).
+- Tests added: `tests/contact-feedback-cta-auth-gate.test.ts` (3 — CTA branches on `loggedIn`; logged-out routes to `login?redirect=/feedback` with the unified label; logged-in goes to `/feedback`).
+- Tests run: 3 new (green); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment) · Integration commit: pushed to `main` · Status: Verified
+- Remaining dependencies: none.
+
 ### PLA-0835 - Competitive gap closed: "Fridge Chef" (fridge photo → allergy-aware recipes → grocery)
 
 - Issue ID: PLA-0835

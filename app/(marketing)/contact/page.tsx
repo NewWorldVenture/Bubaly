@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
-import { Mail, MessageCircle, Shield, Gift, Sparkles, ArrowRight } from 'lucide-react';
+import { Mail, MessageCircle, Shield, Gift, Sparkles } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { ContactForm } from '@/components/marketing/contact-form';
 import { getUser } from '@/lib/supabase/auth';
@@ -69,12 +69,16 @@ export default async function ContactPage() {
                   drop your enhancement requests straight into our roadmap — every gift gets unwrapped, and the best
                   ones shape what we build next.
                 </p>
+                {/* Same primary CTA as the logged-in state, but gated: logged-out
+                    visitors are sent to log in first and returned to /feedback
+                    afterwards (login-form honours ?redirect=). */}
                 <Link
                   href="/login?redirect=%2Ffeedback"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand-text transition hover:bg-brand/15"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90"
                 >
-                  Log in to send an idea <ArrowRight className="h-4 w-4" />
+                  <Gift className="h-4 w-4" /> Share an idea or request
                 </Link>
+                <p className="mt-2 text-xs text-muted">You’ll sign in first, then land right on the idea board.</p>
               </>
             )}
           </div>
