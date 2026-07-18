@@ -116,12 +116,12 @@ export function TripMemoriesModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={BookHeart} title="No memories yet" description="Capture moments from your trips â€” a photo, a note, a place you loved." />
+        <EmptyState icon={BookHeart} title="No memories yet" description="Capture moments from your trips — a photo, a note, a place you loved." />
       ) : groups.map((g) => (
         <div key={g.vacationId || 'general'}>
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
             {g.vacationId ? <><Plane className="h-3.5 w-3.5 text-brand-text" /> {vacName(g.vacationId)}</> : 'Other memories'}
-            <span className="text-xs font-normal text-muted">Â· {g.memories.length}</span>
+            <span className="text-xs font-normal text-muted">· {g.memories.length}</span>
           </h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {g.memories.map((m) => {
@@ -141,7 +141,7 @@ export function TripMemoriesModule() {
                       <button onClick={() => remove(m)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
-                      {fmtDate(m.memory_date)}{m.location ? <> Â· <MapPin className="inline h-3 w-3" /> {m.location}</> : ''}{mem ? ` Â· ${mem.display_name}` : ''}
+                      {fmtDate(m.memory_date)}{m.location ? <> · <MapPin className="inline h-3 w-3" /> {m.location}</> : ''}{mem ? ` · ${mem.display_name}` : ''}
                     </p>
                     {m.note && <p className="mt-1 text-sm text-fg/90">{m.note}</p>}
                   </div>
@@ -162,15 +162,15 @@ export function TripMemoriesModule() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               {(vacations ?? []).length > 0 && (
-                <Field label="Trip">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">â€” None â€”</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
+                <Field label="Trip">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">— None —</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
               )}
-              <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">â€” None â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">— None —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="What made this special?" />}</Field>
             <Field label="Photo (optional)">
               {(id) => <input id={id} type="file" accept="image/*" onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
-                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(`â€œ${f.name}â€ is too large (max ${DOCUMENT_MAX_MB} MB).`); e.target.value = ''; return; }
+                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`); e.target.value = ''; return; }
                 setForm({ ...form, file: f });
               }} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
             </Field>

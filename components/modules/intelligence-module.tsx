@@ -1,6 +1,6 @@
 'use client';
 
-// Family Intelligence Network â€” the opt-in privacy surface. Ships the CONSENT
+// Family Intelligence Network — the opt-in privacy surface. Ships the CONSENT
 // controls (default off, granular, revocable) + an honest, k-anonymity-gated
 // insight area. No cross-family data is aggregated yet, so the insight list is
 // empty by design until that pipeline is built and signed off; the empty state
@@ -57,7 +57,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
     }, { onConflict: 'family_id' });
     setSaving(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success(next.enabled ? 'Preferences saved' : 'Left the network â€” nothing is shared');
+    success(next.enabled ? 'Preferences saved' : 'Left the network — nothing is shared');
   }
 
   const toggleMaster = () => persist({ enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes });
@@ -69,7 +69,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Intelligence Network" description="Opt in to learn from anonymized patterns across similar families â€” or stay fully private. Your choice, always reversible." />
+      <PageHeader title="Intelligence Network" description="Opt in to learn from anonymized patterns across similar families — or stay fully private. Your choice, always reversible." />
 
       {/* Privacy promise */}
       <div className="rounded-xl border border-border bg-card p-4">
@@ -79,9 +79,9 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
         </div>
         <ul className="grid gap-2 text-sm text-muted sm:grid-cols-2">
           <li className="flex items-start gap-2"><Lock className="mt-0.5 size-4 shrink-0" /> Off by default. Nothing is shared unless you turn it on.</li>
-          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> Only aggregate patterns from at least {K_ANONYMITY_FLOOR} families â€” never an individual.</li>
+          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> Only aggregate patterns from at least {K_ANONYMITY_FLOOR} families — never an individual.</li>
           <li className="flex items-start gap-2"><Info className="mt-0.5 size-4 shrink-0" /> Granular: pick exactly what you contribute.</li>
-          <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> Reversible anytime â€” leaving stops all sharing immediately.</li>
+          <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> Reversible anytime — leaving stops all sharing immediately.</li>
         </ul>
       </div>
 
@@ -90,10 +90,10 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-1 flex items-center gap-2">
             <Info className="size-5 text-brand-text" />
-            <h3 className="font-semibold">What youâ€™d contribute</h3>
+            <h3 className="font-semibold">What you’d contribute</h3>
           </div>
           <p className="mb-3 text-sm text-muted">
-            Only these coarse, anonymized bands â€” never names, exact ages, or precise counts. Shown
+            Only these coarse, anonymized bands — never names, exact ages, or precise counts. Shown
             here from your own data so you can decide with your eyes open. Nothing is shared unless you join.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div>
           <h3 className="font-semibold">Join the Intelligence Network</h3>
-          <p className="text-sm text-muted">{contributing ? 'Youâ€™re contributing anonymized patterns and can see network insights.' : 'Currently private â€” youâ€™re not sharing or receiving anything.'}</p>
+          <p className="text-sm text-muted">{contributing ? 'You’re contributing anonymized patterns and can see network insights.' : 'Currently private — you’re not sharing or receiving anything.'}</p>
         </div>
         <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label="Join the network" />
       </div>
@@ -138,7 +138,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
             <p className="text-sm text-muted">
               No insights for families like yours yet. A pattern appears here only once it&apos;s backed
               by at least {K_ANONYMITY_FLOOR} similar families (and the network as a whole is large
-              enough) â€” so nothing can ever be traced back to one household. Check back as more families join.
+              enough) — so nothing can ever be traced back to one household. Check back as more families join.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -146,7 +146,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
                 <li key={i.id} className="rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{i.title}</span>
-                    <span className="text-[10px] uppercase text-muted">{i.confidence} Â· {i.cohortSize} families</span>
+                    <span className="text-[10px] uppercase text-muted">{i.confidence} · {i.cohortSize} families</span>
                   </div>
                   <p className="text-sm text-muted">{i.detail}</p>
                 </li>

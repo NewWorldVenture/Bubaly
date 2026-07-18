@@ -104,7 +104,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
           <ul className="space-y-1 text-sm">
             {followUps.slice(0, 4).map((v) => {
               const d = daysUntilFollowUp(v)!;
-              return <li key={v.id} className="flex items-center gap-2"><span className="font-medium">{v.title}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} Â· {fmtDate(v.follow_up_date!)}</span></li>;
+              return <li key={v.id} className="flex items-center gap-2"><span className="font-medium">{v.title}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} · {fmtDate(v.follow_up_date!)}</span></li>;
             })}
           </ul>
         </div>
@@ -130,7 +130,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                       <p className="truncate font-semibold">{v.title}</p>
                       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">{meta.label}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted">{fmtDate(v.visit_date)}{v.provider_name ? ` Â· ${v.provider_name}` : ''}{who ? ` Â· ${who.display_name}` : ''}</p>
+                    <p className="mt-0.5 text-xs text-muted">{fmtDate(v.visit_date)}{v.provider_name ? ` · ${v.provider_name}` : ''}{who ? ` · ${who.display_name}` : ''}</p>
                     {v.reason && <p className="mt-1 text-sm">{v.reason}</p>}
                     {v.outcome && <p className="mt-1 text-sm text-muted">{v.outcome}</p>}
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
@@ -164,7 +164,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               )}
               <Field label="Family member">{(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">â€” Select â€”</option>
+                  <option value="">— Select —</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}</Field>

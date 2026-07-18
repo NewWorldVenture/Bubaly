@@ -67,7 +67,7 @@ export default async function LeadScoresPage() {
       return {
         contact_id: s.contact_id, score: s.score, band: s.band,
         factors: Array.isArray(s.factors) ? (s.factors as unknown as ContactScoreFactor[]) : [],
-        name, email: c?.email ?? null, lifecycle: c?.lifecycle_stage ?? 'â€”',
+        name, email: c?.email ?? null, lifecycle: c?.lifecycle_stage ?? '—',
       };
   });
 
@@ -85,7 +85,7 @@ export default async function LeadScoresPage() {
         <div>
           <h1 className="text-xl font-black sm:text-2xl">Lead Scores</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Every contact scored 0â€“100 from the signals we collect â€” site engagement, recency,
+            Every contact scored 0–100 from the signals we collect — site engagement, recency,
             conversions, demo, consent, and profile depth. Each score is fully itemized: expand a
             row to see exactly why.
           </p>

@@ -89,13 +89,13 @@ export function VoiceModule() {
     setRunning(true);
     journey.start();
     const route = classifyVoiceCommand(raw);
-    if (!route.text) { setRunning(false); journey.abandon(); toastError("Didn't catch a command â€” try again."); return; }
+    if (!route.text) { setRunning(false); journey.abandon(); toastError("Didn't catch a command — try again."); return; }
     const sb = createClient();
     try {
       const res = await saveCapture(sb, {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
       });
-      // Log the command to the family's voice history (best-effort â€” a logging
+      // Log the command to the family's voice history (best-effort — a logging
       // failure must not lose the thing we just created).
       await sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
@@ -103,7 +103,7 @@ export function VoiceModule() {
         action_count: res.count, status: 'routed', created_by: userId,
       });
       success(
-        `${describeRoute(route.kind)}${res.count > 1 ? ` Â· ${res.count} items` : ''}`,
+        `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
         { label: 'Undo', onClick: () => {
           undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo'));
         } },
@@ -134,7 +134,7 @@ export function VoiceModule() {
     <div className="mx-auto w-full max-w-2xl">
       <PageHeader
         title="Voice Control"
-        description="Speak a command â€” Bubaly files it as a task, note, event, or shopping item, automatically."
+        description="Speak a command — Bubaly files it as a task, note, event, or shopping item, automatically."
       />
 
       {/* Mic + transcript */}
@@ -152,8 +152,8 @@ export function VoiceModule() {
             {speech.listening ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
           </button>
           <p className="text-sm text-muted">
-            {!speech.supported ? 'Voice input isnâ€™t supported here â€” type your command below.'
-              : speech.listening ? 'Listeningâ€¦ tap to stop.' : 'Tap the mic and speak, or type below.'}
+            {!speech.supported ? 'Voice input isn’t supported here — type your command below.'
+              : speech.listening ? 'Listening… tap to stop.' : 'Tap the mic and speak, or type below.'}
           </p>
           {speech.error && <p className="text-sm text-rose-400">{speech.error}</p>}
         </div>
@@ -176,7 +176,7 @@ export function VoiceModule() {
               return (
                 <span className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium', meta.cls)}>
                   <Icon className="h-3.5 w-3.5" /> {meta.label}
-                  <span className="text-muted">Â· â€œ{preview.text}â€</span>
+                  <span className="text-muted">· “{preview.text}”</span>
                 </span>
               );
             })()}
@@ -228,7 +228,7 @@ export function VoiceModule() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
                     <p className="text-xs text-muted">
-                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` Â· ${c.action_count} items` : ''} Â· {ago(c.created_at)}
+                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} aria-label="Run again" title="Run again"

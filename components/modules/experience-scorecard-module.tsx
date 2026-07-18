@@ -1,6 +1,6 @@
 'use client';
 
-// Experience Scorecard (T8) â€” makes the premium-consistency sweep measurable.
+// Experience Scorecard (T8) — makes the premium-consistency sweep measurable.
 // Reads dated per-surface audits from Supabase (100% wired + realtime), rolls
 // them up via the pure lib/experience/scorecard.ts, and renders the live grade,
 // per-dimension health, the trend since the last audit, and the surfaces still
@@ -72,7 +72,7 @@ export function ExperienceScorecardModule() {
     <div className="space-y-6">
       <PageHeader
         title="Experience Scorecard"
-        description="Premium consistency, measured â€” every surface graded on empty states, error recovery, transitions, performance, accessibility and consistency, tracked over time."
+        description="Premium consistency, measured — every surface graded on empty states, error recovery, transitions, performance, accessibility and consistency, tracked over time."
       />
 
       {card.auditedSurfaces === 0 ? (
@@ -94,7 +94,7 @@ export function ExperienceScorecardModule() {
               <div className="mt-2 flex items-center gap-2 text-xs text-muted">
                 <span>Since last audit:</span> <Delta delta={card.overallDelta} />
               </div>
-              <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} surfaces Â· {card.needsWorkCount} below the bar</p>
+              <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} surfaces · {card.needsWorkCount} below the bar</p>
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-5 md:col-span-2">
@@ -106,7 +106,7 @@ export function ExperienceScorecardModule() {
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted/10">
                       <div className={cn('h-full rounded-full', barTone(d.average))} style={{ width: `${d.average}%` }} />
                     </div>
-                    <span className="w-8 shrink-0 text-right text-xs font-semibold tabular-nums">{d.count ? d.average : 'â€”'}</span>
+                    <span className="w-8 shrink-0 text-right text-xs font-semibold tabular-nums">{d.count ? d.average : '—'}</span>
                   </div>
                 ))}
               </div>
@@ -147,14 +147,14 @@ export function ExperienceScorecardModule() {
                       <span className="ml-2 rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted">{s.category}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={cn('rounded-lg border px-2 py-0.5 text-xs font-bold', GRADE_TONE[s.grade])}>{s.score} Â· {s.grade}</span>
+                      <span className={cn('rounded-lg border px-2 py-0.5 text-xs font-bold', GRADE_TONE[s.grade])}>{s.score} · {s.grade}</span>
                     </td>
                     <td className="px-3 py-2.5"><Delta delta={s.delta} /></td>
                     {DIMENSION_KEYS.map((k: DimensionKey) => {
                       const v = s.dimensions[k];
                       return (
                         <td key={k} className="px-2 py-2.5 text-center tabular-nums">
-                          {typeof v === 'number' ? <span className={cn(v < 70 && 'text-rose-400', v >= 90 && 'text-emerald-400')}>{v}</span> : <span className="text-muted">â€”</span>}
+                          {typeof v === 'number' ? <span className={cn(v < 70 && 'text-rose-400', v >= 90 && 'text-emerald-400')}>{v}</span> : <span className="text-muted">—</span>}
                         </td>
                       );
                     })}

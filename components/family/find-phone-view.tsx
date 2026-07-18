@@ -60,7 +60,7 @@ export function FindPhoneView() {
                     <p className="truncate font-semibold">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">
                       {where ? <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {where}</span> : 'No recent location'}
-                      {loc ? ` Â· ${relTime(loc.updated_at)}` : ''}
+                      {loc ? ` · ${relTime(loc.updated_at)}` : ''}
                     </p>
                   </div>
                   {battery != null && (
@@ -76,7 +76,7 @@ export function FindPhoneView() {
                       <Navigation className="h-3.5 w-3.5" /> Open in Maps
                     </a>
                   ) : (
-                    <span className="text-xs text-muted">{loc?.is_sharing ? 'Waiting for a location updateâ€¦' : 'Location sharing is off for this member.'}</span>
+                    <span className="text-xs text-muted">{loc?.is_sharing ? 'Waiting for a location update…' : 'Location sharing is off for this member.'}</span>
                   )}
                 </div>
               </div>

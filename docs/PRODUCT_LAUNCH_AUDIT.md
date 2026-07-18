@@ -6,6 +6,43 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0812 - Widespread UTF-8 mojibake corrupted user-facing strings across ~79 files
+
+- Issue ID: PLA-0812
+- Discovery timestamp: 2026-07-18 10:12 UTC
+- Resolution timestamp: 2026-07-18 10:19 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-FRONTEND lane)
+- Service: cross-cutting UI — admin, marketing, marketplace, and ~40 feature modules
+- Feature: user-facing copy, labels, emoji, browser-tab titles
+- Route: many (admin/*, marketing/*, marketplace/*, dashboard module surfaces)
+- Affected files: 79 `.ts`/`.tsx` under `app/`, `components/`, `lib/` (see commit diff), plus `tests/no-mojibake-source.test.ts` (new regression guard)
+- Database objects: none
+- Integration: none
+- Role: all roles (visible to every user)
+- Subscription tier: all
+- Household configuration: all
+- Scenario: strings authored/saved through a mis-decoding step were double-encoded (UTF-8 bytes read as CP1252, re-saved as UTF-8), so `—` rendered as `â€"`, `·` as `Â·`, curly quotes as `â€œ`/`â€\x9d`, `→` as `â†’`, `≤` as `â‰¤`, and emoji like 🥞/🛡️ as `ðŸ¥ž`/`ðŸ›¡ï¸`.
+- Severity: **MEDIUM** (pervasive visible-quality defect — garbled copy and broken emoji across admin/marketing/marketplace + core modules; erodes trust, hurts polish on a launch surface).
+- Launch impact: users and admins saw garbage characters throughout the UI (including the browser-tab title "Admin Â· Settings"); not a data/security defect but a broad production-polish blocker.
+- Reproduction steps: `grep -rInP '\xc3\xa2\xe2\x82\xac|\xc3\x82\xc2\xb7|\xc3\xb0\xc5\xb8' app lib components --include='*.tsx'` returned 600+ hits; each rendered as mojibake in the browser.
+- Expected behavior: correct Unicode punctuation/emoji in all copy.
+- Actual behavior: double-encoded mojibake sequences.
+- Root cause: classic UTF-8→CP1252 double-encoding introduced upstream (bad editor/copy-paste/save step) across many files.
+- Resolution: deterministic per-line demojibake — reconstruct original bytes (CP1252 where defined, raw byte for the 5 undefined CP1252 C1 slots 0x81/0x8D/0x8F/0x90/0x9D that appear as U+008x/9x), decode as UTF-8, and accept only when it round-trips cleanly AND strictly reduces mojibake-marker codepoints (so correct lines and genuine non-latin text are never touched). 684 lines across 79 files repaired; 0 residual markers.
+- Supabase impact: none.
+- Security impact: none.
+- Privacy impact: none.
+- Accessibility impact: positive — screen readers no longer announce garbled sequences.
+- Performance impact: none.
+- Tests added: `tests/no-mojibake-source.test.ts` (greps shipped `.ts`/`.tsx` for the double-encoding lead sequences, asserts zero — a regression guard).
+- Tests run: new guard (1) green; full `npx vitest run` **3,673 passed / 1 pre-existing unrelated reasoning-lane failure** (documented under PLA-0807); `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on all 79 changed files; every changed file re-checked control-byte-clean (0).
+- Validation evidence: post-fix `grep`/dry-run reports 0 residual mojibake; spot-checked restored lines (🛡️, 🍽️, ☀️, 🌙, curly quotes, →).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none.
+- Follow-up items: the regression guard now blocks reintroduction; if a future editor/tool re-introduces mojibake the guard test fails.
+
 ### PLA-0811 - Calm inbox hid Supabase and reasoning-context failures as an empty inbox
 
 - Timestamp: 2026-07-18 06:05 America/New_York.

@@ -159,7 +159,7 @@ export function WeekendModule() {
         </button>
         {showSources && (
           <div className="mt-3 space-y-3 border-t border-border pt-3">
-            <p className="text-xs text-muted">Add any reliable local calendar â€” a city events page, library, parks &amp; rec, or school district â€” as an <strong>.ics</strong> or <strong>RSS</strong> link. We crawl them alongside Ticketmaster &amp; SeatGeek and merge everything by day.</p>
+            <p className="text-xs text-muted">Add any reliable local calendar — a city events page, library, parks &amp; rec, or school district — as an <strong>.ics</strong> or <strong>RSS</strong> link. We crawl them alongside Ticketmaster &amp; SeatGeek and merge everything by day.</p>
             {feeds.length > 0 && (
               <ul className="space-y-1.5">
                 {feeds.map((f) => (
@@ -167,7 +167,7 @@ export function WeekendModule() {
                     <input type="checkbox" checked={f.is_active} onChange={() => toggleFeed(f)} className="h-4 w-4 rounded border-border" title="Active" />
                     <span className="font-medium">{f.label}</span>
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
-                    {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `âœ“ ${f.last_count} found` : `âš  ${f.last_status}`}</span>}
+                    {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
                     <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
                     <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
@@ -176,7 +176,7 @@ export function WeekendModule() {
             )}
             <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
               <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder="Name (e.g. City Calendar)" className="h-9" />
-              <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://â€¦/events.ics" className="h-9" />
+              <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
               <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
               <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
             </form>
@@ -195,7 +195,7 @@ export function WeekendModule() {
                 <li key={plan.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface/60 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{categoryMeta(event.category).emoji} {event.title}</p>
-                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} Â· ${fmtTime(event.starts_at)}` : 'Date TBA'}{event.venue_name ? ` Â· ${event.venue_name}` : ''}</p>
+                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} · ${fmtTime(event.starts_at)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <select value={plan.status} onChange={(e) => setStatus(event, e.target.value as WeekendPlanStatus)} className="h-8 rounded-lg border border-border bg-surface px-2 text-xs">
@@ -218,7 +218,7 @@ export function WeekendModule() {
         <div className="space-y-6">
           {grouped.map(([day, dayEvents]) => (
             <div key={day}>
-              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted"><Clock className="h-4 w-4" /> {fmtDay(day)} Â· {dayEvents.length} event{dayEvents.length > 1 ? 's' : ''}</h2>
+              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted"><Clock className="h-4 w-4" /> {fmtDay(day)} · {dayEvents.length} event{dayEvents.length > 1 ? 's' : ''}</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {dayEvents.map((e) => {
                   const cat = categoryMeta(e.category);
@@ -237,11 +237,11 @@ export function WeekendModule() {
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] text-muted">{sourceLabel(e.source)}</span>
                         </div>
                         <p className="line-clamp-2 font-semibold">{e.title}</p>
-                        <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at)}{e.venue_name ? ` Â· ${e.venue_name}` : ''}</p>
+                        <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
                         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
                           {e.distance_miles != null && <span className="flex items-center gap-0.5"><Navigation className="h-3 w-3" /> {e.distance_miles} mi</span>}
-                          {price && <span>Â· {price}</span>}
-                          {e.city && <span>Â· {e.city}{e.region ? `, ${e.region}` : ''}</span>}
+                          {price && <span>· {price}</span>}
+                          {e.city && <span>· {e.city}{e.region ? `, ${e.region}` : ''}</span>}
                         </p>
                         <div className="mt-auto flex items-center gap-2 pt-3">
                           {saved ? (

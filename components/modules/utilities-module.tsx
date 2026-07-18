@@ -107,10 +107,10 @@ export function UtilitiesModule() {
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand-text" /> Savings analysis</h4>
-            <span className="text-xs text-muted">~{usd(savings.summary.annualTotalCents)}/yr {savings.aiUsed ? 'Â· AI' : 'Â· data-based'}</span>
+            <span className="text-xs text-muted">~{usd(savings.summary.annualTotalCents)}/yr {savings.aiUsed ? '· AI' : '· data-based'}</span>
           </div>
           {savings.findings.length === 0 && !savings.recommendations ? (
-            <p className="text-sm text-muted">Your utilities look steady â€” no spikes or sharp increases to flag right now.</p>
+            <p className="text-sm text-muted">Your utilities look steady — no spikes or sharp increases to flag right now.</p>
           ) : (
             <>
               {savings.findings.length > 0 && (
@@ -152,8 +152,8 @@ export function UtilitiesModule() {
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-xl font-bold">{cur ? usd(cur.amount_cents) : 'â€”'}</p>
-                <p className="text-xs text-muted">{cur ? fmtDate(cur.period_month) : ''}{cur?.provider ? ` Â· ${cur.provider}` : ''}</p>
+                <p className="mt-1 text-xl font-bold">{cur ? usd(cur.amount_cents) : '—'}</p>
+                <p className="text-xs text-muted">{cur ? fmtDate(cur.period_month) : ''}{cur?.provider ? ` · ${cur.provider}` : ''}</p>
                 <div className="mt-3 flex h-8 items-end gap-1">
                   {series.slice(-8).map((s) => (
                     <div key={s.period_month} className="flex-1 rounded-sm bg-brand/60" style={{ height: `${(s.amount_cents / max) * 100}%` }} title={`${s.period_month}: ${usd(s.amount_cents)}`} />
@@ -168,7 +168,7 @@ export function UtilitiesModule() {
       <div className="space-y-2">
         {all.slice(0, 30).map((b) => (
           <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3 text-sm">
-            <span>{utilityLabel(b.kind)} Â· <span className="font-medium">{usd(b.amount_cents)}</span> Â· {fmtDate(b.period_month)}{b.usage ? ` Â· ${b.usage}${b.unit ?? ''}` : ''}</span>
+            <span>{utilityLabel(b.kind)} · <span className="font-medium">{usd(b.amount_cents)}</span> · {fmtDate(b.period_month)}{b.usage ? ` · ${b.usage}${b.unit ?? ''}` : ''}</span>
             <button onClick={() => remove(b.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
@@ -187,7 +187,7 @@ export function UtilitiesModule() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Usage (optional)">{(id) => <Input id={id} type="number" step="0.01" value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} />}</Field>
-              <Field label="Unit (kWh, galâ€¦)">{(id) => <Input id={id} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />}</Field>
+              <Field label="Unit (kWh, gal…)">{(id) => <Input id={id} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">

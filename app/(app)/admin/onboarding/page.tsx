@@ -43,7 +43,7 @@ export default async function OnboardingAuditPage() {
 
   const stats = [
     { label: 'Median TTV', value: formatDuration(a.medianTtvSec), icon: Timer, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: `Reached value â‰¤ ${TTV_GOAL_SEC}s`, value: a.under90Rate == null ? 'â€”' : `${a.under90Rate}%`, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: `Reached value ≤ ${TTV_GOAL_SEC}s`, value: a.under90Rate == null ? '—' : `${a.under90Rate}%`, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Completion rate', value: `${a.completionRate}%`, icon: CheckCircle2, tint: 'text-blue-400 bg-blue-500/15' },
     { label: 'Activated (value)', value: `${a.valueEngagedRate}%`, icon: Sparkles, tint: 'text-amber-400 bg-amber-500/15' },
   ];
@@ -56,7 +56,7 @@ export default async function OnboardingAuditPage() {
         <h1 className="text-xl font-black sm:text-2xl">Onboarding Audit</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
           The first-run funnel and time-to-value across {a.total.toLocaleString()} onboarding runs.
-          The goal is <span className="font-semibold text-fg">first value in under {TTV_GOAL_SEC}s</span> â€”
+          The goal is <span className="font-semibold text-fg">first value in under {TTV_GOAL_SEC}s</span> —
           measure it, find where people stall, and trim the friction.
         </p>
       </header>
@@ -80,7 +80,7 @@ export default async function OnboardingAuditPage() {
           <p className="text-sm">
             {goalMet
               ? <><span className="font-bold text-emerald-400">On target.</span> Most completed runs reach value within {TTV_GOAL_SEC}s (p90 {formatDuration(a.p90TtvSec)}).</>
-              : <><span className="font-bold text-amber-400">Below target.</span> {a.under90Rate == null ? 'No completed runs yet.' : `Only ${a.under90Rate}% of completed runs reach value within ${TTV_GOAL_SEC}s`} â€” p90 is {formatDuration(a.p90TtvSec)}. Trim the steps with the biggest drop-off below.</>}
+              : <><span className="font-bold text-amber-400">Below target.</span> {a.under90Rate == null ? 'No completed runs yet.' : `Only ${a.under90Rate}% of completed runs reach value within ${TTV_GOAL_SEC}s`} — p90 is {formatDuration(a.p90TtvSec)}. Trim the steps with the biggest drop-off below.</>}
           </p>
         </Card>
       )}
@@ -100,21 +100,21 @@ export default async function OnboardingAuditPage() {
                     <div className="h-full rounded-full bg-gradient-to-r from-brand to-violet-500" style={{ width: `${(s.count / maxFunnel) * 100}%` }} />
                   </div>
                   <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted">
-                    {s.count.toLocaleString()} Â· {s.pct}%
-                    {i > 0 && drop > 0 && <span className="text-rose-300"> âˆ’{drop}%</span>}
+                    {s.count.toLocaleString()} · {s.pct}%
+                    {i > 0 && drop > 0 && <span className="text-rose-300"> −{drop}%</span>}
                   </span>
                 </div>
               );
             })}
           </div>
-          <p className="mt-3 text-[10px] text-muted">âˆ’% marks the drop-off from the previous step â€” the biggest ones are where to trim.</p>
+          <p className="mt-3 text-[10px] text-muted">−% marks the drop-off from the previous step — the biggest ones are where to trim.</p>
         </Card>
 
         {/* Where runs stall */}
         <Card className="p-5">
           <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Where incomplete runs stall</h2>
           {a.stalls.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No incomplete runs â€” everyone who starts, finishes. ðŸŽ‰</p>
+            <p className="mt-3 text-sm text-muted">No incomplete runs — everyone who starts, finishes. 🎉</p>
           ) : (
             <div className="mt-4 space-y-2.5">
               {a.stalls.map((s) => (

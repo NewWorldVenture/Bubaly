@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 export const metadata: Metadata = { title: 'Workload Balance' };
 export const dynamic = 'force-dynamic';
 
-/** Who is carrying the household â€” mental-load measurement + one-tap rebalance. */
+/** Who is carrying the household — mental-load measurement + one-tap rebalance. */
 export default async function WorkloadPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -29,7 +29,7 @@ export default async function WorkloadPage() {
       .eq('family_id', familyId).order('week_start', { ascending: false }).limit(600),
   ]);
 
-  // Snapshot history for trends â€” degrades safely before migration 0174.
+  // Snapshot history for trends — degrades safely before migration 0174.
   const queries = [membersQ, assignQ, choresQ, todosQ, eventsQ, snapshotsQ];
   const failedQuery = queries.find((query) => query.error);
   if (failedQuery?.error) {

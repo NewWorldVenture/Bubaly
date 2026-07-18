@@ -58,7 +58,7 @@ export default async function AdminReferralsPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Viral referral loop â€” families invite families and both earn a credit on conversion.</p>
+      <p className="text-sm text-muted">Viral referral loop — families invite families and both earn a credit on conversion.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -85,9 +85,9 @@ export default async function AdminReferralsPage() {
                   {rows.slice(0, 25).map((r) => (
                     <tr key={r.id} className="border-t border-border">
                       <td className="py-2 font-mono text-xs">{r.code}</td>
-                      <td className="py-2">{r.referred_email || 'â€”'}</td>
+                      <td className="py-2">{r.referred_email || '—'}</td>
                       <td className="py-2 capitalize">{r.status.replace('_', ' ')}</td>
-                      <td className="py-2 text-right tabular-nums">{(r.status === 'converted' || r.status === 'rewarded') ? fmtMoney(r.referrer_reward_cents) : 'â€”'}</td>
+                      <td className="py-2 text-right tabular-nums">{(r.status === 'converted' || r.status === 'rewarded') ? fmtMoney(r.referrer_reward_cents) : '—'}</td>
                       <td className="py-2 text-right text-muted">{fmtDate(r.created_at)}</td>
                     </tr>
                   ))}

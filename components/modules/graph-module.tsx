@@ -1,6 +1,6 @@
 'use client';
 
-// Family Knowledge Graph â€” the reasoning substrate. Models the household as typed
+// Family Knowledge Graph — the reasoning substrate. Models the household as typed
 // entities linked by typed edges, so the AI (and the family) can reason across
 // relationships: trace how two things connect, and see the blast radius when
 // something changes. 100% Supabase + family-scoped. The heavy lifting lives in the
@@ -93,19 +93,19 @@ export function GraphModule() {
     const res = await projectTwinAction();
     setProjecting(false);
     if (!res.ok) { toastError(res.error ?? 'Could not rebuild the twin'); return; }
-    if (res.entities === 0) { toastError('No family data to project yet â€” add members, teams, etc.'); return; }
-    success(`Twin synced â€” ${res.entities} entities, ${res.edges} links from your data`);
+    if (res.entities === 0) { toastError('No family data to project yet — add members, teams, etc.'); return; }
+    success(`Twin synced — ${res.entities} entities, ${res.edges} links from your data`);
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Knowledge Graph"
-        description="The household modelled as linked, typed relationships â€” so the AI can reason, not just retrieve."
+        description="The household modelled as linked, typed relationships — so the AI can reason, not just retrieve."
         action={
           <>
             <Button onClick={rebuildFromData} disabled={projecting}>
-              <Sparkles className="size-4" /> {projecting ? 'Syncingâ€¦' : 'Rebuild from data'}
+              <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Rebuild from data'}
             </Button>
             <Button variant="secondary" onClick={() => setAddEntity(true)}><Plus className="size-4" /> Entity</Button>
             <Button variant="secondary" onClick={() => setAddEdge(true)} disabled={graph.entities.length < 2}>
@@ -153,7 +153,7 @@ export function GraphModule() {
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
                   <Sparkles className="size-4" /> Household hubs
                 </h3>
-                <p className="mb-2 text-xs text-muted">The most connected things â€” where coordination concentrates.</p>
+                <p className="mb-2 text-xs text-muted">The most connected things — where coordination concentrates.</p>
                 <ul className="space-y-1.5">
                   {topHubs.map((h) => (
                     <li key={h.entity.id} className="flex items-center justify-between text-sm">
@@ -175,12 +175,12 @@ export function GraphModule() {
               </h3>
               <div className="flex flex-wrap items-center gap-2">
                 <Select aria-label="Relationship from entity" value={fromId} onChange={(e) => setFromId(e.target.value)} className="min-w-40 flex-1">
-                  <option value="">Fromâ€¦</option>
+                  <option value="">From…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
                 <ArrowRight className="size-4 text-muted" />
                 <Select aria-label="Relationship to entity" value={toId} onChange={(e) => setToId(e.target.value)} className="min-w-40 flex-1">
-                  <option value="">Toâ€¦</option>
+                  <option value="">To…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
               </div>
@@ -189,7 +189,7 @@ export function GraphModule() {
                   {path ? (
                     <span className="font-mono text-xs leading-relaxed">{describePath(index, path)}</span>
                   ) : (
-                    <span className="text-muted">No relationship path found â€” try linking them.</span>
+                    <span className="text-muted">No relationship path found — try linking them.</span>
                   )}
                 </div>
               )}
@@ -214,7 +214,7 @@ export function GraphModule() {
                         onClick={() => setSelectedId(n.entity.id)}
                         className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted/5"
                       >
-                        <span className="text-muted">{n.direction === 'out' ? n.relation : `â†${n.relation}`} </span>
+                        <span className="text-muted">{n.direction === 'out' ? n.relation : `←${n.relation}`} </span>
                         {n.entity.name}
                       </button>
                     ))}
@@ -222,10 +222,10 @@ export function GraphModule() {
                 )}
 
                 <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                  <Zap className="size-3.5" /> If this changes, it ripples toâ€¦
+                  <Zap className="size-3.5" /> If this changes, it ripples to…
                 </h4>
                 {selectedImpact.length === 0 ? (
-                  <p className="text-sm text-muted">Nothing downstream â€” this is a leaf.</p>
+                  <p className="text-sm text-muted">Nothing downstream — this is a leaf.</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {selectedImpact.map((imp) => (
@@ -275,13 +275,13 @@ function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onReb
       <Network className="mx-auto mb-3 size-8 text-muted" />
       <h3 className="mb-1 text-base font-semibold">Build your family&apos;s graph</h3>
       <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Pull in the people, activities, schools, teams, vehicles and places you already track â€”
+        Pull in the people, activities, schools, teams, vehicles and places you already track —
         or add them by hand. Once relationships are explicit, the AI can trace dependencies and
         predict ripple effects.
       </p>
       <div className="flex justify-center gap-2">
         <Button onClick={onRebuild} disabled={projecting}>
-          <Sparkles className="size-4" /> {projecting ? 'Syncingâ€¦' : 'Build from my family data'}
+          <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Build from my family data'}
         </Button>
         <Button variant="secondary" onClick={onAdd}><Plus className="size-4" /> Add manually</Button>
       </div>
@@ -310,7 +310,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   return (
     <Modal open onClose={onClose} title="Add entity">
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's houseâ€¦" autoFocus />}</Field>
+        <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's house…" autoFocus />}</Field>
         <Field label="Kind">{(id) => (
           <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as EntityKind)}>
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -318,7 +318,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
         )}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Addingâ€¦' : 'Add'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Adding…' : 'Add'}</Button>
         </div>
       </form>
     </Modal>
@@ -337,7 +337,7 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!sourceId || !targetId) { onError('Pick both ends'); return; }
-    if (sourceId === targetId) { onError('An entity canâ€™t link to itself'); return; }
+    if (sourceId === targetId) { onError('An entity can’t link to itself'); return; }
     const rel = relation.trim();
     if (!rel) { onError('Describe the relationship'); return; }
     setSaving(true);
@@ -355,23 +355,23 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
       <form onSubmit={submit} className="space-y-3">
         <Field label="From">{(id) => (
           <Select id={id} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-            <option value="">Chooseâ€¦</option>
+            <option value="">Choose…</option>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </Select>
         )}</Field>
-        <Field label="Relationship">{(id) => <Input id={id} value={relation} onChange={(e) => setRelation(e.target.value)} placeholder="plays, at, coached_by, needs, affectsâ€¦" />}</Field>
+        <Field label="Relationship">{(id) => <Input id={id} value={relation} onChange={(e) => setRelation(e.target.value)} placeholder="plays, at, coached_by, needs, affects…" />}</Field>
         <Field label="To">{(id) => (
           <Select id={id} value={targetId} onChange={(e) => setTargetId(e.target.value)}>
-            <option value="">Chooseâ€¦</option>
+            <option value="">Choose…</option>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </Select>
         )}</Field>
-        <Field label="Strength (0â€“1) â€” how strongly a change propagates">{(id) => (
+        <Field label="Strength (0–1) — how strongly a change propagates">{(id) => (
           <Input id={id} type="number" min="0" max="1" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} />
         )}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Linkingâ€¦' : 'Link'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Linking…' : 'Link'}</Button>
         </div>
       </form>
     </Modal>

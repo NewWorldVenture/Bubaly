@@ -40,9 +40,9 @@ const LIST_COLORS: Record<string, string> = {
   teal:   'bg-teal-500/20 text-teal-400',
 };
 
-const LIST_ICONS = ['ðŸ“‹', 'ðŸ ', 'ðŸ’¼', 'ðŸ›’', 'ðŸŽ¯', 'ðŸ“š', 'ðŸ‹ï¸', 'âœˆï¸', 'ðŸ’¡', 'ðŸŽ‰'];
+const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '✈️', '💡', '🎉'];
 
-// Donut segment palette (explicit hex â€” conic-gradient needs real colors).
+// Donut segment palette (explicit hex — conic-gradient needs real colors).
 const DONUT = {
   overdue:   { label: 'Overdue',       hex: '#f43f5e' },
   today:     { label: 'Due Today',     hex: '#f59e0b' },
@@ -57,7 +57,7 @@ function ymd(d: Date): string {
 function dueLabel(due: string, todayStr: string, tomorrowStr: string): string {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
-  // due is 'YYYY-MM-DD' â€” render without TZ surprises.
+  // due is 'YYYY-MM-DD' — render without TZ surprises.
   const [y, m, d] = due.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -113,7 +113,7 @@ export function TodosModule() {
     completed: completed.length,
   };
 
-  // Tab â†’ base set, then search.
+  // Tab → base set, then search.
   const tabItems = useMemo(() => {
     let res: TodoItem[];
     if (tab === 'completed') res = completed;
@@ -193,7 +193,7 @@ export function TodosModule() {
   async function ensureListId(): Promise<string | null> {
     if (lists.length > 0) return lists[0].id;
     const { data, error } = await createClient().from('todo_lists')
-      .insert({ family_id: familyId, name: 'Tasks', icon: 'ðŸ“‹', color: 'violet', is_shared: true })
+      .insert({ family_id: familyId, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true })
       .select('id').single();
     if (error || !data) { toastError(describeDbError(error)); return null; }
     void refreshLists();
@@ -258,7 +258,7 @@ export function TodosModule() {
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
             {list && <span aria-hidden>{list.icon}</span>}
             <span className="truncate">
-              {assignee ? `${assignee.display_name} Â· ${list?.name ?? 'Tasks'}` : (list?.name ?? 'Tasks')}
+              {assignee ? `${assignee.display_name} · ${list?.name ?? 'Tasks'}` : (list?.name ?? 'Tasks')}
             </span>
           </div>
         </div>
@@ -311,7 +311,7 @@ export function TodosModule() {
       <div className="module-main">
         <PageHeader
           title="Tasks"
-          description="Stay organized and get things doneâ€”together."
+          description="Stay organized and get things done—together."
           action={
             <div className="flex items-center gap-2">
               <AiInsight kind="todos" />
@@ -349,7 +349,7 @@ export function TodosModule() {
           {nothing ? (
             <EmptyState icon={CheckSquare}
               title={tab === 'completed' ? 'No completed tasks' : 'All clear!'}
-              description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet â€” add one to get started.'}
+              description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet — add one to get started.'}
               action={tab !== 'completed' ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> Add Task</Button> : undefined} />
           ) : tab === 'completed' ? (
             <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
@@ -513,7 +513,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
-  const [icon, setIcon] = useState('ðŸ“‹');
+  const [icon, setIcon] = useState('📋');
   const [color, setColor] = useState('violet');
   const [isShared, setIsShared] = useState(true);
 
@@ -542,7 +542,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
     <Modal open onClose={onClose} title="New Category">
       <form onSubmit={create} className="space-y-4">
         <Field label="Name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="School, Shopping, Choresâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="School, Shopping, Chores…" autoFocus />}
         </Field>
         <Field label="Icon">
           {() => (
@@ -628,7 +628,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
           {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus />}
         </Field>
         <Field label="Notes">
-          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional detailsâ€¦" />}
+          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional details…" />}
         </Field>
         <Field label="Category" hint={item ? 'Set when the task is created' : undefined}>
           {(id) => (

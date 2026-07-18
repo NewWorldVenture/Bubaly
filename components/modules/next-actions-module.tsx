@@ -1,6 +1,6 @@
 'use client';
 
-// Predictive Planning â€” "Next Best Actions". Merges the family's upcoming events,
+// Predictive Planning — "Next Best Actions". Merges the family's upcoming events,
 // open tasks, and time-boxed opportunities into ONE prioritized worklist so the
 // answer to "what should we do next?" is a real, ranked, one-tap list. 100%
 // Supabase via useRealtimeQuery; ranking is the pure lib/opportunities/next-actions.
@@ -46,7 +46,7 @@ export function NextActionsModule() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const journey = useJourney('next_actions');
-  // Telemetry: the journey is "land here â†’ clear an action". Starts on mount;
+  // Telemetry: the journey is "land here → clear an action". Starts on mount;
   // completes when the first task is cleared below.
   useEffect(() => {
     journey.start();
@@ -113,7 +113,7 @@ export function NextActionsModule() {
       .update({ is_done: true, completed_at: new Date().toISOString() }).eq('id', taskId);
     if (err) { toastError(describeDbError(err)); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
-    success('Nice â€” one less thing');
+    success('Nice — one less thing');
   }
 
   if (loading) return <SkeletonList count={6} />;
@@ -135,7 +135,7 @@ export function NextActionsModule() {
             <Target className="h-4 w-4 text-brand-text" />
             {needAttention > 0
               ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} attention today. {ranked.length} total in your queue.</span>
-              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming â€” nothing overdue. Nicely ahead.</span>}
+              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming — nothing overdue. Nicely ahead.</span>}
           </div>
 
           <div className="space-y-6">
@@ -147,7 +147,7 @@ export function NextActionsModule() {
                   <h2 className={cn('mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide',
                     urgent ? 'text-rose-300' : 'text-muted')}>
                     {urgent && <AlertCircle className="h-3.5 w-3.5" />}
-                    {BUCKET_LABELS[bucket]} <span className="opacity-60">Â· {items.length}</span>
+                    {BUCKET_LABELS[bucket]} <span className="opacity-60">· {items.length}</span>
                   </h2>
                   <ul className="space-y-2">
                     {items.map((a) => {
@@ -162,7 +162,7 @@ export function NextActionsModule() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-fg">{a.title}</p>
-                            <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} Â· {a.reason}</p>
+                            <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} · {a.reason}</p>
                           </div>
                           {isTask && (
                             <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label="Mark done" title="Mark done"

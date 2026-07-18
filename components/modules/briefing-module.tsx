@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
 import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ScheduleItem { time: string; title: string; member: string; emoji: string; color: string }
 interface Conflict { description: string; suggestion: string }
@@ -49,7 +49,7 @@ type TabType = 'morning' | 'evening' | 'weekly' | 'kitchen';
 type CalEvent = Database['public']['Tables']['calendar_events']['Row'];
 type ReminderRow = Database['public']['Tables']['reminders']['Row'];
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const COLOR_CLASSES: Record<string, string> = {
   blue:    'bg-blue-500/20 text-blue-300 border-blue-500/30',
@@ -76,7 +76,7 @@ const URGENCY_CLASSES = {
 };
 const MEMBER_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4'];
 
-// â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ScoreRing({ score, size = 110 }: { score: number; size?: number }) {
   const r = size * 0.4;
@@ -112,12 +112,12 @@ function CategoryBar({ label, score, icon }: OpsCategory) {
 }
 
 const DOMAIN_META: Record<ConciergeDomain, { emoji: string; label: string; href: string }> = {
-  bill:        { emoji: 'ðŸ’µ', label: 'Bill',        href: '/dashboard/billing' },
-  medication:  { emoji: 'ðŸ’Š', label: 'Medication',  href: '/dashboard/medications' },
-  maintenance: { emoji: 'ðŸ”§', label: 'Maintenance', href: '/dashboard/home' },
-  warranty:    { emoji: 'ðŸ›¡ï¸', label: 'Warranty',    href: '/dashboard/home' },
-  trip:        { emoji: 'âœˆï¸', label: 'Trip',        href: '/dashboard/vacations' },
-  pantry:      { emoji: 'ðŸ¥«', label: 'Pantry',      href: '/dashboard/pantry' },
+  bill:        { emoji: '💵', label: 'Bill',        href: '/dashboard/billing' },
+  medication:  { emoji: '💊', label: 'Medication',  href: '/dashboard/medications' },
+  maintenance: { emoji: '🔧', label: 'Maintenance', href: '/dashboard/home' },
+  warranty:    { emoji: '🛡️', label: 'Warranty',    href: '/dashboard/home' },
+  trip:        { emoji: '✈️', label: 'Trip',        href: '/dashboard/vacations' },
+  pantry:      { emoji: '🥫', label: 'Pantry',      href: '/dashboard/pantry' },
 };
 const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot: string }> = {
   overdue: { label: 'Overdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
@@ -126,7 +126,7 @@ const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot
 };
 
 /**
- * The cross-domain "What needs attention today?" card â€” the heart of the AI
+ * The cross-domain "What needs attention today?" card — the heart of the AI
  * Concierge. Pulls deadline-bearing obligations from every domain (bills, meds,
  * home, warranties, trips, pantry) into one prioritized, deterministic answer.
  */
@@ -195,21 +195,21 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
       <Button onClick={onGenerate} disabled={loading}
         className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-        {loading ? 'Generatingâ€¦' : `Generate ${title}`}
+        {loading ? 'Generating…' : `Generate ${title}`}
       </Button>
-      {loading && <p className="text-muted text-sm mt-4">Analyzing your family data with AIâ€¦</p>}
+      {loading && <p className="text-muted text-sm mt-4">Analyzing your family data with AI…</p>}
     </div>
   );
 }
 
-// â”€â”€â”€ Morning Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Morning Content ──────────────────────────────────────────────────────────
 
 function MorningContent({ data, relationships }: { data: BriefingData; relationships?: React.ReactNode }) {
   const ops = data.operationsScore;
   const stress = ops?.stressLevel ? STRESS_CONFIG[ops.stressLevel] : STRESS_CONFIG.low;
   return (
     <div className="space-y-6">
-      {/* Relationship reasoning (R2 â€” graph-backed) */}
+      {/* Relationship reasoning (R2 — graph-backed) */}
       {relationships}
       {/* Ops Score */}
       {ops && (
@@ -256,7 +256,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
             <Clock className="h-4 w-4 text-blue-400" /> Today&apos;s Schedule
           </h3>
           {data.schedule.length === 0 ? (
-            <p className="text-muted text-sm py-8 text-center">No events scheduled â€” enjoy the open day!</p>
+            <p className="text-muted text-sm py-8 text-center">No events scheduled — enjoy the open day!</p>
           ) : (
             <div className="relative pl-5">
               <div className="absolute left-1.5 top-2 bottom-2 w-px bg-elevated" />
@@ -293,7 +293,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
             <ul className="space-y-2.5">
               {(data.familySummary ?? []).map((item, i) => (
                 <li key={i} className="flex gap-2 text-sm text-fg/80">
-                  <span className="text-violet-400 flex-shrink-0 mt-0.5">â€¢</span>
+                  <span className="text-violet-400 flex-shrink-0 mt-0.5">•</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -307,7 +307,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
               <div className="space-y-2">
                 {data.reminders.map((r, i) => (
                   <div key={i} className={cn('text-xs rounded-lg border px-3 py-2', URGENCY_CLASSES[r.urgency])}>
-                    {r.urgency === 'high' && 'âš ï¸ '}{r.text}
+                    {r.urgency === 'high' && '⚠️ '}{r.text}
                   </div>
                 ))}
               </div>
@@ -339,7 +339,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
       {/* Kids Needs */}
       {data.kidsNeeds.length > 0 && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
-          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">ðŸŽ’ What Kids Need Today</h3>
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🎒 What Kids Need Today</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {data.kidsNeeds.map((kid, i) => (
               <div key={i} className="rounded-xl bg-surface/50 border border-border p-4">
@@ -363,7 +363,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
       {/* Meals */}
       {data.meals.length > 0 && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
-          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">ðŸ½ï¸ Meals</h3>
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🍽️ Meals</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {data.meals.map((meal, i) => (
               <div key={i} className={cn('rounded-xl border p-4', meal.status === 'planned' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-surface/50 border-border')}>
@@ -374,7 +374,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
                 {meal.missing && meal.missing.length > 0 && (
                   <div>
                     <div className="text-xs text-amber-400 mb-1">Need to buy:</div>
-                    {meal.missing.map((m, j) => <div key={j} className="text-xs text-muted">â€¢ {m}</div>)}
+                    {meal.missing.map((m, j) => <div key={j} className="text-xs text-muted">• {m}</div>)}
                   </div>
                 )}
               </div>
@@ -386,7 +386,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
   );
 }
 
-// â”€â”€â”€ Evening Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Evening Content ──────────────────────────────────────────────────────────
 
 function EveningContent({ data, recap }: { data: BriefingData; recap?: React.ReactNode }) {
   return (
@@ -419,7 +419,7 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
             <ul className="space-y-2">
               {(data.outstanding ?? []).map((item, i) => (
                 <li key={i} className={cn('text-sm px-3 py-2 rounded-lg border', URGENCY_CLASSES[item.urgency])}>
-                  âš  {item.text}
+                  ⚠ {item.text}
                 </li>
               ))}
             </ul>
@@ -429,12 +429,12 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
       {data.tomorrowPreview && (
         <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-5">
           <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <ChevronRight className="h-4 w-4" /> Tomorrow Preview â€” {data.tomorrowPreview.events} events
+            <ChevronRight className="h-4 w-4" /> Tomorrow Preview — {data.tomorrowPreview.events} events
           </h3>
           <ul className="space-y-1.5">
             {(data.tomorrowPreview.notes ?? []).map((note, i) => (
               <li key={i} className="text-sm text-fg/80 flex gap-2">
-                <span className="text-indigo-400">â†’</span>{note}
+                <span className="text-indigo-400">→</span>{note}
               </li>
             ))}
           </ul>
@@ -444,7 +444,7 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
   );
 }
 
-// â”€â”€â”€ Weekly Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Weekly Content ───────────────────────────────────────────────────────────
 
 function WeeklyContent({ data }: { data: BriefingData }) {
   return (
@@ -457,7 +457,7 @@ function WeeklyContent({ data }: { data: BriefingData }) {
               <ul className="space-y-1.5">
                 {section.items.map((item, j) => (
                   <li key={j} className="text-sm text-fg/80 flex gap-2">
-                    <span className="text-violet-400 flex-shrink-0">â€¢</span>{item}
+                    <span className="text-violet-400 flex-shrink-0">•</span>{item}
                   </li>
                 ))}
               </ul>
@@ -487,7 +487,7 @@ function WeeklyContent({ data }: { data: BriefingData }) {
   );
 }
 
-// â”€â”€â”€ Kitchen Mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Kitchen Mode ─────────────────────────────────────────────────────────────
 
 function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   onExit: () => void;
@@ -584,7 +584,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
                       <div className="w-px h-12 bg-elevated" />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-fg text-lg leading-tight truncate">{e.title}</div>
-                        {e.location && <div className="text-sm text-muted mt-1">ðŸ“ {e.location}</div>}
+                        {e.location && <div className="text-sm text-muted mt-1">📍 {e.location}</div>}
                       </div>
                     </div>
                   );
@@ -595,7 +595,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
           {urgentReminders.length > 0 && (
             <div className="border-t border-amber-500/20 bg-amber-500/[0.04] px-8 py-5 flex-shrink-0">
-              <h2 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3">âš  Don&apos;t Forget</h2>
+              <h2 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3">⚠ Don&apos;t Forget</h2>
               <div className="flex flex-wrap gap-2">
                 {urgentReminders.map((r, i) => (
                   <span key={i} className="bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-full px-4 py-2 text-sm font-medium">
@@ -611,7 +611,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   );
 }
 
-// â”€â”€â”€ Main Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function BriefingModule({ recap, relationships }: { recap?: React.ReactNode; relationships?: React.ReactNode } = {}) {
   const { familyId, members } = useApp();
@@ -672,7 +672,7 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
   }, [today]);
 
   // Frictionless: once the per-day cache has hydrated, auto-generate the active
-  // tab if it has no briefing yet â€” so opening the briefing just shows it,
+  // tab if it has no briefing yet — so opening the briefing just shows it,
   // instead of asking the user to click "Generate". Guarded so a failure won't
   // loop and tab-switching won't re-fire. Kitchen mode never auto-generates.
   useEffect(() => {
@@ -731,7 +731,7 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
     );
   }
 
-  const greetingEmoji = tab === 'morning' ? 'â˜€ï¸' : tab === 'evening' ? 'ðŸŒ™' : 'ðŸ“…';
+  const greetingEmoji = tab === 'morning' ? '☀️' : tab === 'evening' ? '🌙' : '📅';
 
   return (
     <div className="space-y-6">

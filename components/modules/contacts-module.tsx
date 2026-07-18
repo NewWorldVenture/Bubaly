@@ -118,14 +118,14 @@ export function ContactsModule() {
     <div className="module-page">
       <PageHeader
         title="Family Contacts"
-        description="Your family's people â€” doctors, teachers, coaches, and everyone else who matters."
+        description="Your family's people — doctors, teachers, coaches, and everyone else who matters."
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="contacts" iconOnly />
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search contactsâ€¦"
+                placeholder="Search contacts…"
                 className="w-36 bg-transparent text-sm placeholder:text-muted outline-none sm:w-48" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
@@ -208,7 +208,7 @@ export function ContactsModule() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted">
                         {contact.relationship && <span>{contact.relationship}</span>}
-                        {contact.organization && <span>Â· {contact.organization}</span>}
+                        {contact.organization && <span>· {contact.organization}</span>}
                       </div>
                     </div>
 
@@ -274,7 +274,7 @@ export function ContactsModule() {
                 ); })()}
                 <Link href={`/dashboard/contacts/${selected.id}`}
                   className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
-                  ðŸ•°ï¸ Relationship timeline
+                  🕰️ Relationship timeline
                 </Link>
                 {selected.is_emergency && (
                   <span className="flex items-center gap-1 rounded-lg bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger">
@@ -363,7 +363,7 @@ export function ContactsModule() {
                 </Button>
                 <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm('Delete this contact?')) deleteContact(selected.id); }}>
                   <Trash2 className="h-4 w-4 text-danger" />
-                  <span className="text-danger">{isPending(`delete:${selected.id}`) ? 'Deletingâ€¦' : 'Delete'}</span>
+                  <span className="text-danger">{isPending(`delete:${selected.id}`) ? 'Deleting…' : 'Delete'}</span>
                 </Button>
               </div>
             </div>
@@ -410,7 +410,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
       birthday_month: form.get('birthday_month') ? Number(form.get('birthday_month')) : null,
       birthday_day: form.get('birthday_day') ? Number(form.get('birthday_day')) : null,
     };
-    // â”€â”€ Validation â”€â”€
+    // ── Validation ──
     if (!payload.name) return toastError('Name is required');
     if (payload.name.length > 120) return toastError('Name is too long (max 120 characters)');
     if (payload.email && !isValidEmail(payload.email)) return toastError('Enter a valid email address (e.g. name@example.com)');
@@ -442,7 +442,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="name" defaultValue={contact?.name ?? ''} placeholder="Jane Smith" autoFocus />}
           </Field>
           <Field label="Relationship">
-            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder="Mom's doctor, Emma's teacherâ€¦" />}
+            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder="Mom's doctor, Emma's teacher…" />}
           </Field>
         </div>
 
@@ -479,12 +479,12 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="email" type="email" defaultValue={contact?.email ?? ''} placeholder="jane@example.com" />}
           </Field>
           <Field label="Organization">
-            {(id) => <Input id={id} name="organization" defaultValue={contact?.organization ?? ''} placeholder="Riverside Elementary, Kaiserâ€¦" />}
+            {(id) => <Input id={id} name="organization" defaultValue={contact?.organization ?? ''} placeholder="Riverside Elementary, Kaiser…" />}
           </Field>
         </div>
 
         <Field label="Specialty / Role">
-          {(id) => <Input id={id} name="specialty" defaultValue={contact?.specialty ?? ''} placeholder="Pediatrician, Math teacher, Soccer coachâ€¦" />}
+          {(id) => <Input id={id} name="specialty" defaultValue={contact?.specialty ?? ''} placeholder="Pediatrician, Math teacher, Soccer coach…" />}
         </Field>
 
         <Field label="Address">
@@ -496,7 +496,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
             {(id) => (
               <select id={id} name="birthday_month" defaultValue={contact?.birthday_month ?? ''}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">â€” month â€”</option>
+                <option value="">— month —</option>
                 {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
                   <option key={m} value={i + 1}>{m}</option>
                 ))}
@@ -509,7 +509,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
         </div>
 
         <Field label="Notes">
-          {(id) => <Textarea id={id} name="notes" defaultValue={contact?.notes ?? ''} placeholder="Insurance info, pickup person, special instructionsâ€¦" className="min-h-[80px]" />}
+          {(id) => <Textarea id={id} name="notes" defaultValue={contact?.notes ?? ''} placeholder="Insurance info, pickup person, special instructions…" className="min-h-[80px]" />}
         </Field>
 
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3 hover:bg-elevated/30 transition">

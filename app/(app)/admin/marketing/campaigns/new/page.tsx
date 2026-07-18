@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { createCampaign } from '../../actions';
 
-export const metadata: Metadata = { title: 'Marketing Â· New Campaign', robots: { index: false } };
+export const metadata: Metadata = { title: 'Marketing · New Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 function ReadFailure() {
@@ -32,7 +32,7 @@ export default async function NewCampaignPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">â† Back to campaigns</Link>
+      <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">← Back to campaigns</Link>
       <Card className="mt-3">
         <h2 className="mb-4 text-lg font-bold">New campaign</h2>
         <form action={createCampaign} className="space-y-4 text-sm">

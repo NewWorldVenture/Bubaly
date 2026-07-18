@@ -64,7 +64,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
         <StatPill label="Planned" value={dollars(summary.planned_cents)} />
         <StatPill label="Spent" value={dollars(summary.spent_cents)} />
         <StatPill label="Remaining" value={dollars(summary.remaining_cents)} tone={summary.remaining_cents < 0 ? 'border-rose-500/40' : ''} />
-        <StatPill label="Used" value={`${summary.pct === 999 ? 'âˆž' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
+        <StatPill label="Used" value={`${summary.pct === 999 ? '∞' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
       </div>
 
       {summary.over && (
@@ -91,7 +91,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
                     </span>
                   ) : (
                     <button onClick={() => { setEditing(cat.value); setDraft(planned ? String(planned / 100) : ''); }} className="text-sm text-muted hover:text-brand-text">
-                      {dollars(spent)} / {dollars(planned)} âœŽ
+                      {dollars(spent)} / {dollars(planned)} ✎
                     </button>
                   )}
                 </div>
@@ -112,7 +112,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="font-semibold">{x.description}</p>
-                <p className="mt-0.5 text-xs text-muted">{[lookup(BUDGET_CATEGORIES, x.category).label, fmtDate(x.spent_on), who].filter(Boolean).join(' Â· ')}</p>
+                <p className="mt-0.5 text-xs text-muted">{[lookup(BUDGET_CATEGORIES, x.category).label, fmtDate(x.spent_on), who].filter(Boolean).join(' · ')}</p>
               </div>
               <span className="shrink-0 font-semibold">{dollars(x.amount_cents)}</span>
             </div>

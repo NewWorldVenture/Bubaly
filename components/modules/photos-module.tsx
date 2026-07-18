@@ -74,7 +74,7 @@ export function PhotosModule() {
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // â”€â”€ Upload handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
     const media = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
@@ -131,7 +131,7 @@ export function PhotosModule() {
     setUploadOpen(false);
   }
 
-  // â”€â”€ Drag & drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Drag & drop ───────────────────────────────────────────
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
@@ -181,7 +181,7 @@ export function PhotosModule() {
   const error = albumsError || photosError;
   const refresh = () => { void refreshAlbums(); void refreshPhotos(); };
 
-  // â”€â”€ Album stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Album stats ───────────────────────────────────────────
   const albumStats = albums.map((a) => ({
     ...a,
     count: allPhotos.filter((p) => p.album_id === a.id).length,
@@ -203,7 +203,7 @@ export function PhotosModule() {
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search photosâ€¦"
+                placeholder="Search photos…"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
             <Button variant="outline" size="sm" onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
@@ -382,7 +382,7 @@ export function PhotosModule() {
         </div>
       )}
 
-      {/* â”€â”€ Lightbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
           onClick={() => setLightboxIdx(null)}>
@@ -495,7 +495,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title="New Album">
       <form onSubmit={create} className="space-y-4">
         <Field label="Album name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthdayâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthday…" autoFocus />}
         </Field>
         <Field label="Category">
           {(id) => (
@@ -577,7 +577,7 @@ function UploadModal({ onClose, onUpload, progress }: {
           </div>
         )}
 
-        {/* Live upload progress â€” honest per-file bar so multi-file uploads aren't a blind wait. */}
+        {/* Live upload progress — honest per-file bar so multi-file uploads aren't a blind wait. */}
         {busy && progress && (
           <div aria-live="polite">
             <div className="h-1.5 overflow-hidden rounded-full bg-border"
@@ -597,7 +597,7 @@ function UploadModal({ onClose, onUpload, progress }: {
             onUpload(dt.files);
           }}>
             {busy && progress
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}â€¦</>
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
               : <><Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
           </Button>
         </div>
@@ -614,7 +614,7 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
         <Field label="Caption">
-          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a captionâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a caption…" autoFocus />}
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

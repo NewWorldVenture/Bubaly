@@ -82,14 +82,14 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
                 <p className="text-xs text-muted">{fmtDate(d.forecast_date)}</p>
                 <p className="my-1 text-3xl">{meta.emoji}</p>
                 <p className="text-sm font-medium">{meta.label}</p>
-                <p className="mt-1 text-sm"><span className="font-semibold">{cToF(d.temp_high_c) ?? 'â€”'}Â°</span> <span className="text-muted">/ {cToF(d.temp_low_c) ?? 'â€”'}Â°F</span></p>
-                {d.precip_prob != null && <p className="mt-0.5 text-xs text-blue-300">ðŸ’§ {d.precip_prob}%</p>}
+                <p className="mt-1 text-sm"><span className="font-semibold">{cToF(d.temp_high_c) ?? '—'}°</span> <span className="text-muted">/ {cToF(d.temp_low_c) ?? '—'}°F</span></p>
+                {d.precip_prob != null && <p className="mt-0.5 text-xs text-blue-300">💧 {d.precip_prob}%</p>}
               </div>
             );
           })}
         </div>
       )}
-      {days[0]?.location_label && <p className="text-xs text-muted">Forecast for {days[0].location_label} Â· powered by Open-Meteo</p>}
+      {days[0]?.location_label && <p className="text-xs text-muted">Forecast for {days[0].location_label} · powered by Open-Meteo</p>}
     </div>
   );
 }

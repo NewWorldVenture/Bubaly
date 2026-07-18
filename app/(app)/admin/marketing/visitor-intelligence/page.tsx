@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 type SupabaseAdmin = ReturnType<typeof createServiceClient>;
 
-// Every count is best-effort â€” a table not applied yet degrades to 0, never a crash.
+// Every count is best-effort — a table not applied yet degrades to 0, never a crash.
 async function count(
   admin: SupabaseAdmin,
   build: (q: SupabaseAdmin) => PromiseLike<{ count: number | null; error?: { message: string } | null }>,
@@ -95,7 +95,7 @@ export default async function VisitorIntelligencePage() {
       <header>
         <h1 className="text-xl font-black sm:text-2xl">Visitor Intelligence</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          The privacy-first acquisition funnel end-to-end â€” anonymous visitors becoming identified,
+          The privacy-first acquisition funnel end-to-end — anonymous visitors becoming identified,
           profiled, scored, and engaged. All first-party and consent-gated; no fingerprinting.
         </p>
       </header>
@@ -114,7 +114,7 @@ export default async function VisitorIntelligencePage() {
                     <span className="text-sm font-semibold">{s.label}</span>
                     <span className="text-xs text-muted">
                       <span className="font-bold tabular-nums text-fg">{s.count.toLocaleString()}</span>
-                      {' Â· '}{s.pctOfTop}% of visitors{s.key !== 'visitors' && <> Â· {s.pctOfPrev}% step</>}
+                      {' · '}{s.pctOfTop}% of visitors{s.key !== 'visitors' && <> · {s.pctOfPrev}% step</>}
                     </span>
                   </div>
                   <div className="mt-1 h-2 overflow-hidden rounded-full bg-border">
@@ -132,7 +132,7 @@ export default async function VisitorIntelligencePage() {
         <Card className="p-5">
           <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Lead score bands</h2>
           {bandTotal === 0 ? (
-            <p className="mt-3 text-sm text-muted">No scored contacts yet â€” run Recompute on Lead Scores.</p>
+            <p className="mt-3 text-sm text-muted">No scored contacts yet — run Recompute on Lead Scores.</p>
           ) : (
             <div className="mt-4 space-y-2.5">
               {bands.map(({ band, n }) => (
@@ -143,7 +143,7 @@ export default async function VisitorIntelligencePage() {
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-border">
                     <div className="h-full rounded-full bg-brand" style={{ width: `${pct(n, bandTotal)}%` }} />
                   </div>
-                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">{n.toLocaleString()} Â· {pct(n, bandTotal)}%</span>
+                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">{n.toLocaleString()} · {pct(n, bandTotal)}%</span>
                 </div>
               ))}
             </div>

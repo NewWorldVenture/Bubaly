@@ -1,12 +1,12 @@
 'use client';
 
-// Child wallet detail â€” world-class financial dashboard for one child.
-// â€¢ Smart Split donut (CSS conic-gradient) showing actual bucket allocation
-// â€¢ Clear card-status preview when no payment card has been issued
-// â€¢ AI Money Coach: inline coaching card
-// â€¢ Quick actions: Add Funds, Request to Spend, Send to Sibling
-// â€¢ Goals with animated progress bars + date forecast
-// â€¢ Activity feed grouped by day with bucket-kind icons
+// Child wallet detail — world-class financial dashboard for one child.
+// • Smart Split donut (CSS conic-gradient) showing actual bucket allocation
+// • Clear card-status preview when no payment card has been issued
+// • AI Money Coach: inline coaching card
+// • Quick actions: Add Funds, Request to Spend, Send to Sibling
+// • Goals with animated progress bars + date forecast
+// • Activity feed grouped by day with bucket-kind icons
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,7 +29,7 @@ import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementF
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Goal = {
   id: string; title: string; target_cents: number; saved_cents: number;
@@ -47,7 +47,7 @@ type Child = {
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
-// â”€â”€â”€ Bucket metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Bucket metadata ──────────────────────────────────────────────────────────
 
 const BUCKET_META: Record<string, { label: string; icon: typeof PiggyBank; color: string; ring: string; bg: string }> = {
   spend: { label: 'Spend', icon: ShoppingBag, color: 'text-sky-500', ring: '#38bdf8', bg: 'bg-sky-500/10' },
@@ -58,7 +58,7 @@ const BUCKET_META: Record<string, { label: string; icon: typeof PiggyBank; color
 
 const BUCKET_KINDS: BucketKind[] = ['spend', 'save', 'give', 'invest'];
 
-// â”€â”€â”€ Smart Split Donut â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Smart Split Donut ────────────────────────────────────────────────────────
 
 function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, number>; total: number }) {
   if (total <= 0) {
@@ -114,7 +114,7 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
               <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: m.ring }} />
               <span className="text-xs text-muted">{m.label}</span>
               <span className="text-xs font-semibold">{Math.round(pct * 100)}%</span>
-              <span className="text-xs text-muted">Â· {formatCents(amount)}</span>
+              <span className="text-xs text-muted">· {formatCents(amount)}</span>
             </div>
           );
         })}
@@ -123,7 +123,7 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
   );
 }
 
-// â”€â”€â”€ Card status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Card status ──────────────────────────────────────────────────────────────
 
 function SpendingCardPreview({ child }: { child: Child }) {
   const spendable = child.buckets.spend ?? 0;
@@ -160,7 +160,7 @@ function SpendingCardPreview({ child }: { child: Child }) {
         <div>
           <p className="text-[10px] uppercase tracking-widest text-muted">Card setup</p>
           <Link href="/wallet/cards" className="text-xs font-semibold text-brand-text underline-offset-2 transition hover:underline">
-            Open card setup â†’
+            Open card setup →
           </Link>
         </div>
         <p className="text-right text-[10px] font-semibold uppercase tracking-widest text-muted">Ledger only</p>
@@ -169,7 +169,7 @@ function SpendingCardPreview({ child }: { child: Child }) {
   );
 }
 
-// â”€â”€â”€ AI Money Coach card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AI Money Coach card ──────────────────────────────────────────────────────
 
 function AICoachCard({ childId }: { childId: string }) {
   const { error: toastError } = useToast();
@@ -209,7 +209,7 @@ function AICoachCard({ childId }: { childId: string }) {
           )}
         </div>
         <div>
-          <p className="text-sm font-semibold text-brand-text">{loading ? 'Thinkingâ€¦' : 'Ask AI Money Coach'}</p>
+          <p className="text-sm font-semibold text-brand-text">{loading ? 'Thinking…' : 'Ask AI Money Coach'}</p>
           <p className="text-xs text-muted">Get personalised insights for this wallet</p>
         </div>
         {!loading && <ChevronRight className="ml-auto h-4 w-4 text-muted" />}
@@ -253,7 +253,7 @@ function AICoachCard({ childId }: { childId: string }) {
   );
 }
 
-// â”€â”€â”€ Goal progress card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Goal progress card ───────────────────────────────────────────────────────
 
 function GoalCard({ goal }: { goal: Goal }) {
   const pct = Math.round(goalProgress(goal.saved_cents, goal.target_cents) * 100);
@@ -267,13 +267,13 @@ function GoalCard({ goal }: { goal: Goal }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">
-            {reached ? 'ðŸŽ‰ ' : ''}{goal.title}
+            {reached ? '🎉 ' : ''}{goal.title}
           </p>
           <p className="mt-0.5 text-xs text-muted">
             {formatCents(goal.saved_cents)} of {formatCents(goal.target_cents)}
             {daysLeft != null && !reached && (
               <span className={cn('ml-1', daysLeft < 14 ? 'text-amber-500' : '')}>
-                Â· {daysLeft > 0 ? `${daysLeft}d left` : 'overdue'}
+                · {daysLeft > 0 ? `${daysLeft}d left` : 'overdue'}
               </span>
             )}
           </p>
@@ -292,7 +292,7 @@ function GoalCard({ goal }: { goal: Goal }) {
   );
 }
 
-// â”€â”€â”€ Activity feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Activity feed ────────────────────────────────────────────────────────────
 
 const TXN_TYPE_ICON: Record<string, typeof ArrowDownLeft> = {
   gift_received: ArrowDownLeft,
@@ -342,9 +342,9 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
           {tx.description || txnTypeLabel(tx.type)}
         </p>
         <p className="flex items-center gap-1 text-[11px] text-muted">
-          {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} Â· </span>}
-          {txnTypeLabel(tx.type)} Â· {fmtRelative(tx.created_at)}
-          {isPending && <span className="text-amber-500"> Â· Pending approval</span>}
+          {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} · </span>}
+          {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
+          {isPending && <span className="text-amber-500"> · Pending approval</span>}
           {trustLabel && <span className="ml-1 rounded bg-border/60 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">{trustLabel}</span>}
         </p>
       </div>
@@ -352,13 +352,13 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
         isPending ? 'text-amber-500' :
         credit ? 'text-emerald-400' : 'text-rose-400',
       )}>
-        {isPending ? '' : (credit ? '+' : 'âˆ’')}{formatCents(Math.abs(signed))}
+        {isPending ? '' : (credit ? '+' : '−')}{formatCents(Math.abs(signed))}
       </span>
     </div>
   );
 }
 
-// â”€â”€â”€ Request to Spend modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Request to Spend modal ───────────────────────────────────────────────────
 
 function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => void }) {
   const router = useRouter();
@@ -377,13 +377,13 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not submit request');
-    success(res.pendingApproval ? 'Sent to a parent for approval' : 'Approved â€” enjoy!');
+    success(res.pendingApproval ? 'Sent to a parent for approval' : 'Approved — enjoy!');
     onClose();
     router.refresh();
   }
 
   return (
-    <Modal open onClose={onClose} title={`Request to spend â€” ${child.name}`}>
+    <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {formatCents(spendable)} available in Spend.
@@ -414,7 +414,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   );
 }
 
-// â”€â”€â”€ Send to Sibling modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Send to Sibling modal ────────────────────────────────────────────────────
 
 function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblings: Sibling[]; onClose: () => void }) {
   const router = useRouter();
@@ -469,7 +469,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   );
 }
 
-// â”€â”€â”€ Add Funds modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Add Funds modal ──────────────────────────────────────────────────────────
 
 function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }) {
   const router = useRouter();
@@ -491,7 +491,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   }
 
   return (
-    <Modal open onClose={onClose} title={`Add funds â€” ${child.name}`}>
+    <Modal open onClose={onClose} title={`Add funds — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           Split across {child.name}&apos;s buckets: {child.split.spend}% Spend, {child.split.save}% Save,
@@ -520,7 +520,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   );
 }
 
-// â”€â”€â”€ Request Allowance modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Request Allowance modal ──────────────────────────────────────────────────
 
 function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () => void }) {
   const router = useRouter();
@@ -543,7 +543,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   }
 
   return (
-    <Modal open onClose={onClose} title={`Request allowance â€” ${child.name}`}>
+    <Modal open onClose={onClose} title={`Request allowance — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           A parent will see your request and can add funds directly to your wallet.
@@ -563,7 +563,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
           ))}
         </div>
         <Field label="Reason (optional)">
-          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra choresâ€¦" maxLength={120} />}
+          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra chores…" maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
@@ -574,7 +574,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   );
 }
 
-// â”€â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 export function ChildDetailView({
   child, goals, history, canManage, siblings,
@@ -617,7 +617,7 @@ export function ChildDetailView({
         <ArrowLeft className="h-4 w-4" /> All wallets
       </Link>
 
-      {/* â”€â”€ Hero header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Hero header ──────────────────────────────────────────────────────── */}
       <div className="rounded-3xl border border-border bg-gradient-to-br from-surface/60 to-bg p-5">
         <div className="flex items-center gap-4">
           <Avatar name={child.name} color={child.color ?? undefined} size={64} className="ring-2 ring-brand/20 ring-offset-2 ring-offset-bg" />
@@ -625,7 +625,7 @@ export function ChildDetailView({
             <p className="text-sm font-semibold text-muted">{child.name}&apos;s Wallet</p>
             <p className="text-4xl font-black tabular-nums">{formatCents(child.total)}</p>
             <p className="mt-0.5 text-xs text-muted">
-              {formatCents(child.buckets.spend ?? 0)} spendable Â· {formatCents(child.buckets.save ?? 0)} saved
+              {formatCents(child.buckets.spend ?? 0)} spendable · {formatCents(child.buckets.save ?? 0)} saved
             </p>
           </div>
         </div>
@@ -661,7 +661,7 @@ export function ChildDetailView({
           )}
         </div>
 
-        {/* Secondary: request allowance (visible to all â€” child or parent can ask) */}
+        {/* Secondary: request allowance (visible to all — child or parent can ask) */}
         <button
           onClick={() => setRequestingAllowance(true)}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 py-2 text-xs font-medium text-muted transition hover:border-brand/40 hover:text-brand-text"
@@ -670,48 +670,48 @@ export function ChildDetailView({
         </button>
       </div>
 
-      {/* â”€â”€ Smart Split donut â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Smart Split donut ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <span className="inline-block h-2 w-2 rounded-full bg-brand" /> Smart Split
           </h2>
-          <Link href="/wallet/settings" className="text-xs font-semibold text-brand-text hover:underline">Edit split â†’</Link>
+          <Link href="/wallet/settings" className="text-xs font-semibold text-brand-text hover:underline">Edit split →</Link>
         </div>
         <SmartSplitDonut buckets={child.buckets} total={child.total} />
 
         {/* Target vs actual note */}
         {child.total > 0 && (
           <p className="mt-3 text-center text-[10px] text-muted">
-            Target: {child.split.spend}% Spend Â· {child.split.save}% Save Â· {child.split.give}% Give Â· {child.split.invest}% Invest
+            Target: {child.split.spend}% Spend · {child.split.save}% Save · {child.split.give}% Give · {child.split.invest}% Invest
           </p>
         )}
       </div>
 
-      {/* â”€â”€ Card status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Card status ───────────────────────────────────────────────────────── */}
       <SpendingCardPreview child={child} />
 
-      {/* â”€â”€ AI Money Coach â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── AI Money Coach ────────────────────────────────────────────────────── */}
       <AICoachCard childId={child.id} />
 
-      {/* â”€â”€ Savings Goals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Savings Goals ─────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <Target className="h-4 w-4 text-amber-500" /> Goals
             {activeGoals.length > 0 && <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-bold text-amber-500">{activeGoals.length}</span>}
           </h2>
-          <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">Manage â†’</Link>
+          <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">Manage →</Link>
         </div>
         {goals.length === 0 ? (
-          <p className="text-sm text-muted">No goals yet. <Link href="/wallet/goals" className="text-brand-text hover:underline">Create one â†’</Link></p>
+          <p className="text-sm text-muted">No goals yet. <Link href="/wallet/goals" className="text-brand-text hover:underline">Create one →</Link></p>
         ) : (
           <div className="space-y-2">
             {activeGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
             {reachedGoals.length > 0 && (
               <details className="group">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted hover:text-brand-text">
-                  {reachedGoals.length} reached goal{reachedGoals.length !== 1 ? 's' : ''} ðŸŽ‰
+                  {reachedGoals.length} reached goal{reachedGoals.length !== 1 ? 's' : ''} 🎉
                 </summary>
                 <div className="mt-1.5 space-y-2">
                   {reachedGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
@@ -722,7 +722,7 @@ export function ChildDetailView({
         )}
       </div>
 
-      {/* â”€â”€ Bucket breakdown strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Bucket breakdown strip ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {BUCKET_KINDS.map((k) => {
           const m = BUCKET_META[k];
@@ -752,7 +752,7 @@ export function ChildDetailView({
         })}
       </div>
 
-      {/* â”€â”€ Activity feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Activity feed ─────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
           <h2 className="flex items-center gap-2 text-sm font-bold">
@@ -764,7 +764,7 @@ export function ChildDetailView({
                 <Download className="h-3.5 w-3.5" /> Statement
               </button>
             )}
-            <Link href="/wallet/activity" className="text-xs font-semibold text-brand-text hover:underline">All activity â†’</Link>
+            <Link href="/wallet/activity" className="text-xs font-semibold text-brand-text hover:underline">All activity →</Link>
           </div>
         </div>
         {history.length === 0 ? (
@@ -793,7 +793,7 @@ export function ChildDetailView({
         )}
       </div>
 
-      {/* â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Modals ───────────────────────────────────────────────────────────── */}
       {adding && <AddFundsModal child={child} onClose={() => setAdding(false)} />}
       {requesting && <RequestSpendModal child={child} onClose={() => setRequesting(false)} />}
       {sending && siblings.length > 0 && <SendToSiblingModal child={child} siblings={siblings} onClose={() => setSending(false)} />}

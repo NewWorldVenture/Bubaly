@@ -61,7 +61,7 @@ export default async function CompetitivePage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Track competitors, find keyword opportunities, and monitor your backlink profile â€” market awareness + SEO authority.</p>
+      <p className="text-sm text-muted">Track competitors, find keyword opportunities, and monitor your backlink profile — market awareness + SEO authority.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -86,7 +86,7 @@ export default async function CompetitivePage() {
             {comps.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
                 <span><span className="font-medium">{c.name}</span>{c.domain && <span className="ml-2 text-xs text-muted">{c.domain}</span>}{c.ranking != null && <span className="ml-2 rounded bg-violet-500/15 px-1.5 py-0.5 text-[11px] text-violet-300">#{c.ranking}</span>}</span>
-                <form action={deleteCompetitorAction.bind(null, c.id)}><button className="text-xs text-muted hover:text-rose-400">âœ•</button></form>
+                <form action={deleteCompetitorAction.bind(null, c.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form>
               </div>
             ))}
           </div>
@@ -112,10 +112,10 @@ export default async function CompetitivePage() {
                   <tr key={k.id} className="border-t border-border">
                     <td className="py-2 font-medium">{k.keyword}</td>
                     <td className="py-2">{k.search_volume.toLocaleString()}</td>
-                    <td className="py-2">{k.difficulty ?? 'â€”'}</td>
+                    <td className="py-2">{k.difficulty ?? '—'}</td>
                     <td className="py-2">{k.our_rank ?? <span className="text-muted">unranked</span>}</td>
                     <td className="py-2"><span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-300">{keywordOpportunity(k)}</span></td>
-                    <td className="py-2 text-right"><form action={deleteKeywordAction.bind(null, k.id)}><button className="text-xs text-muted hover:text-rose-400">âœ•</button></form></td>
+                    <td className="py-2 text-right"><form action={deleteKeywordAction.bind(null, k.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form></td>
                   </tr>
                 ))}
               </tbody>
@@ -138,8 +138,8 @@ export default async function CompetitivePage() {
           <div className="space-y-1.5">
             {links.map((l) => (
               <div key={l.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
-                <span><span className="font-medium">{l.source_domain}</span>{l.target_url && <span className="ml-2 text-xs text-muted">â†’ {l.target_url}</span>}{l.authority != null && <span className="ml-2 text-xs text-muted">DA {l.authority}</span>}<span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${l.status === 'active' ? 'bg-emerald-500/15 text-emerald-300' : l.status === 'toxic' ? 'bg-rose-500/15 text-rose-300' : 'bg-slate-500/15 text-slate-300'}`}>{l.status}</span></span>
-                <form action={deleteBacklinkAction.bind(null, l.id)}><button className="text-xs text-muted hover:text-rose-400">âœ•</button></form>
+                <span><span className="font-medium">{l.source_domain}</span>{l.target_url && <span className="ml-2 text-xs text-muted">→ {l.target_url}</span>}{l.authority != null && <span className="ml-2 text-xs text-muted">DA {l.authority}</span>}<span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${l.status === 'active' ? 'bg-emerald-500/15 text-emerald-300' : l.status === 'toxic' ? 'bg-rose-500/15 text-rose-300' : 'bg-slate-500/15 text-slate-300'}`}>{l.status}</span></span>
+                <form action={deleteBacklinkAction.bind(null, l.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form>
               </div>
             ))}
           </div>

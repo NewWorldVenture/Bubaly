@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Admin Â· Settings', robots: { index: false } };
+export const metadata: Metadata = { title: 'Admin · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 function ReadFailure() {
@@ -19,7 +19,7 @@ function ReadFailure() {
 }
 
 function host(url: string | undefined): string {
-  if (!url) return 'â€”';
+  if (!url) return '—';
   try { return new URL(url).host; } catch { return url; }
 }
 
@@ -46,7 +46,7 @@ export default async function AdminSettingsPage() {
   const system = [
     { label: 'Environment', value: process.env.NODE_ENV ?? 'unknown' },
     { label: 'Supabase project', value: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
-    { label: 'App URL', value: process.env.NEXT_PUBLIC_APP_URL ?? 'â€”' },
+    { label: 'App URL', value: process.env.NEXT_PUBLIC_APP_URL ?? '—' },
     { label: 'Super administrators', value: String(superAdmins ?? 0) },
   ];
 

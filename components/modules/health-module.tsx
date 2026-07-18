@@ -74,13 +74,13 @@ function formatRelativeTime(iso: string) {
 }
 
 const WORKOUT_ICONS: Record<string, string> = {
-  run: 'ðŸƒ', running: 'ðŸƒ', jog: 'ðŸƒ',
-  swim: 'ðŸŠ', swimming: 'ðŸŠ',
-  bike: 'ðŸš´', cycling: 'ðŸš´', biking: 'ðŸš´',
-  walk: 'ðŸš¶', walking: 'ðŸš¶', hike: 'ðŸš¶', hiking: 'ðŸ¥¾',
-  yoga: 'ðŸ§˜', pilates: 'ðŸ§˜',
-  weights: 'ðŸ‹ï¸', lifting: 'ðŸ‹ï¸', gym: 'ðŸ‹ï¸', strength: 'ðŸ‹ï¸',
-  dance: 'ðŸ’ƒ', basketball: 'ðŸ€', soccer: 'âš½', tennis: 'ðŸŽ¾', golf: 'â›³',
+  run: '🏃', running: '🏃', jog: '🏃',
+  swim: '🏊', swimming: '🏊',
+  bike: '🚴', cycling: '🚴', biking: '🚴',
+  walk: '🚶', walking: '🚶', hike: '🚶', hiking: '🥾',
+  yoga: '🧘', pilates: '🧘',
+  weights: '🏋️', lifting: '🏋️', gym: '🏋️', strength: '🏋️',
+  dance: '💃', basketball: '🏀', soccer: '⚽', tennis: '🎾', golf: '⛳',
 };
 
 function workoutIcon(activity: string) {
@@ -88,7 +88,7 @@ function workoutIcon(activity: string) {
   for (const [key, icon] of Object.entries(WORKOUT_ICONS)) {
     if (lower.includes(key)) return icon;
   }
-  return 'ðŸ…';
+  return '🏅';
 }
 
 export function HealthModule() {
@@ -119,7 +119,7 @@ export function HealthModule() {
   const weekAgo = useMemo(() => daysAgo(7), []);
   const todayISO = useMemo(() => todayStart(), []);
 
-  // â”€â”€ Data queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Data queries ──────────────────────────────────────────
   const { data: metrics, loading: metricsLoading, error: metricsError, refresh: refreshMetrics } = useRealtimeQuery<HealthMetric>({
     table: 'health_metrics', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_metrics').select('*').eq('family_id', familyId).gte('recorded_at', weekAgo).order('recorded_at', { ascending: false }),
@@ -167,7 +167,7 @@ export function HealthModule() {
   const error = metricsError || workoutsError || apptError || remError || symptomsError || goalsError;
   const refresh = () => { void refreshMetrics(); void refreshWorkouts(); void refreshAppointments(); void refreshReminders(); void refreshSymptoms(); void refreshGoals(); };
 
-  // â”€â”€ Derived data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Derived data ──────────────────────────────────────────
   const todayMetrics = useMemo(() => metrics.filter((m) => m.recorded_at >= todayISO), [metrics, todayISO]);
 
   const totalStepsToday = useMemo(() => todayMetrics.filter((m) => m.type === 'steps').reduce((s, m) => s + m.value, 0), [todayMetrics]);
@@ -284,7 +284,7 @@ export function HealthModule() {
       }
       if (consecutive >= 3) {
         result.push({
-          icon: 'ðŸ’¡',
+          icon: '💡',
           text: `${m.display_name} has hit their step goal for ${consecutive} days in a row!`,
           color: 'bg-violet-500/15 border-violet-400/20',
         });
@@ -296,7 +296,7 @@ export function HealthModule() {
     const avgThisWeek = thisWeekSleep.length > 0 ? thisWeekSleep.reduce((s, m) => s + m.value, 0) / thisWeekSleep.length : 0;
     if (avgThisWeek >= 8) {
       result.push({
-        icon: 'ðŸ˜´',
+        icon: '😴',
         text: `Family is averaging ${formatSleepHours(avgThisWeek)} of sleep this week. Great rest!`,
         color: 'bg-blue-500/15 border-blue-400/20',
       });
@@ -309,7 +309,7 @@ export function HealthModule() {
       const daysUntil = Math.ceil((new Date(next.starts_at).getTime() - Date.now()) / 86400000);
       if (daysUntil <= 7) {
         result.push({
-          icon: 'âš ï¸',
+          icon: '⚠️',
           text: `${member ? member.display_name + ' has' : 'There is'} a checkup in ${daysUntil} day${daysUntil === 1 ? '' : 's'}: ${next.title}`,
           color: 'bg-orange-500/15 border-orange-400/20',
         });
@@ -320,7 +320,7 @@ export function HealthModule() {
     const todayWater = todayMetrics.filter((m) => m.type === 'water_cups').reduce((s, m) => s + m.value, 0);
     if (todayWater > 0 && todayWater < 8) {
       result.push({
-        icon: 'ðŸ’§',
+        icon: '💧',
         text: `Family has logged ${todayWater} cups of water today. Keep hydrating!`,
         color: 'bg-cyan-500/15 border-cyan-400/20',
       });
@@ -328,7 +328,7 @@ export function HealthModule() {
 
     if (result.length === 0) {
       result.push({
-        icon: 'ðŸ“Š',
+        icon: '📊',
         text: 'Start logging health metrics to see personalized insights for your family.',
         color: 'bg-violet-500/15 border-violet-400/20',
       });
@@ -337,7 +337,7 @@ export function HealthModule() {
     return result;
   }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor]);
 
-  // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── CRUD handlers ──────────────────────────────────────────
   async function saveAppointment() {
     if (!apptForm.title || !apptForm.starts_at) return;
     setSaving(true);
@@ -490,7 +490,7 @@ export function HealthModule() {
   }, [symptoms]);
   const activeSymptomCount = useMemo(() => symptoms.filter((s) => s.status === 'active').length, [symptoms]);
 
-  // â”€â”€ Loading / Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Loading / Error ──────────────────────────────────────
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
@@ -639,8 +639,8 @@ export function HealthModule() {
                         <p className="text-sm font-semibold">{w.activity}</p>
                         <p className="text-xs text-muted">
                           {member?.display_name ?? 'Unknown'}
-                          {w.distance ? ` Â· ${w.distance} mi` : ''}
-                          {w.duration_minutes ? ` Â· ${formatDuration(w.duration_minutes)}` : ''}
+                          {w.distance ? ` · ${w.distance} mi` : ''}
+                          {w.duration_minutes ? ` · ${formatDuration(w.duration_minutes)}` : ''}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
@@ -684,7 +684,7 @@ export function HealthModule() {
             <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> Log symptom</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
-            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time â€” severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
+            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
           ) : (
             <div className="space-y-2.5">
               {sortedSymptoms.slice(0, 12).map((s) => {
@@ -700,9 +700,9 @@ export function HealthModule() {
                       </div>
                       <p className="truncate text-xs text-muted">
                         {member?.display_name ?? 'Unknown'}
-                        {s.body_area ? ` Â· ${s.body_area}` : ''}
-                        {` Â· since ${formatRelativeTime(s.started_at)}`}
-                        {s.notes ? ` Â· ${s.notes}` : ''}
+                        {s.body_area ? ` · ${s.body_area}` : ''}
+                        {` · since ${formatRelativeTime(s.started_at)}`}
+                        {s.notes ? ` · ${s.notes}` : ''}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -719,7 +719,7 @@ export function HealthModule() {
         </div>
       </div>
 
-      {/* â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Health Summary */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -802,7 +802,7 @@ export function HealthModule() {
         </div>
       </aside>
 
-      {/* â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Modals ──────────────────────────────────────────── */}
 
       {/* Add Appointment Modal */}
       <Modal open={apptOpen} title="Add Appointment" onClose={() => setApptOpen(false)}>
@@ -854,7 +854,7 @@ export function HealthModule() {
           <Field label="Family Member">{(id) => <Select id={id} value={symptomForm.member_id} onChange={(e) => setSymptomForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="Symptom">{(id) => <Input id={id} value={symptomForm.symptom} onChange={(e) => setSymptomForm((f) => ({ ...f, symptom: e.target.value }))} placeholder="e.g. Headache, Sore throat, Fever" />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 â€” Mild</option><option value="2">2 â€” Mild</option><option value="3">3 â€” Moderate</option><option value="4">4 â€” Severe</option><option value="5">5 â€” Severe</option></Select>}</Field>
+            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 — Mild</option><option value="2">2 — Mild</option><option value="3">3 — Moderate</option><option value="4">4 — Severe</option><option value="5">5 — Severe</option></Select>}</Field>
             <Field label="Body Area (optional)">{(id) => <Input id={id} value={symptomForm.body_area} onChange={(e) => setSymptomForm((f) => ({ ...f, body_area: e.target.value }))} placeholder="e.g. Head, Stomach" />}</Field>
           </div>
           <Field label="Started (optional)">{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>

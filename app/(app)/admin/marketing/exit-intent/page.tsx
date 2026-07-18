@@ -35,8 +35,8 @@ function matchSummary(m: AudienceMatch): string {
   if (m.paths?.length) p.push(`path: ${m.paths.join('/')}`);
   if (m.countries?.length) p.push(`country: ${m.countries.join('/')}`);
   if (typeof m.returning === 'boolean') p.push(m.returning ? 'returning' : 'new visitor');
-  if (m.minSessions) p.push(`â‰¥${m.minSessions} sessions`);
-  return p.length ? p.join(' Â· ') : 'Everyone';
+  if (m.minSessions) p.push(`≥${m.minSessions} sessions`);
+  return p.length ? p.join(' · ') : 'Everyone';
 }
 
 export default async function ExitIntentPage() {
@@ -129,9 +129,9 @@ export default async function ExitIntentPage() {
                     <Badge tone="neutral">P{o.priority}</Badge>
                     <Badge tone={o.status === 'active' ? 'success' : 'neutral'}>{o.status === 'active' ? 'Active' : 'Paused'}</Badge>
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-fg/80">â€œ{o.headline}â€{o.cta_label ? ` â†’ [${o.cta_label}]` : ''}</p>
+                  <p className="mt-0.5 truncate text-xs text-fg/80">“{o.headline}”{o.cta_label ? ` → [${o.cta_label}]` : ''}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {matchSummary(m)} Â· {trig.mode === 'scroll' ? `scroll ${trig.scrollPercent}%` : 'mouseleave'} Â· {o.impressions} shown Â· {o.conversions} converted ({conversionRate(o.conversions, o.impressions)}%)
+                    {matchSummary(m)} · {trig.mode === 'scroll' ? `scroll ${trig.scrollPercent}%` : 'mouseleave'} · {o.impressions} shown · {o.conversions} converted ({conversionRate(o.conversions, o.impressions)}%)
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -141,7 +141,7 @@ export default async function ExitIntentPage() {
                     </button>
                   </form>
                   <form action={deleteExitIntentAction.bind(null, o.id)}>
-                    <button type="submit" className="text-xs text-muted hover:text-rose-400">âœ•</button>
+                    <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
                   </form>
                 </div>
               </Card>

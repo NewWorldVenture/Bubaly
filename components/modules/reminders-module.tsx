@@ -50,7 +50,7 @@ const PRIORITIES = [
 const RECURRENCES = [
   { id: 'none', label: 'No repeat' },
   { id: 'daily', label: 'Every day' },
-  { id: 'weekdays', label: 'Weekdays (Monâ€“Fri)' },
+  { id: 'weekdays', label: 'Weekdays (Mon–Fri)' },
   { id: 'weekly', label: 'Every week' },
   { id: 'biweekly', label: 'Every 2 weeks' },
   { id: 'monthly', label: 'Every month' },
@@ -77,7 +77,7 @@ function isOverdue(r: Reminder) {
   return new Date(r.remind_at) < new Date();
 }
 
-// â”€â”€ Quick-add reminder templates (common household reminders) â”€â”€
+// ── Quick-add reminder templates (common household reminders) ──
 const AI_SUGGESTIONS = [
   { title: 'Prescription refill', kind: 'medication', priority: 'high', notes: 'Check the pharmacy portal or call ahead.' },
   { title: 'Pay monthly bills', kind: 'bill', priority: 'medium', notes: 'Review credit card, utilities, and insurance.' },
@@ -163,7 +163,7 @@ export function RemindersModule() {
         .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', reminder.id);
       if (error) throw error;
 
-      // Recurring reminder â†’ spawn the next occurrence so it keeps recurring
+      // Recurring reminder → spawn the next occurrence so it keeps recurring
       // (the completed one stays as history, like iOS).
       let recurred = false;
       const next = reminder.remind_at && reminder.recurrence !== 'none'
@@ -183,7 +183,7 @@ export function RemindersModule() {
         if (insErr && isMissingRelationError(insErr)) ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
         recurred = !insErr;
       }
-      success(recurred ? 'Completed âœ“ â€” next one scheduled' : 'Reminder completed âœ“');
+      success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
       void refresh();
     });
   }
@@ -195,7 +195,7 @@ export function RemindersModule() {
       const supabase = createClient();
       const { error } = await supabase.from('family_reminders')
         .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id);
-      // Pre-0100 the subtasks column may not exist yet â€” degrade silently.
+      // Pre-0100 the subtasks column may not exist yet — degrade silently.
       if (error && !isMissingRelationError(error)) throw error;
       void refresh();
     });
@@ -330,7 +330,7 @@ export function RemindersModule() {
           {/* Search */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search remindersâ€¦"
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reminders…"
               className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand/50 sm:w-52" />
             {query && (
               <button onClick={() => setQuery('')} aria-label="Clear search"
@@ -458,7 +458,7 @@ export function RemindersModule() {
                     {reminder.remind_at && (
                       <span className={cn('flex items-center gap-1', overdue && 'text-danger')}>
                         <Clock className="h-3.5 w-3.5" />
-                        {fmtDate(reminder.remind_at, 'MMM d Â· h:mm a')}
+                        {fmtDate(reminder.remind_at, 'MMM d · h:mm a')}
                       </span>
                     )}
                     {reminder.recurrence !== 'none' && (
@@ -507,7 +507,7 @@ export function RemindersModule() {
                     ))}
                   </div>
 
-                  {/* Inline subtasks â€” check off without opening the editor */}
+                  {/* Inline subtasks — check off without opening the editor */}
                   {expanded.has(reminder.id) && (
                     <div className="mt-2 space-y-1 border-l-2 border-border/60 pl-3">
                       {normalizeSubtasks(reminder.subtasks).map((s) => {
@@ -661,10 +661,10 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       list_id: listId || null,
       tags: finalTags,
     };
-    // â”€â”€ Validation â”€â”€
+    // ── Validation ──
     if (!payload.title) return toastError('Title is required');
     if (payload.title.length > 200) return toastError('Title is too long (max 200 characters)');
-    // A brand-new time-based reminder in the past would never fire â€” block it.
+    // A brand-new time-based reminder in the past would never fire — block it.
     const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
     if (!reminder && timeBased && remindAtRaw) {
       if (new Date(remindAtRaw).getTime() < Date.now() - 60_000) {
@@ -685,7 +685,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         : supabase.from('family_reminders').insert(iStrip);
 
       let { error } = await run(fullUpdate, fullInsert);
-      // Forward-compatible: before migration 0100 the new columns don't exist â€”
+      // Forward-compatible: before migration 0100 the new columns don't exist —
       // retry with only the legacy fields so the core reminder still saves (the
       // extra fields light up once 0100 lands).
       if (error && isMissingRelationError(error)) {
@@ -705,7 +705,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     <Modal open onClose={onClose} title={reminder ? 'Edit Reminder' : 'New Reminder'}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Title" required>
-          {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder="Pick up prescription, Pay credit cardâ€¦" autoFocus />}
+          {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder="Pick up prescription, Pay credit card…" autoFocus />}
         </Field>
 
         <Field label="Type">
@@ -751,7 +751,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
 
         {kind === 'location' && (
           <Field label="Location">
-            {(id) => <Input id={id} name="location_name" defaultValue={reminder?.location_name ?? ''} placeholder="Pharmacy, School, Grocery storeâ€¦" />}
+            {(id) => <Input id={id} name="location_name" defaultValue={reminder?.location_name ?? ''} placeholder="Pharmacy, School, Grocery store…" />}
           </Field>
         )}
 
@@ -777,11 +777,11 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </div>
 
         <Field label="Notes">
-          {(id) => <Textarea id={id} name="notes" defaultValue={reminder?.notes ?? ''} placeholder="Additional context or instructionsâ€¦" className="min-h-[80px]" />}
+          {(id) => <Textarea id={id} name="notes" defaultValue={reminder?.notes ?? ''} placeholder="Additional context or instructions…" className="min-h-[80px]" />}
         </Field>
 
         <Field label="URL">
-          {(id) => <Input id={id} name="url" type="url" defaultValue={reminder?.url ?? ''} placeholder="https://â€¦" />}
+          {(id) => <Input id={id} name="url" type="url" defaultValue={reminder?.url ?? ''} placeholder="https://…" />}
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -792,7 +792,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
                 <option value="">No list</option>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                <option value="__new__">ï¼‹ New listâ€¦</option>
+                <option value="__new__">＋ New list…</option>
               </select>
             )}
           </Field>
@@ -838,7 +838,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         {/* Subtasks */}
-        <Field label={`Subtasks${subtasks.length ? ` Â· ${subtaskProgress(subtasks).done}/${subtaskProgress(subtasks).total}` : ''}`}>
+        <Field label={`Subtasks${subtasks.length ? ` · ${subtaskProgress(subtasks).done}/${subtaskProgress(subtasks).total}` : ''}`}>
           {(id) => (
             <div className="space-y-1.5">
               {subtasks.map((s) => (
@@ -875,7 +875,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                 : <div className="grid h-16 w-16 place-items-center rounded-lg border border-dashed border-border text-muted"><ImageIcon className="h-5 w-5" /></div>}
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-elevated">
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                {uploading ? 'Uploadingâ€¦' : imageUrl ? 'Replace' : 'Add Image'}
+                {uploading ? 'Uploading…' : imageUrl ? 'Replace' : 'Add Image'}
                 <input type="file" accept="image/*" className="hidden" disabled={uploading}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadImage(f); }} />
               </label>

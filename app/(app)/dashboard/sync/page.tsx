@@ -103,7 +103,7 @@ export default async function SyncHubPage() {
         </div>
       </div>
 
-      {/* Capability matrix â€” the honest source of truth */}
+      {/* Capability matrix — the honest source of truth */}
       <Card>
         <h2 className="mb-1 text-base font-semibold">What each provider supports</h2>
         <p className="mb-4 text-xs text-muted">
@@ -173,7 +173,7 @@ export default async function SyncHubPage() {
               <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3 text-sm">
                 <RefreshCw className="h-4 w-4 text-muted" />
                 <span className="font-medium">{PROVIDER_LABELS[(r.provider as SyncProvider)] ?? r.provider}</span>
-                <span className="text-xs text-muted">â†“{r.items_imported} â†‘{r.items_exported}{r.conflicts_found ? ` Â· ${r.conflicts_found} conflicts` : ''}</span>
+                <span className="text-xs text-muted">↓{r.items_imported} ↑{r.items_exported}{r.conflicts_found ? ` · ${r.conflicts_found} conflicts` : ''}</span>
                 <Badge tone={r.status === 'succeeded' ? 'success' : r.status === 'failed' ? 'danger' : 'neutral'} className="ml-auto">{r.status}</Badge>
               </div>
             ))}

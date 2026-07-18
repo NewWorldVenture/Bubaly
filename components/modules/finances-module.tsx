@@ -114,7 +114,7 @@ export function FinancesModule() {
   }, [accounts, goals]);
   const netThisMonth = income - expenses;
 
-  // Budget & Spending â€” this month's expenses by category.
+  // Budget & Spending — this month's expenses by category.
   const spendByCat = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of monthTxns) if (t.type === 'expense') map.set(t.category ?? 'Other', (map.get(t.category ?? 'Other') ?? 0) + num(t.amount));
@@ -154,7 +154,7 @@ export function FinancesModule() {
     return rows.slice(0, 6).map((r) => ({ ...r, pct: Math.round((r.amount / total) * 100), bar: Math.round((r.amount / max) * 100) }));
   }, [monthTxns, memberById]);
 
-  // Money tip â€” real: biggest category this month.
+  // Money tip — real: biggest category this month.
   const tip = useMemo(() => {
     if (spendByCat.length === 0) return 'Add a few transactions to unlock spending insights.';
     const top = spendByCat.find((r) => r.category !== 'Other') ?? spendByCat[0];
@@ -200,7 +200,7 @@ export function FinancesModule() {
           }
         />
 
-        {/* Financial Copilot â€” the scheduleâ†”money timeline (deepens the linkage). */}
+        {/* Financial Copilot — the schedule↔money timeline (deepens the linkage). */}
         <Link
           href="/dashboard/money-timeline"
           className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/[0.12] to-transparent p-4 transition hover:border-brand/50"
@@ -210,7 +210,7 @@ export function FinancesModule() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-bold">Financial Copilot</span>
-            <span className="block text-xs text-muted">See bills, goals &amp; your calendar on one money timeline â€” get ahead of heavy weeks.</span>
+            <span className="block text-xs text-muted">See bills, goals &amp; your calendar on one money timeline — get ahead of heavy weeks.</span>
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-brand-text" />
         </Link>
@@ -219,7 +219,7 @@ export function FinancesModule() {
         <div className="rounded-2xl border border-border bg-surface/30 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold">Overview</h2>
-            <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View full report â€º</Link>
+            <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View full report ›</Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {STATS.map((s) => (
@@ -278,7 +278,7 @@ export function FinancesModule() {
                 <div className={cn('h-full rounded-full', budgetPct > 100 ? 'bg-danger' : 'bg-green-500')} style={{ width: `${Math.min(100, budgetPct)}%` }} />
               </div>
               <p className={cn('mt-1 text-xs font-medium', budgetPct > 100 ? 'text-danger' : 'text-green-400')}>
-                {budgetPct > 100 ? 'Over budget' : 'Youâ€™re on track! ðŸŽ‰'}
+                {budgetPct > 100 ? 'Over budget' : 'You’re on track! 🎉'}
               </p>
             </div>
           </div>
@@ -287,7 +287,7 @@ export function FinancesModule() {
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Recent Transactions</h2>
-              <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View all â€º</Link>
+              <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View all ›</Link>
             </div>
             {recent.length === 0 ? <p className="text-xs text-muted">No transactions yet.</p> : (
               <div className="space-y-1">
@@ -300,7 +300,7 @@ export function FinancesModule() {
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-4 w-4" /></span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{t.name}</p>
-                        <p className="truncate text-[11px] text-muted">{t.category ?? 'â€”'}</p>
+                        <p className="truncate text-[11px] text-muted">{t.category ?? '—'}</p>
                       </div>
                       <span className="shrink-0 text-[11px] text-muted">{shortDate(t.date)}</span>
                       <span className={cn('w-20 shrink-0 text-right text-sm font-semibold', inc ? 'text-green-400' : 'text-fg')}>
@@ -321,7 +321,7 @@ export function FinancesModule() {
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-3">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Bills &amp; Reminders</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand-text hover:underline">View calendar â€º</Link>
+              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand-text hover:underline">View calendar ›</Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <BillsCalendar month={calMonth} bills={bills} onPrev={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))} onNext={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))} />
@@ -337,7 +337,7 @@ export function FinancesModule() {
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-4 w-4" /></span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{b.name}</p>
-                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? 'Overdue Â· ' : 'Due '}{shortDate(b.due_date)}</p>
+                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? 'Overdue · ' : 'Due '}{shortDate(b.due_date)}</p>
                           </div>
                           <span className="shrink-0 text-sm font-semibold">{usd(num(b.amount))}</span>
                         </div>
@@ -381,7 +381,7 @@ export function FinancesModule() {
                 ))}
               </div>
             )}
-            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand-text hover:underline">View full breakdown â€º</Link>
+            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand-text hover:underline">View full breakdown ›</Link>
           </div>
         </div>
 
@@ -402,7 +402,7 @@ export function FinancesModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold">Accounts</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all â€º</Link>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
           </div>
           {accounts.length === 0 ? (
             <div className="text-center">
@@ -419,7 +419,7 @@ export function FinancesModule() {
                     <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', ACCOUNT_TINT[a.type] ?? 'bg-elevated text-muted')}><Icon className="h-4 w-4" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{a.name}</p>
-                      {a.last_four && <p className="text-[11px] text-muted">â€¢â€¢â€¢â€¢ {a.last_four}</p>}
+                      {a.last_four && <p className="text-[11px] text-muted">•••• {a.last_four}</p>}
                     </div>
                     <span className={cn('shrink-0 text-sm font-bold', bal < 0 && 'text-danger')}>{usd(bal)}</span>
                   </div>
@@ -433,7 +433,7 @@ export function FinancesModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold">Savings Goals</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all â€º</Link>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
           </div>
           {goals.length === 0 ? <p className="text-xs text-muted">No savings goals yet.</p> : (
             <div className="space-y-3">
@@ -442,7 +442,7 @@ export function FinancesModule() {
                 const pct = Math.min(100, Math.round((cur / tgt) * 100));
                 return (
                   <div key={g.id} className="flex items-center gap-2.5">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevated text-base">{g.emoji ?? 'ðŸŽ¯'}</span>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevated text-base">{g.emoji ?? '🎯'}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
                         <span className="truncate text-xs font-semibold">{g.name}</span>
@@ -557,12 +557,12 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
           <Field label="Type">{(id) => <Select id={id} name="type" defaultValue="expense"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Select id={id} name="category"><option value="">â€”</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+          <Field label="Category">{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
           <Field label="Date">{(id) => <Input id={id} name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Account">{(id) => <Select id={id} name="account_id"><option value="">â€”</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>
-          <Field label="Person">{(id) => <Select id={id} name="member_id" defaultValue={selfId ?? ''}><option value="">â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Account">{(id) => <Select id={id} name="account_id"><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>
+          <Field label="Person">{(id) => <Select id={id} name="member_id" defaultValue={selfId ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

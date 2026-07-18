@@ -131,13 +131,13 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {sortedDays.length === 0 ? (
-        <EmptyState icon={CalendarRange} title="No days planned yet" description="Set trip dates then click â€œBuild days from datesâ€, or add days as you go." />
+        <EmptyState icon={CalendarRange} title="No days planned yet" description="Set trip dates then click “Build days from dates”, or add days as you go." />
       ) : (
         <div className="space-y-4">
           {sortedDays.map((day, i) => (
             <div key={day.id} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold">Day {i + 1} Â· {fmtDate(day.day_date)}</h3>
+                <h3 className="font-semibold">Day {i + 1} · {fmtDate(day.day_date)}</h3>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {DAY_PARTS.map((part) => {
@@ -159,11 +159,11 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                               </span>
                             </div>
                             {(it.start_time || it.location || it.cost_cents != null) && (
-                              <p className="mt-0.5 text-[11px] text-muted">{[it.start_time?.slice(0, 5), it.location, it.cost_cents != null && dollars(it.cost_cents)].filter(Boolean).join(' Â· ')}</p>
+                              <p className="mt-0.5 text-[11px] text-muted">{[it.start_time?.slice(0, 5), it.location, it.cost_cents != null && dollars(it.cost_cents)].filter(Boolean).join(' · ')}</p>
                             )}
                           </li>
                         ))}
-                        {list.length === 0 && <li className="py-1 text-center text-[11px] text-muted">â€”</li>}
+                        {list.length === 0 && <li className="py-1 text-center text-[11px] text-muted">—</li>}
                       </ul>
                     </div>
                   );

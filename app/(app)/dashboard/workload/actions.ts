@@ -25,7 +25,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
     .eq('family_id', ctx.active.familyId)
     .in('status', ['todo', 'in_progress']);
   if (error) return { ok: false, error: error.message };
-  if (!count) return { ok: false, error: 'That chore is no longer open â€” refresh and try again.' };
+  if (!count) return { ok: false, error: 'That chore is no longer open — refresh and try again.' };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
