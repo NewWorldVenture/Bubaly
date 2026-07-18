@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0837 - Fridge Chef made discoverable from the Smart Kitchen quick actions
+
+- Issue ID: PLA-0837
+- Discovery timestamp: 2026-07-18 18:12 UTC · Resolution timestamp: 2026-07-18 18:15 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — follow-up #1 from `docs/COMPETITIVE_ANALYSIS.md`
+- Service: Meals / Smart Kitchen
+- Feature: discoverability of Fridge Chef (PLA-0835)
+- Route: `/dashboard/kitchen` → `/dashboard/fridge-chef`
+- Affected files: `components/modules/kitchen-dashboard.tsx`, `tests/kitchen-fridge-chef-link.test.ts` (new)
+- Role: authenticated family members
+- Scenario: Fridge Chef shipped as a reachable route but had no in-product entry point.
+- Severity: **LOW** (discoverability — a shipped feature users couldn't find).
+- Resolution: added a "Fridge Chef" quick action (Refrigerator icon, already imported) to the Smart Kitchen header row alongside Meal plan and Grocery. The **global app sidebar is intentionally untouched** per the standing navigation rule. Lane note: agent-05's A-05 dashboard claim heartbeat was >90 min stale (last 10:18 UTC), so this one-link edit is permitted under COORDINATION §0/§3 staleness; the kitchen page's existing read-boundary guard still passes.
+- Supabase impact: none. Security/Privacy/Performance impact: none.
+- Tests added: `tests/kitchen-fridge-chef-link.test.ts` (2 — link present; existing Meal plan/Grocery actions preserved).
+- Tests run: 2 new + kitchen read-boundary guard (5 total, green); `tsc --noEmit` clean; eslint clean.
+- Commit: (this increment) · Integration commit: pushed to `main` · Status: Verified
+- Remaining dependencies: none. Remaining competitive follow-ups (inbound-email ingestion; Fridge Chef → meal plan) stay listed in `docs/COMPETITIVE_ANALYSIS.md`.
+
 ### PLA-0836 - Contact page: "Share an idea or request" gates logged-out visitors through login → /feedback
 
 - Issue ID: PLA-0836
