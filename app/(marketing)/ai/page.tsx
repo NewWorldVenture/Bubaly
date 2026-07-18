@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import Link from 'next/link';
 import {
   Sparkles, Calendar, UtensilsCrossed, ShoppingCart, CheckSquare, Bell, PiggyBank,
@@ -10,11 +11,13 @@ import { CTASection } from '@/components/marketing/cta';
 import { Button } from '@/components/ui/button';
 import { AiActionDemo } from '@/components/marketing/ai-showcase';
 
-export const metadata: Metadata = {
-  title: 'Bubaly AI — the assistant that does the work',
-  description:
-    'Bubaly’s AI doesn’t just answer questions — it creates the events, chores, reminders, meal plans, grocery lists, and follow-ups that keep family life running. Ask in plain language; it takes real action inside your family’s data, privately and model-agnostically.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/ai', {
+    title: 'Bubaly AI — the assistant that does the work',
+    description:
+      'Bubaly’s AI doesn’t just answer questions — it creates the events, chores, reminders, meal plans, grocery lists, and follow-ups that keep family life running. Ask in plain language; it takes real action inside your family’s data, privately and model-agnostically.',
+  });
+}
 
 const DIFFERENTIATORS = [
   {

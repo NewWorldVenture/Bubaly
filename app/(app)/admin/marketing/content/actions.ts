@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
+import { deriveArticleAeoQuestions } from '@/lib/marketing/aeo-generate';
 import type { Json } from '@/lib/database.types';
 
 function s(fd: FormData, k: string): string | null {
@@ -83,10 +84,33 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   }).eq('id', id).select('id').maybeSingle();
   if (updateError || !updated) marketingActionFailure('mark the content item as published', updateError ?? new Error('Marketing content item not found.'));
 
+  // Closed loop: auto-generate this post's AEO Knowledge-Center questions so it
+  // becomes a citable answer (its own FAQPage) the moment it's published.
+  try {
+    const aeo = deriveArticleAeoQuestions({
+      slug: payload.slug,
+      title: payload.title,
+      category: payload.category,
+      excerpt: payload.excerpt,
+    });
+    await supabase.from('marketing_aeo_questions').delete().eq('source_path', `/blog/${payload.slug}`).eq('metadata->>seed', 'blog_aeo_v1');
+    await supabase.from('marketing_aeo_questions').insert(
+      aeo.map((q) => ({
+        question: q.question, answer: q.answer, entity: q.entity, source_path: q.source_path,
+        pattern: q.pattern, status: q.status, clarity_score: q.clarity_score,
+        last_reviewed: new Date().toISOString(), metadata: q.metadata as unknown as Json,
+      })),
+    );
+  } catch {
+    /* AEO generation is best-effort — never block a publish on it */
+  }
+
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'publish', resource: 'blog_post', resourceId: payload.slug, metadata: { fromContentItem: id } });
   revalidatePath('/admin/marketing/content');
+  revalidatePath('/admin/marketing/aeo');
   revalidatePath('/blog');
   revalidatePath(`/blog/${payload.slug}`);
+  revalidatePath('/faq');
 }
 
 /** Pull a published post from the public blog without deleting it. */

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { PricingContent } from './pricing-content';
 import { getPublicStats } from '@/lib/marketing/stats';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -6,10 +7,12 @@ import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { FEATURE_CATALOG, FEATURE_SECTIONS } from '@/lib/constants/feature-catalog';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
-export const metadata: Metadata = {
-  title: 'Pricing',
-  description: 'Simple pricing for happier families.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/pricing', {
+    title: 'Pricing',
+    description: 'Simple pricing for happier families.',
+  });
+}
 
 export const dynamic = 'force-dynamic';
 

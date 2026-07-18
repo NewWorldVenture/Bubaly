@@ -2883,3 +2883,13 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: 2 additive migrations (0228 policy+registry, 0229 seed) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
 - **Remaining (owner-visible scope, not claimed done):** the larger spec — 10k+/20k+ keyword & question scale, vector embeddings, AI-citation / AI-Overview analytics (needs external data sources), fully automatic regeneration-on-edit for ALL page types, and DB-driven metadata for every marketing route — are follow-ons that need external APIs/infra beyond this repo. This increment delivers the wired foundation + a real themed dataset + the public↔admin loop for AEO/content.
 - Commit: this push.
+
+### PLA-0795 - Marketing engine: per-post AEO (auto), DB-driven metadata, scaled seed (A-17)
+
+- Timestamp: 2026-07-18 16:55 UTC · Service: A-17 marketing (SEO/AEO/content). Follows PLA-0790.
+- **(1) Per-post AEO, automatic (0230 + `lib/marketing/aeo-generate.ts`):** every published blog post now has its own AEO questions (source_path=/blog/<slug>) — 0230 backfills all existing posts in-DB (2 per post = **1,090**), and the admin publish action (`publishContentToBlogAction`) generates the SAME questions for NEW posts at publish time (best-effort, revalidates /faq + /admin/marketing/aeo). Idempotent (seed tag `blog_aeo_v1`).
+- **(2) DB-driven metadata (0230 policy + `lib/marketing/seo.ts`):** `marketing_seo_pages` active rows are now public-readable; 7 marketing routes (`/features`, `/how-it-works`, `/ai`, `/pricing`, `/mobile`, `/security`, `/contact`) resolve their `<title>`/description from the admin SEO store via `resolveMarketingMetadata(path, fallback)` — the admin console overrides when a row exists, code fallback otherwise. No page can break if the store is empty.
+- **(3) Scaled seed (0229 regenerated):** AEO **754 → 2,344** themed questions (added 16 topics, persona×how_to, alternative comparisons, AI-engine visibility Q&A) and SEO keywords **191 → 1,603** (prefix×base×suffix long-tail matrix). Combined with per-post → **3,434 published AEO questions** total.
+- Verified: PG16 full bootstrap `migration_fail=0` (3434 AEO / 1090 per-post / 1603 keywords / seo-pages public policy present); `tsc` 0; migration-version bumped to 0231. (Build not re-run this pass due to a time constraint — handing off; typecheck clean.)
+- Supabase impact: 0229 (regenerated, idempotent) + 0230 (additive) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
+- Commit: this push.
