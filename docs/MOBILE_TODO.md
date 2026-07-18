@@ -149,10 +149,18 @@ render well; avoid narrow centered phone columns on tablets. Mostly a review pas
   (c) wire the mobile projects into CI — ✅ **DONE**: `run-e2e.mjs` runs all projects with no filter, so the CI `e2e` job (PR + push to main) now executes the mobile matrix as a gate. Running the full matrix needs a
   `next build` + server (~5 min) — kicked once for evidence.
 
-### M-010 (P2) — PWA update UX + offline states (Phases 16/17)
-`app/manifest.ts` + `public/sw.js` exist. Verify: a visible "new version available"
-prompt (no permanently-stale code), offline fallback, no caching of authenticated
-responses, and that long-running requests time out with a retry-safe message.
+### ✅ M-010 (P2) — DONE — PWA update UX + offline states (Phases 16/17)
+- ✅ Visible "new version" prompt: shipped earlier (see MOBILE_PROGRESS M-010 —
+  RegisterSW banner + hourly update poll).
+- ✅ Offline fallback: `/offline` prerendered + SW navigation fallback (kept,
+  guarded).
+- ✅ **No caching of authenticated responses (M-023, `agent-fable-opus`):** the SW
+  was caching EVERY navigation (authed HTML persisted after logout, served
+  offline on shared devices) + precached `/dashboard`. Now public-shell-allowlist
+  only; `bubaly-v4` bump purges the old cache. Guard
+  `tests/mobile-sw-auth-cache.test.ts` (5).
+- Long-running request timeout messaging is app-level fetch error handling,
+  covered by module error states (not SW scope).
 
 ---
 

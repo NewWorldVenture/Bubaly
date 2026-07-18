@@ -19,7 +19,7 @@ Weighting (per the mission brief):
 | Navigation & touch | 10% | 0% | pending |
 | Forms & keyboard | 10% | 0% | pending (inputmode/type audit) |
 | Supabase & backend workflows | 15% | ~2% | marketing read-path + fail-closed already hardened this session; app-wide pending |
-| Auth & security | 10% | 0% | pending |
+| Auth & security | 10% | ~2% | M-023: SW never caches authed HTML (logout-persistence purged via v4) |
 | Performance | 10% | ~1% | SEO/AEO bounded reads landed; app-wide pending |
 | Accessibility | 10% | ~1% | A-05 icon-button a11y done earlier; app-wide pending |
 | Automated testing | 10% | ~1% | guard tests added incrementally |
@@ -480,6 +480,38 @@ Weighting (per the mission brief):
   the change is isolated to that one file — the shell's nav/top-bar/safe-area and the
   shared `Modal` are untouched. Left the launcher's `h-10 w-10` header **trigger** icon
   as-is, since its size is an app-header-density call in agent-05's lane.
+
+### M-023 — SW cached authenticated HTML into Cache Storage (persisted after logout, served offline to anyone on the device) — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P1 privacy, Phases 16/17):** `public/sw.js`'s navigation handler
+  `c.put()` **every** successful page navigation — including authenticated HTML
+  (`/dashboard`, `/wallet`, `/admin`, … full of private family data) — and
+  precached `/dashboard` at install. Cache Storage persists unencrypted **after
+  logout**, and the offline fallback (`caches.match(request)`) would *serve* that
+  cached authenticated page to whoever next opens the app on a shared/family
+  device. Exactly the M-010 checklist item "no caching of authenticated
+  responses".
+- **Fix:** `APP_SHELL = ['/', '/offline']` (dropped `/dashboard`); navigation
+  caching gated to a `CACHEABLE_NAV` public-shell allowlist (everything else is
+  network-only with the `/offline` fallback); cache bumped `bubaly-v3 → v4` so the
+  existing activate-time cleanup **purges any previously cached authed HTML** on
+  update. `/api` + `/auth` remain fully uncached; cross-origin (Supabase storage
+  signed URLs) was already untouched. Offline-page copy updated (no longer claims
+  "recently viewed screens available").
+- **Guard:** `tests/mobile-sw-auth-cache.test.ts` (5) — public-only precache,
+  allowlist-gated navigation put (put must sit inside the gate), version-bump +
+  cleanup purge, /api·/auth untouched, offline fallback kept.
+- **Evidence:** guard green; all prior mobile guards green; `tsc --noEmit` 0;
+  eslint 0; `next build` exit 0 (`/offline` prerendered). Also realigned one stale
+  M-001 assertion to M-017's shipped Tailwind sizing (spaced `calc(100dvh - 140px)`
+  → `h-[calc(100dvh-140px-4rem-var(--safe-bottom))]`) — behaviour unchanged,
+  suite green.
+- **Parallel-bot note:** file-disjoint from agent-05 (modules/app-shell) and
+  agent-02 (overlays): touches only `public/sw.js`, `app/offline/page.tsx`, and
+  tests. Completes the offline/caching-safety half of M-010 (the update-prompt
+  half shipped earlier); remaining M-010 scope — long-running request timeout
+  messaging — is app-level fetch error handling already covered by module error
+  states.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

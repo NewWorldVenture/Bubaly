@@ -1,8 +1,16 @@
 /* Bubaly service worker — app-shell caching for offline-friendly PWA behavior.
    Network-first for navigation/API (always fresh family data when online),
-   cache-first for static assets. */
-const CACHE = 'bubaly-v3';
-const APP_SHELL = ['/', '/dashboard', '/offline'];
+   cache-first for static assets.
+
+   PRIVACY INVARIANT (M-023): authenticated HTML is NEVER written to Cache
+   Storage. Cached pages persist unencrypted after logout and would be served
+   offline to whoever next opens the app on a shared/family device — so only the
+   public app shell below is ever cached for navigations; every other page is
+   network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
+   previous worker cached, via the activate-time cleanup.) */
+const CACHE = 'bubaly-v4';
+const APP_SHELL = ['/', '/offline'];
+const CACHEABLE_NAV = new Set(APP_SHELL);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));
@@ -29,8 +37,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          // Only the public app shell may be cached (see PRIVACY INVARIANT).
+          if (CACHEABLE_NAV.has(url.pathname)) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(request).then((r) => r || caches.match('/offline'))),

@@ -25,9 +25,11 @@ describe('full-height mobile surfaces use dynamic viewport units (dvh)', () => {
   });
 
   it('the concierge panel is sized with dvh, not 100vh', () => {
+    // M-017 moved the inline style (spaced calc) to Tailwind arbitrary values
+    // that also clear the mobile bottom nav — keep asserting dvh (never vh).
     const src = fs.readFileSync(files.concierge, 'utf8');
-    expect(src).toContain('calc(100dvh - 140px)');
-    expect(src).not.toContain('calc(100vh - 140px)');
+    expect(src).toContain('h-[calc(100dvh-140px-4rem-var(--safe-bottom))]');
+    expect(src).not.toMatch(/100vh/);
   });
 
   it('app shells / full-page layouts use min-h-dvh, not min-h-screen', () => {
