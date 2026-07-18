@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Family Assistant Reasoning Read Boundary
+
+- Focused Family Assistant boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run --maxWorkers=2 --minWorkers=1`: 511 test files, 3,271 tests passed with no unhandled worker errors.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Fresh-directory production build: passed and generated 250 routes; generated output required a temporary `distDir` because OneDrive held stale `.next` reparse links; the override was removed after verification.
+- `git diff --check`: passed before commit.
+- Family Assistant now fails visibly when shared reasoning context cannot be read instead of silently omitting relationship guidance.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `ab2d2adc`.
+
 ## Latest Local Evidence - Shared Operating Index and Graph Read Boundaries
 
 - Focused shared boundary suite: 1 file, 1 assertion passed.

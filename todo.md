@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-18 05:40:00 -04:00
+- Last updated: 2026-07-18 05:58:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `e4851253` makes shared Operating Index and graph reads fail closed after `306aeb17` repaired Command Center; live provider and deployment evidence remains open
+- Commit: `ab2d2adc` makes Family Assistant reasoning reads fail closed after `e4851253` repaired shared Operating Index and graph loaders; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,28 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0406 - Family Assistant hid shared reasoning-context failures by omitting relationship guidance
+
+- Timestamp: 2026-07-18 05:58 America/New_York
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard intelligence / Family Assistant / Supabase read boundary
+- Feature: Family Assistant
+- Route: `/dashboard/agents`
+- File or files: `app/(app)/dashboard/agents/page.tsx`, `tests/dashboard-agents-read-boundary.test.ts`
+- Database objects: shared Operating Index source tables, `family_operating_index`, `graph_entities`, `graph_edges`
+- Affected roles: authenticated family members
+- Scenario: a shared reasoning-context read failure was converted into an empty relationship-guidance list while primary Family Assistant briefings rendered.
+- Launch impact: users could miss relationship-aware guidance without knowing the supporting data was unavailable.
+- Root cause: the route used `.catch(() => null)` around `loadFamilyContext`.
+- Required remediation: route-level catch must return the existing retryable Family Assistant failure state.
+- Implementation notes: replaced the silent fallback with explicit logging and `ReadFailure`; expanded the existing boundary test.
+- Test plan: focused Family Assistant boundary suite; constrained-worker full Vitest, typecheck, lint, fresh-directory production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (511 files/3,271 tests); typecheck; lint; clean 250-route build; diff check.
+- Evidence: source repair validated in commit `ab2d2adc`; local branch pushed; live RLS, browser, and deployment evidence remain open.
+- Resolution: Family Assistant no longer presents partial relationship guidance after a failed reasoning read.
+- Remaining dependencies: update remaining optional reasoning consumers; verify authenticated RLS and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0405 - Operating Index and graph loaders converted Supabase read failures into partial household data
 

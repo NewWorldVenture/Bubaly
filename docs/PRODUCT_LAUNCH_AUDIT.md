@@ -6,6 +6,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0406 - Family Assistant hid shared reasoning-context failures by omitting relationship guidance
+
+- Timestamp: 2026-07-18 05:58 America/New_York.
+- Service: Dashboard intelligence.
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/agents`.
+- Finding: a rejected shared graph/snapshot read was converted into an empty reasoning list while the Family Assistant page continued rendering its primary briefings.
+- Repair: the route now catches the shared reasoning-context failure and uses its existing retryable Family Assistant error state before rendering partial guidance.
+- Affected roles: authenticated family members.
+- Supabase impact: shared reasoning read failures are visible to the user rather than silently presented as no relationship insights.
+- Evidence: focused existing Family Assistant boundary suite, full 511 test files/3,271 tests, typecheck, lint, fresh-directory clean 250-route build, and `git diff --check`; source commit `ab2d2adc`.
+- Remaining launch gate: update the remaining optional reasoning consumers, validate authenticated RLS and deployed retry behavior, and continue broader dashboard/deployment verification.
+
 ### PLA-0405 - Operating Index and graph loaders converted Supabase read failures into partial household data
 
 - Timestamp: 2026-07-18 05:40 America/New_York.

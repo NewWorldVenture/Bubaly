@@ -31,6 +31,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   before computing readiness scores and issues.
 - Shared Operating Index and graph loaders now preserve rejected Supabase reads; Family Operating Index renders
   a retryable state before showing scores or relationship insights.
+- Family Assistant now preserves shared reasoning-context failures and renders its retryable state before showing
+  partial relationship guidance.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
   goal funding is published in migration `0208` and commit `7a20e160`.
 - Wallet activation now fails closed on disclosure, member, child-wallet, bucket, and rule provisioning
