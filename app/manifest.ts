@@ -11,7 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/dashboard',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
+    // 'any', not 'portrait': tablets rotate (M-014 landscape safe-area work) and
+    // the /display kitchen-wall kiosk is designed for landscape tablets — a
+    // portrait lock would freeze the installed PWA sideways on both (M-025).
+    orientation: 'any',
     background_color: '#090c14',
     theme_color: '#090c14',
     categories: ['productivity', 'lifestyle', 'utilities'],

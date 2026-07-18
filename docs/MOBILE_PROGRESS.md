@@ -535,6 +535,25 @@ Weighting (per the mission brief):
   This completes the touch-target sweep of the public blog/marketing surface
   (M-019 share bar, M-021 header, M-022 launcher, M-024 engagement CTAs).
 
+### M-025 — PWA manifest locked the installed app to portrait (tablets + wall kiosk couldn't rotate) — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P2, Phases 9/16):** `app/manifest.ts` set `orientation: 'portrait'`,
+  so the **installed** PWA refused to rotate on iPads/Android tablets — directly
+  contradicting the mission's portrait+landscape scope, M-014's landscape
+  safe-area work, and the `/display` kitchen-wall kiosk (a landscape-tablet
+  surface): launched from the installed app, the kiosk rendered sideways.
+- **Fix:** `orientation: 'any'` (one line + rationale comment). Verified the root
+  `viewport` export has **no** `userScalable:false`/`maximumScale` (pinch-zoom
+  stays enabled — no WCAG 1.4.4 issue to fix).
+- **Guard:** `tests/mobile-manifest-orientation.test.ts` (2) — imports the real
+  manifest: orientation `'any'` + standalone display; installable identity
+  (start_url/scope/icons) intact.
+- **Evidence:** guard green; `tsc --noEmit` 0; eslint 0. (Manifest is
+  build-emitted JSON; no layout change → no build re-run needed beyond M-023's.)
+- **Parallel-bot note:** file-disjoint (`app/manifest.ts` + test only).
+
+## Next steps (autonomous, in order)
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
