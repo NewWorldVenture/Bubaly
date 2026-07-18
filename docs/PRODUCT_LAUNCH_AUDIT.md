@@ -6,6 +6,62 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0805 - Family COO showed "No open tasks — nicely done" when a household read failed
+
+- Timestamp: 2026-07-17 21:16 UTC
+- Service: Dashboard / Family COO (agent-`fable-opus` lane)
+- Route: `/dashboard/family-coo`
+- Affected files: `app/(app)/dashboard/family-coo/page.tsx`, `tests/family-coo-read-boundary.test.ts`
+- Database objects: `family_members`, `chore_assignments`, `calendar_events`, `grocery_items`, `family_routines`, `maintenance_tasks` (the dependent `chores` title lookup stays best-effort)
+- Role: authenticated family members running the household
+- Scenario: any of the six household reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong operations state — the family believes chores are done / nothing is scheduled; not money/safety).
+- Launch impact: the six-way `Promise.all` dropped every `error`. A silent failure rendered **"No open tasks — nicely done."** (open chores actually pending), **"Nothing scheduled this week"**, an empty shopping list, no routines, and no maintenance — a confidently-wrong "all handled" operations picture.
+- Root cause: the six source-of-truth household reads dropped their `error`.
+- Resolution: capture all six results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-coo] household read failed', …)` + `return <ErrorState message="Could not load your household from Supabase. Refresh and try again." />` before rendering. The dependent `chores` title lookup stays best-effort; a genuinely missing table (unapplied migration) is still tolerated as empty. (This page's null-`display_name` `.split()` crash sites were already fixed in PLA-0780.)
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-coo-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0804 - Family Sports Hub showed empty teams/results/schedule when a read failed
+
+- Timestamp: 2026-07-17 21:14 UTC
+- Service: Dashboard / Family Sports Hub (agent-`fable-opus` lane)
+- Route: `/dashboard/family-sports`
+- Affected files: `app/(app)/dashboard/family-sports/page.tsx`, `tests/family-sports-read-boundary.test.ts`
+- Database objects: `family_members`, `teams`, `game_results`, `sports_events`
+- Role: authenticated family members using the Sports Hub
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a parent could miss tomorrow's game; not money/safety).
+- Launch impact: the four-way `Promise.all` dropped every `error`. A silent failure rendered **"No teams added yet", "No game results logged", "No practices or games scheduled"** and a **0-0-0 record** for a family that actually has them.
+- Root cause: the source-of-truth reads dropped their `error`.
+- Resolution: capture all four results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-sports] sports read failed', …)` + `return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />` before rendering. Missing table tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-sports-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0803 - Family School Hub showed empty classes/grades/events when a read failed
+
+- Timestamp: 2026-07-17 21:14 UTC
+- Service: Dashboard / Family School Hub (agent-`fable-opus` lane)
+- Route: `/dashboard/family-school`
+- Affected files: `app/(app)/dashboard/family-school/page.tsx`, `tests/family-school-read-boundary.test.ts`
+- Database objects: `family_members`, `school_classes`, `grades`, `school_events`
+- Role: authenticated family members using the School Hub
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a parent believes a kid has no grades/classes; not money/safety).
+- Launch impact: the four-way `Promise.all` dropped every `error`. A silent failure rendered **"No classes added yet", "No grades recorded yet", "No school events coming up"** and an `—` average score for a family that actually has them.
+- Root cause: the source-of-truth reads dropped their `error`.
+- Resolution: capture all four results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-school] school read failed', …)` + `return <ErrorState message="Could not load your family school hub from Supabase. Refresh and try again." />` before rendering. Missing table tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-school-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
 ### PLA-0785 - Trip detail writes (packing toggle/remove, dismiss recommendation) silently no-op'd on failure (A-13)
 
 - Timestamp: 2026-07-17 20:35 UTC
