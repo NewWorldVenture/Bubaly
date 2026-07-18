@@ -6,7 +6,8 @@ import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from
 import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
-import { BlogPostStructuredData } from '@/components/marketing/structured-data';
+import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
+import { getAeoQuestionsForCategory } from '@/lib/marketing/aeo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 import { HeartButton } from '@/components/blog/heart-button';
@@ -91,9 +92,12 @@ export default async function BlogPostPage({ params }: Params) {
   const post = await getPost(slug);
   if (!post) notFound();
 
-  const [related, { prev, next }] = await Promise.all([
+  const [related, { prev, next }, aeoFaqs] = await Promise.all([
     getRelatedPosts(slug, post.category, 3),
     getAdjacentPosts(post.date),
+    // Category-relevant answers from the admin AEO Knowledge Center → an on-topic
+    // FAQ block + FAQPage schema on every article, linking back to the source.
+    getAeoQuestionsForCategory(post.category, 4),
   ]);
 
   const headings = extractHeadings(post.body);
@@ -205,6 +209,26 @@ export default async function BlogPostPage({ params }: Params) {
                 ),
               )}
             </div>
+
+            {/* AEO FAQ — answers from the Knowledge Center, on-topic for this
+                article, feeding FAQPage rich results and voice/AI answers. */}
+            {aeoFaqs.length > 0 && (
+              <section className="mb-10 rounded-2xl border border-white/8 bg-white/[0.02] p-6" aria-labelledby="article-faq">
+                <FaqStructuredData items={aeoFaqs.map((q) => ({ q: q.question, a: q.answer }))} />
+                <h2 id="article-faq" className="scroll-mt-24 text-xl font-bold sm:text-2xl">Frequently asked questions</h2>
+                <dl className="mt-5 space-y-5">
+                  {aeoFaqs.map((q) => (
+                    <div key={q.question}>
+                      <dt className="font-semibold text-white/90">{q.question}</dt>
+                      <dd className="mt-1.5 text-sm leading-7 text-white/60">{q.answer}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <Link href="/faq" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+                  Explore the full Family Knowledge Center <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </section>
+            )}
 
             {/* Did you enjoy it? ♥ + subscribe */}
             <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6">
