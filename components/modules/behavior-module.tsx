@@ -34,7 +34,13 @@ export function BehaviorModule() {
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'behavior_logs', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
+    // Bound the read: behavior_logs grows unbounded over a family's lifetime, but
+    // every view here is recent-focused (6-week trend, streaks, recent list). Load
+    // a rolling 365-day window (hard-capped at 1000 rows) instead of the full
+    // history, so the client payload stays bounded as data accumulates.
+    fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId)
+      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('occurred_at', { ascending: false }).limit(1000),
   });
 
   const [memberFilter, setMemberFilter] = useState('all');

@@ -6,6 +6,30 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0813 - Behavior Tracking loaded a family's entire behavior_logs history (unbounded client read)
+
+- Timestamp: 2026-07-18 10:23 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Behavior Tracking
+- Route: `/dashboard/behavior` (`components/modules/behavior-module.tsx`)
+- Affected files: `components/modules/behavior-module.tsx`, `tests/behavior-read-bounded.test.ts` (new)
+- Database objects: `behavior_logs` (mig 0073; grows unbounded over a family's lifetime)
+- Role: all family roles · Subscription tier: all · Household: any with behavior history
+- Scenario: a family that has logged behavior for months/years opens the Behavior Tracking module
+- Severity: P2 (performance / reliability — unbounded client payload that grows without limit)
+- Reproduction: the `useRealtimeQuery` fetcher ran `sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', desc)` with **no `.limit()` or window** — it fetched the ENTIRE per-family history on every mount and re-fetched it on every realtime change
+- Expected: a bounded read sized to what the views need
+- Actual: an unbounded read; payload + client-side work grow linearly with total logs forever
+- Root cause: no upper bound on a growth-prone table read; every view here is recent-focused (6-week `trendByWeek`, `positiveStreakDays`, recent list) and never needs full history
+- Resolution: bound the fetcher to a rolling **365-day window** (`.gte('occurred_at', now-365d)`) **and** a hard `.limit(1000)` cap. The window rolls forward on each realtime refetch and fully covers the 6-week trend + streaks at any realistic logging frequency; the cap backstops pathological volume. No visualization changes (all are recent-scoped)
+- Supabase impact: none — read-shaping only; no schema/RLS/migration change. Also reduces DB/egress load
+- Security/Privacy/Accessibility impact: none
+- Performance impact: **positive** — bounds a previously-unbounded read; payload no longer grows with lifetime data
+- Tests added: `tests/behavior-read-bounded.test.ts` (1 — asserts the `.gte` window + `.limit(1000)` + now()-derived window)
+- Tests run: new guard green; `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guard asserts the bounded fetcher; behavior analytics (`lib/behavior/insights.ts`) confirmed recent-scoped (trend=6wk, streak=recent, `total` not surfaced in JSX)
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none · Follow-up: same unbounded-read pattern may exist in other growth-table modules — tracked as an ongoing A-05 perf sweep
+
 ### PLA-0812 - Widespread UTF-8 mojibake corrupted user-facing strings across ~79 files
 
 - Issue ID: PLA-0812
