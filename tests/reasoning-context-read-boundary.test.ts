@@ -24,24 +24,27 @@ function fakeSupabase(results: Record<string, { data: unknown; error: unknown }>
 describe('loadFamilyGraph read boundary', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('degrades to an empty graph (never throws) when both reads fail, and logs each failure', async () => {
+  it('fails closed (throws) on a read error so each route renders a truthful retryable state, and logs the failure', async () => {
+    // Design (context.ts `loadFamilyGraph`): a rejected/missing-table read is a
+    // data-integrity failure, NOT an empty graph. The loader throws rather than
+    // presenting a partial relationship view as current; every caller catches it
+    // (`.catch(() => null)` or try/catch → <ErrorState>/<ReadFailure>) and shows
+    // a retryable state. This test pins that fail-closed contract + observability.
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const readError = { message: 'permission denied for table graph_entities' };
     const supabase = fakeSupabase({
-      graph_entities: { data: null, error: { message: 'permission denied for table graph_entities' } },
+      graph_entities: { data: null, error: readError },
       graph_edges: { data: null, error: { message: 'relation graph_edges does not exist' } },
     });
 
-    const graph = await loadFamilyGraph(supabase, 'fam-1');
+    // Fail-closed: the read error surfaces to the caller instead of being
+    // swallowed into an empty graph.
+    await expect(loadFamilyGraph(supabase, 'fam-1')).rejects.toEqual(readError);
 
-    // Graceful degradation: an empty graph, not a thrown exception.
-    expect(graph.entities).toEqual([]);
-    expect(graph.edges).toEqual([]);
-
-    // Observability: a swallowed read error must still leave a signal so a
-    // drifted/broken graph table is diagnosable instead of silently invisible.
+    // Observability: the failure still leaves a diagnosable signal so a
+    // drifted/broken graph table is not silently invisible.
     const logged = err.mock.calls.map((c) => String(c[0]));
-    expect(logged).toContain('[reasoning-context] graph_entities read failed');
-    expect(logged).toContain('[reasoning-context] graph_edges read failed');
+    expect(logged).toContain('[reasoning] graph read failed');
   });
 
   it('does not log when both reads succeed, and maps the rows', async () => {
