@@ -447,3 +447,13 @@ the current remote database therefore still reports 2,059 queued jobs and 0
 ready vectors until migration apply and scheduled worker execution occur.
 Published route contract and migration safety coverage: 654 test files / 3,876
 tests, typecheck, all remote marketing gates, and the 1,281-route build passed.
+
+### Production migration workflow observation - 2026-07-18
+
+Push `444d4457` correctly triggered the Supabase production workflow, but
+GitHub did not start the job steps. The run was rejected at account level with
+the annotation: "recent account payments have failed or your spending limit
+needs to be increased." This is an external GitHub billing/plan blocker, not a
+migration, test, or repository failure. Until the account is restored, migration
+0239 cannot apply remotely and the runtime queue/vector readback must remain
+reported as not ready.
