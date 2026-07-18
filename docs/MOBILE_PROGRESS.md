@@ -425,6 +425,33 @@ Weighting (per the mission brief):
   `loading` prop where one image was already lazy).
 - **First entry in the Performance area** (was 0% app-wide).
 
+### M-021 — Marketing header control cluster had sub-44px touch targets (Phase 6) — _parallel bot (public marketing surface)_
+- **Severity:** P2 (mobile). **Phase:** 6 (navigation & touch targets).
+- **Problem:** the public `components/marketing/site-header.tsx` (rendered on every
+  bubaly.com marketing page) has a top-bar control cluster with interactive targets
+  below the 44px minimum on touch: the **ThemeToggle** is forced to `h-8 w-8` (32px —
+  the site-header className overrides the toggle's own `h-10` base), the **mobile menu
+  button** is `p-2` around a 24px icon (~40px), and the **Log in / Get Started** pills
+  are `h-8` (32px tall) — these show at `sm:` (≥640px), i.e. on touch tablets. All are
+  under the 44px Apple HIG / WCAG 2.5.5 tap-target minimum. Not false positives: each
+  is a real `<button>`/`<a>` with a fixed sub-44px box and no touch-size escape.
+- **Fix:** grow each to **≥44px on coarse-pointer (touch)** while keeping the compact
+  desktop-with-a-mouse density — `coarse:min-h-11 coarse:min-w-11` on the square
+  icon-only controls (ThemeToggle, menu button; menu button also gets `inline-flex
+  items-center justify-center` so the icon stays centered as the box grows) and
+  `coarse:min-h-11` on the two header pills. Reuses the M-019 utilities (no new CSS).
+  The mobile drawer nav items were already compliant (`px-3 py-3 text-base` ≈ 48px).
+- **Files:** `components/marketing/site-header.tsx`.
+- **Test:** `tests/mobile-marketing-header-touch-target.test.ts` (4) — locks the
+  coarse escape on the toggle, menu button, and both pills; forbids a regression.
+- **Evidence:** guard green (4/4); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** file-disjoint from agent-05 (modules + app-shell) and agent-02
+  (hand-rolled overlays + non-module app chrome). The **marketing** `site-header` is a
+  separate component from the authed app-shell header; the ThemeToggle change is scoped
+  to the className this page passes, so the shared toggle's app-wide `h-10` base is
+  untouched.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

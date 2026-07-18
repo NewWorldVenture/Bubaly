@@ -38,15 +38,17 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle className="h-8 w-8 border border-border/80 bg-surface/70 text-fg hover:bg-elevated" />
-          <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg sm:inline-flex">
+          {/* Header controls stay compact on desktop-with-a-mouse but grow to the
+              44px minimum tap target on touch (coarse pointer) — WCAG 2.5.5 / Apple HIG. */}
+          <ThemeToggle className="h-8 w-8 border border-border/80 bg-surface/70 text-fg hover:bg-elevated coarse:min-h-11 coarse:min-w-11" />
+          <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg coarse:min-h-11 sm:inline-flex">
             Log in
           </Link>
-          <Link href="/welcome" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 sm:inline-flex">
+          <Link href="/welcome" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 coarse:min-h-11 sm:inline-flex">
             Get Started Free
           </Link>
           <button
-            className="rounded-lg p-2 text-fg lg:hidden focus-ring"
+            className="inline-flex items-center justify-center rounded-lg p-2 text-fg coarse:min-h-11 coarse:min-w-11 lg:hidden focus-ring"
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
             aria-expanded={open}
