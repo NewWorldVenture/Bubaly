@@ -661,8 +661,6 @@ Weighting (per the mission brief):
   files nobody has in flight (agent-05 module heartbeat stale per §0).
 
 ## Next steps (autonomous, in order)
-
-## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
 then M-007 (overlays/safe-area), M-009 (Playwright matrix), M-010 (PWA/offline).
