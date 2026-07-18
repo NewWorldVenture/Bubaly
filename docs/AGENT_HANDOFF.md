@@ -1,5 +1,18 @@
 # Agent Handoff — Bubaly / FamilyOS
 
+> 🚨 **ACTIVE INCIDENT (2026-07-18 09:47 UTC) — CORRUPTING LEDGER PUBLISHER.**
+> The automated **"Publish operating index readiness increment"** job (origin
+> commits `83e1356a`, `84de4e22`, `840c6268`, `e8c3c9f1`, `68add36a`, …) is
+> **repeatedly overwriting `docs/PRODUCT_LAUNCH_AUDIT.md` with a corrupted
+> 167-line / newest-PLA-0405 version carrying ~3,136 control bytes**, wiping
+> every ledger entry from PLA-0406 through the latest (~2,240 lines of audit
+> history) on each run. `agent-fable-opus` restored the clean ledger from the
+> last good commit `99a8bbfd` (2,406 lines, 0 control bytes) in `1b2b2bf3`, but
+> **that job will re-corrupt it on its next run.** Its ledger-write path must be
+> fixed or the job stopped. Until then: before trusting the ledger, check
+> `LC_ALL=C tr -cd '\000-\010\013\014\016-\037' < docs/PRODUCT_LAUNCH_AUDIT.md | wc -c`
+> == 0; if not, restore from the newest clean commit and re-push.
+
 > ⛔ **STANDING RULE (see `/memory.md`): do NOT modify the global left navigation
 > (app sidebar) for all accounts unless the user specifically instructs it.**
 > Per-user customization (Settings → Navigation Choices) is fine; changing the
