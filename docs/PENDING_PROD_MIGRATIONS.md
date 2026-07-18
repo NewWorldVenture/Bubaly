@@ -16,10 +16,11 @@ authoritative list.
 > **Marketing platform status (2026-07-18):** migration
 > `0231_marketing_platform_spine.sql` has been applied to the authenticated
 > FamilyOS production Supabase project. The remote verifier passed all 11
-> platform schema checks, and `npm.cmd run marketing:verify:assets:remote`
-> passed the media provenance gate. The migration was applied in eight SQL
-> editor chunks because the dashboard editor rejected one full paste. Keep the
-> production workflow configured to reconcile future environments.
+> platform schema checks, the anonymous public/private boundary verifier passed,
+> and `npm.cmd run marketing:verify:assets:remote` passed the media provenance
+> gate. The migration was applied in eight SQL editor chunks because the
+> dashboard editor rejected one full paste. Keep the production workflow
+> configured to reconcile future environments.
 
 ## 🔴 SECURITY MIGRATIONS — APPLY FIRST (launch-blocking)
 

@@ -35,10 +35,11 @@ production-ready until the remote checks below pass.
    ```
 
 For repeatable production releases, configure the GitHub `production`
-environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and
-`SUPABASE_SERVICE_ROLE_KEY`. The `Supabase production migrations` workflow then
-applies the ordered ledger on `main` migration changes, runs the provenance
-backfill, and blocks completion until both remote verification gates pass.
+environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
+`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`. The `Supabase production
+migrations` workflow then applies the ordered ledger on `main` migration
+changes, runs the provenance backfill, and blocks completion until the schema,
+public/private access-boundary, and media provenance gates pass.
 
 ## Verify
 
@@ -49,6 +50,7 @@ npm.cmd run typecheck
 npm.cmd test -- --reporter=dot
 npm.cmd run marketing:audit:assets
 npm.cmd run marketing:verify:remote
+npm.cmd run marketing:verify:public:remote
 npm.cmd run marketing:verify:assets:remote
 ```
 
@@ -56,6 +58,9 @@ npm.cmd run marketing:verify:assets:remote
 tables (`marketing_pages`, versions, templates, brand rules, generation jobs,
 relationships, embeddings, provider observations, and provider syncs) plus
 the provenance columns on `marketing_assets` and `marketing_videos`.
+`marketing:verify:public:remote` additionally proves anonymous clients can read
+published pages only, cannot read drafts or deleted pages, and cannot read the
+admin-only marketing tables.
 
 ## Configure
 

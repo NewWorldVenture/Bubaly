@@ -9,6 +9,7 @@ on:
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
       - 'scripts/verify-marketing-platform.mjs'
+      - 'scripts/verify-marketing-public-access.mjs'
       - 'scripts/verify-marketing-assets-remote.mjs'
 
 permissions:
@@ -29,6 +30,7 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       NEXT_PUBLIC_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +51,7 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing SUPABASE_ACCESS_TOKEN repository/environment secret."; exit 1; }
           test -n "$SUPABASE_PROJECT_REF" || { echo "Missing SUPABASE_PROJECT_REF repository/environment secret."; exit 1; }
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "Missing SUPABASE_SERVICE_ROLE_KEY repository/environment secret."; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo "Missing SUPABASE_ANON_KEY repository/environment secret."; exit 1; }
           echo "Supabase production credentials are present."
 
       - name: Install dependencies
@@ -68,6 +71,9 @@ jobs:
 
       - name: Verify platform schema
         run: npm run marketing:verify:remote
+
+      - name: Verify public and private access boundaries
+        run: npm run marketing:verify:public:remote
 
       - name: Verify media provenance and uniqueness
         run: npm run marketing:verify:assets:remote
