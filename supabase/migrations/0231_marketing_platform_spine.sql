@@ -147,6 +147,8 @@ create table if not exists public.marketing_embeddings (
   unique(source_type, source_id, chunk_index, content_hash)
 );
 create index if not exists idx_mkt_embeddings_source on public.marketing_embeddings(source_type, source_id);
+create index if not exists idx_mkt_embeddings_vector_hnsw
+  on public.marketing_embeddings using hnsw (embedding extensions.vector_cosine_ops);
 
 create table if not exists public.marketing_provider_observations (
   id uuid primary key default gen_random_uuid(),

@@ -69,6 +69,27 @@ function contentHash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+/** Split long page material into stable, slightly-overlapping retrieval chunks. */
+export function chunkMarketingText(value: string, maxChars = 6_000, overlap = 400): string[] {
+  const source = value.trim();
+  if (!source) return [];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < source.length) {
+    const hardEnd = Math.min(source.length, start + maxChars);
+    let end = hardEnd;
+    if (hardEnd < source.length) {
+      const boundary = source.lastIndexOf(' ', hardEnd);
+      if (boundary > start + Math.floor(maxChars * 0.6)) end = boundary;
+    }
+    const chunk = source.slice(start, end).trim();
+    if (chunk) chunks.push(chunk);
+    if (end >= source.length) break;
+    start = Math.max(start + 1, end - overlap);
+  }
+  return chunks;
+}
+
 export type GeneratedMarketingPage = {
   title: string;
   summary: string;
@@ -295,20 +316,23 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
   return { pageId: page.id, questions: rows.length };
 }
 
-async function openAIEmbedding(textInput: string, configuredKey?: string | null): Promise<{ vector: number[]; model: string }> {
+async function openAIEmbeddings(textInputs: string[], configuredKey?: string | null): Promise<{ vectors: number[][]; model: string }> {
   const apiKey = configuredKey ?? process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('Embedding provider is not configured. Set OPENAI_API_KEY.');
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
   const response = await fetchExternal('https://api.openai.com/v1/embeddings', {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, input: textInput.slice(0, 24_000) }),
+    body: JSON.stringify({ model, input: textInputs.map((input) => input.slice(0, 6_000)) }),
   }, 60_000);
   if (!response.ok) throw new Error(`Embedding provider returned ${response.status}.`);
-  const data = await readBoundedResponseJson<{ data?: { embedding?: number[] }[] }>(response, 2 * 1024 * 1024);
-  const vector = data.data?.[0]?.embedding;
-  if (!vector?.length) throw new Error('Embedding provider returned no vector.');
-  if (vector.length !== 1536) throw new Error(`Embedding dimensions ${vector.length} do not match the configured 1536-dimension index.`);
-  return { vector, model };
+  const data = await readBoundedResponseJson<{ data?: { index?: number; embedding?: number[] }[] }>(response, 8 * 1024 * 1024);
+  const ordered = [...(data.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  if (ordered.length !== textInputs.length) throw new Error('Embedding provider returned an incomplete batch.');
+  const vectors = ordered.map((item) => item.embedding);
+  if (vectors.some((vector) => !vector?.length)) throw new Error('Embedding provider returned an empty vector.');
+  const validVectors = vectors as number[][];
+  if (validVectors.some((vector) => vector.length !== 1536)) throw new Error('Embedding dimensions do not match the configured 1536-dimension index.');
+  return { vectors: validVectors, model };
 }
 
 async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
@@ -316,17 +340,34 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   const { data: page, error } = await supabase.from('marketing_pages').select('id, title, summary, body, version').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
   if (error || !page) throw error ?? new Error('Marketing page not found.');
   const source = [page.title, page.summary ?? '', page.body ?? ''].filter(Boolean).join('\n\n');
-  const hash = contentHash(source);
-  const existing = await supabase.from('marketing_embeddings').select('id').eq('source_type', 'page').eq('source_id', page.id).eq('chunk_index', 0).eq('content_hash', hash).maybeSingle();
-  if (existing.data?.id) return { pageId: page.id, reused: true };
+  const chunks = chunkMarketingText(source);
+  if (!chunks.length) throw new Error('Marketing page has no embeddable content.');
+  const hashes = chunks.map(contentHash);
+  const { data: existingRows, error: existingError } = await supabase.from('marketing_embeddings')
+    .select('id, chunk_index, content_hash').eq('source_type', 'page').eq('source_id', page.id);
+  if (existingError) throw existingError;
+  const currentHashes = new Set(hashes);
+  const reusable = new Set((existingRows ?? []).filter((row) => currentHashes.has(row.content_hash)).map((row) => row.content_hash));
+  const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
+  const staleIds = (existingRows ?? []).filter((row) => !currentHashes.has(row.content_hash)).map((row) => row.id);
+  if (staleIds.length) {
+    const { error: staleError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', staleIds);
+    if (staleError) throw staleError;
+  }
+  if (!missing.length) return { pageId: page.id, chunks: chunks.length, embedded: 0, reused: reusable.size };
   const aiConfig = await getAIConfig(supabase);
-  const { vector, model } = await openAIEmbedding(source, aiConfig.openaiKey);
-  const { error: insertError } = await supabase.from('marketing_embeddings').insert({
-    source_type: 'page', source_id: page.id, chunk_index: 0, content_hash: hash, content: source,
-    embedding: JSON.stringify(vector) as unknown as Json, model, dimensions: vector.length, status: 'ready',
-  });
-  if (insertError) throw insertError;
-  return { pageId: page.id, reused: false, dimensions: vector.length };
+  let embedded = 0;
+  for (let offset = 0; offset < missing.length; offset += 32) {
+    const batch = missing.slice(offset, offset + 32);
+    const { vectors, model } = await openAIEmbeddings(batch.map((row) => row.content), aiConfig.openaiKey);
+    const { error: insertError } = await supabase.from('marketing_embeddings').insert(batch.map((row, index) => ({
+      source_type: 'page', source_id: page.id, chunk_index: row.index, content_hash: row.hash, content: row.content,
+      embedding: JSON.stringify(vectors[index]) as unknown as Json, model, dimensions: vectors[index].length, status: 'ready',
+    })));
+    if (insertError) throw insertError;
+    embedded += batch.length;
+  }
+  return { pageId: page.id, chunks: chunks.length, embedded, reused: reusable.size };
 }
 
 async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {

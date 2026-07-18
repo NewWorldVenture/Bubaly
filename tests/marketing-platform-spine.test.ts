@@ -30,6 +30,7 @@ describe('marketing platform spine contract', () => {
     expect(migration).toContain('create extension if not exists vector with schema extensions');
     expect(migration).toContain('unique(page_id, version)');
     expect(migration).toContain('idempotency_key text not null unique');
+    expect(migration).toContain('using hnsw (embedding extensions.vector_cosine_ops)');
     expect(migration).toContain('page_path text not null default \'\'');
     expect(migration).toContain('query text not null default \'\'');
   });
@@ -52,6 +53,9 @@ describe('marketing platform spine contract', () => {
     expect(platform).toContain("jobType: 'generate_questions'");
     expect(platform).toContain("jobType: 'embed_page'");
     expect(platform).toContain('text-embedding-3-small');
+    expect(platform).toContain('chunkMarketingText');
+    expect(platform).toContain('for (let offset = 0; offset < missing.length; offset += 32)');
+    expect(platform).toContain("status: 'stale'");
     expect(platform).toContain('getAIConfig(supabase)');
   });
 
