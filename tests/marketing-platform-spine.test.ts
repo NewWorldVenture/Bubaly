@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
+const imageMigration = readFileSync('supabase/migrations/0232_blog_image_provenance.sql', 'utf8');
 const platform = readFileSync('lib/marketing/platform.ts', 'utf8');
 const worker = readFileSync('app/api/cron/marketing/route.ts', 'utf8');
 const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf8');
@@ -19,6 +20,10 @@ const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf
 const landingRoute = readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
 const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 const productionMigrationWorkflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
+const imageBackfill = readFileSync('scripts/backfill-marketing-image-provenance.mjs', 'utf8');
+const blogGenerator = readFileSync('scripts/generate-blog-posts.mjs', 'utf8');
+const coverageBackfill = readFileSync('scripts/backfill-marketing-coverage.mjs', 'utf8');
+const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.mjs', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -125,6 +130,38 @@ describe('marketing platform spine contract', () => {
     expect(provenanceBackfill).toContain("from('marketing-assets')");
     expect(provenanceBackfill).toContain('assetByStoragePath');
     expect(provenanceBackfill).toContain('asset?.content_hash ?? hashVideoSource(video)');
+  });
+
+  it('covers public blog hero images with fail-closed provenance and deduplication', () => {
+    expect(imageMigration).toContain('hero_image_source_url text');
+    expect(imageMigration).toContain('hero_image_license text');
+    expect(imageMigration).toContain('hero_image_attribution text');
+    expect(imageMigration).toContain('hero_image_source_hash text');
+    expect(imageMigration).toContain('CREATE TRIGGER trg_blog_image_provenance');
+    expect(imageMigration).toContain('approved free-use license');
+    expect(imageMigration).toContain('uq_blog_posts_hero_image_source_url');
+    expect(imageMigration).toContain('uq_blog_posts_hero_image_source_hash');
+    expect(imageBackfill).toContain('Duplicate blog hero image source');
+    expect(imageBackfill).toContain("process.argv.includes('--apply')");
+    expect(remoteAssetVerifier).toContain('blog_posts?select=id,slug,published');
+    expect(remoteAssetVerifier).toContain('approvedBlogLicenses');
+    expect(productionMigrationWorkflow).toContain('marketing:backfill:image-provenance -- --apply');
+    expect(blogGenerator).toContain('https://picsum.photos/seed/');
+    expect(blogGenerator).toContain('Lorem Picsum (CC0)');
+  });
+
+  it('reconciles canonical SEO/AEO coverage and verifies citable public pages', () => {
+    expect(coverageBackfill).toContain('buildSeo(page)');
+    expect(coverageBackfill).toContain('buildQuestions(page)');
+    expect(coverageBackfill).toContain("metadata: { source: 'marketing_platform', page_id: page.id }");
+    expect(coverageBackfill).toContain('placeholderAeoIds');
+    expect(coverageBackfill).toContain('updated_by: null');
+    expect(coverageBackfill).toContain('Dry run only');
+    expect(coverageVerifier).toContain('canonical SEO');
+    expect(coverageVerifier).toContain('canonical AEO');
+    expect(coverageVerifier).toContain('no registered public AEO row');
+    expect(productionMigrationWorkflow).toContain('marketing:backfill:coverage -- --apply');
+    expect(productionMigrationWorkflow).toContain('marketing:verify:coverage:remote');
   });
 
   it('does not enqueue regeneration for archived canonical pages', () => {

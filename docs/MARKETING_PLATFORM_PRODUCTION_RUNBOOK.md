@@ -48,12 +48,31 @@ production-ready until the remote checks below pass.
    npm.cmd run marketing:backfill:pages -- --apply
    ```
 
+6. Normalize and validate public blog hero-image provenance. This is additive
+   and rejects missing attribution, unknown free-use licenses, non-HTTPS URLs,
+   and duplicate sources:
+
+   ```powershell
+   npm.cmd run marketing:backfill:image-provenance
+   npm.cmd run marketing:backfill:image-provenance -- --apply
+   ```
+
+7. Reconcile canonical SEO/AEO coverage. This repairs incomplete metadata,
+   removes placeholder questions, and registers at least three citable answers
+   for every published canonical page:
+
+   ```powershell
+   npm.cmd run marketing:backfill:coverage
+   npm.cmd run marketing:backfill:coverage -- --apply
+   ```
+
 For repeatable production releases, configure the GitHub `production`
 environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`. The `Supabase production
 migrations` workflow then applies the ordered ledger on `main` migration
-changes, runs the provenance backfill, and blocks completion until the schema,
-public/private access-boundary, and media provenance gates pass.
+changes, runs the provenance and coverage backfills, and blocks completion
+until the schema, public/private access-boundary, canonical-content, media
+provenance, and SEO/AEO coverage gates pass.
 
 ## Verify
 
@@ -64,16 +83,21 @@ npm.cmd run typecheck
 npm.cmd test -- --reporter=dot
 npm.cmd run marketing:audit:assets
 npm.cmd run marketing:backfill:pages
+npm.cmd run marketing:backfill:image-provenance
+npm.cmd run marketing:backfill:coverage
 npm.cmd run marketing:verify:remote
 npm.cmd run marketing:verify:public:remote
 npm.cmd run marketing:verify:assets:remote
+npm.cmd run marketing:verify:coverage:remote
 ```
 
 `marketing:verify:remote` must report these as available: the nine platform
 tables (`marketing_pages`, versions, templates, brand rules, generation jobs,
 relationships, embeddings, provider observations, and provider syncs) plus
 the provenance columns on `marketing_assets` and `marketing_videos`, plus a
-non-empty canonical page registry.
+non-empty canonical page registry. `marketing:verify:assets:remote` must also
+cover every blog hero image with an approved license, attribution, HTTPS source,
+and unique source hash.
 `marketing:verify:public:remote` additionally proves anonymous clients can read
 published pages only, cannot read drafts or deleted pages, and cannot read the
 admin-only marketing tables.

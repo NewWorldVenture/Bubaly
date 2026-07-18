@@ -15,8 +15,8 @@ authoritative list.
 >
 > **Marketing platform status (2026-07-18):** migration
 > `0231_marketing_platform_spine.sql` has been applied to the authenticated
-> FamilyOS production Supabase project. The remote verifier passed all 11
-> platform schema/content checks (12/12), the anonymous public/private boundary verifier passed,
+> FamilyOS production Supabase project. The remote verifier passed all 12/12
+> platform schema/content checks, the anonymous public/private boundary verifier passed,
 > and `npm.cmd run marketing:verify:assets:remote` passed the media provenance
 > gate. The migration was applied in eight SQL editor chunks because the
 > dashboard editor rejected one full paste. Keep the production workflow
@@ -26,7 +26,12 @@ authoritative list.
 > safely run; its new preflight fails closed rather than replaying unknown
 > historical migrations. The canonical page backfill has since inserted 2,059
 > missing page records; the public boundary verifier reports 1,809 published
-> canonical pages.
+> canonical pages. Migration `0232_blog_image_provenance.sql` was subsequently
+> applied manually and the image backfill reports 2,040 posts read, 1,540
+> attributed unique hero-image sources, and zero rows needing normalization.
+> The additive SEO/AEO coverage reconciler now reports 1,809 published pages,
+> 1,559 complete active SEO rows, and 10,851 published AEO rows with no
+> placeholder or uncited records.
 
 ## 🔴 SECURITY MIGRATIONS — APPLY FIRST (launch-blocking)
 
@@ -246,4 +251,11 @@ Vault, the Knowledge Graph, Decisions, Prep Plans, and the Onboarding funnel
 | 0228 | `0228_marketing_public_aeo_and_content_registry.sql` | Public SELECT on published `marketing_aeo_questions` + register blogs in `marketing_content_items` | **Marketing closed loop (PLA-0790).** (1) Published AEO questions become world-readable (published only; drafts stay admin-only) so the public FAQ/Knowledge Center + blog FAQ blocks + FAQPage schema render the same answers the admin AEO console manages. (2) Registers every published, non-synthetic blog post as a content item (kind='blog', idempotent by metadata slug) so the whole blog is listed + wired in /admin/marketing/content. Additive/idempotent. **PG16-verified** (public sees 754 published, drafts hidden; 545 blogs registered; re-run 0 dupes). |
 | 0229 | `0229_seed_marketing_aeo_seo.sql` | Seed 754 themed AEO questions (published) + 191 SEO keywords + 19 SEO pages | **Marketing AEO/SEO seed (PLA-0790).** On-brand, deterministic (scripts/generate-marketing-seed.mjs) content positioning Bubaly as "The AI Family Operating System": AEO Q&A across 24 topics × personas × patterns, head/long-tail/semantic keyword clusters, and per-route SEO records for every public page + blog category tab. Idempotent (seed-tag delete + ON CONFLICT). Feeds the public FAQ/Knowledge Center + every blog article. **PG16-verified** (754/191/19; idempotent x2). Safe before apply: public pages just show fewer answers until applied. |
 | 0230 | `0230_blog_per_post_aeo_and_seo_public_read.sql` | Per-post blog AEO (auto) + public read on `marketing_seo_pages` | **Marketing engine, part 2 (PLA-0795).** (1) Every published blog post gets its own AEO questions (source_path=/blog/<slug>), derived in-DB from title+excerpt (1,090 rows; idempotent seed tag blog_aeo_v1); the admin publish action generates the same for new posts. (2) `marketing_seo_pages` active rows become public-readable so 7 marketing routes drive title/description from the admin SEO store (code fallback). Additive/idempotent. **PG16-verified** (bootstrap fail=0; 1090 per-post AEO; policy present). NOTE: 0229 was also regenerated (scaled to 2,344 AEO / 1,603 keywords) — re-apply it (idempotent) alongside 0230. |
-| 0231 | `0231_marketing_platform_spine.sql` | Canonical marketing page registry, durable regeneration queue, embeddings, provider observations, and media provenance | **Applied to production on 2026-07-18.** `marketing:verify:remote` passed 12/12 checks, the public boundary gate passed, and `marketing:verify:assets:remote` passed. The canonical page backfill inserted 2,059 missing records (1,809 published). Keep the production workflow configured to reconcile future environments. |
+| 0231 | `0231_marketing_platform_spine.sql` | Canonical marketing page registry, durable regeneration queue, embeddings, provider observations, and media provenance | **Applied to production on 2026-07-18.** `marketing:verify:remote` passed 12/12 checks, the public boundary gate passed, and the canonical page backfill inserted 2,059 missing records (1,809 published). Keep the production workflow configured to reconcile future environments. |
+| 0232 | `0232_blog_image_provenance.sql` | Blog hero-image license, attribution, source URL/hash, trigger validation, and unique-source indexes | **Applied to production on 2026-07-18.** Image backfill: 2,040 posts read, 1,540 attributed unique hero-image sources, 0 rows needing normalization. The expanded media verifier passed. The migration ledger still needs owner-reviewed reconciliation. |
+
+The SEO/AEO coverage reconciler (`marketing:backfill:coverage`) is an additive
+post-migration data repair against `0231`; it does not consume a migration
+number. It repairs canonical metadata, removes placeholder AEO rows, and
+registers citable questions for every published canonical page. Its paired
+remote gate is `marketing:verify:coverage:remote`.

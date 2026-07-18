@@ -2,11 +2,11 @@
 
 **Purpose:** shared ownership contract for parallel Codex/Claude work on the AI-first marketing operating system.
 
-**Updated:** 2026-07-18 12:42 America/New_York
+**Updated:** 2026-07-18 13:28 America/New_York
 **Repository:** `NewWorldVenture/FamilyOS`
 **Current integration branch:** `codex/reasoning-main-publication`
 **Baseline:** `a6ca111e`
-**Next migration number:** `0232` (migration `0231_marketing_platform_spine.sql` applied to FamilyOS production on 2026-07-18; canonical backfill inserted 2,059 pages and queued 2,059 regeneration jobs)
+**Next migration number:** `0233` (migration `0232_blog_image_provenance.sql` applied manually to FamilyOS production on 2026-07-18; canonical backfill inserted 2,059 pages and queued 2,059 regeneration jobs; 1,540 blog hero-image sources verified; SEO/AEO coverage reconciliation is the current integration task)
 **Production runbook:** `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`
 
 ## Rules
@@ -38,13 +38,13 @@ The platform spine is being built around these Supabase objects:
 
 | Lane | Owner | Status | Owned paths | Do not touch | Handoff evidence |
 |---|---|---|---|---|---|
-| Platform spine | `CODEX-01` | PRODUCTION VERIFIED | `supabase/migrations/0231_marketing_platform_spine.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `lib/marketing/public-pages.tsx`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `scripts/backfill-marketing-pages.mjs`, `.github/workflows/ci.yml`, `.github/workflows/supabase-production-migrations.yml`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (633 files / 3,750 tests); build PASS; live schema/content 12/12, public/private boundary, canonical page backfill, queue, and cross-media provenance gates PASS |
+| Platform spine | `CODEX-01` | PRODUCTION VERIFIED | `supabase/migrations/0231_marketing_platform_spine.sql`, `supabase/migrations/0232_blog_image_provenance.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `lib/marketing/public-pages.tsx`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `scripts/backfill-marketing-pages.mjs`, `scripts/backfill-marketing-image-provenance.mjs`, `scripts/backfill-marketing-coverage.mjs`, `scripts/verify-marketing-coverage-remote.mjs`, `.github/workflows/ci.yml`, `.github/workflows/supabase-production-migrations.yml`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (633 files / 3,752 tests); build PASS; live schema/content 12/12, public/private boundary, SEO/AEO coverage, canonical page backfill, and cross-media source provenance gates PASS; 2,059 canonical pages, 1,809 published, 1,559 active SEO rows, 10,851 published AEO rows, and 1,540 unique attributed blog-image sources |
 | Super Admin control center | `MARKETING-ADMIN-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(app)/admin/marketing/platform/**`, `app/(app)/admin/marketing/marketing-subnav.tsx` | `lib/marketing/platform.ts`, migration files | Admin action tests, role boundary test, rendered page smoke |
 | Public page families | `MARKETING-PUBLIC-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(marketing)/questions/**`, `guides/**`, `compare/**`, `alternatives/**`, `audiences/**`, `resources/**`, `glossary/**` | `lib/marketing/public-pages.tsx`, `app/sitemap.ts` | Public published/draft/404 tests, metadata, JSON-LD, mobile smoke |
 | Public shared renderer | `MARKETING-PUBLIC-03` | RESERVED | `lib/marketing/public-pages.tsx` | Route folders owned by PUBLIC-02 | Renderer tests and accessibility check |
 | Legacy content bridge | `CODEX-01` | CHECKPOINT READY | `app/(app)/admin/marketing/content/**`, `app/(app)/admin/marketing/actions.ts` (legacy marketing actions), `lib/marketing/legacy-bridge.ts` | Platform schema and worker internals | Blog/landing create, publish, edit, unpublish, archive bridge; missing-schema compatibility; full suite PASS |
 | Provider analytics | `MARKETING-DATA-02` | AVAILABLE | `app/(app)/admin/marketing/seo/**`, `analytics/**`, `intelligence/**`, provider observation UI/tests | Provider adapter implementation | Fixture import tests, no-fabrication tests, degraded-state UI |
-| Asset provenance | `MARKETING-ASSETS-02` | PRODUCTION VERIFIED | `app/(app)/admin/marketing/assets/**`, `video/**`, `lib/marketing/assets.ts`, `lib/marketing/video.ts`, `scripts/backfill-marketing-asset-provenance.mjs`, `scripts/verify-marketing-assets-remote.mjs` | Platform worker and public route files | Local asset audit PASS (18 unique shipped raster assets; no remote image URLs); remote provenance and cross-media uniqueness gate PASS |
+| Asset provenance | `MARKETING-ASSETS-02` | PRODUCTION VERIFIED | `app/(app)/admin/marketing/assets/**`, `video/**`, `lib/marketing/assets.ts`, `lib/marketing/video.ts`, `scripts/backfill-marketing-asset-provenance.mjs`, `scripts/backfill-marketing-image-provenance.mjs`, `scripts/verify-marketing-assets-remote.mjs` | Platform worker and public route files | Local asset audit PASS (18 unique shipped raster assets; no remote image URLs); remote gate PASS across 0 active DAM assets, 0 active videos, and 1,540 blog hero images |
 | Test and verification | `MARKETING-QA-02` | CHECKPOINT READY | `tests/marketing-platform-*.test.ts`, `tests/marketing-provider-*.test.ts`, `tests/marketing-assets-*.test.ts` | Production code owned by another lane | Full suite PASS (633 files / 3,750 tests); typecheck, build, schema, public/private boundary, and media gates PASS |
 | Integration owner | `CODEX-01` | ACTIVE | `docs/MARKETING_PLATFORM_COORDINATION.md`, release notes, final integration only | Active feature lanes before handoff | Full test, lint, typecheck, build, migration audit |
 
@@ -77,7 +77,7 @@ To claim a lane, append a row with the agent id, timestamp, exact paths, and exp
 | Bridge legacy blog/landing edits into `marketing_pages` without double-publishing | `CODEX-01` | `CODEX-01` | CHECKPOINT READY |
 | Add provider observation dashboards with explicit unavailable/partial states | `CODEX-01` | `MARKETING-DATA-02` | OPEN |
 | Add duplicate-image and license contract tests | `CODEX-01` | `MARKETING-ASSETS-02`, `MARKETING-QA-02` | OPEN |
-| Reconcile `supabase_migrations.schema_migrations` after the reviewed manual 0231 apply | `CODEX-01` | Supabase operator | EXTERNAL / OPEN; CI now fails closed until repaired |
+| Reconcile `supabase_migrations.schema_migrations` after the reviewed manual 0231/0232 applies | `CODEX-01` | Supabase operator | EXTERNAL / OPEN; CI now fails closed until repaired |
 
 ### CODEX-01 checkpoint
 
@@ -88,7 +88,7 @@ Files: migration 0231, platform worker/provider adapters, cron routes, public re
 Commit: latest branch checkpoint on `codex/reasoning-main-publication` (see `git log`)
 Tests: npm test -- --reporter=dot -> 633 files / 3,750 tests passed
 Typecheck: npm run typecheck -> pass
-Migration: npm run db:audit:migrations -> pass; next available 0232; live REST schema/content verification -> 12/12 pass
+Migration: npm run db:audit:migrations -> pass; next available 0233; live REST schema/content verification -> 12/12 pass; coverage verification -> 1,809 published pages / 1,559 active SEO rows / 10,851 published AEO rows
 Build: npm run build -> pass; 490 routes generated
 Assets: npm run marketing:audit:assets -> pass; 18 unique shipped raster assets, no remote image URLs; uploaded video rows now reuse the Asset Library byte hash and carry source URL/attribution
 Known follow-ups: reconcile the remote migration ledger before enabling automated migration pushes; configure real provider/API secrets; publish the integrated branch through the guarded production workflow

@@ -12,9 +12,13 @@
 - [ ] Back up the target database and confirm a tested restore path.
 - [ ] Run `npm run db:audit:migrations`, then reconcile and apply migrations in order through the validated current set, including `0208_atomic_wallet_goal_funding.sql` and `0210_onboarding_idempotency.sql`.
 - [ ] Apply `0231_marketing_platform_spine.sql` with the ordered migration set before enabling the marketing control center or public canonical page families.
+- [ ] Apply `0232_blog_image_provenance.sql` and run the image provenance backfill before publishing any blog hero image.
 - [ ] Run `npm.cmd run marketing:verify:remote` against the production Supabase URL and require all 12 platform schema/provenance/content checks to pass.
 - [ ] Run `npm.cmd run marketing:verify:public:remote` with the production anon key and require published-only public reads plus admin-table isolation to pass.
 - [ ] Run `npm.cmd run marketing:backfill:pages -- --apply` and confirm the dry run reports zero missing canonical pages on the next release.
+- [ ] Run `npm.cmd run marketing:backfill:image-provenance -- --apply` and require the media verifier to report every blog hero image attributed, licensed, and unique.
+- [ ] Run `npm.cmd run marketing:backfill:coverage -- --apply` and require every published canonical page to have complete SEO, three or more AEO answers, and a registered public AEO source.
+- [ ] Run `npm.cmd run marketing:verify:coverage:remote` and require zero placeholder AEO rows and zero incomplete active SEO rows.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles, including a
       non-manager attempt to update `family_members.role`, `is_active`, or `family_id` after applying `0211`.

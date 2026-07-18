@@ -11,10 +11,13 @@ on:
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
+      - 'scripts/backfill-marketing-image-provenance.mjs'
+      - 'scripts/backfill-marketing-coverage.mjs'
       - 'scripts/backfill-marketing-pages.mjs'
       - 'scripts/verify-marketing-platform.mjs'
       - 'scripts/verify-marketing-public-access.mjs'
       - 'scripts/verify-marketing-assets-remote.mjs'
+      - 'scripts/verify-marketing-coverage-remote.mjs'
 
 permissions:
   contents: read
@@ -85,6 +88,12 @@ jobs:
       - name: Backfill canonical marketing pages
         run: npm run marketing:backfill:pages -- --apply
 
+      - name: Backfill blog image provenance
+        run: npm run marketing:backfill:image-provenance -- --apply
+
+      - name: Reconcile canonical SEO and AEO coverage
+        run: npm run marketing:backfill:coverage -- --apply
+
       - name: Verify platform schema
         run: npm run marketing:verify:remote
 
@@ -93,3 +102,6 @@ jobs:
 
       - name: Verify media provenance and uniqueness
         run: npm run marketing:verify:assets:remote
+
+      - name: Verify SEO and AEO coverage
+        run: npm run marketing:verify:coverage:remote

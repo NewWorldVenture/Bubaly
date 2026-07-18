@@ -10,7 +10,12 @@ and pass the content-hash duplicate check before they can be reused.
 | Family lifestyle hero | `public/images/family-ai-lifestyle.png` | First-party project asset; retain source record with the project owner | SHA-256 unique |
 | Supabase marketing uploads | `marketing_assets` / private `marketing-assets` bucket | `license`, `source_url`, and `attribution` are stored per asset | Active `content_hash` is unique |
 | Embedded videos | `marketing_videos` | `license` is explicit; external URLs retain provider/source identity | Active `source_hash` is unique |
+| Public blog hero images | `blog_posts.hero_image_url` | `hero_image_license`, `hero_image_source_url`, and `hero_image_attribution` are trigger-populated from the declared credit | Active source URL and source hash are unique (migration `0232`) |
 
-Run `npm run marketing:audit:assets` before publishing a marketing asset change.
+Run `npm run marketing:audit:assets` before publishing a shipped asset change and
+run `npm run marketing:verify:assets:remote` before publishing any Supabase-backed
+marketing image or video change. Blog hero-image writes with missing attribution,
+unknown licenses, non-HTTPS URLs, or duplicate sources are rejected by the
+`0232_blog_image_provenance.sql` trigger/index contract.
 The audit intentionally fails on remote raster URLs and exact duplicate bytes so
 an asset cannot silently become an unlicensed or redundant dependency.
