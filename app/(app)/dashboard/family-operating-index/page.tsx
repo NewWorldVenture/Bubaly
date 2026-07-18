@@ -16,6 +16,7 @@ import { progressBarA11y } from '@/lib/ui/a11y';
 import { loadFamilyGraph } from '@/lib/reasoning/context';
 import { graphReasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Family Operating Index' };
 export const dynamic = 'force-dynamic';
@@ -55,12 +56,25 @@ function barColor(score: number): string {
 export default async function FamilyOperatingIndexPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { index, priorComposite, trend, change, orchestrator } = await loadOperatingIndex(supabase, ctx.active.familyId);
+  let indexResult;
+  try {
+    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
+  } catch (error) {
+    console.error('[dashboard/family-operating-index] operating index read failed', error);
+    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+  }
+  const { index, priorComposite, trend, change, orchestrator } = indexResult;
   const band = BAND_COPY[index.band];
 
   // R2: relationship reasoning over the Knowledge Graph, reusing the band we just
   // computed (no second snapshot build). Best-effort — missing graph → no insights.
-  const graph = await loadFamilyGraph(supabase, ctx.active.familyId).catch(() => null);
+  let graph = null;
+  try {
+    graph = await loadFamilyGraph(supabase, ctx.active.familyId);
+  } catch (error) {
+    console.error('[dashboard/family-operating-index] graph read failed', error);
+    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+  }
   const relationshipInsights = graph ? graphReasoningInsights(graph, index.band) : [];
 
   // SVG ring geometry.
