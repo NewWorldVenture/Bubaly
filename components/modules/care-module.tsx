@@ -60,7 +60,12 @@ export function CareModule() {
 
   const { data: entries, loading, error } = useRealtimeQuery<CareEntry>({
     table: 'care_log', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('care_log').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
+    // Bound the read: care_log grows unbounded over time, but the views are
+    // recent-focused ("This week" count + a day-grouped timeline). Load a rolling
+    // 365-day window (hard-capped at 1000 rows) so the client payload stays bounded.
+    fetcher: (sb) => sb.from('care_log').select('*').eq('family_id', familyId)
+      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('occurred_at', { ascending: false }).limit(1000),
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;

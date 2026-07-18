@@ -10,13 +10,21 @@ import fs from 'node:fs';
 // hard-capped at 1000 rows.
 
 const src = fs.readFileSync('components/modules/behavior-module.tsx', 'utf8');
+const care = fs.readFileSync('components/modules/care-module.tsx', 'utf8');
 
-describe('behavior module read is bounded (A-05 perf)', () => {
-  it('bounds the behavior_logs fetch by a rolling window AND a hard row cap', () => {
+describe('A-05 growth-table module reads are bounded (perf)', () => {
+  it('behavior_logs: rolling window AND a hard row cap', () => {
     const fetcher = src.slice(src.indexOf("table: 'behavior_logs'"), src.indexOf('const [memberFilter'));
     expect(fetcher).toContain(".gte('occurred_at'");
     expect(fetcher).toMatch(/\.limit\(1000\)/);
     // The window is derived from now(), so it rolls forward with realtime refetches.
+    expect(fetcher).toContain('Date.now()');
+  });
+
+  it('care_log: rolling window AND a hard row cap', () => {
+    const fetcher = care.slice(care.indexOf("table: 'care_log'"), care.indexOf("const memberName"));
+    expect(fetcher).toContain(".gte('occurred_at'");
+    expect(fetcher).toMatch(/\.limit\(1000\)/);
     expect(fetcher).toContain('Date.now()');
   });
 });

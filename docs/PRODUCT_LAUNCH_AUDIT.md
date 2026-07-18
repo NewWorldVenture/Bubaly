@@ -28,7 +28,8 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: new guard green; `tsc --noEmit` clean; `eslint` clean on the module
 - Validation evidence: guard asserts the bounded fetcher; behavior analytics (`lib/behavior/insights.ts`) confirmed recent-scoped (trend=6wk, streak=recent, `total` not surfaced in JSX)
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
-- Status: Verified · Remaining dependencies: none · Follow-up: same unbounded-read pattern may exist in other growth-table modules — tracked as an ongoing A-05 perf sweep
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same class, FIXED): `care-module` (`care_log`) had the identical unbounded read (`This week` count + day-grouped timeline are recent-focused) — bounded to the same rolling 365-day / 1000-row window; guard extended in `tests/behavior-read-bounded.test.ts` (2 assertions). A-05 growth-table read sweep continues (calendar/notifications live in A-06/A-16 owners' lanes)
 
 ### PLA-0812 - Widespread UTF-8 mojibake corrupted user-facing strings across ~79 files
 
