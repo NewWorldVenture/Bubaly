@@ -41,7 +41,8 @@ describe('marketing closed loop — AEO/SEO wired public ↔ admin', () => {
   });
 
   it('every blog article gets an on-topic AEO FAQ block + FAQPage schema linking back', () => {
-    expect(article).toMatch(/(?:getAeoQuestionsForCategory|readAeoQuestionsForCategory)/);
+    expect(article).toMatch(/readAeoQuestionsForPath\(`\/blog\/\$\{post\.slug\}`/);
+    expect(article).toMatch(/readAeoQuestionsForCategory/);
     expect(article).toMatch(/FaqStructuredData/);
     expect(article).toMatch(/href="\/faq"/); // links back to the Knowledge Center
   });

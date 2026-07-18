@@ -371,3 +371,10 @@ now applies admin-managed canonical URLs, and sitemap output de-duplicates legac
 static, blog, landing, and platform entries. AEO create/update/delete actions
 accept and revalidate `source_path`, so a published answer reaches its public page
 without a manual deploy.
+
+### Article AEO refinement — 2026-07-18
+
+Blog articles now prefer their `/blog/{slug}` published AEO rows, falling back to
+category answers only for legacy posts without per-post coverage. A successful
+path query is authoritative even when empty, so deleting or unpublishing an answer
+cannot resurrect stale generated JSON from the page payload.

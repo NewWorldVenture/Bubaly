@@ -151,7 +151,9 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
       .limit(limit);
     if (!rowsError) {
       const questions = (rows ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
-      if (questions.length > 0) return { questions, available: true };
+      // A successful empty result is authoritative: deleting or unpublishing
+      // an answer must remove it publicly instead of resurrecting stale JSON.
+      return { questions, available: true };
     } else {
       console.error('[marketing-aeo] path question rows read failed', rowsError);
     }

@@ -31,6 +31,7 @@ describe('static marketing AEO coverage', () => {
     expect(reader).toContain("from('marketing_pages')");
     expect(reader).toContain("from('marketing_aeo_questions')");
     expect(reader).toContain(".eq('source_path', path)");
+    expect(reader).toContain('successful empty result is authoritative');
     expect(reader).toContain(".eq('status', 'published')");
     expect(reader).toContain(".is('deleted_at', null)");
     expect(schema).toContain("'@type': 'WebPage'");
