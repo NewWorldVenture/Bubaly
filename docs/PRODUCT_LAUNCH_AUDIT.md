@@ -6,6 +6,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0405 - Operating Index and graph loaders converted Supabase read failures into partial household data
+
+- Timestamp: 2026-07-18 05:40 America/New_York.
+- Service: Dashboard intelligence and shared reasoning context.
+- Status: Resolved in source; live and deployed verification remain open.
+- Severity: P1.
+- Surface: shared `lib/operating-index/server.ts`, `lib/reasoning/context.ts`, and `/dashboard/family-operating-index`.
+- Finding: rejected snapshot inputs, orchestrator reads, prior Operating Index snapshots, or graph reads were converted into zero-valued signals, empty graphs, or omitted relationship insights.
+- Repair: shared loaders now preserve and throw rejected reads; the Family Operating Index route catches both Operating Index and graph failures and returns a retryable state before rendering scores or relationships.
+- Affected roles: authenticated family members using dashboard intelligence.
+- Supabase impact: failed reads from `family_operating_index`, its source tables, `graph_entities`, or `graph_edges` are no longer presented as valid empty data.
+- Evidence: focused shared read-boundary suite (1 assertion), full 511 test files/3,271 tests with constrained workers and no unhandled errors, typecheck, lint, clean 250-route build, `git diff --check`, and live Auth blocker rerun matched documented failure; source commit `e4851253`.
+- Remaining launch gate: update optional reasoning consumers with visible failure states, validate authenticated RLS and deployed retry behavior, and continue broader dashboard/deployment verification.
+
 ### PLA-0404 - Command Center hid family and Operating Index read failures as a healthy readiness score
 
 - Status: Resolved in source; live and deployed verification remain open.

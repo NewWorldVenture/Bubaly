@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Shared Operating Index and Graph Read Boundaries
+
+- Focused shared boundary suite: 1 file, 1 assertion passed.
+- Full `npm.cmd exec vitest run --maxWorkers=2 --minWorkers=1`: 511 test files, 3,271 tests passed with no unhandled worker errors.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `git diff --check`: passed before commit.
+- Shared Operating Index and graph loaders now preserve rejected Supabase reads; Family Operating Index renders a retryable state instead of a partial score.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500 request `019f7499-50fd-7ac2-8ec3-0840f2615d41`.
+- Live Auth Admin, Super Admin permission, RLS/role, browser, backup, and deployment evidence remain open.
+- Source commit: `e4851253`.
+
 ## Latest Local Evidence - Command Center Read Boundaries
 
 - Focused Command Center boundary suite: 1 file, 1 assertion passed.

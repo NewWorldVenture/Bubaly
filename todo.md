@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-16 12:40:00 -04:00
+- Last updated: 2026-07-18 05:40:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `306aeb17` makes Command Center fail closed on family and Operating Index read failures after `c56b870e` repaired Dashboard Briefing; live provider and deployment evidence remains open
+- Commit: `e4851253` makes shared Operating Index and graph reads fail closed after `306aeb17` repaired Command Center; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,28 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0405 - Operating Index and graph loaders converted Supabase read failures into partial household data
+
+- Timestamp: 2026-07-18 05:40 America/New_York
+- Status: `[x]` Completed in code, tested, committed, and pushed to the audit branch; publication to `main` follows this documentation update.
+- Severity: P1
+- Category: Dashboard intelligence / shared reasoning / Supabase read boundary
+- Feature: Family Operating Index and Knowledge Graph
+- Route: `/dashboard/family-operating-index` and shared loaders
+- File or files: `lib/operating-index/server.ts`, `lib/reasoning/context.ts`, `app/(app)/dashboard/family-operating-index/page.tsx`, `tests/operating-index-read-boundary.test.ts`
+- Database objects: Operating Index source tables, `family_operating_index`, `graph_entities`, `graph_edges`
+- Affected roles: authenticated family members using dashboard intelligence
+- Scenario: rejected source, snapshot, orchestrator, or graph reads were treated as empty data.
+- Launch impact: users could see partial household scores or relationship insights without knowing Supabase data was unavailable.
+- Root cause: shared loaders discarded PostgREST errors and returned empty/zero-valued fallbacks.
+- Required remediation: preserve loader read errors and return a retryable route failure before showing scores or relationships.
+- Implementation notes: added explicit error checks to all Operating Index input/orchestrator/prior-snapshot reads, made graph reads throw on failure, and added route-level error handling plus a focused regression test.
+- Test plan: focused shared boundary suite; constrained-worker full Vitest, typecheck, lint, production build, and diff check.
+- Tests performed: focused suite (1 assertion); full Vitest (511 files/3,271 tests); typecheck; lint; clean 250-route build; diff check; live Auth audit.
+- Evidence: source repair validated in commit `e4851253`; local branch pushed; live Auth public health passed but Admin users remains HTTP 500; RLS, browser, and deployment evidence remain open.
+- Resolution: covered Operating Index and graph paths no longer convert rejected reads into partial dashboard data.
+- Remaining dependencies: update optional reasoning consumers with visible failure states; verify authenticated RLS and deployed retry behavior; continue the dashboard audit.
 
 #### TODO-0404 - Command Center hid family and Operating Index read failures as a healthy readiness score
 
