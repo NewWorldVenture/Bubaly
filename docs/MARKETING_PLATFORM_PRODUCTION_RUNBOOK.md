@@ -34,6 +34,12 @@ production-ready until the remote checks below pass.
    npm.cmd run marketing:backfill:provenance -- --apply
    ```
 
+For repeatable production releases, configure the GitHub `production`
+environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, and
+`SUPABASE_SERVICE_ROLE_KEY`. The `Supabase production migrations` workflow then
+applies the ordered ledger on `main` migration changes, runs the provenance
+backfill, and blocks completion until both remote verification gates pass.
+
 ## Verify
 
 Run the local gates against the release commit:

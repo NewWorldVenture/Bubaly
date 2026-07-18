@@ -18,6 +18,7 @@ const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.t
 const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
 const landingRoute = readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
 const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+const productionMigrationWorkflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -98,6 +99,16 @@ describe('marketing platform spine contract', () => {
     expect(verifier).toContain('process.exit(1)');
     expect(ciWorkflow).toContain('npm run marketing:verify:remote');
     expect(ciWorkflow).toContain('npm run marketing:verify:assets:remote');
+  });
+
+  it('ships a guarded production migration workflow with post-apply gates', () => {
+    expect(productionMigrationWorkflow).toContain('supabase db push --yes');
+    expect(productionMigrationWorkflow).toContain('marketing:backfill:provenance -- --apply');
+    expect(productionMigrationWorkflow).toContain('marketing:verify:remote');
+    expect(productionMigrationWorkflow).toContain('marketing:verify:assets:remote');
+    expect(productionMigrationWorkflow).toContain('environment: production');
+    expect(productionMigrationWorkflow).toContain('SUPABASE_ACCESS_TOKEN');
+    expect(productionMigrationWorkflow).toContain('SUPABASE_SERVICE_ROLE_KEY');
   });
 
   it('ships strict remote asset provenance and a safe legacy backfill', () => {

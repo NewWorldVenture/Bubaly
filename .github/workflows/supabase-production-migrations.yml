@@ -1,0 +1,73 @@
+name: Supabase production migrations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/audit-migration-versions.mjs'
+      - 'scripts/backfill-marketing-asset-provenance.mjs'
+      - 'scripts/verify-marketing-platform.mjs'
+      - 'scripts/verify-marketing-assets-remote.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate-and-verify:
+    name: Apply ordered migrations and verify production
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      NEXT_PUBLIC_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Validate production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing SUPABASE_ACCESS_TOKEN repository/environment secret."; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo "Missing SUPABASE_PROJECT_REF repository/environment secret."; exit 1; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "Missing SUPABASE_SERVICE_ROLE_KEY repository/environment secret."; exit 1; }
+          echo "Supabase production credentials are present."
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit migration ledger
+        run: npm run db:audit:migrations
+
+      - name: Link production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Apply ordered migrations
+        run: supabase db push --yes
+
+      - name: Backfill and enforce media provenance
+        run: npm run marketing:backfill:provenance -- --apply
+
+      - name: Verify platform schema
+        run: npm run marketing:verify:remote
+
+      - name: Verify media provenance and uniqueness
+        run: npm run marketing:verify:assets:remote
