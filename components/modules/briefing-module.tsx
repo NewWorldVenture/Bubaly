@@ -687,7 +687,13 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
   const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
     familyId,
-    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId) as never,
+    // rawEvents is only used for TODAY's events (filtered below + KitchenMode); the
+    // weekly/tomorrow briefing data comes from a separate source. Bound to a small
+    // window around today instead of loading the family's entire calendar history.
+    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId)
+      .gte('starts_at', new Date(Date.now() - 86_400_000).toISOString())
+      .lte('starts_at', new Date(Date.now() + 2 * 86_400_000).toISOString())
+      .order('starts_at', { ascending: true }).limit(200) as never,
   });
   const { data: rawReminders, error: remindersError, refresh: refreshReminders } = useRealtimeQuery<ReminderRow>({
     table: 'reminders',

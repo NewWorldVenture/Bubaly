@@ -14,6 +14,7 @@ const care = fs.readFileSync('components/modules/care-module.tsx', 'utf8');
 const security = fs.readFileSync('components/modules/security-module.tsx', 'utf8');
 const scorecard = fs.readFileSync('components/modules/experience-scorecard-module.tsx', 'utf8');
 const nextActions = fs.readFileSync('components/modules/next-actions-module.tsx', 'utf8');
+const briefing = fs.readFileSync('components/modules/briefing-module.tsx', 'utf8');
 
 describe('A-05 growth-table module reads are bounded (perf)', () => {
   it('behavior_logs: rolling window AND a hard row cap', () => {
@@ -52,5 +53,12 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
     expect(fetcher).toContain(".gte('starts_at'");
     expect(fetcher).toContain(".lte('starts_at'");
     expect(fetcher).toMatch(/\.limit\(500\)/);
+  });
+
+  it('briefing calendar_events: bounded to a small window around today', () => {
+    const fetcher = briefing.slice(briefing.indexOf("table: 'calendar_events'"), briefing.indexOf("table: 'calendar_events'") + 700);
+    expect(fetcher).toContain(".gte('starts_at'");
+    expect(fetcher).toContain(".lte('starts_at'");
+    expect(fetcher).toMatch(/\.limit\(200\)/);
   });
 });

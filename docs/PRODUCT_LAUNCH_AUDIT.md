@@ -28,7 +28,8 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module
 - Validation evidence: guard asserts the bounded fetcher; client-side horizon trim preserved (correctness unchanged)
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
-- Status: Verified · Remaining dependencies: none · Follow-up: `todo_items`/`opportunities` reads in the same module are bounded-by-nature (open-only / small collections), left as-is
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same over-fetch class, FIXED): `briefing-module` loaded the full `calendar_events` history to render only TODAY's events (`rawEvents` is used solely for the today filter + KitchenMode; weekly/tomorrow data comes from a separate briefing source). Bounded to a small window around today (`.gte(now-1d).lte(now+2d).limit(200)`); guard extended (6 total). `todo_items`/`opportunities` in next-actions are bounded-by-nature (open-only / small collections), left as-is. **A-05 calendar-consumer over-fetch sweep now covers next-actions + briefing; command-center/conflicts SSR pages were already date-range-bounded (verified).**
 
 ### PLA-0813 - Behavior Tracking loaded a family's entire behavior_logs history (unbounded client read)
 
