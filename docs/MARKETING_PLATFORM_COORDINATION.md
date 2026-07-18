@@ -114,3 +114,72 @@ verified green and owned by QA-01 — build the engine freely in `lib/marketing/
 `app/(app)/admin/marketing/**` without touching `app/(marketing)/**`. Log any
 cross-lane need here. Keep new marketing images unique + free (CC/licensed); this
 file's §3 command re-verifies uniqueness.
+
+---
+
+## 6. agent-05 independent verification + image-integrity amendment (2026-07-18 14:40)
+
+_Added by `agent-05` (CLAUDE-FRONTEND-01) at the product owner's request to support
+the marketing buildout. Appended — QA-01's sections above are left intact._
+
+### 6a. Supabase wiring — independently re-verified ✅
+Grep-swept `lib/marketing/**` (≈45 modules) and all ≈40
+`app/(app)/admin/marketing/**` pages: **zero** `TODO / FIXME / mock / stub /
+hardcoded / "coming soon"` markers. Every admin `page.tsx` reads through a server
+client or a `lib/marketing/*` server module; the sole no-DB page,
+`admin/marketing/assistant/page.tsx`, is a correct `'use client'` shell that POSTs
+to the assistant API route. `tsc` + `next build` green at latest main. Concurs
+with QA-01 §4: **read-path wiring is production-grade.** (Write-path round-trip and
+automation/send E2E still to be exercised — tracked below.)
+
+### 6b. ⚠️ Image integrity — §3's "✅ SATISFIED" is AMENDED to 🔴 NOT SATISFIED (licensing)
+QA-01 §3 proved **URL uniqueness** (525 distinct `?lock` values) — that part holds.
+But the product bar is **free + unique + no duplicates**, and two of those three do
+**not** hold for the 500-article blog engine. Evidence:
+
+1. **🔴 Licensing is NOT verified-free.** The covers hotlink
+   `loremflickr.com/1600/900/<terms>?lock=N`. `?lock` pins *which* image, **not its
+   license**. LoremFlickr proxies **Flickr** photos across **mixed licenses**
+   (including attribution-required and All-Rights-Reserved) — it does **not**
+   guarantee CC/commercial reuse. Labeling them "LoremFlickr (CC), free to use" is
+   an over-claim. (Tell: `scripts/generate-blog-posts.mjs` comments even say
+   "free-license **Unsplash** hero photos" while line 428 emits **loremflickr**
+   URLs — the source of truth is inconsistent with itself.) A public marketing
+   site should not ship 525 photos of unverifiable license.
+2. **🟡 Visual duplicates are structural.** The 525 posts draw from only **9
+   keyword pools** (`family,children,parenting` ×75, `planner,desk,organized` ×68,
+   `school…` ×61, `wellness…` ×56, `money…` ×56, `food…` ×56, `technology…` ×55,
+   `home…` ×50, `travel…` ×48). LoremFlickr's per-keyword pool is small, so many of
+   the 75 "family" posts resolve to the **same handful of photos**. Unique *URLs* ≠
+   unique *images*.
+3. **🟡 Reliability.** 525 hotlinks to a third-party placeholder host → slow LCP,
+   rate-limits, and silent 404s in production.
+
+**Reproduce:**
+```
+grep -oE 'loremflickr\.com/1600/900/[a-z,]+' supabase/migrations/0226_blog_500_articles.sql \
+  | sed -E 's|.*/900/||' | sort | uniq -c   # → 9 keyword pools across 525 posts
+```
+
+### 6c. Recommended fix (MKT-IMG — the top marketing launch item)
+Replace LoremFlickr with **bespoke, generated, on-brand SVG cover art**, keyed
+deterministically off each post's category + title — the same approach already
+shipped in `components/blog/blog-hero-art.tsx`. This yields covers that are **free
+(owned, zero external license), guaranteed unique (per-title seed), duplicate-free,
+theme-aware, and world-class** — with **no external host** (drop `loremflickr.com`
+from `next.config.mjs remotePatterns`). Alternative: pin one distinct licensed asset
+per post in the `marketing_assets` Supabase bucket. Either way, **do not ship
+loremflickr to production.** _(Unclaimed — `agent-05` can execute this on request;
+flagged here so codex/QA-01 aren't surprised by a cross-lane edit to the blog seed +
+rendering.)_
+
+### 6d. Gate corrections to §4
+- Row "Image integrity (free/unique/no-dup)" → **🔴 NOT SATISFIED** pending §6c
+  (was ✅). This is the one hard image blocker.
+- Unsplash seed hotlinks elsewhere (`0202_blog_articles.sql`, `lib/display/imagery.ts`,
+  marketplace seeds) are genuinely **free** (Unsplash license) and effectively
+  unique (the 3 repeated ids are the marketplace seed counted twice via
+  `SEED_ALL.sql`, not two listings sharing a photo) — acceptable as fallbacks; a
+  bespoke-SVG pass would still raise polish.
+
+_§6 last updated: 2026-07-18 14:40 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
