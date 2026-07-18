@@ -67,6 +67,12 @@ describe('marketing platform spine contract', () => {
     expect(platform).toContain('for (let offset = 0; offset < missing.length; offset += 32)');
     expect(platform).toContain("status: 'stale'");
     expect(platform).toContain('getAIConfig(supabase)');
+    expect(platform).toContain(".eq('status', 'running').select('id').maybeSingle()");
+    expect(platform).toContain('Could not persist success for marketing job');
+    expect(platform).toContain('Could not persist failure for marketing job');
+    expect(platform).toContain('persistenceFailed');
+    expect(platform).toContain('const { error: versionError }');
+    expect(platform).toContain('const { error: deleteError }');
   });
 
   it('protects both cron surfaces with the shared authorization guard', () => {

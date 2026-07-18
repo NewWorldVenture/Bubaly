@@ -224,36 +224,43 @@ export async function enqueueMarketingGenerationJob(
   if (!error) return { id: data?.id ?? null, created: true };
   if (error.code === '23505') {
     const existing = await supabase.from('marketing_generation_jobs').select('id').eq('idempotency_key', input.idempotencyKey).maybeSingle();
+    if (existing.error) throw existing.error;
     return { id: existing.data?.id ?? null, created: false };
   }
   throw error;
 }
 
 async function finishJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>, result: Record<string, unknown>) {
-  await supabase.from('marketing_generation_jobs').update({
+  const { data, error } = await supabase.from('marketing_generation_jobs').update({
     status: 'succeeded', completed_at: new Date().toISOString(), locked_at: null, result: safeJson(result), error: null,
-  }).eq('id', job.id);
+  }).eq('id', job.id).eq('status', 'running').select('id').maybeSingle();
+  if (error || !data) throw error ?? new Error(`Could not persist success for marketing job ${job.id}.`);
 }
 
 async function failJob(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>, error: unknown) {
   const message = String(error instanceof Error ? error.message : error).slice(0, 500);
   const terminal = job.attempts >= job.max_attempts;
-  await supabase.from('marketing_generation_jobs').update({
+  const { data, error: updateError } = await supabase.from('marketing_generation_jobs').update({
     status: terminal ? 'dead_letter' : 'queued',
     run_after: new Date(Date.now() + Math.min(60 * 60_000, 2 ** job.attempts * 30_000)).toISOString(),
     locked_at: null,
     error: message,
-  }).eq('id', job.id);
+  }).eq('id', job.id).eq('status', 'running').select('id').maybeSingle();
+  if (updateError || !data) throw updateError ?? new Error(`Could not persist failure for marketing job ${job.id}.`);
 }
 
 async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Regeneration job is missing target_id.');
   const { data: page, error: pageError } = await supabase.from('marketing_pages').select('*').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
   if (pageError || !page) throw pageError ?? new Error('Marketing page not found.');
-  const [{ data: template }, { data: rules }] = await Promise.all([
+  const [templateResult, rulesResult] = await Promise.all([
     supabase.from('marketing_content_templates').select('instructions, defaults').eq('page_type', page.page_type).eq('status', 'active').eq('is_default', true).maybeSingle(),
     supabase.from('marketing_brand_rules').select('name, instructions, value').eq('active', true).order('name'),
   ]);
+  if (templateResult.error) throw templateResult.error;
+  if (rulesResult.error) throw rulesResult.error;
+  const template = templateResult.data;
+  const rules = rulesResult.data;
   let generated = buildDeterministicMarketingPage(page);
   let source: 'ai' | 'system' = 'system';
   try {
@@ -272,7 +279,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     updated_by: null,
   }).eq('id', page.id);
   if (updateError) throw updateError;
-  await supabase.from('marketing_page_versions').upsert({
+  const { error: versionError } = await supabase.from('marketing_page_versions').upsert({
     page_id: page.id,
     version: page.version,
     title: generated.title,
@@ -284,6 +291,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     change_source: source,
     change_note: `Automatic regeneration for version ${page.version}`,
   }, { onConflict: 'page_id,version' });
+  if (versionError) throw versionError;
   await enqueueMarketingGenerationJob(supabase, {
     jobType: 'generate_questions', targetType: 'marketing_page', targetId: page.id, targetPath: page.path,
     idempotencyKey: `marketing-page:${page.id}:v:${page.version}:questions`, payload: { page_id: page.id, version: page.version }, priority: 65,
@@ -310,7 +318,8 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
     pattern: 'faq', status: page.status === 'published' ? 'published' : 'answered',
     clarity_score: 85, last_reviewed: new Date().toISOString(), metadata: safeJson({ source: 'marketing_platform', page_id: page.id }),
   }));
-  await supabase.from('marketing_aeo_questions').delete().eq('source_path', page.path).contains('metadata', { source: 'marketing_platform' });
+  const { error: deleteError } = await supabase.from('marketing_aeo_questions').delete().eq('source_path', page.path).contains('metadata', { source: 'marketing_platform' });
+  if (deleteError) throw deleteError;
   if (rows.length) {
     const { error: insertError } = await supabase.from('marketing_aeo_questions').insert(rows);
     if (insertError) throw insertError;
@@ -390,18 +399,24 @@ async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_gene
 export async function processMarketingGenerationJobs(supabase: MarketingPlatformDb, limit = 10) {
   const { data: jobs, error } = await supabase.rpc('claim_marketing_generation_jobs', { p_limit: limit });
   if (error) throw error;
-  const summary = { claimed: jobs?.length ?? 0, succeeded: 0, failed: 0, deadLettered: 0 };
+  const summary = { claimed: jobs?.length ?? 0, succeeded: 0, failed: 0, deadLettered: 0, persistenceFailed: 0 };
   for (const job of jobs ?? []) {
     try {
       const result = await runJob(supabase, job);
       await finishJob(supabase, job, result as Record<string, unknown>);
       summary.succeeded++;
     } catch (error) {
-      await failJob(supabase, job, error);
       summary.failed++;
       if (job.attempts >= job.max_attempts) summary.deadLettered++;
+      try {
+        await failJob(supabase, job, error);
+      } catch (persistenceError) {
+        summary.persistenceFailed++;
+        console.error(`[marketing-platform] job ${job.id} failure state could not be persisted`, persistenceError);
+      }
       console.error(`[marketing-platform] job ${job.id} failed`, error);
     }
   }
+  if (summary.persistenceFailed > 0) throw new Error(`Could not persist ${summary.persistenceFailed} marketing job failure state${summary.persistenceFailed === 1 ? '' : 's'}.`);
   return summary;
 }
