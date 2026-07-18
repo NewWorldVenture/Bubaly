@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, Tables } from '@/lib/database.types';
 import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
+import { getAIConfig } from '@/lib/ai/settings';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
@@ -294,8 +295,8 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
   return { pageId: page.id, questions: rows.length };
 }
 
-async function openAIEmbedding(textInput: string): Promise<{ vector: number[]; model: string }> {
-  let apiKey = process.env.OPENAI_API_KEY ?? '';
+async function openAIEmbedding(textInput: string, configuredKey?: string | null): Promise<{ vector: number[]; model: string }> {
+  const apiKey = configuredKey ?? process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('Embedding provider is not configured. Set OPENAI_API_KEY.');
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
   const response = await fetchExternal('https://api.openai.com/v1/embeddings', {
@@ -318,7 +319,8 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   const hash = contentHash(source);
   const existing = await supabase.from('marketing_embeddings').select('id').eq('source_type', 'page').eq('source_id', page.id).eq('chunk_index', 0).eq('content_hash', hash).maybeSingle();
   if (existing.data?.id) return { pageId: page.id, reused: true };
-  const { vector, model } = await openAIEmbedding(source);
+  const aiConfig = await getAIConfig(supabase);
+  const { vector, model } = await openAIEmbedding(source, aiConfig.openaiKey);
   const { error: insertError } = await supabase.from('marketing_embeddings').insert({
     source_type: 'page', source_id: page.id, chunk_index: 0, content_hash: hash, content: source,
     embedding: JSON.stringify(vector) as unknown as Json, model, dimensions: vector.length, status: 'ready',

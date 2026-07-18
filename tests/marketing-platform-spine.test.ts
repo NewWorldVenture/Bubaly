@@ -37,6 +37,7 @@ describe('marketing platform spine contract', () => {
     expect(platform).toContain("jobType: 'generate_questions'");
     expect(platform).toContain("jobType: 'embed_page'");
     expect(platform).toContain('text-embedding-3-small');
+    expect(platform).toContain('getAIConfig(supabase)');
   });
 
   it('protects both cron surfaces with the shared authorization guard', () => {
