@@ -7,6 +7,8 @@ import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 type Db = SupabaseClient<Database>;
 type Provider = 'google_search_console' | 'bing_webmaster' | 'ai_citation';
+type ProviderStatus = 'connected' | 'not_configured' | 'error';
+type ProviderSyncOutcome = { status: ProviderStatus; rows: number };
 
 type Observation = {
   provider: Provider;
@@ -58,12 +60,12 @@ async function writeObservations(db: Db, rows: Observation[]): Promise<number> {
   return rows.length;
 }
 
-async function syncGoogle(db: Db): Promise<number> {
+async function syncGoogle(db: Db): Promise<ProviderSyncOutcome> {
   const started = new Date().toISOString();
   const token = tokenForGoogle();
   if (!token) {
     await writeSyncState(db, 'google_search_console', { status: 'not_configured', error: 'Set GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN for Search Console API access.', started });
-    return 0;
+    return { status: 'not_configured', rows: 0 };
   }
   try {
     const end = new Date();
@@ -84,19 +86,19 @@ async function syncGoogle(db: Db): Promise<number> {
     }));
     const count = await writeObservations(db, rows);
     await writeSyncState(db, 'google_search_console', { status: 'connected', rows: count, started, completed: new Date().toISOString() });
-    return count;
+    return { status: 'connected', rows: count };
   } catch (error) {
     await writeSyncState(db, 'google_search_console', { status: 'error', error: String(error instanceof Error ? error.message : error).slice(0, 500), started });
     throw error;
   }
 }
 
-async function syncBing(db: Db): Promise<number> {
+async function syncBing(db: Db): Promise<ProviderSyncOutcome> {
   const started = new Date().toISOString();
   const apiKey = process.env.BING_WEBMASTER_API_KEY?.trim();
   if (!apiKey) {
     await writeSyncState(db, 'bing_webmaster', { status: 'not_configured', error: 'Set BING_WEBMASTER_API_KEY for Bing Webmaster API access.', started });
-    return 0;
+    return { status: 'not_configured', rows: 0 };
   }
   try {
     const url = `https://ssl.bing.com/webmaster/api.svc/json/GetRankAndTrafficStats?siteUrl=${encodeURIComponent(siteUrl())}&apikey=${encodeURIComponent(apiKey)}`;
@@ -109,20 +111,20 @@ async function syncBing(db: Db): Promise<number> {
     }));
     const count = await writeObservations(db, rows);
     await writeSyncState(db, 'bing_webmaster', { status: 'connected', rows: count, started, completed: new Date().toISOString() });
-    return count;
+    return { status: 'connected', rows: count };
   } catch (error) {
     await writeSyncState(db, 'bing_webmaster', { status: 'error', error: String(error instanceof Error ? error.message : error).slice(0, 500), started });
     throw error;
   }
 }
 
-async function syncAiCitations(db: Db): Promise<number> {
+async function syncAiCitations(db: Db): Promise<ProviderSyncOutcome> {
   const started = new Date().toISOString();
   const endpoint = process.env.AI_CITATION_API_URL?.trim();
   const apiKey = process.env.AI_CITATION_API_KEY?.trim();
   if (!endpoint || !apiKey) {
     await writeSyncState(db, 'ai_citation', { status: 'not_configured', error: 'Set AI_CITATION_API_URL and AI_CITATION_API_KEY for citation observations.', started });
-    return 0;
+    return { status: 'not_configured', rows: 0 };
   }
   try {
     const response = await fetchExternal(endpoint, { method: 'GET', headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } }, 60_000);
@@ -139,7 +141,7 @@ async function syncAiCitations(db: Db): Promise<number> {
     }));
     const count = await writeObservations(db, rows);
     await writeSyncState(db, 'ai_citation', { status: 'connected', rows: count, started, completed: new Date().toISOString() });
-    return count;
+    return { status: 'connected', rows: count };
   } catch (error) {
     await writeSyncState(db, 'ai_citation', { status: 'error', error: String(error instanceof Error ? error.message : error).slice(0, 500), started });
     throw error;
@@ -147,12 +149,23 @@ async function syncAiCitations(db: Db): Promise<number> {
 }
 
 export async function syncMarketingProviders(db: Db) {
-  const results: Record<Provider, { ok: boolean; rows: number; error?: string }> = {
-    google_search_console: { ok: true, rows: 0 }, bing_webmaster: { ok: true, rows: 0 }, ai_citation: { ok: true, rows: 0 },
+  const results: Record<Provider, { ok: boolean; configured: boolean; status: ProviderStatus; rows: number; error?: string }> = {
+    google_search_console: { ok: true, configured: false, status: 'not_configured', rows: 0 },
+    bing_webmaster: { ok: true, configured: false, status: 'not_configured', rows: 0 },
+    ai_citation: { ok: true, configured: false, status: 'not_configured', rows: 0 },
   };
-  for (const [provider, fn] of Object.entries({ google_search_console: syncGoogle, bing_webmaster: syncBing, ai_citation: syncAiCitations }) as [Provider, (db: Db) => Promise<number>][]) {
-    try { results[provider].rows = await fn(db); }
-    catch (error) { results[provider] = { ok: false, rows: 0, error: 'Provider synchronization failed.' }; console.error(`[marketing-provider-sync] ${provider}`, error); }
+  for (const [provider, fn] of Object.entries({ google_search_console: syncGoogle, bing_webmaster: syncBing, ai_citation: syncAiCitations }) as [Provider, (db: Db) => Promise<ProviderSyncOutcome>][]) {
+    try {
+      const outcome = await fn(db);
+      results[provider] = { ok: true, configured: outcome.status === 'connected', ...outcome };
+    } catch (error) {
+      results[provider] = { ok: false, configured: false, status: 'error', rows: 0, error: 'Provider synchronization failed.' };
+      console.error(`[marketing-provider-sync] ${provider}`, error);
+    }
   }
-  return results;
+  return {
+    results,
+    completed: Object.values(results).every((result) => result.ok),
+    ready: Object.values(results).every((result) => result.ok && result.configured),
+  };
 }

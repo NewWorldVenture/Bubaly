@@ -77,6 +77,8 @@ describe('marketing platform spine contract', () => {
     expect(providerSync).toContain("page_path: ''");
     expect(providerSync).toContain("query: ''");
     expect(providerSync).toContain("onConflict: 'provider,engine,observed_for,page_path,query'");
+    expect(providerSync).toContain("ready: Object.values(results).every((result) => result.ok && result.configured)");
+    expect(providers).toContain('ready: summary.ready');
   });
 
   it('executes queued provider refreshes and revalidates sitemap jobs', () => {
