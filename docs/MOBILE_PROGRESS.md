@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~35% (early)
+## Overall completion: ~37% (early)
 
 Weighting (per the mission brief):
 
@@ -404,6 +404,26 @@ Weighting (per the mission brief):
 - **Parallel-bot note:** file-disjoint from agent-05 (modules + app-shell) and agent-02
   (hand-rolled overlays + non-module app chrome) — this is the public blog/marketing
   surface. The `coarse:min-w-11` utility is additive and shared-safe.
+
+### M-020 — Gallery/feed thumbnails eager-loaded every image on mobile (Performance)
+- **Severity:** P2 (mobile performance). **Phase:** performance.
+- **Problem:** the photo / memory / social-feed **gallery grids** used raw `<img>`
+  with no `loading` hint, so opening an image-heavy screen made a phone download
+  *every* below-the-fold thumbnail immediately — wasted mobile data + slower first
+  paint.
+- **Fix:** added `loading="lazy" decoding="async"` to the grid/feed thumbnails in
+  `photos-module`, `memories/page`, and `social-feed-module` (10 images). Deliberately
+  **left eager** the photos lightbox's *active* image (it's the focused content — lazy
+  would delay it) and the upload **blob previews** (immediately visible). Verified per
+  image that each target is a below-the-fold grid/feed thumbnail, not a hero/LCP image.
+- **Files:** `components/modules/photos-module.tsx`,
+  `components/modules/social-feed-module.tsx`,
+  `app/(app)/dashboard/memories/page.tsx`.
+- **Test:** `tests/mobile-gallery-lazy-images.test.ts` (4) — asserts the grids
+  lazy-load and that the lightbox active image is NOT lazy.
+- **Evidence:** guard green; `tsc --noEmit` 0; eslint 0 (caught + fixed a duplicate
+  `loading` prop where one image was already lazy).
+- **First entry in the Performance area** (was 0% app-wide).
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

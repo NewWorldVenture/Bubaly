@@ -328,18 +328,18 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
           {hasVideo ? (
             <div className="relative overflow-hidden rounded-xl border border-border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={item.thumbnailUrl || media[0]} alt="" className="h-48 w-full object-cover" />
+              <img src={item.thumbnailUrl || media[0]} alt="" loading="lazy" decoding="async" className="h-48 w-full object-cover" />
               <span className="absolute inset-0 grid place-items-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-black/55 text-white"><Play className="h-5 w-5 fill-white" /></span></span>
               {item.durationLabel && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">{item.durationLabel}</span>}
             </div>
           ) : media.length === 1 ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={media[0]} alt="" className="h-48 w-full rounded-xl border border-border object-cover" />
+            <img src={media[0]} alt="" loading="lazy" decoding="async" className="h-48 w-full rounded-xl border border-border object-cover" />
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
               {media.map((url, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={url} alt="" className="h-24 w-full rounded-lg border border-border object-cover" />
+                <img key={i} src={url} alt="" loading="lazy" decoding="async" className="h-24 w-full rounded-lg border border-border object-cover" />
               ))}
             </div>
           )}

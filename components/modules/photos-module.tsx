@@ -249,7 +249,7 @@ export function PhotosModule() {
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={album.cover} alt={album.name} className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <img src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
                       ) : (
                         <div className="flex h-full items-center justify-center text-5xl opacity-30">
                           <kind.icon className="h-12 w-12" style={{ color: kind.color }} />
@@ -320,7 +320,7 @@ export function PhotosModule() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={photo.url ?? ''} alt={photo.caption ?? 'Photo'}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
-                      loading="lazy" />
+                      loading="lazy" decoding="async" />
                   )}
                   {/* Video badge */}
                   {isVideo && (
@@ -367,7 +367,7 @@ export function PhotosModule() {
                     </div>
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                    <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? (photo.media_type === 'video' ? 'Video' : 'Photo')}</p>
