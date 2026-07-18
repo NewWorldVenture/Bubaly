@@ -21,6 +21,7 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-002 | 7 | iOS/iPadOS zoom-on-focus: force ≥16px inputs on touch (`!important` + coarse pointer) | `60741b61` |
 | M-003 | 4 | Horizontal-overflow sweep — found compliant; ratcheted (tables stay scroll-wrapped) | `1e5d5cd5` |
 | M-004 | 6 | Labeled 4 icon-only buttons; inbox archive made touch-visible + bigger target | `ded0e179` |
+| M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | (this commit) |
 
 Guard tests: `tests/mobile-viewport-height.test.ts`, `tests/mobile-forms.test.ts`,
 `tests/mobile-no-horizontal-overflow.test.ts`, `tests/mobile-touch-a11y.test.ts`
@@ -30,7 +31,18 @@ Guard tests: `tests/mobile-viewport-height.test.ts`, `tests/mobile-forms.test.ts
 
 ## 🔜 OPEN — do these next (priority order)
 
-### M-005 (P1) — Hover-reveal controls are invisible/unreachable on touch
+### ✅ M-005 (P1) — DONE (agent-05) — Hover-reveal controls are invisible/unreachable on touch
+**Resolved.** All 10 modules with truly-hidden `opacity-0 group-hover:opacity-100`
+row actions (billing, briefing, care, files-hub, grocery, notes, photos, shopping,
+timetable, trips) transformed to `opacity-100 sm:opacity-0 sm:group-hover:opacity-100
+focus-visible:opacity-100` — visible on touch, hover-reveal on mouse, keyboard-
+reachable. No `hidden group-hover:` remained (inbox was fixed in M-004). Guard
+`tests/mobile-hover-reveal.test.ts` forbids regression. The `opacity-70/80
+group-hover:opacity-100` hits (no `opacity-0` base) were left — they are already
+visible on touch and just brighten on hover (not a defect).
+
+<details><summary>Original description (for reference)</summary>
+
 The `opacity-0 group-hover:opacity-100` and `hidden group-hover:flex` pattern hides
 row actions until mouse-hover — but **touch devices have no hover**, so these
 controls never appear on a phone/tablet (edit, delete, archive, favorite, drag,

@@ -188,7 +188,7 @@ export function ShoppingModule() {
                 {isActive && (
                   <button onClick={(e) => { e.stopPropagation(); setEditingList(list); }}
                     aria-label="Edit list"
-                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-1 hover:bg-black/10">
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 rounded p-1 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}

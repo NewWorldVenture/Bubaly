@@ -273,7 +273,7 @@ export function TripsModule() {
                           {it.assignee_id && <div className="text-[11px] text-muted mt-0.5">{memberName(it.assignee_id)}</div>}
                         </div>
                         {canEdit && (
-                          <button onClick={() => removeItem(it)} aria-label="Remove" className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:text-rose-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => removeItem(it)} aria-label="Remove" className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 hover:text-rose-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
                         )}
                       </li>
                     ))}

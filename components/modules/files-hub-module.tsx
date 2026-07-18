@@ -207,7 +207,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                   <span className={cn('grid h-11 w-11 place-items-center rounded-xl', KIND_TONE[kind])}><Icon className="h-5 w-5" /></span>
                   <div className="flex items-center gap-0.5">
                     <button onClick={() => toggleFavorite(d.id)} aria-label={d.is_favorite ? 'Unfavorite' : 'Favorite'}
-                      className={cn('rounded-lg p-1.5 transition hover:bg-elevated', d.is_favorite ? 'text-amber-400' : 'text-muted opacity-0 group-hover:opacity-100')}>
+                      className={cn('rounded-lg p-1.5 transition hover:bg-elevated', d.is_favorite ? 'text-amber-400' : 'text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100')}>
                       <Star className={cn('h-4 w-4', d.is_favorite && 'fill-amber-400')} />
                     </button>
                     <button onClick={() => toggleSecure(d.id)} aria-label={d.is_secure ? 'Move to shared' : 'Move to vault'}

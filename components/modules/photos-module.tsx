@@ -329,7 +329,7 @@ export function PhotosModule() {
                     </div>
                   )}
                   {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                       {photo.caption && <p className="truncate text-[11px] text-white">{photo.caption}</p>}
                       <div className="ml-auto flex gap-1.5">

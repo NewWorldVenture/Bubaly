@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~14% (early)
+## Overall completion: ~17% (early)
 
 Weighting (per the mission brief):
 
@@ -121,11 +121,23 @@ Weighting (per the mission brief):
   list-row controls too — invisible on touch. A dedicated pass should make these
   touch-visible app-wide (inbox archive done here as the first).
 
+### M-005 — Hover-reveal row actions invisible on touch (Phase 6)
+- **Severity:** P1 (mobile). Row actions gated behind `opacity-0
+  group-hover:opacity-100` never appear on a touch device (no hover), so
+  edit/delete/archive/favorite/drag controls were unreachable on phones/tablets.
+- **Fix:** transformed all 10 modules with the truly-hidden pattern (billing,
+  briefing, care, files-hub, grocery, notes, photos, shopping, timetable, trips) to
+  `opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100` —
+  shown on touch, hover-reveal on mouse (`sm+`), keyboard-reachable. Left the
+  `opacity-70/80 group-hover` hits (already visible on touch; they only brighten).
+- **Test:** `tests/mobile-hover-reveal.test.ts` (3) — forbids a bare touch-invisible
+  hover-reveal anywhere in `components/` + `app/`. **17 mobile guard tests** total.
+- **Evidence:** app-wide grep → 0 bare hover-reveal remain; guard green; eslint 0.
+
 ## Next steps (autonomous, in order)
-The prioritized, ready-to-pick backlog lives in **`docs/MOBILE_TODO.md`** (M-005…
-M-010) with exact `file:line` targets. Top of queue: **M-005 — hover-reveal
-controls invisible on touch** (~30 `group-hover`-gated row actions; template is the
-inbox-archive fix in M-004).
+The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
+**M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
+then M-007 (overlays/safe-area), M-009 (Playwright matrix), M-010 (PWA/offline).
 
 ---
 

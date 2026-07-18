@@ -170,7 +170,7 @@ export function TimetableModule() {
                       <div key={cl.id} className={cn('group rounded-xl border p-2.5', subjectColor(c.subject))}>
                         <div className="flex items-start justify-between gap-1">
                           <div className="font-semibold text-sm leading-tight">{c.subject}</div>
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(c)} aria-label="Edit" className="p-1 rounded-md hover:bg-black/20"><Pencil className="h-3.5 w-3.5" /></button>
                             <button onClick={() => remove(c)} aria-label="Remove" className="p-1 rounded-md hover:bg-black/20"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>

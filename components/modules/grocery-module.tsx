@@ -241,7 +241,7 @@ export function GroceryModule() {
                         </button>
                         <span className={cn('flex-1 text-sm font-medium', item.is_checked && 'line-through text-muted')}>{item.name}</span>
                         {item.quantity && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand-text">{item.quantity}</span>}
-                        <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                        <div className="ml-auto flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition">
                           <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                           <button aria-label="More options" className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-3.5 w-3.5" /></button>
                         </div>
