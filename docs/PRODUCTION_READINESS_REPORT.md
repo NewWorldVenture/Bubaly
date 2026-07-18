@@ -1,13 +1,13 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-18 05:40 America/New_York
+Audit snapshot: 2026-07-18 06:05 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 511 Vitest files and 3,271 tests pass in the latest constrained-worker full local gate.
-- Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
-- The build generates 250 static routes.
+- 512 Vitest files and 3,272 tests pass in the latest constrained-worker full local gate.
+- Typecheck and lint pass. The latest fresh-directory production build compiled successfully but its page-generation worker exited with code 1; this increment is not build-verified.
+- The prior verified build generated 250 static routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
@@ -33,6 +33,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   a retryable state before showing scores or relationship insights.
 - Family Assistant now preserves shared reasoning-context failures and renders its retryable state before showing
   partial relationship guidance.
+- Calm now preserves inbox and shared reasoning-context failures and renders its retryable state before showing
+  partial household guidance.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
   goal funding is published in migration `0208` and commit `7a20e160`.
 - Wallet activation now fails closed on disclosure, member, child-wallet, bucket, and rule provisioning

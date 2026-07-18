@@ -5,14 +5,17 @@ import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Calm | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 type FoiSuggestion = { id?: string; title?: string; detail?: string; href?: string; impact?: number };
 
-function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
-  return Promise.resolve(p).then(({ data, error }) => (error ? [] : (data ?? [])));
+type ReadResult<T> = { data: T[]; error: unknown | null };
+
+function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<ReadResult<T>> {
+  return Promise.resolve(p).then(({ data, error }) => ({ data: data ?? [], error: error ?? null }));
 }
 
 export default async function CalmPage() {
@@ -22,7 +25,7 @@ export default async function CalmPage() {
   const now = new Date();
   const in24 = new Date(now.getTime() + 24 * 3_600_000).toISOString();
 
-  const [agentRows, autopilotRows, foiRows, approvalRows, reminderRows] = await Promise.all([
+  const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
       .eq('family_id', familyId).eq('status', 'active').in('severity', ['action', 'attention']).order('created_at', { ascending: false }).limit(100)),
     safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency')
@@ -34,6 +37,18 @@ export default async function CalmPage() {
     safe(supabase.from('reminders').select('id, title, remind_at')
       .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(50)),
   ]);
+
+  const readError = [agentResult.error, autopilotResult.error, foiResult.error, approvalResult.error, reminderResult.error].find(Boolean);
+  if (readError) {
+    console.error('[dashboard-calm] inbox read failed', readError);
+    return <ErrorState message="Could not load your Calm inbox from Supabase. Refresh and try again." />;
+  }
+
+  const agentRows = agentResult.data;
+  const autopilotRows = autopilotResult.data;
+  const foiRows = foiResult.data;
+  const approvalRows = approvalResult.data;
+  const reminderRows = reminderResult.data;
 
   const items: CalmItem[] = [];
 
@@ -60,11 +75,15 @@ export default async function CalmPage() {
   // R2: relationship-level reasoning over the Knowledge Graph (hub risk, ripple,
   // coverage) folded into the same calm inbox — best-effort, so a missing graph
   // never breaks the page.
-  const reasoning = await loadFamilyContext(supabase, familyId).catch(() => null);
-  if (reasoning) {
-    for (const ins of reasoningInsights(reasoning)) {
-      items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });
-    }
+  let reasoning;
+  try {
+    reasoning = await loadFamilyContext(supabase, familyId);
+  } catch (error) {
+    console.error('[dashboard-calm] reasoning context read failed', error);
+    return <ErrorState message="Could not load your Calm inbox from Supabase. Refresh and try again." />;
+  }
+  for (const ins of reasoningInsights(reasoning)) {
+    items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });
   }
 
   const inbox = buildCalmInbox(items);

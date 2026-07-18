@@ -6,6 +6,21 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0811 - Calm inbox hid Supabase and reasoning-context failures as an empty inbox
+
+- Timestamp: 2026-07-18 06:05 America/New_York.
+- Service: Dashboard Calm inbox.
+- Status: Resolved in source; build and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/calm`.
+- Finding: required inbox reads and shared reasoning-context failures were converted into empty arrays or omitted insights while the Calm page continued rendering a partial inbox.
+- Repair: the route now preserves each inbox read error, logs the failed boundary, and returns its retryable error state before building the inbox; reasoning-context failures use the same visible failure state.
+- Affected roles: authenticated family members.
+- Supabase impact: failed reads from agent activity, autopilot suggestions, Operating Index suggestions, approvals, reminders, or shared reasoning context are no longer presented as a healthy empty inbox.
+- Evidence: focused Calm read-boundary test, full 512 test files/3,272 tests with constrained workers and no unhandled errors, typecheck, lint, and `git diff --check`; a fresh-directory build compiled but its page-generation worker exited with code 1.
+- Source commit: `63a3090f`.
+- Remaining launch gate: resolve the page-generation build-worker failure, validate authenticated RLS and deployed retry behavior, and continue broader dashboard/deployment verification.
+
 ### PLA-0810 - Profile contribution stats silently swallowed read failures (observability)
 
 - Timestamp: 2026-07-18 10:04 UTC
