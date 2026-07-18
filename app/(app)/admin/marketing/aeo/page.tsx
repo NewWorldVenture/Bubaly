@@ -114,6 +114,7 @@ export default async function AeoPage() {
             <input name="question" required placeholder="What is the best family organizer app?" className={inputCls} />
             <select name="pattern" className={inputCls}><option value="">Pattern (optional)</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
             <input name="entity" placeholder="Entity (e.g. Bubaly)" className={inputCls} />
+            <input name="source_path" placeholder="Source path (/features)" className={inputCls} />
             <textarea name="answer" rows={4} placeholder="Structured answer draft…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
             <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Add question</button>
           </form>

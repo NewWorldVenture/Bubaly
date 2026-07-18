@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { SignupForm } from '@/components/auth/signup-form';
 import { LoadingBlock } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Sign up' };
+export const metadata: Metadata = { title: 'Sign up', robots: { index: false, follow: false } };
 
 export default function SignupPage() {
   return (

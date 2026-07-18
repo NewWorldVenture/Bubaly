@@ -6,6 +6,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { landingCta, bodyParagraphs, normalizeSlug } from '@/lib/marketing/landing';
 import { LandingTracker } from './tracker';
 import { getPublishedMarketingPage, MarketingPageView, marketingPageMetadata } from '@/lib/marketing/public-pages';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +48,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     const platformPage = await getPlatformPage(slug);
     return platformPage ? marketingPageMetadata('landing', slug) : { title: 'Not found', robots: { index: false } };
   }
-  return {
+  return resolveMarketingMetadata(`/lp/${page.slug}`, {
     title: page.headline || page.title,
     description: page.subhead || undefined,
     alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/lp/${page.slug}` },
@@ -56,7 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description: page.subhead || undefined,
       url: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/lp/${page.slug}`,
     },
-  };
+  });
 }
 
 export default async function LandingPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -99,6 +101,11 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           {paragraphs.map((p, i) => <p key={i}>{p}</p>)}
         </article>
       )}
+      <MarketingAeoSection
+        path={`/lp/${page.slug}`}
+        name={page.headline || page.title}
+        description={page.subhead || page.title}
+      />
     </div>
   );
 }

@@ -18,8 +18,6 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/faq', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/blog', priority: 0.7, changeFrequency: 'weekly' },
   { path: '/contact', priority: 0.5, changeFrequency: 'yearly' },
-  { path: '/login', priority: 0.5, changeFrequency: 'yearly' },
-  { path: '/signup', priority: 0.6, changeFrequency: 'yearly' },
   { path: '/terms', priority: 0.3, changeFrequency: 'yearly' },
   { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' },
   { path: '/cookies', priority: 0.3, changeFrequency: 'yearly' },
@@ -105,5 +103,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries];
+  const byUrl = new Map<string, MetadataRoute.Sitemap[number]>();
+  for (const entry of [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries]) {
+    const previous = byUrl.get(entry.url);
+    if (!previous) {
+      byUrl.set(entry.url, entry);
+      continue;
+    }
+    const previousDate = previous.lastModified ? new Date(previous.lastModified).getTime() : 0;
+    const nextDate = entry.lastModified ? new Date(entry.lastModified).getTime() : 0;
+    byUrl.set(entry.url, {
+      ...previous,
+      ...entry,
+      priority: Math.max(previous.priority ?? 0, entry.priority ?? 0),
+      lastModified: Math.max(previousDate, nextDate) ? new Date(Math.max(previousDate, nextDate)) : undefined,
+    });
+  }
+  return [...byUrl.values()];
 }

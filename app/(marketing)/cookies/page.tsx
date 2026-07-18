@@ -1,11 +1,14 @@
 import type { Metadata } from 'next';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/cookies', {
   title: 'Cookie Policy',
   description: 'How Bubaly uses cookies and similar technologies, and the choices you have.',
-};
+  });
+}
 
 const SECTIONS: LegalSection[] = [
   {

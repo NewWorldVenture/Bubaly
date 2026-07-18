@@ -138,7 +138,25 @@ export async function getAeoQuestionsForCategory(category: string, limit = 4): P
 /** Read the canonical page payload populated by the Super Admin content loop. */
 export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<PublicAeoRead> {
   try {
-    const { data, error } = await anonClient()
+    const client = anonClient();
+    // The AEO console is the editable source of truth. Prefer its published
+    // rows so an admin answer reaches every matching public route immediately.
+    const { data: rows, error: rowsError } = await client
+      .from('marketing_aeo_questions')
+      .select('*')
+      .eq('source_path', path)
+      .eq('status', 'published')
+      .not('answer', 'is', null)
+      .order('clarity_score', { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (!rowsError) {
+      const questions = (rows ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
+      if (questions.length > 0) return { questions, available: true };
+    } else {
+      console.error('[marketing-aeo] path question rows read failed', rowsError);
+    }
+
+    const { data, error } = await client
       .from('marketing_pages')
       .select('aeo')
       .eq('path', path)
@@ -154,7 +172,7 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
       payload && typeof payload === 'object' ? (payload as Record<string, unknown>).questions : payload,
       path,
     );
-    return { questions: questions.slice(0, limit), available: true };
+    return { questions: questions.slice(0, limit), available: !error || Boolean(data) };
   } catch (error) {
     console.error('[marketing-aeo] path questions read failed', error);
     return { questions: [], available: false };

@@ -361,3 +361,13 @@ This checkpoint passed 653 test files / 3,843 tests, generated 1,281 pages,
 migration and dependency audits, and all four remote marketing gates. Production
 workflow secrets and Supabase migration-ledger ownership remain owner-side
 blockers for automated migration apply.
+
+## Follow-up checkpoint — 2026-07-18
+
+The legacy `/lp/[slug]` renderer now consumes the same published path-scoped AEO
+reader and WebPage/FAQ schema as canonical platform pages while preserving its
+existing Supabase content and conversion tracker. `resolveMarketingMetadata()`
+now applies admin-managed canonical URLs, and sitemap output de-duplicates legacy,
+static, blog, landing, and platform entries. AEO create/update/delete actions
+accept and revalidate `source_path`, so a published answer reaches its public page
+without a manual deploy.

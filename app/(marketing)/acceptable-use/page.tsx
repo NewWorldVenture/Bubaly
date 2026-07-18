@@ -1,11 +1,14 @@
 import type { Metadata } from 'next';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/acceptable-use', {
   title: 'Acceptable Use Policy',
   description: 'The rules for using Bubaly responsibly and keeping every family safe.',
-};
+  });
+}
 
 const SECTIONS: LegalSection[] = [
   {

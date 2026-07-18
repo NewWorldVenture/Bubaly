@@ -20,6 +20,10 @@ const AUTOMATION_TRIGGERS = ['customer_created', 'joins_segment', 'form_submitte
 const AUTOMATION_ACTIONS = ['send_email', 'send_sms', 'add_to_segment', 'remove_from_segment', 'apply_tag', 'create_task', 'notify_admin', 'update_lead_score'] as const;
 const AUTOMATION_STATUSES = ['draft', 'active', 'paused', 'archived'] as const;
 
+function revalidatePublicMarketingPath(path: string | null | undefined) {
+  if (path?.startsWith('/')) revalidatePath(path);
+}
+
 function requireChoice<T extends string>(value: string, choices: readonly T[], label: string): T {
   if (!(choices as readonly string[]).includes(value)) throw new Error(`Invalid ${label}.`);
   return value as T;
@@ -237,12 +241,14 @@ export async function addAeoQuestion(formData: FormData) {
     answer: answer || null,
     pattern: pattern || null,
     entity: str(formData.get('entity')) || null,
+    source_path: normalizePublicPath(str(formData.get('source_path'))),
     status: answer ? 'drafting' : 'opportunity',
     created_by: actorId,
   }).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('add the AEO question', error ?? new Error('No AEO question was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_aeo_question', resourceId: data.id, metadata: { question } });
   revalidatePath('/admin/marketing/aeo');
+  revalidatePublicMarketingPath(normalizePublicPath(str(formData.get('source_path'))));
 }
 
 export async function updateAeoQuestion(formData: FormData) {
@@ -276,22 +282,24 @@ export async function updateAeoQuestion(formData: FormData) {
     status,
     clarity_score: clarityScore,
     last_reviewed: new Date().toISOString(),
-  }).eq('id', id).select('id').maybeSingle();
+  }).eq('id', id).select('id, source_path').maybeSingle();
   if (error || !data) marketingActionFailure('update the AEO question', error ?? new Error('AEO question not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: status === 'published' ? 'publish' : 'update', resource: 'marketing_aeo_question', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/aeo');
   revalidatePath('/faq');
+  revalidatePublicMarketingPath(data.source_path);
 }
 
 export async function deleteAeoQuestion(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = str(formData.get('id'));
   if (!id) return;
-  const { data, error } = await supabase.from('marketing_aeo_questions').delete().eq('id', id).select('id').maybeSingle();
+  const { data, error } = await supabase.from('marketing_aeo_questions').delete().eq('id', id).select('id, source_path').maybeSingle();
   if (error || !data) marketingActionFailure('delete the AEO question', error ?? new Error('AEO question not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_aeo_question', resourceId: id });
   revalidatePath('/admin/marketing/aeo');
   revalidatePath('/faq');
+  revalidatePublicMarketingPath(data.source_path);
 }
 
 export async function updateSeoKeyword(formData: FormData) {

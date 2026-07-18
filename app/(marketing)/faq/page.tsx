@@ -5,11 +5,14 @@ import { FaqTabs, type FaqSection } from '@/components/marketing/faq-tabs';
 import { CTASection } from '@/components/marketing/cta';
 import { FaqStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
 import { readPublishedAeoQuestions } from '@/lib/marketing/aeo';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/faq', {
   title: 'FAQ & Family Knowledge Center',
   description: 'Answers to the questions families ask about organizing family life with Bubaly, the AI Family Operating System — privacy, roles, the AI assistant, pricing, and mobile apps.',
-};
+  });
+}
 
 export const revalidate = 3600;
 

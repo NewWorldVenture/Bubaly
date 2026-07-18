@@ -29,6 +29,8 @@ describe('static marketing AEO coverage', () => {
     expect(section).toContain('FAQAccordion');
     expect(section).toContain('MarketingPageStructuredData');
     expect(reader).toContain("from('marketing_pages')");
+    expect(reader).toContain("from('marketing_aeo_questions')");
+    expect(reader).toContain(".eq('source_path', path)");
     expect(reader).toContain(".eq('status', 'published')");
     expect(reader).toContain(".is('deleted_at', null)");
     expect(schema).toContain("'@type': 'WebPage'");
@@ -45,5 +47,29 @@ describe('static marketing AEO coverage', () => {
   it('does not loosen intentionally noindex utility routes', () => {
     expect(read('app/(marketing)/f/[id]/page.tsx')).toContain('index: false');
     expect(read('app/(marketing)/demo/upgrade/page.tsx')).toContain('index: false');
+    expect(read('app/(auth)/login/page.tsx')).toContain('index: false');
+    expect(read('app/(auth)/signup/page.tsx')).toContain('index: false');
+    expect(read('app/sitemap.ts')).not.toContain("path: '/login'");
+    expect(read('app/sitemap.ts')).not.toContain("path: '/signup'");
+  });
+
+  it('keeps the legacy landing route inside the canonical AEO loop', () => {
+    const landing = read('app/(marketing)/lp/[slug]/page.tsx');
+    const publicRenderer = read('lib/marketing/public-pages.tsx');
+    expect(landing).toContain('LandingTracker');
+    expect(landing).toContain('MarketingAeoSection');
+    expect(landing).toContain('path={`/lp/${page.slug}`}');
+    expect(publicRenderer).toContain('MarketingPageStructuredData');
+    expect(publicRenderer).toContain('readAeoQuestionsForPath');
+    expect(publicRenderer).toContain('marketingPageMetadata');
+  });
+
+  it('lets the admin SEO registry control canonical URLs as well as title and description', () => {
+    const seo = read('lib/marketing/seo.ts');
+    expect(seo).toContain('canonical');
+    expect(seo).toContain('alternates');
+    expect(seo).toContain("from('marketing_pages')");
+    expect(seo).toContain("from('marketing_seo_pages')");
+    expect(read('app/(app)/admin/marketing/actions.ts')).toContain('revalidatePublicMarketingPath');
   });
 });

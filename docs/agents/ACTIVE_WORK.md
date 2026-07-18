@@ -17,6 +17,7 @@ Update at each checkpoint (≤15 min while active).
 | agent-01/03/04 | stale >18h | IN_REVIEW; may resume | see registry | reclaimable per §0 |
 
 | `codex` | 2026-07-18 15:02 | Public marketing AEO/SEO handoff: added the shared Supabase-backed `MarketingAeoSection`, WebPage/FAQ JSON-LD, static-route wiring, and explicit parallel-agent ownership rules. Full 653-file / 3,843-test gate, build, audits, and all four remote marketing gates passed. | `components/marketing/marketing-aeo-section.tsx`, `lib/marketing/aeo.ts`, `components/marketing/structured-data.tsx`, public marketing routes, coordination docs | Preserve the shared reader/schema contract; engine and data lanes may proceed independently. |
+| `codex` | 2026-07-18 15:04 | Closed legacy public loop: `/lp/[slug]` now renders path-scoped AEO/schema, admin SEO canonical values flow into metadata, sitemap URLs are deduplicated, and AEO edits revalidate their public source path. Full 653-file / 3,846-test gate, build, audits, and remote marketing gates passed. | `lib/marketing/{aeo,seo,public-pages}.ts*`, `app/(marketing)/lp/[slug]/page.tsx`, `app/sitemap.ts`, admin AEO actions | Preserve source-path precedence and the legacy landing tracker while extending the shared public contracts. |
 
 ## QA-01 done this session (all on main, verified)
 - `next build` GREEN + tsc/vitest re-gate after concurrent landings.

@@ -11,8 +11,10 @@ import { BlogHeroArt } from '@/components/blog/blog-hero-art';
 import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/blog', {
   title: 'Blog — Tips, Stories & Insights for Modern Families',
   description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
   keywords: [
@@ -25,7 +27,8 @@ export const metadata: Metadata = {
     title: 'The Bubaly Blog — Tips, Stories & Insights for Modern Families',
     description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
   },
-};
+  });
+}
 
 export const revalidate = 3600;
 

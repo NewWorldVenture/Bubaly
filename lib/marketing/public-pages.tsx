@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ArrowRight, BookOpen, ChevronRight, CircleHelp, GitCompareArrows, Users } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import { normalizeMarketingSlug, pageTypeConfig, type MarketingPageType } from './platform';
+import { MarketingPageStructuredData } from '@/components/marketing/structured-data';
+import { readAeoQuestionsForPath } from './aeo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -65,14 +67,6 @@ export async function marketingPageMetadata(type: MarketingPageType, slug: strin
   };
 }
 
-function questionsFor(page: PublicPage): { question: string; answer: string }[] {
-  const aeo = record(page.aeo);
-  return (Array.isArray(aeo.questions) ? aeo.questions : []).map((item) => {
-    const row = record(item);
-    return { question: stringValue(row.question) ?? '', answer: stringValue(row.answer) ?? '' };
-  }).filter((row) => row.question && row.answer).slice(0, 12);
-}
-
 function bodyParagraphs(body: string | null): string[] {
   return (body ?? '').split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
 }
@@ -80,17 +74,12 @@ function bodyParagraphs(body: string | null): string[] {
 export async function MarketingPageView({ type, slug }: { type: MarketingPageType; slug: string }) {
   const page = await getPublishedMarketingPage(type, slug);
   if (!page) notFound();
-  const questions = questionsFor(page);
+  const aeo = await readAeoQuestionsForPath(page.path, 12);
+  const questions = aeo.questions.map((item) => ({ question: item.question, answer: item.answer }));
   const paragraphs = bodyParagraphs(page.body);
   const Icon = type === 'question' ? CircleHelp : type === 'comparison' || type === 'alternative' ? GitCompareArrows : type === 'audience' ? Users : type === 'guide' || type === 'resource' ? BookOpen : BookOpen;
-  const structured = {
-    '@context': 'https://schema.org', '@type': questions.length ? 'FAQPage' : 'WebPage', name: page.title, url: `${SITE_URL}${page.path}`,
-    description: page.summary ?? undefined,
-    ...(questions.length ? { mainEntity: questions.map((q) => ({ '@type': 'Question', name: q.question, acceptedAnswer: { '@type': 'Answer', text: q.answer } })) } : {}),
-  };
-  const jsonLd = JSON.stringify(structured).replace(/</g, '\\u003c');
   return <>
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
+    <MarketingPageStructuredData path={page.path} name={page.title} description={page.summary ?? `Explore ${page.title} with Bubaly.`} questions={questions.map((q) => ({ q: q.question, a: q.answer }))} />
     <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
       <nav className="mb-8 flex items-center gap-2 text-sm text-muted"><Link href="/" className="hover:text-fg">Bubaly</Link><ChevronRight className="h-4 w-4" /><span className="capitalize">{type}</span><ChevronRight className="h-4 w-4" /><span className="truncate">{page.title}</span></nav>
       <header className="max-w-4xl"><div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-text"><Icon className="h-3.5 w-3.5" /> {type}</div><h1 className="text-balance text-4xl font-black tracking-tight sm:text-6xl">{page.title}</h1>{page.summary && <p className="mt-5 max-w-3xl text-lg leading-8 text-muted sm:text-xl">{page.summary}</p>}<Link href="/signup" className="mt-7 inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-3 font-semibold text-white hover:bg-brand/90">Start with Bubaly <ArrowRight className="h-4 w-4" /></Link></header>

@@ -14,6 +14,12 @@ describe('marketing sitemap closed loop', () => {
   it('emits public landing-page URLs without making sitemap generation fatal', () => {
     expect(source).toContain('`' + '${SITE_URL}/lp/${encodeURIComponent(page.slug)}`');
     expect(source).toContain("console.error('[sitemap] published landing-page read failed'");
-    expect(source).toContain('return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries]');
+    expect(source).toContain('const byUrl = new Map');
+    expect(source).toContain('return [...byUrl.values()]');
+  });
+
+  it('deduplicates URLs when canonical platform pages overlap legacy or static entries', () => {
+    expect(source).toContain('byUrl.get(entry.url)');
+    expect(source).toContain('Math.max(previous.priority ?? 0, entry.priority ?? 0)');
   });
 });
