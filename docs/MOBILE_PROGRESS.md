@@ -452,6 +452,35 @@ Weighting (per the mission brief):
   to the className this page passes, so the shared toggle's app-wide `h-10` base is
   untouched.
 
+### M-022 — In-app Blog launcher modal used `88vh` + sub-44px header controls (Phase 8/6) — _parallel bot (blog feature component)_
+- **Severity:** P2 (mobile). **Phase:** 8 (viewport) + 6 (touch targets).
+- **Problem:** the signed-in **Blog launcher** modal (`components/app/blog-launcher.tsx`
+  — the header BookOpen button that pops the blog in an in-app iframe) had two mobile
+  bugs. (1) The panel was **`h-[88vh]`** — a *static* viewport unit; on mobile
+  Safari/Chrome `vh` is measured against the address-bar-**retracted** viewport, so
+  with the URL bar showing the 88vh panel is ~as tall as the whole visible area and
+  its header row (with the **Close** button) is pushed up behind the browser chrome,
+  and the iframe's bottom runs off-screen — the same class as M-001. (2) The header
+  **Close** and **Open-in-new-tab** controls go **icon-only on mobile** (their labels
+  are `hidden sm:inline`) at `px-2.5 py-1.5 text-xs` ≈ 28px — below the 44px minimum,
+  and Close is the modal's primary escape control on a phone.
+- **Fix:** (1) `h-[88vh]` → **`h-[88dvh]`** (dynamic viewport = the *visible* area, so
+  the header + iframe stay on-screen with the URL bar showing). (2) `coarse:min-h-11
+  coarse:min-w-11` + `justify-center` on the Close and Open-in-new-tab controls so they
+  become ≥44px squares on touch (icon stays centered when the label is hidden). Reuses
+  the M-019 utilities — no new CSS.
+- **Files:** `components/app/blog-launcher.tsx`.
+- **Test:** `tests/mobile-blog-launcher.test.ts` (3) — asserts the panel uses `dvh`
+  (and forbids any bare `h-[NNvh]`) and that both header controls carry the coarse
+  touch escape.
+- **Evidence:** guard green (3/3); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** the launcher is a **blog feature** component I authored this
+  session (rendered by the app-shell but not part of the shell chrome agent-05 owns);
+  the change is isolated to that one file — the shell's nav/top-bar/safe-area and the
+  shared `Modal` are untouched. Left the launcher's `h-10 w-10` header **trigger** icon
+  as-is, since its size is an app-header-density call in agent-05's lane.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
