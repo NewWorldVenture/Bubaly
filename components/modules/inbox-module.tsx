@@ -289,7 +289,7 @@ export function InboxModule() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] lg:pt-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CommDetail comm={selected} familyId={familyId} userId={userId}
             onClose={() => setSelected(null)} onArchive={() => void archive(selected)} onRefresh={refreshComms} />
         </div>

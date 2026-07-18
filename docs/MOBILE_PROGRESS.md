@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~34% (early)
+## Overall completion: ~35% (early)
 
 Weighting (per the mission brief):
 
@@ -358,6 +358,26 @@ Weighting (per the mission brief):
   the `lg:` restore, and the removal of the old inline calc.
 - **Evidence:** guard green; eslint 0; `next build` exit 0; Chromium fixture
   bug-reproduced + fix-cleared on all 4 profiles.
+
+### M-018 — Inbox/front-desk full-screen detail panels missed the bottom/side safe area (Phase 8)
+- **Severity:** P2 (mobile). **Phase:** 8 (safe areas & viewport).
+- **Problem:** the inbox + front-desk detail views become a mobile full-screen
+  takeover (`fixed inset-0 z-50 bg-background flex flex-col`, above the bottom nav).
+  They padded only `pt-[var(--safe-top)]`, so bottom-anchored content — notably the
+  **inbox reply composer** — sat under the home indicator on a notched phone, and in
+  landscape the side notch clipped the edges.
+- **Fix:** completed the safe-area padding on all four sides
+  (`pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]` with
+  `lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0` — the panels collapse to a static `lg:w-[400px]`
+  sidebar on desktop, where there's no safe area). Additive: portrait / non-notched
+  devices report 0 for these insets. Same completion pattern as M-014 (camera).
+- **Files:** `components/modules/inbox-module.tsx`,
+  `components/modules/front-desk-module.tsx`.
+- **Test:** `tests/mobile-fullscreen-panel-safe-area.test.ts` (2) — locks all four
+  insets + the `lg:` resets on both panels.
+- **Evidence:** guard green; eslint 0; `next build` exit 0. (className-only, no TS
+  surface — additive safe-area padding needs no pixel measurement, unlike the M-016/17
+  calc.)
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

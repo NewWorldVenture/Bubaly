@@ -31,14 +31,16 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-014 | 8 | Landscape safe-area: the edge-to-edge full-screen **camera** now pads left/right insets too (`--safe-left`/`--safe-right`), so the top-bar + shutter controls clear the side notch when a phone is held in landscape | `d13f0c88` |
 | M-015 | 7 | Mobile keyboards for the guardian **contact editor** (non-module, missed by M-006): phone→`type=tel`+`inputMode=tel`, email→`type=email`+`inputMode=email`+`autoCapitalize=none`, name→`autoComplete=name` | `b2948d10` |
 | M-016 | 8 | **Messages** chat panel now subtracts the mobile bottom-nav footprint (`-4rem-var(--safe-bottom)`, `lg:` restores desktop) so the composer clears the fixed nav — **Chromium-verified** (Playwright fixture, iPhone/Pixel/SE + landscape). Resolves the messages half of M-011 | `0226fa50` |
-| M-017 | 8 | **Concierge** chat panel same fix (inline `calc(100dvh-140px)` → `h-[calc(100dvh-140px-4rem-var(--safe-bottom))] lg:h-[…140px]`) — **Chromium-verified** with the `.module-main/.module-page` wrappers modelled. **Fully closes M-011** | (this commit) |
+| M-017 | 8 | **Concierge** chat panel same fix (inline `calc(100dvh-140px)` → `h-[calc(100dvh-140px-4rem-var(--safe-bottom))] lg:h-[…140px]`) — **Chromium-verified** with the `.module-main/.module-page` wrappers modelled. **Fully closes M-011** | `70dfc4c3` |
+| M-018 | 8 | **Inbox + front-desk** mobile full-screen detail panels (`fixed inset-0 z-50`) padded only `pt-[safe-top]`; completed the safe-area padding on all four sides (`pb`/`pl`/`pr` + `lg:` resets) so the inbox reply composer clears the home indicator and landscape side notches don't clip | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),
 `tests/mobile-landscape-safe-area.test.ts` (2),
 `tests/mobile-contact-input-keyboard.test.ts` (2),
-`tests/mobile-chat-panel-height.test.ts` (2), and
-`tests/mobile-concierge-panel-height.test.ts` (3) alongside the prior mobile guards.
+`tests/mobile-chat-panel-height.test.ts` (2),
+`tests/mobile-concierge-panel-height.test.ts` (3), and
+`tests/mobile-fullscreen-panel-safe-area.test.ts` (2) alongside the prior mobile guards.
 
 > **Parallel-bot note:** M-012 was done concurrently with agent-05's M-006/M-007.
 > It is **file-disjoint** and **complementary** to M-007: agent-05's M-007 audited
