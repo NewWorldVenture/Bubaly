@@ -37,7 +37,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-020 | perf | Gallery/feed grid thumbnails (photos, memories, social-feed) get `loading="lazy" decoding="async"` so a phone stops eager-loading every below-the-fold image on open (mobile data + first-paint). Lightbox active image + upload blob previews deliberately left eager | (agent-05) |
 | M-021 | 6 | Marketing **site-header** control cluster (ThemeToggle 32px, menu button 40px, Log in / Get Started pills 32px) grows to ≥44px on touch (`coarse:min-h-11`/`-w-11`). Public marketing surface (parallel bot) | `ff874c48` |
 | M-022 | 8/6 | In-app **Blog launcher** modal: panel `h-[88vh]` → `h-[88dvh]` (fits the visible mobile viewport so the header/Close clear the URL bar) + Close / Open-in-new-tab controls (icon-only on mobile) grow to ≥44px on touch. Blog feature component (parallel bot) | `5bbeb24c` |
-| M-024 | 6 | Blog **engagement CTAs**: Save (♥) pill (~36px) + Subscribe card button (~40px) grow to ≥44px tall on touch (`coarse:min-h-11`). Completes the blog/marketing touch-target sweep. Blog feature components (parallel bot) | (this commit) |
+| M-024 | 6 | Blog **engagement CTAs**: Save (♥) pill (~36px) + Subscribe card button (~40px) grow to ≥44px tall on touch (`coarse:min-h-11`). Completes the blog/marketing touch-target sweep. Blog feature components (parallel bot) | `19738aa0` |
+| M-027 | 3 | Blog article **Related Articles** now render on mobile/tablet (`lg:hidden` inline section) — were `hidden lg:block` sidebar-only, so phones got no related-article links. Public blog surface (parallel bot) | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),

@@ -308,6 +308,37 @@ export default async function BlogPostPage({ params }: Params) {
                 ) : <div />}
               </div>
             )}
+
+            {/* Related articles — MOBILE/tablet parity. The desktop sidebar (below,
+                `hidden lg:block`) already shows these, but it's hidden < lg, so on a
+                phone readers otherwise get NO related-article navigation. Render the
+                same list inline for < lg; the sticky sidebar owns lg+. */}
+            {related.length > 0 && (
+              <section className="border-t border-white/8 py-8 lg:hidden" aria-label="Related articles">
+                <h2 className="mb-5 text-lg font-bold">Related Articles</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {related.map((r) => (
+                    <Link key={r.slug} href={`/blog/${r.slug}`} className="group flex gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4 transition hover:border-violet-400/20">
+                      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg">
+                        {r.heroImageUrl ? (
+                          <Image src={r.heroImageUrl} alt={r.heroImageAlt ?? r.title} fill sizes="56px" className="object-cover" />
+                        ) : (
+                          <BlogCover title={r.title} category={r.category} seed={r.slug} className="absolute inset-0 h-full w-full object-cover" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
+                        <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/40">
+                          <span>{fmtDate(r.date)}</span>
+                          <span>·</span>
+                          <span>{r.readingMinutes} min</span>
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
           </article>
 
           {/* Sidebar */}

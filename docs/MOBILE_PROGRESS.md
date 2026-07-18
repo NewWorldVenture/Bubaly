@@ -567,6 +567,30 @@ Weighting (per the mission brief):
 - **Evidence:** guard green (7 across both SW guards); `sw.js` parse-checked;
   eslint 0. File-disjoint (`public/sw.js` + test only).
 
+### M-027 — Blog article hid "Related Articles" entirely on mobile (Phase 3 responsive parity) — _parallel bot (public blog surface)_
+- **Severity:** P2 (mobile content parity + internal linking). **Phase:** 3 (responsive layout).
+- **Problem:** the article page (`app/(marketing)/blog/[slug]/page.tsx`) renders
+  **Related Articles** only inside the right sidebar `<aside className="hidden lg:block">`.
+  Below `lg` the whole sidebar is hidden, so on a **phone/tablet the reader got NO
+  related-article navigation at all** — a content-parity gap for the majority (mobile)
+  audience and a lost internal-linking / session-depth / SEO surface that desktop
+  visitors get. The `related` posts are already fetched server-side; they were simply
+  never rendered below `lg`. (Subscribe is unaffected — the article body already carries
+  an inline + bottom SubscribeForm; only Related was mobile-absent.)
+- **Fix:** added a `lg:hidden` inline **Related Articles** section at the end of the
+  article column (1-col, `sm:grid-cols-2`) that mirrors the sidebar list, reusing the
+  already-fetched `related` data + the same `Image`/`BlogCover` fallback. The sticky
+  desktop sidebar keeps its copy and still owns `lg+` — no duplicate render (the inline
+  block is `lg:hidden`, the sidebar is `hidden lg:block`).
+- **Files:** `app/(marketing)/blog/[slug]/page.tsx`.
+- **Test:** `tests/mobile-blog-related-parity.test.ts` (3) — asserts the inline section
+  is `lg:hidden`, maps over `related`, and the sidebar stays `hidden lg:block`.
+- **Evidence:** guard green (3/3); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** public blog surface — file-disjoint from agent-05 (modules/
+  app-shell), agent-02 (overlays), and agent-fable-opus (PWA/SW). First **responsive-
+  layout content-parity** fix (prior blog/marketing increments were touch-target/viewport).
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
