@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~32% (early)
+## Overall completion: ~33% (early)
 
 Weighting (per the mission brief):
 
@@ -314,6 +314,32 @@ Weighting (per the mission brief):
 - **Test:** `tests/mobile-contact-input-keyboard.test.ts` (2).
 - **Evidence:** guard green; `tsc --noEmit` 0; eslint 0.
 - **Parallel note:** non-module file, disjoint from the module inputs M-006 covered.
+
+### M-016 — Messages chat panel sat behind the mobile bottom nav (Phase 8) — Chromium-verified
+- **Severity:** P2 (mobile). **Phase:** 8 (safe areas & viewport). Resolves the
+  **messages** half of the flagged M-011.
+- **Problem:** the panel was `h-[calc(100dvh-var(--topbar-height)-1rem)]` — it
+  subtracts the sticky top bar but not the fixed mobile bottom tab bar (`app-shell`
+  reserves `pb-24`; the nav's real footprint is `4rem + safe-bottom`), so on a phone
+  the message composer sat *behind* the bottom nav.
+- **Verification (the reason this was deferred):** built a faithful HTML fixture of
+  the app-shell chrome (sticky `4rem`/`72px` top bar, `main pt-4 pb-24`, fixed
+  `4rem + var(--safe-bottom)` nav) and drove it in **real Chromium via Playwright**
+  across iPhone-390, Pixel-412, iPhone-SE-375 (portrait) + iPhone landscape, injecting
+  each device's home-indicator inset. The bug **reproduced on all**; a naive `-5rem`
+  guess left the composer 10px behind the nav on the 34px-inset iPhone; the correct
+  `-4rem-var(--safe-bottom)` **cleared the nav on all** (8px margin portrait, exact on
+  SE/landscape).
+- **Fix:** mobile `h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))]`,
+  `lg:h-[calc(100dvh-var(--topbar-height)-1rem)]` (desktop has no bottom nav).
+- **Files:** `components/modules/messages-module.tsx`.
+- **Test:** `tests/mobile-chat-panel-height.test.ts` (2) locks the formula + `lg:`
+  restore; the Playwright measurement is the shipping evidence.
+- **Evidence:** guard green; eslint 0 (2 pre-existing warnings); `next build` exit 0;
+  Chromium fixture: bug reproduced + fix cleared on all 4 profiles.
+- **Follow-up:** the **concierge** panel (inline `calc(100dvh - 140px)`, different
+  wrappers) has the same class of bug — left OPEN in TODO pending its own in-browser
+  verification (its nesting wasn't in this fixture, so it isn't verified yet).
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
