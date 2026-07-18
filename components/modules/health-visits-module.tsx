@@ -180,7 +180,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
             </div>
             <Field label="Reason / visit for">{(id) => <Input id={id} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />}</Field>
             <Field label="Outcome / notes">{(id) => <Textarea id={id} value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} rows={3} />}</Field>
-            <Field label="Cost ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+            <Field label="Cost ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add visit'}</Button>

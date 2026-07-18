@@ -553,7 +553,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
       <form onSubmit={submit} className="space-y-4">
         <Field label="Description" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Whole Foods Market" />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Amount" required>{(id) => <Input id={id} name="amount" type="number" step="0.01" min="0" placeholder="0.00" />}</Field>
+          <Field label="Amount" required>{(id) => <Input id={id} name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" />}</Field>
           <Field label="Type">{(id) => <Select id={id} name="type" defaultValue="expense"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -601,7 +601,7 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
         <Field label="Account name" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Joint Checking" />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Type">{(id) => <Select id={id} name="type" defaultValue="checking"><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit">Credit</option><option value="investment">Investment</option><option value="retirement">Retirement</option></Select>}</Field>
-          <Field label="Balance">{(id) => <Input id={id} name="balance" type="number" step="0.01" placeholder="0.00" />}</Field>
+          <Field label="Balance">{(id) => <Input id={id} name="balance" type="number" inputMode="decimal" step="0.01" placeholder="0.00" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Institution" hint="Optional">{(id) => <Input id={id} name="institution" placeholder="Chase" />}</Field>

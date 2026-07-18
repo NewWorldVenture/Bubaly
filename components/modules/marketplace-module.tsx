@@ -386,7 +386,7 @@ export function MarketplaceModule({
           {kindHasPrice(form.kind) && (
             <div className="grid grid-cols-2 gap-3">
               <Field label={form.kind === 'rent' ? 'Rate ($)' : 'Price ($)'}>
-                {(id) => <Input id={id} type="number" min={0} step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
+                {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
               </Field>
               {form.kind === 'rent' && (
                 <Field label="Per">

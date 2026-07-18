@@ -367,7 +367,7 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
           </Select>
         )}</Field>
         <Field label="Strength (0–1) — how strongly a change propagates">{(id) => (
-          <Input id={id} type="number" min="0" max="1" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} />
+          <Input id={id} type="number" inputMode="decimal" min="0" max="1" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} />
         )}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

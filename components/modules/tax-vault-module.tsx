@@ -137,7 +137,7 @@ export function TaxVaultModule() {
               <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{TAX_CATEGORIES.map((c) => <option key={c} value={c}>{taxCategoryLabel(c)}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($, optional)">{(id) => <Input id={id} type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label="Amount ($, optional)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
               <Field label="Member (optional)">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">— None —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
             <Field label="File (optional, stored privately)">

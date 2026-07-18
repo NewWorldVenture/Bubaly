@@ -182,11 +182,11 @@ export function UtilitiesModule() {
               <Field label="Month">{(id) => <Input id={id} type="date" value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label="Amount ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
               <Field label="Provider">{(id) => <Input id={id} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Usage (optional)">{(id) => <Input id={id} type="number" step="0.01" value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} />}</Field>
+              <Field label="Usage (optional)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} />}</Field>
               <Field label="Unit (kWh, gal…)">{(id) => <Input id={id} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>

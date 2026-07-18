@@ -271,7 +271,7 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
         )}</Field>
         <Field label="Institution">{(id) => <Input id={id} value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="e.g. Chase, Ally, Fidelity" />}</Field>
         <Field label="Last 4 Digits">{(id) => <Input id={id} value={lastFour} onChange={(e) => setLastFour(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="4823" maxLength={4} />}</Field>
-        <Field label="Current Balance" required>{(id) => <Input id={id} type="number" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" required />}</Field>
+        <Field label="Current Balance" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" required />}</Field>
         <Button type="submit" className="w-full" loading={saving}>Add Account</Button>
       </form>
     </Modal>
@@ -314,7 +314,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     <Modal open={open} onClose={onClose} title="Add Transaction">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Whole Foods Market" required />}</Field>
-        <Field label="Amount" required>{(id) => <Input id={id} type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
+        <Field label="Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
         <Field label="Type">{(id) => (
           <Select id={id} value={type} onChange={(e) => setType(e.target.value as 'expense' | 'income' | 'transfer')}>
             <option value="expense">Expense</option>
@@ -376,7 +376,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
         )}</Field>
-        <Field label="Budget Amount" required>{(id) => <Input id={id} type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />}</Field>
+        <Field label="Budget Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />}</Field>
         <Field label="Period">{(id) => (
           <Select id={id} value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)}>
             <option value="weekly">Weekly</option>
@@ -425,7 +425,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
     <Modal open={open} onClose={onClose} title="Add Bill">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Bill Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mortgage" required />}</Field>
-        <Field label="Amount" required>{(id) => <Input id={id} type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
+        <Field label="Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
         <Field label="Due Date" required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />}</Field>
         <Field label="Category">{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -488,8 +488,8 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
       <form onSubmit={submit} className="space-y-4">
         <Field label="Goal Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Family Vacation" required />}</Field>
         <Field label="Emoji">{(id) => <Input id={id} value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🎯" />}</Field>
-        <Field label="Target Amount" required>{(id) => <Input id={id} type="number" step="0.01" min="0.01" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} placeholder="5000.00" required />}</Field>
-        <Field label="Saved So Far">{(id) => <Input id={id} type="number" step="0.01" min="0" value={currentAmount} onChange={(e) => setCurrentAmount(e.target.value)} placeholder="0.00" />}</Field>
+        <Field label="Target Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} placeholder="5000.00" required />}</Field>
+        <Field label="Saved So Far">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={currentAmount} onChange={(e) => setCurrentAmount(e.target.value)} placeholder="0.00" />}</Field>
         <Field label="Target Date">{(id) => <Input id={id} type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />}</Field>
         <Button type="submit" className="w-full" loading={saving}>Add Goal</Button>
       </form>

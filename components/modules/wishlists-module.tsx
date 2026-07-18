@@ -222,7 +222,7 @@ export function WishlistsModule() {
               {(id) => <Input id={id} type="url" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
             </Field>
             <Field label="Approx. price ($)">
-              {(id) => <Input id={id} type="number" min={0} step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
+              {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
             </Field>
           </div>
           <Field label="Priority">

@@ -267,7 +267,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
           <Field label="Birthday">{(id) => <Input id={id} name="birthday" type="date" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Weight (kg)">{(id) => <Input id={id} name="weight_kg" type="number" step="0.1" min="0" placeholder="12.5" />}</Field>
+          <Field label="Weight (kg)">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" placeholder="12.5" />}</Field>
           <Field label="Color">{(id) => <Input id={id} name="color" placeholder="Golden" />}</Field>
         </div>
         <Field label="Microchip ID">{(id) => <Input id={id} name="microchip_id" placeholder="Optional" />}</Field>
@@ -324,7 +324,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
           <Field label="Next due" hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
           <Field label="Dose / amount">{(id) => <Input id={id} name="dose" placeholder="1 tablet" />}</Field>
         </div>
-        <Field label="Weight (kg)" hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" step="0.1" min="0" />}</Field>
+        <Field label="Weight (kg)" hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
         <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Vet remarks, reactions…" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

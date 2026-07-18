@@ -143,7 +143,7 @@ export function SubscriptionsModule() {
           <form onSubmit={save} className="space-y-3">
             <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Netflix, Spotify…" />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Cost ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+              <Field label="Cost ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
               <Field label="Billing">{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">

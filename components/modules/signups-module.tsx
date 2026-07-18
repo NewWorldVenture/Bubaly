@@ -283,7 +283,7 @@ export function SignupsModule() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Cost ($)">
-              {(id) => <Input id={id} type="number" min={0} step="0.01" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} placeholder="0.00" />}
+              {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} placeholder="0.00" />}
             </Field>
             <Field label="Status">
               {(id) => (

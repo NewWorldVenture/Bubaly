@@ -125,7 +125,7 @@ export function ContactTimelineModule({
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <input name="occurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)}
               className="h-10 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 focus:ring-2" />
-            <input name="amount" type="number" step="0.01" min="0" placeholder="$ (gifts — optional)"
+            <input name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="$ (gifts — optional)"
               className="h-10 w-36 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />
             <input name="note" placeholder="Note — optional"
               className="h-10 flex-1 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />

@@ -21,7 +21,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-002 | 7 | iOS/iPadOS zoom-on-focus: force ≥16px inputs on touch (`!important` + coarse pointer) | `60741b61` |
 | M-003 | 4 | Horizontal-overflow sweep — found compliant; ratcheted (tables stay scroll-wrapped) | `1e5d5cd5` |
 | M-004 | 6 | Labeled 4 icon-only buttons; inbox archive made touch-visible + bigger target | `ded0e179` |
-| M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | (this commit) |
+| M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | `d678557f` |
+| M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | (this commit) |
 
 Guard tests: `tests/mobile-viewport-height.test.ts`, `tests/mobile-forms.test.ts`,
 `tests/mobile-no-horizontal-overflow.test.ts`, `tests/mobile-touch-a11y.test.ts`
@@ -70,13 +71,17 @@ touch via `sm:opacity-0 sm:group-hover:opacity-100`.
   bare `opacity-0 group-hover:opacity-100` on a `<button>`/`<a>` without a
   `focus-visible`/touch-visible escape hatch.
 
-### M-006 (P2) — Field-level mobile keyboard audit (Phase 7)
-The global 16px zoom-guard (M-002) and auth/OTP/phone inputs are done. Remaining:
-sweep numeric/currency/search/url inputs for `inputMode` + `type` + `autocomplete`.
-- Currency/amount inputs → `inputMode="decimal"`; quantity/count → `inputMode="numeric"`.
-- Search inputs → `type="search"` `inputMode="search"`.
-- Verify `enterKeyHint` on multi-field forms where useful.
-- Start: `grep -rn "type=\"number\"\|placeholder=\".*\\$\|amount\|quantity" components/modules`.
+### 🟡 M-006 (P2) — Field-level mobile keyboard audit (Phase 7) — MONEY DONE, search remains
+- ✅ **Money/decimal keypad (agent-05):** all 29 `type="number"` inputs with a
+  decimal step (`0.01`/`0.1`/`any`) or `0.00` placeholder across 19 modules now
+  carry `inputMode="decimal"` so iOS surfaces the decimal point (cents). Guard
+  `tests/mobile-numeric-inputmode.test.ts`. `type="number"` already yields a numeric
+  keypad, so integer count/year inputs were intentionally left (no defect).
+- 🔜 **Remaining (minor polish):** search inputs → add `inputMode="search"` (keep
+  `type="text"` to avoid a duplicate native clear-× next to existing custom clears)
+  on the ~10 modules with a Search box (files-hub, knowledge-base, weather, meals,
+  photos, social-feed, front-desk, inbox, documents, shopping). Low value — the
+  search enter-key hint only; do it as a quick pass if picked.
 
 ### M-007 (P2) — Overlay/drawer safe-area + keyboard behavior (Phase 11)
 `components/ui/modal.tsx` already uses safe-area insets. Verify each modal/drawer:

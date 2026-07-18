@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~17% (early)
+## Overall completion: ~19% (early)
 
 Weighting (per the mission brief):
 
@@ -133,6 +133,17 @@ Weighting (per the mission brief):
 - **Test:** `tests/mobile-hover-reveal.test.ts` (3) — forbids a bare touch-invisible
   hover-reveal anywhere in `components/` + `app/`. **17 mobile guard tests** total.
 - **Evidence:** app-wide grep → 0 bare hover-reveal remain; guard green; eslint 0.
+
+### M-006 — Money inputs missing the mobile decimal keypad (Phase 7)
+- **Severity:** P2 (mobile forms). `type="number"` on iOS Safari does not reliably
+  show a decimal point, so entering cents in money fields was awkward.
+- **Fix:** added `inputMode="decimal"` to all **29** `type="number"` inputs with a
+  decimal step (`0.01`/`0.1`/`any`) or `0.00` placeholder across **19 modules**
+  (finances, expenses, billing, insurance, health, marketplace, subscriptions, …).
+  Additive only — no type/validation change. Integer count/year inputs left as-is
+  (`type=number` already gives a numeric keypad).
+- **Test:** `tests/mobile-numeric-inputmode.test.ts` (2). **19 mobile guard tests** total.
+- **Evidence:** grep → 29/29 decimal inputs now have `inputMode`, 0 missing; tsc + eslint clean.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

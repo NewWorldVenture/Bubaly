@@ -211,7 +211,7 @@ export function ExpensesModule() {
           <form onSubmit={save} className="space-y-3">
             <Field label="Description">{(id) => <Input id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Dinner, groceries…" />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label="Amount ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
               <Field label="Date">{(id) => <Input id={id} type="date" value={form.spent_on} onChange={(e) => setForm({ ...form, spent_on: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">

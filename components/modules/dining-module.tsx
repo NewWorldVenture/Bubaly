@@ -194,7 +194,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
                   {['1', '2', '3', '4'].map(p => <option key={p} value={p}>{'$'.repeat(Number(p))}</option>)}
                 </Select>
               )}</Field>
-              <Field label="Rating">{(id) => <Input id={id} type="number" min="0" max="5" step="0.1" value={addForm.rating} onChange={e => setAddForm({ ...addForm, rating: e.target.value })} placeholder="4.5" />}</Field>
+              <Field label="Rating">{(id) => <Input id={id} type="number" inputMode="decimal" min="0" max="5" step="0.1" value={addForm.rating} onChange={e => setAddForm({ ...addForm, rating: e.target.value })} placeholder="4.5" />}</Field>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -210,7 +210,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
           <form onSubmit={submitLog} className="space-y-3">
             <Field label="Restaurant">{(id) => <Input id={id} value={logForm.name} onChange={e => setLogForm({ ...logForm, name: e.target.value })} placeholder="Where did you eat?" autoFocus />}</Field>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Total ($)">{(id) => <Input id={id} type="number" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({ ...logForm, amount: e.target.value })} placeholder="64.20" />}</Field>
+              <Field label="Total ($)">{(id) => <Input id={id} type="number" inputMode="decimal" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({ ...logForm, amount: e.target.value })} placeholder="64.20" />}</Field>
               <Field label="Items">{(id) => <Input id={id} type="number" min="0" value={logForm.items} onChange={e => setLogForm({ ...logForm, items: e.target.value })} placeholder="5" />}</Field>
               <Field label="When">{(id) => <Input id={id} type="date" value={logForm.when} onChange={e => setLogForm({ ...logForm, when: e.target.value })} />}</Field>
             </div>

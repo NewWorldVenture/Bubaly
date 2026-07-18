@@ -244,7 +244,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Covers">{(id) => <Select id={id} name="member_id" defaultValue=""><option value="">Whole family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Premium">{(id) => <Input id={id} name="premium_amount" type="number" step="0.01" min="0" placeholder="150" />}</Field>
+          <Field label="Premium">{(id) => <Input id={id} name="premium_amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="150" />}</Field>
           <Field label="Billed">{(id) => <Select id={id} name="premium_frequency" defaultValue="monthly">{PREMIUM_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">

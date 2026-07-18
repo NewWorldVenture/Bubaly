@@ -509,7 +509,7 @@ export function RelationshipModule() {
               {(id) => <Input id={id} type="url" value={giftForm.url} onChange={(e) => setGiftForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
             </Field>
             <Field label="Approx. price ($)">
-              {(id) => <Input id={id} type="number" min={0} step="0.01" value={giftForm.price} onChange={(e) => setGiftForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
+              {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={giftForm.price} onChange={(e) => setGiftForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

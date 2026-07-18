@@ -840,7 +840,7 @@ export function HealthModule() {
             <Field label="Calories">{(id) => <Input id={id} type="number" value={workoutForm.calories} onChange={(e) => setWorkoutForm((f) => ({ ...f, calories: e.target.value }))} placeholder="e.g. 285" />}</Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Distance (miles)">{(id) => <Input id={id} type="number" step="0.1" value={workoutForm.distance} onChange={(e) => setWorkoutForm((f) => ({ ...f, distance: e.target.value }))} placeholder="e.g. 3.2" />}</Field>
+            <Field label="Distance (miles)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={workoutForm.distance} onChange={(e) => setWorkoutForm((f) => ({ ...f, distance: e.target.value }))} placeholder="e.g. 3.2" />}</Field>
             <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={workoutForm.recorded_at} onChange={(e) => setWorkoutForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
           </div>
           <Field label="Notes (optional)">{(id) => <Input id={id} value={workoutForm.notes} onChange={(e) => setWorkoutForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Felt great, PR pace" />}</Field>

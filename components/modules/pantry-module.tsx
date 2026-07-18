@@ -285,9 +285,9 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Quantity">{(id) => <Input id={id} name="quantity" type="number" min={0} step="any" defaultValue={item?.quantity ?? 1} />}</Field>
+          <Field label="Quantity">{(id) => <Input id={id} name="quantity" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.quantity ?? 1} />}</Field>
           <Field label="Unit">{(id) => <Input id={id} name="unit" defaultValue={item?.unit ?? ''} placeholder="cans, lbs" />}</Field>
-          <Field label="Low at" hint="Restock threshold">{(id) => <Input id={id} name="low_threshold" type="number" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
+          <Field label="Low at" hint="Restock threshold">{(id) => <Input id={id} name="low_threshold" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
         </div>
         <Field label="Expiration date" hint="Leave blank for non-perishables">
           {(id) => <Input id={id} name="expires_at" type="date" defaultValue={item?.expires_at ?? ''} />}
