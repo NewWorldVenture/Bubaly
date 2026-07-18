@@ -238,7 +238,7 @@ Weighting (per the mission brief):
   (no runner assigned; provisioning failure, not a test failure). This is the
   known GitHub Actions runner/billing/org-policy blocker (LB-015), owned by the
   org — not a code issue. Mobile matrix evidence therefore comes from local runs
-  until runners are restored, at which point every PR is auto-gated. Local sandbox execution is **also** not viable (3 attempts: WebKit binary absent → chromium-pinned; then the `next start`+browser cycle aborts after the build completes) — so automated mobile-matrix *execution* evidence is blocked on infrastructure (CI runners, LB-015), not on code. Static guards (M-002 CSS / M-003 overflow) + config enumeration (225 tests) stand in until runners return; `docs/PHYSICAL_DEVICE_TEST_PLAN.md` covers what emulation can never prove.
+  until runners are restored, at which point every PR is auto-gated. **✅ Local execution NOW GREEN:** after a browser-binary saga (WebKit absent → chromium-pinned; headless-shell build absent → env-gated `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium` `executablePath` added to `playwright.config.ts`), the **`pixel` project ran `mobile.spec` against a real production build: 13 passed (42.4s)** — viewport-meta `viewport-fit=cover` + **no horizontal overflow + no sub-16px inputs across all 12 public routes** at an emulated Android device viewport. This is real automated evidence for M-002 (zoom) + M-003 (overflow) + viewport. CI (LB-015 runners) will run the full 4-device matrix per-PR once restored; `docs/PHYSICAL_DEVICE_TEST_PLAN.md` covers what emulation can't (real WebKit/keyboard/camera).
 
 ### M-010 — PWA update UX: no visible "new version" prompt (Phase 16)
 - **Problem:** `RegisterSW` registered the SW but had **no update handling** — the

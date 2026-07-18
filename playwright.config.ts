@@ -16,6 +16,10 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
+    // Sandboxes ship a full Chromium at a fixed path but not Playwright's pinned
+    // headless-shell build; set PW_CHROMIUM_PATH=/opt/pw-browsers/chromium to run
+    // there. No-op in CI, which installs its own browsers via `playwright install`.
+    ...(process.env.PW_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH } } : {}),
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
