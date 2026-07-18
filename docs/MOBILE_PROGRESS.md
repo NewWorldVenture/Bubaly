@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~11% (early)
+## Overall completion: ~14% (early)
 
 Weighting (per the mission brief):
 
@@ -98,6 +98,28 @@ Weighting (per the mission brief):
 - **Test:** `tests/mobile-no-horizontal-overflow.test.ts` (2) — asserts every
   module `<table>` sits in an `overflow-x-auto` container.
 - **Evidence:** live grep → 0 unwrapped tables; guard green (10 mobile tests total).
+
+### M-004 — Touch targets & accessible names (Phase 6): icon-only buttons swept
+- **Severity:** Medium (a11y + touch). **Phase:** 6 (touch targets & interactions).
+- **Finding:** app-wide scan of `<button>` elements for icon-only controls with no
+  accessible name (beyond the A-05 photos/contacts set already fixed in PLA-0822).
+  Most flags were false positives (visible text on an adjacent line). **Four real
+  offenders** fixed:
+  - `shopping-module` list **edit** (`<Pencil>`) — added `aria-label="Edit list"` +
+    `focus-visible:opacity-100` (the hover-reveal control is now keyboard-reachable).
+  - `inbox-module` **archive** (`<Archive>`) — added `aria-label="Archive"`, made it
+    **visible on touch** (`flex sm:hidden sm:group-hover:flex` — hover-reveal was
+    invisible on phones), and bumped the target from `h-7` (28px) to `h-9` (36px) on
+    mobile.
+  - `concierge-module` **back** (`<ArrowLeft>`) — added `aria-label="Back"`.
+  - `feedback-board` **submit** (icon-only `<Send>`) — added `aria-label="Post
+    feedback"` + `min-w-9 justify-center`.
+- **Test:** `tests/mobile-touch-a11y.test.ts` (4). **14 mobile guard tests** total.
+- **Evidence:** re-scan → the 4 targets no longer flag; `tsc` + `eslint` clean.
+- **Noted for a follow-up increment:** the **hover-reveal pattern**
+  (`opacity-0 group-hover:opacity-100` / `hidden group-hover:*`) appears on other
+  list-row controls too — invisible on touch. A dedicated pass should make these
+  touch-visible app-wide (inbox archive done here as the first).
 
 ## Next steps (autonomous, in order)
 1. Complete Phase 1 route inventory → `MOBILE_AUDIT.md` (every route × role × data

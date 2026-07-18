@@ -216,8 +216,8 @@ function CommentThread({ ideaId }: { ideaId: string }) {
       <form onSubmit={post} className="mt-3 flex items-center gap-2">
         <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={2000}
           placeholder="Add a comment…" className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-brand" />
-        <button type="submit" disabled={pending || !draft.trim()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+        <button type="submit" disabled={pending || !draft.trim()} aria-label="Post feedback"
+          className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
       </form>

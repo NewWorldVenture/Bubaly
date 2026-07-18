@@ -274,7 +274,8 @@ export function InboxModule() {
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); void archive(comm); }}
-                        className="hidden group-hover:flex items-center justify-center h-7 w-7 rounded-lg hover:bg-surface text-muted hover:text-fg transition shrink-0">
+                        aria-label="Archive"
+                        className="flex sm:hidden sm:group-hover:flex items-center justify-center h-9 w-9 sm:h-7 sm:w-7 rounded-lg hover:bg-surface text-muted hover:text-fg transition shrink-0">
                         <Archive className="h-3.5 w-3.5" />
                       </button>
                     </button>
