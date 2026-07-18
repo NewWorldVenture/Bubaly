@@ -6,6 +6,44 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0810 - Profile contribution stats silently swallowed read failures (observability)
+
+- Timestamp: 2026-07-18 10:04 UTC
+- Service: Profile / personal identity surface (agent-`fable-opus` lane)
+- Route: `/dashboard/profile`
+- Affected files: `app/(app)/dashboard/profile/page.tsx`, `tests/profile-read-boundary.test.ts`
+- Database objects: `chore_assignments` (points/chores), `calendar_events` (upcoming count), `independence_milestones` (achieved count); `family_members` (identity, best-effort with ctx fallback)
+- Role: any member viewing their own profile
+- Scenario: a contribution-stat read fails while the identity read succeeds (or falls back).
+- Severity: **P3** (observability gap on a low-stakes gamification surface — the identity is unaffected).
+- Launch impact: the page renders identity from the member read *or the already-loaded ctx member* (safe fallback), so it correctly does NOT fail closed. But the three contribution-stat reads dropped their `error`, so a failed read became `0 points / 0 chores / 0 upcoming / 0 milestones` **indistinguishable from a genuine "nothing yet"** — a swallowed failure with no diagnostic signal.
+- Root cause: the secondary stat reads dropped their `error`.
+- Resolution: keep the page best-effort (identity is primary and falls back to ctx), but `console.error('[dashboard/profile] chore-points read failed' | 'upcoming-events read failed' | 'milestones read failed', { memberId, error })` on each so a drifted/broken stat read is observable. This matches the "optional enhancement reads degrade but must log" guidance (vs. source-of-truth reads that fail closed).
+- Supabase impact: none (observability only; no schema/migration change).
+- Tests run: new `tests/profile-read-boundary.test.ts` (2 assertions — each stat error logged; page does not fail closed / keeps the ctx fallback); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0809 - Social workspace settings could overwrite real config with defaults after a read failure
+
+- Timestamp: 2026-07-18 10:04 UTC
+- Service: Social / content studio — workspace settings & access control (agent-`fable-opus` lane)
+- Route: `/dashboard/social/settings`
+- Affected files: `app/(app)/dashboard/social/settings/page.tsx`, `tests/social-settings-read-boundary.test.ts`
+- Database objects: `social_settings`, `family_members`, `social_access_permissions`
+- Role: family members with the social workspace; management gated via `can('manage_settings')`
+- Scenario: any of the three reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (data-loss trap — the settings form would render defaults that a save overwrites the real config with; access config hidden).
+- Launch impact: the three-way `Promise.all` dropped every `error`. A dropped `social_settings` read left `settings` null → the form pre-filled **DEFAULT values** (UTC timezone, "friendly" tone, no default platforms, approval off), and because the form's Save action persists whatever is shown, a manager saving would **silently overwrite the family's real workspace settings with defaults**. A dropped `members`/`perms` read likewise rendered an empty/incorrect access-control list.
+- Root cause: the three source-of-truth reads dropped their `error`, conflating a read failure with "no settings / no members".
+- Resolution: capture `settingsRes`/`membersRes`/`permsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/social/settings] social settings read failed', …)` + `return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />` before rendering the editable form. A genuinely missing table (unapplied migration) is still tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/social-settings-read-boundary.test.ts` (3 assertions); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0808 - Meal-voting page rendered an empty vote board when a read failed
 
 - Timestamp: 2026-07-18 09:59 UTC
