@@ -17,6 +17,7 @@ import { usd } from '@/lib/finance/splits';
 import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductibleTotalCents, type TaxDocLike } from '@/lib/finance/tax';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
+import { preOpenWindow } from '@/lib/utils/open-url';
 
 type TaxDoc = Tables<'tax_documents'>;
 
@@ -70,9 +71,10 @@ export function TaxVaultModule() {
   }
 
   async function download(path: string) {
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const { url, error } = await getDocumentSignedUrl(createClient(), path);
-    if (error || !url) return toastError(error ?? 'Could not open');
-    window.open(url, '_blank', 'noopener');
+    if (error || !url) { tab.cancel(); return toastError(error ?? 'Could not open'); }
+    tab.navigate(url);
   }
 
   async function remove(d: TaxDoc) {

@@ -24,6 +24,7 @@ import {
   type FileView, type SortKey, type DocLike,
 } from '@/lib/files/overview';
 import type { Tables } from '@/lib/database.types';
+import { preOpenWindow } from '@/lib/utils/open-url';
 
 type Document = Tables<'documents'>;
 
@@ -74,11 +75,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function download(id: string) {
     const d = byId.get(id); if (!d) return;
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     setBusy(id);
     const { url, error: err } = await getDocumentSignedUrl(createClient(), d.storage_path);
     setBusy(null);
-    if (err || !url) return toastError(err ?? 'Could not open the file');
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (err || !url) { tab.cancel(); return toastError(err ?? 'Could not open the file'); }
+    tab.navigate(url);
   }
 
   async function remove(id: string) {

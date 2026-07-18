@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { adminGetDocumentUrlAction, adminDeleteDocumentAction } from '@/app/(app)/admin/actions';
+import { preOpenWindow } from '@/lib/utils/open-url';
 
 export function DocumentRowActions({ documentId, storagePath }: { documentId: string; storagePath: string }) {
   const router = useRouter();
@@ -12,11 +13,12 @@ export function DocumentRowActions({ documentId, storagePath }: { documentId: st
   const [busy, setBusy] = useState<'view' | 'delete' | null>(null);
 
   async function view() {
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     setBusy('view');
     const res = await adminGetDocumentUrlAction(storagePath);
     setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    window.open(res.data!.url, '_blank', 'noopener,noreferrer');
+    if (!res.ok) { tab.cancel(); return toastError(res.error); }
+    tab.navigate(res.data!.url);
   }
 
   async function remove() {

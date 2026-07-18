@@ -19,6 +19,7 @@ import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
+import { preOpenWindow } from '@/lib/utils/open-url';
 
 type HomeAsset = Tables<'home_assets'>;
 type MaintenanceTask = Tables<'maintenance_tasks'>;
@@ -132,10 +133,11 @@ export function HomeModule() {
   }
 
   async function viewFile(doc: WarrantyDoc) {
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const supabase = createClient();
     const { url, error } = await getDocumentSignedUrl(supabase, doc.storage_path);
-    if (error || !url) return toastError(error ?? 'Could not open file');
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (error || !url) { tab.cancel(); return toastError(error ?? 'Could not open file'); }
+    tab.navigate(url);
   }
 
   if (assetsLoading || tasksLoading || docsLoading) return <SkeletonList />;
@@ -362,10 +364,11 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   }
 
   async function viewFile(doc: WarrantyDoc) {
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const supabase = createClient();
     const { url, error } = await getDocumentSignedUrl(supabase, doc.storage_path);
-    if (error || !url) return toastError(error ?? 'Could not open file');
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (error || !url) { tab.cancel(); return toastError(error ?? 'Could not open file'); }
+    tab.navigate(url);
   }
 
   async function removeFile(doc: WarrantyDoc) {

@@ -635,6 +635,33 @@ Weighting (per the mission brief):
   app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Second responsive
   content-parity fix, completing the article sidebar's mobile parity (Related + ToC).
 
+### M-030 — "View document" did nothing on iPhone: window.open after await is popup-blocked — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P1 mobile, Phase 5/8):** every signed-URL flow — Documents, Files
+  Hub, Tax Vault, Home warranty docs (×2), admin document viewer — did
+  `await getDocumentSignedUrl(...)` **then** `window.open(url)`. iOS Safari
+  (and strict desktop blockers) silently drop a `window.open` that is not in
+  the synchronous call stack of the tap gesture, so tapping **View/Download on
+  an iPhone did nothing** — core family documents (passports, insurance,
+  warranties, tax PDFs) were unopenable on mobile.
+- **Fix:** new `lib/utils/open-url.ts` `preOpenWindow()` — synchronously
+  pre-opens `about:blank` inside the gesture (manual `w.opener = null`, since a
+  `'noopener'` feature string would return null and lose the handle), then
+  `navigate(url)` after the await, `cancel()` (close the blank tab) on failure,
+  and a **same-tab `location.assign` fallback** when even the pre-open is
+  blocked — the tap always does something. All 6 call sites across the 5 files
+  converted; synchronous `window.open` in click handlers (social-feed
+  permalink, contacts tel/maps, profile store link) verified fine + left as-is.
+- **Guard:** `tests/mobile-popup-blocker-safe-open.test.ts` (3) — helper
+  pre-open + fallback + close; every signed-URL file imports the helper, calls
+  `preOpenWindow()`, has **no** raw `window.open(` left; failure path cancels
+  the blank tab.
+- **Evidence:** guard green; **full suite 683 files green**; tsc 0; eslint 0.
+- **Parallel-bot note:** new helper file + mechanical same-shape edits to 5
+  files nobody has in flight (agent-05 module heartbeat stale per §0).
+
+## Next steps (autonomous, in order)
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

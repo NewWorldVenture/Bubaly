@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { preOpenWindow } from '@/lib/utils/open-url';
 
 type Document = Tables<'documents'>;
 
@@ -236,10 +237,11 @@ export function DocumentsModule() {
   async function download(doc: Document) {
     setMenuId(null);
     if (!doc.storage_path) { toastError('No file attached to this document'); return; }
+    const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const sb = createClient();
     const { url, error: err } = await getDocumentSignedUrl(sb, doc.storage_path);
-    if (err || !url) { toastError(err ?? 'Could not open this file'); return; }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (err || !url) { tab.cancel(); toastError(err ?? 'Could not open this file'); return; }
+    tab.navigate(url);
   }
 
   async function remove(doc: Document) {
