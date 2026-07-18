@@ -85,7 +85,7 @@ To claim a lane, append a row with the agent id, timestamp, exact paths, and exp
 Lane: Platform spine + integration
 Owner: CODEX-01
 Files: migration 0231, platform worker/provider adapters, cron routes, public renderer/routes, sitemap/SEO bridge, asset provenance, coordination docs
-Commit: pending current checkpoint on codex/reasoning-main-publication
+Commit: `7f3fa538` on codex/reasoning-main-publication
 Tests: npm test -- --reporter=dot -> 632 files / 3,744 tests passed
 Typecheck: npm run typecheck -> pass
 Migration: npm run db:audit:migrations -> pass; next available 0232; live REST check currently returns 404 for `marketing_pages` until 0231 is applied
