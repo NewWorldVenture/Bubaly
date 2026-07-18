@@ -9,7 +9,7 @@ Read this whole file before you touch anything.
 parallel scheme. Progress math and weights live there; this file is only the live
 *who-owns-what* board + protocol.
 
-Last board update: **2026-07-18 17:40 UTC** · by `agent-04`
+Last board update: **2026-07-18 17:50 UTC** · by `agent-04`
 
 ---
 

@@ -8,6 +8,7 @@ import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeading
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
 import { readAeoQuestionsForCategory } from '@/lib/marketing/aeo';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 import { HeartButton } from '@/components/blog/heart-button';
@@ -58,7 +59,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!post) return { title: 'Post not found' };
   const keywords = articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''));
   const canonical = `${SITE_URL}/blog/${post.slug}`;
-  return {
+  // Closed loop: the SEO Page Registry (/admin/marketing/seo) can override this
+  // article's title + description; the post-derived values are the fallback.
+  return resolveMarketingMetadata(`/blog/${post.slug}`, {
     title: post.title,
     description: post.excerpt,
     keywords,
@@ -85,7 +88,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       description: post.excerpt,
       ...(post.heroImageUrl ? { images: [post.heroImageUrl] } : {}),
     },
-  };
+  });
 }
 
 export default async function BlogPostPage({ params }: Params) {
