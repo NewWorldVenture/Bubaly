@@ -6,6 +6,41 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0833 - SEO Page Registry polluted with ~100+ inert "Seed data" junk rows (debug-tool artifacts)
+
+- Issue ID: PLA-0833
+- Discovery timestamp: 2026-07-18 16:33 UTC
+- Resolution timestamp: 2026-07-18 16:37 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** (code review of /admin/marketing/seo)
+- Service: Marketing admin (A-17) — SEO Page Registry
+- Feature: SEO Page Registry (drives public-route `<title>`/meta description)
+- Route: `/admin/marketing/seo` (registry tab)
+- Affected files: `supabase/migrations/0233_cleanup_seo_registry_seed_junk.sql` (new), `tests/seo-registry-junk-cleanup.test.ts` (new)
+- Database objects: `public.marketing_seo_pages`
+- Integration: none
+- Role: super admin
+- Subscription tier: n/a
+- Household configuration: n/a
+- Scenario: the registry displayed ~100+ rows labeled "Seed data 1" … "Seed data 116+" (and "Seed data 1 <uuid>"), each with a random score and "active" status, alongside the real route rows (`/pricing`, `/security`).
+- Severity: **LOW-MEDIUM** (production data-hygiene / admin-UX; not a functional or security defect, but clutters a launch admin surface with fake data — §19 "remove placeholder/fake data").
+- Reproduction steps: open `/admin/marketing/seo` → SEO Page Registry tab; observe the "Seed data N" rows.
+- Expected behavior: the registry lists only real indexable routes.
+- Actual behavior: ~100+ inert "Seed data N" rows.
+- Root cause: an **external "Debug data seeding" tool** (bookmarked in the owner's browser; **not present in this repository** — a full repo grep for "Seed data" / any bulk `marketing_seo_pages` insert found none) wrote label-path rows directly into `marketing_seo_pages`, bypassing the app (the app's `saveSeoPage` normalises every path to a leading "/", so it cannot produce the no-slash "Seed data N" paths).
+- **Are they real / doing anything?** No. `lib/marketing/seo.ts` `getSeoPage(path)` resolves metadata by looking a row up by its **exact route path** (`.eq('path', path).eq('status','active')`). The "Seed data N" paths match no route, so they are **never queried and drive nothing** — purely inert clutter. The `marketing_seo_pages` table itself IS real and functional for the genuine route rows.
+- Resolution: migration `0233_cleanup_seo_registry_seed_junk.sql` — `DELETE FROM public.marketing_seo_pages WHERE path LIKE 'Seed data%' OR path NOT LIKE '/%'` (real registry rows are always routes beginning with "/"). Idempotent + non-destructive to real rows. To remove them immediately in production without waiting for deploy, run that one statement in the Supabase SQL editor.
+- Supabase impact: data-cleanup migration only (no schema/RLS change). Removes inert rows.
+- Security/Privacy impact: none (synthetic labels, no PII).
+- Accessibility/Performance impact: minor positive — registry renders fewer rows.
+- Tests added: `tests/seo-registry-junk-cleanup.test.ts` (3 — migration deletes the junk predicate, is a narrowly-scoped DELETE only [no DROP/TRUNCATE/UPDATE], and no repo source reintroduces "Seed data" rows).
+- Tests run: **executed migration 0233 against the live PG16 `fam` schema DB** with seeded fixtures (2 real + 3 junk) → `DELETE 3`, junk_left=0, real rows preserved, re-run `DELETE 0` (idempotent). Guard test (3) green; eslint clean; control-byte-clean.
+- Validation evidence: PG16 before/after counts (total=5 junk=3 → junk_left=0 real_kept=2) + idempotent re-run.
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified (in-repo). Production rows cleared when 0233 is applied (deploy) or the DELETE is run manually.
+- Remaining dependencies: the **external "Debug data seeding" tool** should be disabled/pointed away from production to prevent recurrence — it is outside this repo, so owner-actioned. Consider auditing other `marketing_*` tables for the same tool's artifacts.
+- Follow-up items: if the debug tool also seeded `marketing_seo_keywords` or other marketing tables, extend the cleanup with the same non-route/label predicate.
+
 ### PLA-0832 - Super Admin Marketing SEO/AEO pages were slow to open (fetched + rendered every row)
 
 - Timestamp: 2026-07-18 15:41 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
