@@ -2623,3 +2623,15 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
 - Tests run: batch apply on the harness (17 clean, 2 reverted on pre-existing enum bugs) + row-count spot checks + idempotent re-apply.
 - Commit: this push. Status: LB-014 orphan slice ~90% de-risked (19/21 reproducible + verified); remaining for A-02 = fix the 2 enum-cast seeds, then wire all into the SEED_ALL/harness pipeline.
+
+### PLA-0770 - Orphan one-family seeds: final 2 enum-cast bugs fixed → 21 of 21 reproducible + verified
+
+- Timestamp: 2026-07-18 15:05 UTC · Service: A-02 seed (LB-014)
+- Fixed the last 2 orphan `*_one_family.sql` seeds flagged in PLA-0760, which had a pre-existing enum-cast bug distinct from the family-UUID pin: enum columns fed by an array-subscript / `CASE` expression resolve to explicit `text`, which has no implicit cast to the target enum.
+- **`seed_finance_hub_one_family.sql`** — repointed to the reproducible coalesce-in-DECLARE resolver + added `::public.bill_status` to the bills status `CASE`.
+- **`seed_operating_index_one_family.sql`** — repointed + added `::public.event_category` to the `calendar_events.category` array-subscript and `::public.bill_status` to the bills status `CASE`; de-hardcoded the inline VERIFY subqueries and the header comment. Introspected all 17 candidate enum/text columns first (`information_schema.columns`) to confirm bare string literals (`'todo'`, `'medium'`, `'none'`, `'expense'`, `'monthly'`, `'checking'`…) coerce implicitly and need no cast — only the two derived expressions did.
+- PG16-verified on the anchor family `00000000-0000-4000-8000-0000000000f1`: both apply with **no errors** and are **idempotent ×2**. operating_index VERIFY totals **619 records across 12 tables** (calendar_events 300, transactions 220, pantry 30, reminders 15, bills 12, docs/maintenance/goals 10 each, votes/polls 3 each, budgets 2, accounts 4); finance_hub seeds bills/budgets/savings goals clean.
+- **Total: 21 of 21 orphan `*_one_family.sql` seeds now reproducible + verified.** The LB-014 orphan slice is fully de-risked at the seed level; the remaining LB-014 work is A-02 pipeline wiring (into SEED_ALL/harness) + authoring seeds for the genuinely-unseeded features (`medical_profiles`, `medication_schedules`, `grades`, `home_assets`).
+- Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
+- Tests run: apply + idempotent re-apply on a clean PG16 bootstrap; enum-column introspection; VERIFY row counts.
+- Commit: this push.
