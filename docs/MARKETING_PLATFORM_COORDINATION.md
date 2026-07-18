@@ -38,7 +38,7 @@ The platform spine is being built around these Supabase objects:
 
 | Lane | Owner | Status | Owned paths | Do not touch | Handoff evidence |
 |---|---|---|---|---|---|
-| Platform spine | `CODEX-01` | CHECKPOINT READY | `supabase/migrations/0231_marketing_platform_spine.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `lib/marketing/public-pages.tsx`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `.github/workflows/ci.yml`, `.github/workflows/supabase-production-migrations.yml`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (632 files / 3,746 tests); build PASS; provider-key normalization, immutable-version, HNSW embedding, queued provider refresh, sitemap revalidation, cross-media provenance, retryable automation, and CI gate contracts PASS |
+| Platform spine | `CODEX-01` | CHECKPOINT READY | `supabase/migrations/0231_marketing_platform_spine.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `lib/marketing/public-pages.tsx`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `.github/workflows/ci.yml`, `.github/workflows/supabase-production-migrations.yml`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (633 files / 3,750 tests); build PASS; provider-key normalization, immutable-version, HNSW embedding, queued provider refresh, sitemap revalidation, cross-media provenance, retryable automation, and CI gate contracts PASS |
 | Super Admin control center | `MARKETING-ADMIN-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(app)/admin/marketing/platform/**`, `app/(app)/admin/marketing/marketing-subnav.tsx` | `lib/marketing/platform.ts`, migration files | Admin action tests, role boundary test, rendered page smoke |
 | Public page families | `MARKETING-PUBLIC-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(marketing)/questions/**`, `guides/**`, `compare/**`, `alternatives/**`, `audiences/**`, `resources/**`, `glossary/**` | `lib/marketing/public-pages.tsx`, `app/sitemap.ts` | Public published/draft/404 tests, metadata, JSON-LD, mobile smoke |
 | Public shared renderer | `MARKETING-PUBLIC-03` | RESERVED | `lib/marketing/public-pages.tsx` | Route folders owned by PUBLIC-02 | Renderer tests and accessibility check |
@@ -86,7 +86,7 @@ Lane: Platform spine + integration
 Owner: CODEX-01
 Files: migration 0231, platform worker/provider adapters, cron routes, public renderer/routes, sitemap/SEO bridge, asset provenance, coordination docs
 Commit: `643ab7df` on codex/reasoning-main-publication
-Tests: npm test -- --reporter=dot -> 632 files / 3,746 tests passed
+Tests: npm test -- --reporter=dot -> 633 files / 3,750 tests passed
 Typecheck: npm run typecheck -> pass
 Migration: npm run db:audit:migrations -> pass; next available 0232; live REST check currently returns 404 for `marketing_pages` until 0231 is applied
 Build: npm run build -> pass; 490 routes generated
