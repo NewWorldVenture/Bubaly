@@ -34,6 +34,8 @@ describe('marketing platform spine contract', () => {
     expect(migration).toContain('using hnsw (embedding extensions.vector_cosine_ops)');
     expect(migration).toContain('page_path text not null default \'\'');
     expect(migration).toContain('query text not null default \'\'');
+    expect(migration).toContain('alter table public.marketing_videos add column if not exists source_url text');
+    expect(migration).toContain('alter table public.marketing_videos add column if not exists attribution text');
   });
 
   it('keeps public reads published-only and grants the queue to service_role', () => {
