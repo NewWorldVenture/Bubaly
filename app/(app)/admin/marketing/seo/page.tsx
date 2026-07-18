@@ -82,7 +82,7 @@ export default async function SeoPage() {
                     </summary>
                     <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
                       <input type="hidden" name="id" value={page.id} />
-                      <input name="path" required defaultValue={page.path} className={inputCls} />
+                      <input name="path" required readOnly defaultValue={page.path} className={`${inputCls} cursor-not-allowed opacity-70`} aria-label="SEO page path (fixed)" />
                       <input name="title" defaultValue={page.title ?? ''} placeholder="SEO title" className={inputCls} />
                       <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder="Meta description" className={`${inputCls} sm:col-span-2`} />
                       <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder="Score 0–100" className={inputCls} />

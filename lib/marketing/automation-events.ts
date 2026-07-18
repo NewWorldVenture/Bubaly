@@ -17,7 +17,7 @@ export type FireEventParams = {
   context?: Record<string, unknown>;
 };
 
-export type FireEventResult = { workflows: number; emails: number };
+export type FireEventResult = { workflows: number; emails: number; failures: number };
 
 /**
  * Fires every active workflow whose trigger matches `params.trigger`, in real
@@ -30,7 +30,7 @@ export type FireEventResult = { workflows: number; emails: number };
  * user-facing response on it.
  */
 export async function fireAutomationEvent(supabase: DB, params: FireEventParams): Promise<FireEventResult> {
-  const result: FireEventResult = { workflows: 0, emails: 0 };
+  const result: FireEventResult = { workflows: 0, emails: 0, failures: 0 };
 
   const { data: flows } = await supabase
     .from('marketing_automation_workflows')
@@ -62,20 +62,24 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     const actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback);
 
-    await supabase
+    const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
+    const { error: runError } = await supabase
       .from('marketing_automation_runs')
       .update({
-        status: 'completed',
+        status: failed ? 'failed' : 'completed',
         metadata: { trigger: params.trigger, actions, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
       })
       .eq('id', runId);
-    await supabase
+    if (runError) throw new Error('Could not record the event-driven automation result.');
+    const { error: workflowError } = await supabase
       .from('marketing_automation_workflows')
       .update({ run_count: (flow.run_count ?? 0) + 1 })
       .eq('id', flow.id);
+    if (workflowError) throw new Error('Could not update the automation run count.');
 
     result.workflows++;
     result.emails += actions.filter((a) => a === 'send_email').length;
+    if (failed) result.failures++;
   }
 
   return result;

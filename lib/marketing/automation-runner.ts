@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { runSteps, type Step } from '@/lib/marketing/automation-steps';
-import { getMarketingCustomers, type MarketingCustomer } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 
 type DB = SupabaseClient<Database>;
 const DAY = 86_400_000;
@@ -41,7 +41,7 @@ const DEFAULT_COPY: Record<string, { subject: string; body: string }> = {
   high_value_detected: { subject: 'A thank-you from Bubaly', body: "You're one of our most engaged families — thank you! Reply if there's anything we can do for you." },
 };
 
-export type AutomationRunSummary = { workflows: number; runs: number; emails: number };
+export type AutomationRunSummary = { workflows: number; runs: number; emails: number; failures: number };
 
 /**
  * Evaluate active workflows with scheduled triggers and execute them once per
@@ -50,16 +50,19 @@ export type AutomationRunSummary = { workflows: number; runs: number; emails: nu
  */
 export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: number } = {}): Promise<AutomationRunSummary> {
   const cap = opts.maxPerWorkflow ?? 200;
-  const summary: AutomationRunSummary = { workflows: 0, runs: 0, emails: 0 };
+  const summary: AutomationRunSummary = { workflows: 0, runs: 0, emails: 0, failures: 0 };
 
-  const { data: flows } = await supabase
+  const { data: flows, error: flowsError } = await supabase
     .from('marketing_automation_workflows')
     .select('id, trigger, steps, run_count')
     .eq('status', 'active')
     .is('deleted_at', null);
+  if (flowsError) throw new Error('Could not load active marketing automation workflows.');
   if (!flows || flows.length === 0) return summary;
 
-  const customers = await getMarketingCustomers(supabase);
+  const customerResult = await getMarketingCustomersWithError(supabase);
+  if (customerResult.error) throw new Error('Could not load marketing customers for automation.');
+  const customers = customerResult.customers;
 
   for (const flow of flows) {
     if (!SCHEDULED_TRIGGERS.includes(flow.trigger as ScheduledTrigger)) continue;
@@ -69,7 +72,9 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
     if (subjects.length === 0) continue;
 
     // Skip subjects this workflow already ran for.
-    const { data: prior } = await supabase.from('marketing_automation_runs').select('subject_key').eq('workflow_id', flow.id);
+    const { data: prior, error: priorError } = await supabase.from('marketing_automation_runs')
+      .select('subject_key, status').eq('workflow_id', flow.id);
+    if (priorError) throw new Error('Could not load automation run history.');
     const seen = new Set((prior ?? []).map((r) => r.subject_key).filter(Boolean) as string[]);
 
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
@@ -79,14 +84,21 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       if (seen.has(c.familyId)) continue;
       const actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
       summary.emails += actions.filter((a) => a === 'send_email').length;
-      await supabase.from('marketing_automation_runs').insert({
-        workflow_id: flow.id, status: 'completed', subject_key: c.familyId,
+      const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
+      const { error: runError } = await supabase.from('marketing_automation_runs').insert({
+        workflow_id: flow.id, status: failed ? 'failed' : 'completed', subject_key: c.familyId,
         metadata: { trigger: flow.trigger, actions } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
       });
+      if (runError) throw new Error('Could not record the automation run.');
       ran++;
       summary.runs++;
+      if (failed) summary.failures++;
     }
-    if (ran > 0) await supabase.from('marketing_automation_workflows').update({ run_count: (flow.run_count ?? 0) + ran }).eq('id', flow.id);
+    if (ran > 0) {
+      const { error: updateError } = await supabase.from('marketing_automation_workflows')
+        .update({ run_count: (flow.run_count ?? 0) + ran }).eq('id', flow.id);
+      if (updateError) throw new Error('Could not update the automation run count.');
+    }
   }
 
   return summary;

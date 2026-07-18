@@ -358,12 +358,23 @@ export async function saveSeoPage(formData: FormData) {
     score,
     last_audited_at: new Date().toISOString(),
   };
-  const query = id
-    ? supabase.from('marketing_seo_pages').update({ path, ...values } as never).eq('id', id).select('id, path').maybeSingle()
-    : supabase.from('marketing_seo_pages').upsert({ path, ...values }, { onConflict: 'path' }).select('id, path').single();
-  const { data, error } = await query;
-  if (error || !data) marketingActionFailure('save the SEO page', error ?? new Error('The SEO page row was not returned after save.'));
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: id ? 'update' : 'create', resource: 'marketing_seo_page', resourceId: data.id, metadata: { path } });
+  let savedId: string;
+  if (id) {
+    const { data: existing, error: readError } = await supabase.from('marketing_seo_pages')
+      .select('id, path').eq('id', id).maybeSingle();
+    if (readError || !existing) marketingActionFailure('find the SEO page', readError ?? new Error('SEO page not found.'));
+    if (existing.path !== path) marketingActionFailure('save the SEO page', new Error('Page paths cannot be changed after an audit is created.'));
+    const { data, error } = await supabase.from('marketing_seo_pages').update(values)
+      .eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('save the SEO page', error ?? new Error('The SEO page row was not returned after save.'));
+    savedId = data.id;
+  } else {
+    const { data, error } = await supabase.from('marketing_seo_pages')
+      .upsert({ path, ...values }, { onConflict: 'path' }).select('id').single();
+    if (error || !data) marketingActionFailure('save the SEO page', error ?? new Error('The SEO page row was not returned after save.'));
+    savedId = data.id;
+  }
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: id ? 'update' : 'create', resource: 'marketing_seo_page', resourceId: savedId, metadata: { path } });
   revalidatePath('/admin/marketing/seo');
 }
 

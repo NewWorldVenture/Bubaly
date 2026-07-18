@@ -7,6 +7,7 @@ const landingPages = readFileSync('app/(app)/admin/marketing/landing-pages/page.
 const funnels = readFileSync('app/(app)/admin/marketing/funnels/page.tsx', 'utf8');
 const settings = readFileSync('app/(app)/admin/marketing/settings/page.tsx', 'utf8');
 const audit = readFileSync('app/(app)/admin/marketing/audit/page.tsx', 'utf8');
+const actions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
 
 describe('admin marketing control-plane read boundaries', () => {
   it('preserves SEO and AEO read failures instead of showing empty inventories', () => {
@@ -28,5 +29,14 @@ describe('admin marketing control-plane read boundaries', () => {
     expect(settings).toContain('Could not load marketing settings from Supabase. Refresh and try again.');
     expect(audit).toContain('logsError');
     expect(audit).toContain('Could not load marketing audit logs from Supabase. Refresh and try again.');
+  });
+
+  it('keeps the admin closed-loop controls wired to guarded mutations', () => {
+    expect(landingPages).toContain('updateLandingPage');
+    expect(landingPages).toContain('archiveLandingPage');
+    expect(aeo).toContain('updateAeoQuestion');
+    expect(aeo).toContain('deleteAeoQuestion');
+    expect(actions).toContain('Page paths cannot be changed after an audit is created.');
+    expect(actions).toContain(".is('deleted_at', null)");
   });
 });
