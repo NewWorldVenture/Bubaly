@@ -58,6 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // because their table is intentionally private to the admin control plane.
   // A failed admin read must not take down the public sitemap.
   let landingEntries: MetadataRoute.Sitemap = [];
+  let platformEntries: MetadataRoute.Sitemap = [];
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const supabase = createServiceClient();
@@ -80,10 +81,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.7,
           }));
       }
+
+      const { data: platformPages, error: platformError } = await supabase
+        .from('marketing_pages')
+        .select('path, updated_at, published_at')
+        .eq('status', 'published')
+        .is('deleted_at', null)
+        .order('updated_at', { ascending: false });
+      if (platformError) {
+        console.error('[sitemap] published platform-page read failed', platformError);
+      } else {
+        platformEntries = (platformPages ?? [])
+          .filter((page) => typeof page.path === 'string' && page.path.startsWith('/'))
+          .map((page) => ({
+            url: `${SITE_URL}${page.path}`,
+            lastModified: page.updated_at ? new Date(page.updated_at) : now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.7,
+          }));
+      }
     } catch (error) {
       console.error('[sitemap] published landing-page read failed', error);
     }
   }
 
-  return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries];
+  return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries];
 }

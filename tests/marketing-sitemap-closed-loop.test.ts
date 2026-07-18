@@ -14,6 +14,6 @@ describe('marketing sitemap closed loop', () => {
   it('emits public landing-page URLs without making sitemap generation fatal', () => {
     expect(source).toContain('`' + '${SITE_URL}/lp/${encodeURIComponent(page.slug)}`');
     expect(source).toContain("console.error('[sitemap] published landing-page read failed'");
-    expect(source).toContain('return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries]');
+    expect(source).toContain('return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries]');
   });
 });

@@ -17,7 +17,27 @@ function anonClient() {
 
 export async function getSeoPage(path: string): Promise<{ title: string | null; description: string | null } | null> {
   try {
-    const { data } = await anonClient()
+    const client = anonClient();
+    // The platform registry is canonical for newly managed page families. The
+    // legacy SEO table remains a compatibility fallback for routes that have not
+    // yet been migrated by Super Admin.
+    const { data: platform } = await client
+      .from('marketing_pages')
+      .select('title, summary, seo, status')
+      .eq('path', path)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (platform) {
+      const seo = platform.seo && typeof platform.seo === 'object' && !Array.isArray(platform.seo)
+        ? platform.seo as { title?: unknown; description?: unknown }
+        : {};
+      return {
+        title: typeof seo.title === 'string' && seo.title.trim() ? seo.title : platform.title,
+        description: typeof seo.description === 'string' && seo.description.trim() ? seo.description : platform.summary,
+      };
+    }
+    const { data } = await client
       .from('marketing_seo_pages')
       .select('title, meta_description, status')
       .eq('path', path)

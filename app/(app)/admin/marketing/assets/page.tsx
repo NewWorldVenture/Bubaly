@@ -73,6 +73,11 @@ export default async function AssetsPage() {
           <input name="name" placeholder="Name (defaults to filename)" className={inputCls} />
           <input name="alt_text" placeholder="Alt text (for images)" className={`${inputCls} lg:col-span-2`} />
           <input name="tags" placeholder="Tags, comma-separated" className={inputCls} />
+          <select name="license" defaultValue="original" className={inputCls} aria-label="Asset license">
+            <option value="original">Original / owned</option><option value="cc0">CC0 / public domain</option><option value="cc_by">Creative Commons BY</option><option value="licensed">Licensed with proof</option>
+          </select>
+          <input name="source_url" placeholder="Source URL (if applicable)" className={inputCls} />
+          <input name="attribution" placeholder="Attribution (if required)" className={inputCls} />
           <button type="submit" className={btnCls}>Upload</button>
         </form>
         <p className="mt-3 text-xs text-muted">
@@ -118,6 +123,9 @@ export default async function AssetsPage() {
                           <input name="name" defaultValue={a.name} placeholder="Name" className={inputCls} />
                           <input name="alt_text" defaultValue={a.alt_text ?? ''} placeholder="Alt text" className={inputCls} />
                           <input name="tags" defaultValue={a.tags.join(', ')} placeholder="Tags" className={inputCls} />
+                          <select name="license" defaultValue={a.license ?? 'original'} className={inputCls}><option value="original">Original / owned</option><option value="cc0">CC0 / public domain</option><option value="cc_by">Creative Commons BY</option><option value="licensed">Licensed with proof</option></select>
+                          <input name="source_url" defaultValue={a.source_url ?? ''} placeholder="Source URL" className={inputCls} />
+                          <input name="attribution" defaultValue={a.attribution ?? ''} placeholder="Attribution" className={inputCls} />
                           <button type="submit" className={`${btnCls} w-full`}>Save</button>
                         </form>
                       </details>

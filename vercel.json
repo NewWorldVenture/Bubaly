@@ -29,6 +29,14 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/marketing",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing-providers",
+      "schedule": "15 */6 * * *"
+    },
+    {
       "path": "/api/cron/checkout-abandoned",
       "schedule": "0 */6 * * *"
     },

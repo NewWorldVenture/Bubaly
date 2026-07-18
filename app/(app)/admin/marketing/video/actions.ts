@@ -1,5 +1,6 @@
 'use server';
 
+import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { parseVideoUrl } from '@/lib/marketing/video';
@@ -55,6 +56,8 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
     duration_seconds: Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : null,
     status: s(formData, 'status') === 'published' ? 'published' : 'draft',
     tags: parseTags(s(formData, 'tags')),
+    source_hash: createHash('sha256').update(`${provider}:${video_id ?? storage_path ?? url ?? ''}`).digest('hex'),
+    license: s(formData, 'license') ?? 'embedded_source',
   };
 
   if (id) {

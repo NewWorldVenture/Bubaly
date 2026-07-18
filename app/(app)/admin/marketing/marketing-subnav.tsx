@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils/cn';
 // scroll, everything clickable in one place, and mobile-friendly (chips wrap).
 const GROUPS: { title: string; items: [string, string][] }[] = [
   {
-    title: 'Overview',
-    items: [
-      ['/admin/marketing', 'Dashboard'],
-      ['/admin/marketing/assistant', 'AI Assistant'],
+      title: 'Overview',
+      items: [
+        ['/admin/marketing', 'Dashboard'],
+        ['/admin/marketing/platform', 'Control Center'],
+        ['/admin/marketing/assistant', 'AI Assistant'],
       ['/admin/marketing/analytics', 'Analytics'],
       ['/admin/marketing/audit', 'Audit'],
       ['/admin/marketing/settings', 'Settings'],

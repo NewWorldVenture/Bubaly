@@ -6,7 +6,7 @@
 // Maskable icons get extra padding (safe zone) so Android's adaptive mask never
 // clips the house mark. The neutral tile keeps the gradient legible everywhere.
 import sharp from 'sharp';
-import { copyFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -52,11 +52,7 @@ async function renderMaskable(size) {
 const run = async () => {
   await Promise.all(standard.map(renderStandard));
   await Promise.all(maskable.map(renderMaskable));
-  // Apple touch icon (180) + favicon (32) at conventional public paths.
-  await sharp(join(outDir, 'icon-180.png')).toFile(join(root, 'public/apple-touch-icon.png'));
-  await sharp(join(outDir, 'icon-32.png')).toFile(join(root, 'public/favicon-32.png'));
-  copyFileSync(join(outDir, 'icon-512.png'), join(root, 'app/icon.png'));
-  console.log(`Generated ${standard.length + maskable.length + 2} icons in public/icons`);
+  console.log(`Generated ${standard.length + maskable.length} unique icons in public/icons`);
 };
 
 run().catch((e) => { console.error(e); process.exit(1); });

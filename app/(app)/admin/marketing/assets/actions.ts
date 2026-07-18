@@ -1,5 +1,6 @@
 'use server';
 
+import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { assetKindFromMime, buildAssetPath, isAssetKind, parseTags, type AssetKind } from '@/lib/marketing/assets';
@@ -22,6 +23,11 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
   // Explicit kind wins; otherwise infer from the file's MIME type.
   const explicit = s(formData, 'kind');
   const kind: AssetKind = explicit && isAssetKind(explicit) ? explicit : assetKindFromMime(file.type);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const contentHash = createHash('sha256').update(bytes).digest('hex');
+  const license = s(formData, 'license') ?? 'original';
+  const { data: duplicate } = await supabase.from('marketing_assets').select('id, name').eq('content_hash', contentHash).is('deleted_at', null).maybeSingle();
+  if (duplicate) throw new Error(`This file is already in the Asset Library as "${duplicate.name}". Choose the existing asset instead of uploading a duplicate.`);
 
   const id = crypto.randomUUID();
   const name = s(formData, 'name') ?? file.name;
@@ -42,6 +48,10 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
     size_bytes: file.size,
     alt_text: s(formData, 'alt_text'),
     tags: parseTags(s(formData, 'tags')),
+    content_hash: contentHash,
+    license,
+    source_url: s(formData, 'source_url'),
+    attribution: s(formData, 'attribution'),
     created_by: actorId,
   }).select('id').single();
 
@@ -65,6 +75,9 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
     ...(name ? { name } : {}),
     alt_text: s(formData, 'alt_text'),
     tags: parseTags(s(formData, 'tags')),
+    license: s(formData, 'license') ?? 'original',
+    source_url: s(formData, 'source_url'),
+    attribution: s(formData, 'attribution'),
   }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('update the marketing asset', error ?? new Error('Marketing asset not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_asset', resourceId: id });

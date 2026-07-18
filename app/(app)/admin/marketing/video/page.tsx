@@ -58,6 +58,9 @@ export default async function VideoPage() {
             {videoAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <input name="poster_url" placeholder="Poster image URL (optional)" className={inputCls} />
+          <select name="license" defaultValue="embedded_source" className={inputCls} aria-label="Video license">
+            <option value="embedded_source">Embedded source terms</option><option value="original">Original / owned</option><option value="cc0">CC0 / public domain</option><option value="cc_by">Creative Commons BY</option><option value="licensed">Licensed with proof</option>
+          </select>
           <input name="tags" placeholder="Tags, comma-separated" className={`${inputCls} lg:col-span-2`} />
           <textarea name="transcript" placeholder="Transcript (optional — feeds AEO/SEO)" rows={2} className={`${inputCls} h-auto py-2 lg:col-span-2`} />
           <button type="submit" className={btnCls}>Add video</button>

@@ -1572,6 +1572,51 @@ export interface Database {
         { id?: string; campaign_id?: string | null; slug: string; title: string; headline?: string | null; subhead?: string | null; body?: string | null; status?: string; published?: boolean; views?: number; conversions?: number; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ slug: string; title: string; headline: string | null; subhead: string | null; body: string | null; status: string; published: boolean; views: number; conversions: number; metadata: Json }>
       >;
+      marketing_pages: T<
+        { id: string; page_type: string; slug: string; path: string; parent_id: string | null; campaign_id: string | null; template_id: string | null; title: string; summary: string | null; body: string | null; content: Json; seo: Json; aeo: Json; status: string; version: number; published_at: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; page_type: string; slug: string; path: string; parent_id?: string | null; campaign_id?: string | null; template_id?: string | null; title: string; summary?: string | null; body?: string | null; content?: Json; seo?: Json; aeo?: Json; status?: string; version?: number; published_at?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ page_type: string; slug: string; path: string; parent_id: string | null; campaign_id: string | null; template_id: string | null; title: string; summary: string | null; body: string | null; content: Json; seo: Json; aeo: Json; status: string; version: number; published_at: string | null; updated_by: string | null; deleted_at: string | null }>
+      >;
+      marketing_page_versions: T<
+        { id: string; page_id: string; version: number; title: string; summary: string | null; body: string | null; content: Json; seo: Json; aeo: Json; change_source: string; change_note: string | null; created_by: string | null; created_at: string },
+        { id?: string; page_id: string; version: number; title: string; summary?: string | null; body?: string | null; content?: Json; seo?: Json; aeo?: Json; change_source?: string; change_note?: string | null; created_by?: string | null },
+        Partial<{ title: string; summary: string | null; body: string | null; content: Json; seo: Json; aeo: Json; change_source: string; change_note: string | null }>
+      >;
+      marketing_content_templates: T<
+        { id: string; name: string; page_type: string; description: string | null; schema: Json; instructions: string; defaults: Json; version: number; status: string; is_default: boolean; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; name: string; page_type: string; description?: string | null; schema?: Json; instructions?: string; defaults?: Json; version?: number; status?: string; is_default?: boolean; created_by?: string | null; updated_by?: string | null },
+        Partial<{ name: string; page_type: string; description: string | null; schema: Json; instructions: string; defaults: Json; version: number; status: string; is_default: boolean; updated_by: string | null }>
+      >;
+      marketing_brand_rules: T<
+        { id: string; rule_key: string; name: string; instructions: string; value: Json; version: number; active: boolean; updated_by: string | null } & Stamps,
+        { id?: string; rule_key: string; name: string; instructions?: string; value?: Json; version?: number; active?: boolean; updated_by?: string | null },
+        Partial<{ rule_key: string; name: string; instructions: string; value: Json; version: number; active: boolean; updated_by: string | null }>
+      >;
+      marketing_generation_jobs: T<
+        { id: string; job_type: string; target_type: string; target_id: string | null; target_path: string | null; status: string; priority: number; attempts: number; max_attempts: number; run_after: string; locked_at: string | null; started_at: string | null; completed_at: string | null; idempotency_key: string; payload: Json; result: Json; error: string | null; created_by: string | null } & Stamps,
+        { id?: string; job_type: string; target_type?: string; target_id?: string | null; target_path?: string | null; status?: string; priority?: number; attempts?: number; max_attempts?: number; run_after?: string; locked_at?: string | null; started_at?: string | null; completed_at?: string | null; idempotency_key: string; payload?: Json; result?: Json; error?: string | null; created_by?: string | null },
+        Partial<{ job_type: string; target_type: string; target_id: string | null; target_path: string | null; status: string; priority: number; attempts: number; max_attempts: number; run_after: string; locked_at: string | null; started_at: string | null; completed_at: string | null; payload: Json; result: Json; error: string | null }>
+      >;
+      marketing_page_relationships: T<
+        { id: string; from_page_id: string; to_page_id: string; relationship: string; position: number; metadata: Json; created_at: string },
+        { id?: string; from_page_id: string; to_page_id: string; relationship: string; position?: number; metadata?: Json },
+        Partial<{ relationship: string; position: number; metadata: Json }>
+      >;
+      marketing_embeddings: T<
+        { id: string; source_type: string; source_id: string; chunk_index: number; content_hash: string; content: string; embedding: Json | null; provider: string; model: string; dimensions: number; status: string; metadata: Json } & Stamps,
+        { id?: string; source_type: string; source_id: string; chunk_index?: number; content_hash: string; content: string; embedding?: Json | null; provider?: string; model?: string; dimensions?: number; status?: string; metadata?: Json },
+        Partial<{ chunk_index: number; content_hash: string; content: string; embedding: Json | null; provider: string; model: string; dimensions: number; status: string; metadata: Json }>
+      >;
+      marketing_provider_observations: T<
+        { id: string; provider: string; engine: string | null; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string } & Stamps,
+        { id?: string; provider: string; engine?: string | null; observed_for: string; page_path?: string | null; query?: string | null; clicks?: number; impressions?: number; ctr?: number | null; average_position?: number | null; citations?: number; cited?: boolean | null; payload?: Json; source_status?: string },
+        Partial<{ provider: string; engine: string | null; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string }>
+      >;
+      marketing_provider_syncs: T<
+        { provider: string; status: string; last_started_at: string | null; last_completed_at: string | null; last_error: string | null; rows_imported: number; metadata: Json; updated_at: string },
+        { provider: string; status?: string; last_started_at?: string | null; last_completed_at?: string | null; last_error?: string | null; rows_imported?: number; metadata?: Json },
+        Partial<{ status: string; last_started_at: string | null; last_completed_at: string | null; last_error: string | null; rows_imported: number; metadata: Json }>
+      >;
       marketing_forms: T<
         { id: string; campaign_id: string | null; name: string; fields: Json; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
         { id?: string; campaign_id?: string | null; name: string; fields?: Json; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
@@ -1653,14 +1698,14 @@ export interface Database {
         Partial<{ title: string; slug: string; industry: string | null; customer_name: string | null; summary: string | null; body: string | null; result_metric: string | null; is_published: boolean }>
       >;
       marketing_assets: T<
-        { id: string; name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
-        { id?: string; name: string; kind?: string; storage_path: string; mime_type?: string | null; size_bytes?: number | null; width?: number | null; height?: number | null; alt_text?: string | null; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
-        Partial<{ name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; deleted_at: string | null }>
+        { id: string; name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; content_hash: string | null; license: string; source_url: string | null; attribution: string | null; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; kind?: string; storage_path: string; mime_type?: string | null; size_bytes?: number | null; width?: number | null; height?: number | null; alt_text?: string | null; tags?: string[]; metadata?: Json; content_hash?: string | null; license?: string; source_url?: string | null; attribution?: string | null; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; content_hash: string | null; license: string; source_url: string | null; attribution: string | null; deleted_at: string | null }>
       >;
       marketing_videos: T<
-        { id: string; title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
-        { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
-        Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; deleted_at: string | null }>
+        { id: string; title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; source_hash: string | null; license: string; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; source_hash?: string | null; license?: string; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; source_hash: string | null; license: string; deleted_at: string | null }>
       >;
       marketing_exit_intent: T<
         { id: string; name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
@@ -2393,6 +2438,10 @@ export interface Database {
       wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_fund_goal: { Args: { p_family_id: string; p_goal_id: string; p_amount: number; p_actor_id: string }; Returns: Json };
+      claim_marketing_generation_jobs: {
+        Args: { p_limit?: number };
+        Returns: Tables<'marketing_generation_jobs'>[];
+      };
     };
     Enums: {
       member_role: MemberRole;
