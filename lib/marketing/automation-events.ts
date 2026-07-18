@@ -56,11 +56,26 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
         { onConflict: 'workflow_id,subject_key', ignoreDuplicates: true },
       )
       .select('id');
-    if (reserveErr || !reserved || reserved.length === 0) continue; // duplicate or error → skip
+    if (reserveErr) continue; // best-effort event path; callers must not block user requests
 
-    const runId = reserved[0].id;
+    let runId = reserved?.[0]?.id ?? null;
+    if (!runId) {
+      const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
+        .select('id, status').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
+      if (existingError || !existing || existing.status !== 'failed') continue;
+      const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
+        .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
+      if (claimError || !claimed) continue;
+      runId = claimed.id;
+    }
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
-    const actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback);
+    let actions: string[];
+    try {
+      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback);
+    } catch (error) {
+      console.error('[marketing automation] event-driven steps failed', error);
+      actions = ['automation:failed'];
+    }
 
     const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
     const { error: runError } = await supabase

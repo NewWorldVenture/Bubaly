@@ -20,4 +20,11 @@ describe('marketing automation execution boundaries', () => {
     expect(events).toContain("status: failed ? 'failed' : 'completed'");
     expect(events).toContain("Could not record the event-driven automation result.");
   });
+
+  it('can atomically claim failed runs for a safe retry', () => {
+    expect(runner).toContain(".eq('status', 'failed').select('id').maybeSingle()");
+    expect(events).toContain(".eq('status', 'failed').select('id').maybeSingle()");
+    expect(runner).toContain("status: 'running'");
+    expect(events).toContain("status: 'running'");
+  });
 });

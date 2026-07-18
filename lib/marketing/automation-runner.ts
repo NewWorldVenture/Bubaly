@@ -73,22 +73,50 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
     // Skip subjects this workflow already ran for.
     const { data: prior, error: priorError } = await supabase.from('marketing_automation_runs')
-      .select('subject_key, status').eq('workflow_id', flow.id);
+      .select('id, subject_key, status').eq('workflow_id', flow.id);
     if (priorError) throw new Error('Could not load automation run history.');
-    const seen = new Set((prior ?? []).map((r) => r.subject_key).filter(Boolean) as string[]);
+    const priorBySubject = new Map((prior ?? []).filter((r) => r.subject_key).map((r) => [r.subject_key as string, r]));
 
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let ran = 0;
     const fallback = DEFAULT_COPY[flow.trigger] ?? { subject: 'A note from Bubaly', body: '' };
     for (const c of subjects) {
-      if (seen.has(c.familyId)) continue;
-      const actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
+      const existing = priorBySubject.get(c.familyId);
+      if (existing?.status === 'completed' || existing?.status === 'running') continue;
+
+      let runId: string;
+      if (existing?.status === 'failed') {
+        const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
+          .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
+        if (claimError) throw new Error('Could not claim the failed automation run.');
+        if (!claimed) continue;
+        runId = claimed.id;
+      } else {
+        const { data: reserved, error: reserveError } = await supabase.from('marketing_automation_runs').insert({
+          workflow_id: flow.id, status: 'running', subject_key: c.familyId,
+          metadata: { trigger: flow.trigger } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
+        }).select('id').maybeSingle();
+        if (reserveError) {
+          if (reserveError.code === '23505') continue;
+          throw new Error('Could not reserve the automation run.');
+        }
+        if (!reserved) throw new Error('The automation run was not returned after reservation.');
+        runId = reserved.id;
+      }
+
+      let actions: string[];
+      try {
+        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
+      } catch (error) {
+        console.error('[marketing automation] scheduled steps failed', error);
+        actions = ['automation:failed'];
+      }
       summary.emails += actions.filter((a) => a === 'send_email').length;
       const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
-      const { error: runError } = await supabase.from('marketing_automation_runs').insert({
-        workflow_id: flow.id, status: failed ? 'failed' : 'completed', subject_key: c.familyId,
+      const { error: runError } = await supabase.from('marketing_automation_runs').update({
+        status: failed ? 'failed' : 'completed',
         metadata: { trigger: flow.trigger, actions } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
-      });
+      }).eq('id', runId).eq('status', 'running');
       if (runError) throw new Error('Could not record the automation run.');
       ran++;
       summary.runs++;
