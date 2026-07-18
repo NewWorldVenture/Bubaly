@@ -334,10 +334,12 @@ export function PhotosModule() {
                       {photo.caption && <p className="truncate text-[11px] text-white">{photo.caption}</p>}
                       <div className="ml-auto flex gap-1.5">
                         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
+                          aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           {photo.is_favorite ? <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" /> : <Heart className="h-3.5 w-3.5" />}
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); setEditPhoto(photo); }}
+                          aria-label="Edit photo details"
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -372,7 +374,8 @@ export function PhotosModule() {
                     <p className="text-xs text-muted">{fmtRelative(photo.created_at)}</p>
                   </div>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}>
+                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
+                    aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}>
                     {photo.is_favorite ? <Heart className="h-4 w-4 fill-red-400 text-red-400" /> : <Heart className="h-4 w-4 text-muted" />}
                   </button>
                 </div>
@@ -389,12 +392,14 @@ export function PhotosModule() {
           {/* Nav */}
           {lightboxIdx > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
+              aria-label="Previous photo"
               className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
           {lightboxIdx < photos.length - 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) + 1); }}
+              aria-label="Next photo"
               className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronRight className="h-6 w-6" />
             </button>
@@ -425,10 +430,12 @@ export function PhotosModule() {
                   <Download className="h-4 w-4" />
                 </a>
                 <button onClick={() => toggleFavorite(photos[lightboxIdx])}
+                  aria-label={photos[lightboxIdx].is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
                 <button onClick={() => { if (confirm('Delete this photo?')) deletePhoto(photos[lightboxIdx]); }}
+                  aria-label="Delete photo"
                   className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -438,6 +445,7 @@ export function PhotosModule() {
 
           {/* Close */}
           <button onClick={() => setLightboxIdx(null)}
+            aria-label="Close"
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
             <X className="h-5 w-5" />
           </button>

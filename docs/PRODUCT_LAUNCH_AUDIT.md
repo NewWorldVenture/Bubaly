@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0822 - Photos lightbox had 8 icon-only controls with no accessible name (WCAG 4.1.2)
+
+- Timestamp: 2026-07-18 11:19 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Photos
+- Route: `/dashboard/photos` (`components/modules/photos-module.tsx`)
+- Affected files: `components/modules/photos-module.tsx`, `tests/photos-a11y-labels.test.ts` (new)
+- Database objects: none (UI a11y)
+- Role: all family roles · Tier: all · Household: any
+- Scenario: a screen-reader or voice-control user opens the photo grid / lightbox and tries to favorite, edit, delete, navigate between, or close a photo
+- Severity: **P2 (accessibility — §23; a workflow-blocking a11y defect for AT users)**
+- Reproduction: 8 `<button>` elements rendered only a lucide icon with no `aria-label`, no `title`, and no visible text: grid-overlay favorite + edit, list-tile favorite, lightbox prev/next/close, and lightbox favorite/delete. A screen reader announced each as a bare "button"; voice control had no name to target — the photo lightbox could not be operated non-visually
+- Expected: every interactive control exposes an accessible name (WCAG 2.2 AA 4.1.2 Name, Role, Value)
+- Actual: icon-only buttons had no accessible name
+- Root cause: icon-only buttons authored without `aria-label`
+- Resolution: added `aria-label` to all 8 — "Previous photo", "Next photo", "Close", "Delete photo", "Edit photo details", and a dynamic `Add to favorites` / `Remove from favorites` on the three favorite toggles. Text-labeled buttons (tabs, album cards, back) already had accessible names (verified)
+- Supabase/Security/Privacy/Performance impact: none
+- Accessibility impact: **positive** — the photo lightbox is now operable by screen readers and voice control
+- Tests added: `tests/photos-a11y-labels.test.ts` (3 — asserts the nav/close + action labels, plus a heuristic guard that no icon-only `<button>` remains without an accessible name)
+- Tests run: guard green (3); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: static scan pre-fix flagged 8 icon-only buttons; post-fix the heuristic guard finds 0
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none · Follow-up: extend the icon-only-button a11y sweep to other interaction-heavy A-05 modules (viewers/toolbars) as an ongoing §23 pass
+
 ### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
 
 - Timestamp: 2026-07-18 10:50 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
