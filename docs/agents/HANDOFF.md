@@ -15,8 +15,8 @@ Reassignments and preserved-work records on session boundaries.
 - Local validation is green: marketing 46 files / 245 tests, full 631 files / 3,734 tests, lint, typecheck, and
   fresh 489-route production build. The increment is intentionally still NO-GO for live permission/RLS, provider,
   browser, CI, deployment, and backup evidence.
-- Working tree contains only this marketing increment plus its audit/coordination records. Rebase on `origin/main`,
-  commit as one validated publication unit, push to `main`, and verify remote readback before closing the claim.
+- Published as `c0e37f7f` on `main`; remote readback matches. The local and integrated gates are complete. Live
+  provider/RLS/browser evidence remains external and is intentionally still NO-GO.
 
 ## 2026-07-18 11:30 — QA-01 (agent-02)
 - No reassignment performed. agent-01/03/04 board claims are heartbeat-stale
