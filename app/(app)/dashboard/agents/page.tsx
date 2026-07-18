@@ -79,7 +79,13 @@ export default async function AgentsPage() {
   // Knowledge graph → relationship-level reasoning for the Chief of Staff, via the
   // ONE shared reasoning engine (R1 context + R2 insights) — the same one Calm folds
   // in. Best-effort: a missing graph yields no insights, never an error.
-  const reasoning = await loadFamilyContext(supabase, familyId, now).catch(() => null);
+  let reasoning;
+  try {
+    reasoning = await loadFamilyContext(supabase, familyId, now);
+  } catch (error) {
+    console.error('[dashboard-agents] reasoning context read failed', error);
+    return <ReadFailure />;
+  }
   const graphItems: AgentItem[] = reasoning
     ? reasoningInsights(reasoning).map((i) => ({ title: i.title, detail: i.detail, href: i.href, severity: i.severity }))
     : [];
