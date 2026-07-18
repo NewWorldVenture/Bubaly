@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~29% (early)
+## Overall completion: ~30% (early)
 
 Weighting (per the mission brief):
 
@@ -240,6 +240,28 @@ Weighting (per the mission brief):
 - **Test:** `tests/mobile-pwa-update.test.ts` (5) — update detection + reload +
   safe-area banner; SW never-cache-auth + manifest installable.
 - **Evidence:** guard green; `tsc` + `eslint` clean.
+
+### M-013 — Hand-rolled overlays missing dialog semantics for screen readers (Phase 6)
+- **Severity:** P2 (mobile a11y). **Phase:** 6 (a11y / VoiceOver / TalkBack).
+- **Problem:** several full-screen overlays that bypass the shared `Modal` (which
+  already carries dialog semantics) had no `role="dialog"` / `aria-modal` / accessible
+  name, so mobile VoiceOver / TalkBack didn't announce them as modal dialogs or scope
+  the reader to their contents — the exit-intent offer, the app-lock (PIN) gate, and
+  the guardian rules-editor + contact-editor bottom sheets.
+- **Fix:** added `role="dialog"` + `aria-modal="true"` + `aria-labelledby` (pointing
+  at the real heading, which now carries the matching `id`) to all four, plus
+  keyboard **ESC-to-close** on the dismissible exit-intent modal (parity with its
+  scrim-click + close button). Bonus: the rules-editor panel's `max-h-[85vh]` →
+  `max-h-[85dvh]` (mobile viewport-height correctness). The `aria-hidden` dropdown
+  dismiss-catchers in wallet/contact were correctly left alone (not dialogs).
+- **Files:** `components/marketing/exit-intent.tsx`, `components/app/app-lock-gate.tsx`,
+  `components/guardian/rules-editor.tsx`, `components/guardian/contact-list.tsx`.
+- **Test:** `tests/mobile-overlay-dialog-a11y.test.ts` (5) — asserts each overlay's
+  labeled dialog semantics + the exit-intent ESC handler.
+- **Evidence:** guard green; `tsc --noEmit` 0; eslint 0; `next build` exit 0.
+- **Parallel note:** same overlay surface as M-012, disjoint from the module files
+  the other bot works; complements agent-05's M-007 (safe-area/focus-trap on the
+  shared `Modal`) by giving the hand-rolled overlays their missing dialog semantics.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

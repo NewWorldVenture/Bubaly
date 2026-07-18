@@ -247,9 +247,14 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rules-editor-title"
+        className="relative z-10 w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl"
+      >
         <div className="sticky top-0 z-10 border-b border-border bg-bg px-5 py-4">
-          <h2 className="text-lg font-bold">New Rule</h2>
+          <h2 id="rules-editor-title" className="text-lg font-bold">New Rule</h2>
           <p className="text-xs text-muted mt-0.5">All conditions must match for the rule to apply.</p>
         </div>
         <div className="p-5 space-y-4">

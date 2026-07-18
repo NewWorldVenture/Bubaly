@@ -270,8 +270,13 @@ function ContactModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl">
-        <h2 className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="contact-editor-title"
+        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl"
+      >
+        <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">
           <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name *" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
           <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="Phone (e.g. +15551234567)" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />

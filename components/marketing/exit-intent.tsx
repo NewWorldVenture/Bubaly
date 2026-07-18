@@ -36,6 +36,14 @@ export function ExitIntent() {
   // Lock background scroll while the offer modal is showing (mobile scroll-bleed).
   useLockBodyScroll(Boolean(offer) && open);
 
+  // ESC closes the offer (keyboard parity with the scrim click + close button).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
     if (recentlySeen()) return;
@@ -102,11 +110,17 @@ export function ExitIntent() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
-      <div className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exit-intent-title"
+        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button onClick={() => setOpen(false)} aria-label="Close" className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />
         </button>
-        <h2 className="text-2xl font-bold">{offer.headline}</h2>
+        <h2 id="exit-intent-title" className="text-2xl font-bold">{offer.headline}</h2>
         {offer.body && <p className="mt-3 text-muted">{offer.body}</p>}
         {offer.cta_href && (
           <a
