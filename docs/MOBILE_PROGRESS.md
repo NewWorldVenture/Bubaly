@@ -611,6 +611,30 @@ Weighting (per the mission brief):
   (photos-module was not in any bot's in-flight edit; agent-05's module heartbeat
   stale per §0).
 
+### M-029 — Blog article Table of Contents was desktop-only (no in-page nav on mobile) (Phase 3 responsive parity) — _parallel bot (public blog surface)_
+- **Severity:** P3 (mobile content parity / navigation). **Phase:** 3 (responsive layout).
+- **Problem:** the article's **Table of Contents** renders only inside the right
+  sidebar `<aside className="hidden lg:block">`, so below `lg` a long multi-section
+  article had **no in-page jump navigation** — a mobile reader had to scroll the whole
+  piece. (Companion to M-027, which restored the sidebar's *Related Articles* on mobile;
+  this restores the sidebar's *ToC*.)
+- **Fix:** added a **native `<details>` collapsible ToC** (no JS / no hydration cost —
+  it's an RSC-friendly disclosure) shown only `lg:hidden`, placed above the article
+  body. It links to the same in-body `h2` anchor ids (`#${id}`, derived identically to
+  the headings), rotates its chevron via the compile-verified `group-open:rotate-90`,
+  and gives its summary + jump links `coarse:min-h-11` (≥44px on touch). Gated on
+  `headings.length > 1` so a one-item ToC is never shown. The sticky sidebar ToC (with
+  its scroll-spy) still owns `lg+`; the inline block is `lg:hidden` (no duplicate).
+- **Files:** `app/(marketing)/blog/[slug]/page.tsx`.
+- **Test:** `tests/mobile-blog-toc-parity.test.ts` (3) — asserts the `lg:hidden`
+  `<details>` ToC, the shared-anchor jump links, and the 44px touch target.
+- **Evidence:** guard green (3/3); `group-open` variant compile-checked against the
+  project Tailwind config; `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** public blog surface — file-disjoint from agent-05 (modules/
+  app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Second responsive
+  content-parity fix, completing the article sidebar's mobile parity (Related + ToC).
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

@@ -203,6 +203,31 @@ export default async function BlogPostPage({ params }: Params) {
               <ShareButtons title={post.title} slug={post.slug} />
             </div>
 
+            {/* Table of contents — MOBILE/tablet parity. The desktop sidebar ToC
+                is `hidden lg:block`, so on a phone a long article otherwise has no
+                in-page jump navigation. A native <details> (no JS/hydration) gives
+                collapsible jump links < lg; the sidebar owns lg+. */}
+            {headings.length > 1 && (
+              <details className="group mt-8 rounded-2xl border border-white/8 bg-white/[0.03] lg:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">
+                  In this article
+                  <ChevronRight className="h-4 w-4 shrink-0 text-white/40 transition-transform group-open:rotate-90" aria-hidden />
+                </summary>
+                <ul className="space-y-1 border-t border-white/8 px-3 py-2">
+                  {headings.map(({ id, text }) => (
+                    <li key={id}>
+                      <a
+                        href={`#${id}`}
+                        className="flex items-center rounded-lg px-2 py-2 text-sm leading-snug text-white/60 transition coarse:min-h-11 hover:bg-white/[0.04] hover:text-white"
+                      >
+                        {text}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
             {/* Article body */}
             <div className="prose-family mt-8 space-y-5 pb-10">
               {post.body.map((block, i) =>
