@@ -681,9 +681,10 @@ export function CalendarModule() {
       {/* Right sidebar */}
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         <div className="sidebar-card">
-          <MiniCalendar current={monday} onSelect={(d) => {
+          <MiniCalendar current={days[mobileDayIndex]} onSelect={(d) => {
             const offset = Math.round((d.getTime() - weekStart(0).getTime()) / (7 * 86400000));
             setWeekOffset(offset);
+            setMobileDayIndex((d.getDay() + 6) % 7);
           }} />
         </div>
 
