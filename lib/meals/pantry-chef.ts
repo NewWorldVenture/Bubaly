@@ -94,6 +94,18 @@ export function parsePantryRecipes(text: string): PantryRecipe[] {
 }
 
 /**
+ * Validate a caller-supplied plan date (YYYY-MM-DD, a real calendar day);
+ * anything else falls back to today's date. Used by the add-to-plan phase.
+ */
+export function normalizePlanDate(value: unknown, now: Date = new Date()): string {
+  const today = now.toISOString().slice(0, 10);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return today;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return today;
+  return value;
+}
+
+/**
  * Defense-in-depth: flag (don't silently drop) any recipe whose title/have/need
  * mentions a family allergy term, so the UI can warn or exclude it even if the
  * model ignored the prompt.

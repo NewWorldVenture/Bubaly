@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  annotateAllergens, buildPantryChefPrompt, normalizeAllergies, parsePantryRecipes,
+  annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
 
 // PLA-0835: "Fridge Chef" — snap the fridge → allergy-aware dinner ideas →
@@ -48,6 +48,20 @@ describe('parsePantryRecipes', () => {
   });
   it('drops entries without a title', () => {
     expect(parsePantryRecipes('[{"have":["x"]},{"title":"OK"}]')).toHaveLength(1);
+  });
+});
+
+describe('normalizePlanDate (add-to-plan phase)', () => {
+  const now = new Date('2026-07-18T12:00:00Z');
+  it('accepts a real YYYY-MM-DD date', () => {
+    expect(normalizePlanDate('2026-07-20', now)).toBe('2026-07-20');
+  });
+  it('falls back to today for junk, wrong formats, and impossible dates', () => {
+    expect(normalizePlanDate('tomorrow', now)).toBe('2026-07-18');
+    expect(normalizePlanDate('2026-02-30', now)).toBe('2026-07-18'); // not a real day
+    expect(normalizePlanDate('2026-7-2', now)).toBe('2026-07-18');
+    expect(normalizePlanDate(null, now)).toBe('2026-07-18');
+    expect(normalizePlanDate(20260720, now)).toBe('2026-07-18');
   });
 });
 

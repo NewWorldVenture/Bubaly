@@ -7,7 +7,7 @@ import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import {
-  annotateAllergens, buildPantryChefPrompt, normalizeAllergies, parsePantryRecipes,
+  annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
 
 // Fridge Chef — snap a photo of the fridge/pantry, get allergy-aware dinner
@@ -37,7 +37,41 @@ export async function POST(req: NextRequest) {
       { error: boundedBody.reason === 'too_large' ? 'Photo is too large.' : 'Invalid request body' },
       { status: 400 },
     );
-    const body = (boundedBody.value ?? {}) as { data?: string; mediaType?: string; addToGrocery?: string[] };
+    const body = (boundedBody.value ?? {}) as {
+      data?: string; mediaType?: string; addToGrocery?: string[];
+      addToPlan?: { title?: string; steps?: string; have?: string[]; need?: string[]; planDate?: string };
+    };
+
+    // ── Phase 3: plan a suggested recipe for dinner ──────────────────────────
+    if (body.addToPlan && typeof body.addToPlan === 'object') {
+      const plan = body.addToPlan;
+      const title = typeof plan.title === 'string' ? plan.title.trim().slice(0, 200) : '';
+      if (!title) return NextResponse.json({ error: 'Recipe title is required.' }, { status: 400 });
+      const planDate = normalizePlanDate(plan.planDate);
+      const ingredients = [...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])]
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+        .slice(0, 50)
+        .map((name) => ({ name: name.trim() }));
+
+      const { data: meal, error: mealError } = await supabase.from('meals').insert({
+        family_id: familyId, created_by: userId, name: title, meal_type: 'dinner',
+        ingredients: ingredients as never,
+        notes: typeof plan.steps === 'string' ? plan.steps.slice(0, 2000) : null,
+      }).select('id').single();
+      if (mealError || !meal?.id) {
+        console.error('[ai/pantry-chef] meal create failed', mealError);
+        return NextResponse.json({ error: 'Could not save that recipe.' }, { status: 500 });
+      }
+      const { error: planError } = await supabase.from('meal_plans').insert({
+        family_id: familyId, created_by: userId, meal_id: meal.id,
+        plan_date: planDate, meal_type: 'dinner',
+      });
+      if (planError) {
+        console.error('[ai/pantry-chef] meal plan insert failed', planError);
+        return NextResponse.json({ error: 'Could not add that recipe to your meal plan.' }, { status: 500 });
+      }
+      return NextResponse.json({ planned: true, planDate });
+    }
 
     // ── Phase 2: add the chosen recipe's missing ingredients to grocery ──────
     if (Array.isArray(body.addToGrocery)) {

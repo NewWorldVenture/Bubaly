@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Camera, Clock, Check, AlertTriangle, ShoppingCart, Sparkles, Utensils } from 'lucide-react';
+import { Camera, CalendarPlus, Clock, Check, AlertTriangle, ShoppingCart, Sparkles, Utensils } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
@@ -36,6 +36,8 @@ export function FridgeChef() {
   const [scanning, setScanning] = useState(false);
   const [addingIndex, setAddingIndex] = useState<number | null>(null);
   const [added, setAdded] = useState<Set<number>>(new Set());
+  const [planningIndex, setPlanningIndex] = useState<number | null>(null);
+  const [planned, setPlanned] = useState<Set<number>>(new Set());
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
 
   async function onFile(file: File | null) {
@@ -44,6 +46,7 @@ export function FridgeChef() {
     if (file.size > MAX_BYTES) { toastError('Photo is too large (5 MB max).'); return; }
     setRecipes(null);
     setAdded(new Set());
+    setPlanned(new Set());
     setPreview(URL.createObjectURL(file));
     setScanning(true);
     try {
@@ -82,6 +85,26 @@ export function FridgeChef() {
       toastError('Could not update your grocery list.');
     } finally {
       setAddingIndex(null);
+    }
+  }
+
+  async function planForDinner(recipe: Recipe, index: number) {
+    if (planningIndex !== null || planned.has(index)) return;
+    setPlanningIndex(index);
+    try {
+      const res = await fetch('/api/ai/pantry-chef', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addToPlan: { title: recipe.title, steps: recipe.steps, have: recipe.have, need: recipe.need } }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toastError(json.error ?? 'Could not add that to your meal plan.'); return; }
+      setPlanned((prev) => new Set(prev).add(index));
+      success(`“${recipe.title}” planned for tonight's dinner.`);
+    } catch {
+      toastError('Could not add that to your meal plan.');
+    } finally {
+      setPlanningIndex(null);
     }
   }
 
@@ -154,7 +177,16 @@ export function FridgeChef() {
                 </div>
               )}
 
-              <div className="mt-auto pt-4">
+              <div className="mt-auto space-y-2 pt-4">
+                <Button
+                  className={cn('w-full', planned.has(i) && 'pointer-events-none opacity-70')}
+                  onClick={() => planForDinner(recipe, i)}
+                  disabled={planningIndex !== null}
+                >
+                  {planned.has(i)
+                    ? <><Check className="h-4 w-4" /> On tonight&apos;s plan</>
+                    : <><CalendarPlus className="h-4 w-4" /> Plan for dinner</>}
+                </Button>
                 {recipe.need.length > 0 ? (
                   <Button
                     variant="secondary"

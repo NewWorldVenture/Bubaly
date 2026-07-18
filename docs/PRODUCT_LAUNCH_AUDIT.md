@@ -6,6 +6,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0845 - Fridge Chef: one-tap "Plan for dinner" (photo → recipe → meal plan)
+
+- Issue ID: PLA-0845
+- Discovery timestamp: 2026-07-18 18:20 UTC · Resolution timestamp: 2026-07-18 18:40 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — follow-up #2 from `docs/COMPETITIVE_ANALYSIS.md`
+- Service: Meals / Fridge Chef (PLA-0835)
+- Feature: add a suggested recipe straight to the family meal plan
+- Route: `/dashboard/fridge-chef` → `POST /api/ai/pantry-chef` (new `addToPlan` phase)
+- Affected files: `lib/meals/pantry-chef.ts` (`normalizePlanDate`), `app/api/ai/pantry-chef/route.ts` (Phase 3), `components/meals/fridge-chef.tsx` ("Plan for dinner" button), `tests/pantry-chef.test.ts` (+2 tests)
+- Database objects: `meals` (insert: name + ingredients jsonb [have+need] + notes=steps), `meal_plans` (insert: dinner on the chosen/today date) — same two-step pattern as the assistant's `create_meal_plan_entry` action; both writes run under the caller's RLS session
+- Role: authenticated family members
+- Scenario: after a fridge scan, closing the loop previously required retyping the recipe into the meal planner.
+- Severity: **LOW-MEDIUM** (competitive completeness — closes the photo → dinner-decision loop the analysis called out).
+- Resolution: Phase 3 `addToPlan` on the pantry-chef API — validates title (required, ≤200 chars) and the plan date via the new pure `normalizePlanDate` (strict `YYYY-MM-DD` real-calendar-day check, falls back to today), stores the recipe as a `meals` row (ingredients + method) then a dinner `meal_plans` entry; both writes error-guarded with logs (no silent success). UI: per-recipe "Plan for dinner" button with pending/planned states and toasts; scan reset clears planned state. The planned dinner then surfaces on Smart Kitchen ("Tonight") and the meal planner automatically.
+- Supabase impact: inserts only, via existing family-scoped RLS tables; no schema change.
+- Security/Privacy impact: none (auth + rate-limit unchanged; caller-session writes).
+- Tests added/run: `tests/pantry-chef.test.ts` now 11 (adds `normalizePlanDate` real-date + junk/impossible-date fallbacks); tsc clean; eslint clean.
+- Commit: (this increment) · Integration commit: pushed to `main` · Status: Verified
+- Remaining dependencies: none. Remaining competitive follow-up: inbound-email ingestion (owner-gated on an inbound-email provider).
+
 ### PLA-0844 - Blog category tabs showed wrong counts ("Recipes & Food (0)" while the section listed 56)
 
 - Timestamp: 2026-07-18 16:05 UTC · Agent: `CLAUDE-QA-01` (agent-02) — **cross-lane, direct user request** (A-17 marketing/blog)
