@@ -6,6 +6,30 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0823 - Calendar mini-calendar highlighted the week's Monday, not today; no way to compare members side by side
+
+- Timestamp: 2026-07-18 14:35 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Calendar (A-06) — **cross-lane, direct user request** (owner agent notified via coordination board)
+- Route: `/dashboard/calendar` (`components/modules/calendar-module.tsx`)
+- Affected files: `components/modules/calendar-module.tsx`, `tests/calendar-split-view.test.ts` (new)
+- Database objects: none (client render only; reads unchanged)
+- Role: all family roles · Tier: all · Household: any
+- Scenario: (1) a user opens the calendar on any day that is not Monday and looks at the mini-calendar; (2) a family wants to compare each member's schedule for one day at a glance
+- Severity: **P2 (correctness + UX)** — the date highlight actively misinformed
+- Reproduction: (1) On 2026-07-18 (a Saturday) the mini-calendar rendered the purple "selected" block on the 13th (that week's Monday) because it was passed `current={monday}`; the focused day (`days[mobileDayIndex]`, the 18th) got no highlight. The highlight lied about which day was selected. (2) No affordance existed to view members' days in parallel columns.
+- Expected: the mini-calendar highlights the day the user is actually focused on; families can optionally split the focused day into per-member columns
+- Actual: highlight tracked the week's Monday; no per-member comparison view
+- Root cause: (1) `<MiniCalendar current={monday}>` — the "selected" comparison used the week anchor instead of the focused day. (2) feature gap.
+- Resolution: (1) pass `current={days[mobileDayIndex]}` and, on select, set both `setWeekOffset(...)` and `setMobileDayIndex((d.getDay()+6)%7)` so the picker and the grid stay in sync. (2) added an opt-in **"Side-by-side view"** checkbox in the Calendars sidebar. When on, a unified `gridCols` model replaces the day-columns with one column per *visible* member for the focused day; each column shows that member's events **plus** unassigned shared/family events (`e.assignee_id === m.id || !e.assignee_id`). Toggling a member (existing Eye/EyeOff control) shows/hides their column. Header + time-grid iterate the same `gridCols` array, so day/week/split share one render path. `dateLabel` shows the focused-day label while split is active.
+- Supabase/Security/Privacy/Performance impact: none — no new queries; split is a pure client-side partition of already-loaded events
+- Accessibility impact: neutral/positive — the checkbox is a real `<label>`+`<input>`; member columns reuse labeled avatars
+- Tests added: `tests/calendar-split-view.test.ts` (5 — mini-calendar tracks focused day + syncs week/day-index; split checkbox present; per-member own+shared merge; unified `gridCols` render path)
+- Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module; `next build` (see commit)
+- Validation evidence: guard asserts the regressed `current={monday}` form is gone; type-check + lint clean
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Lane note: Calendar is A-06 (not my A-05 lane). Edited under direct user request per the "direct user requests override lane discipline" rule; logged here + on the coordination board so the A-06 owner has the record.
+
 ### PLA-0822 - Photos lightbox had 8 icon-only controls with no accessible name (WCAG 4.1.2)
 
 - Timestamp: 2026-07-18 11:19 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
