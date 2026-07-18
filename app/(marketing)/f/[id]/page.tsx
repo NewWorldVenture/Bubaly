@@ -46,7 +46,17 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
   if (!form) notFound();
 
   const fields = parseFormFields(form.fields);
-  if (fields.length === 0) notFound();
+  if (fields.length === 0) {
+    return (
+      <Section className="pt-20">
+        <SectionHeading
+          eyebrow="Form unavailable"
+          title={metaString(meta(form), 'title') ?? form.name}
+          description="This form is temporarily unavailable because it has no usable fields. Please try again later or contact us directly."
+        />
+      </Section>
+    );
+  }
 
   const m = meta(form);
   return (

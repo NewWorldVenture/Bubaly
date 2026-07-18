@@ -5,13 +5,14 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { addAeoQuestion } from '../actions';
+import { addAeoQuestion, deleteAeoQuestion, updateAeoQuestion } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · AEO', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const PATTERNS = ['what_is', 'how_to', 'best_x_for_y', 'comparison', 'faq', 'local'];
+const STATUSES = ['opportunity', 'drafting', 'answered', 'published'];
 
 const STATUS_TONE: Record<string, 'neutral' | 'warning' | 'brand' | 'success'> = {
   opportunity: 'warning', drafting: 'neutral', answered: 'brand', published: 'success',
@@ -55,6 +56,24 @@ export default async function AeoPage() {
                     <Badge tone={STATUS_TONE[q.status] ?? 'neutral'} className="shrink-0 capitalize">{q.status}</Badge>
                   </div>
                   {q.answer && <p className="mt-2 text-sm text-muted">{q.answer}</p>}
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-xs text-muted hover:text-fg">Edit question</summary>
+                    <form action={updateAeoQuestion} className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <input type="hidden" name="id" value={q.id} />
+                      <input name="question" required defaultValue={q.question} className={inputCls} />
+                      <input name="entity" defaultValue={q.entity ?? ''} placeholder="Entity" className={inputCls} />
+                      <textarea name="answer" rows={4} defaultValue={q.answer ?? ''} placeholder="Structured answer" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring sm:col-span-2" />
+                      <select name="pattern" defaultValue={q.pattern ?? ''} className={inputCls}><option value="">Pattern</option>{PATTERNS.map((pattern) => <option key={pattern} value={pattern}>{pattern.replace(/_/g, ' ')}</option>)}</select>
+                      <select name="status" defaultValue={q.status} className={inputCls}>{STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                      <input name="clarity_score" type="number" min="0" max="100" defaultValue={q.clarity_score ?? ''} placeholder="Clarity score 0-100" className={inputCls} />
+                      <input name="source_path" defaultValue={q.source_path ?? ''} placeholder="Source path (/faq)" className={inputCls} />
+                      <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">Save question</button>
+                    </form>
+                    <form action={deleteAeoQuestion} className="mt-2">
+                      <input type="hidden" name="id" value={q.id} />
+                      <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete question</button>
+                    </form>
+                  </details>
                   {q.pattern && <p className="mt-2 text-xs text-muted">Pattern: {q.pattern.replace(/_/g, ' ')}{q.entity ? ` · ${q.entity}` : ''}</p>}
                 </Card>
               ))}

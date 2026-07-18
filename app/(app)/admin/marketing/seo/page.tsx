@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { addKeyword } from '../actions';
+import { addKeyword, archiveSeoKeyword, archiveSeoPage, saveSeoPage, updateSeoKeyword } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · SEO', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -17,14 +17,24 @@ const SITE_PAGES = [
   '/', '/features', '/how-it-works', '/ai', '/pricing', '/security', '/faq', '/blog', '/mobile', '/contact',
 ];
 const INTENTS = ['informational', 'navigational', 'commercial', 'transactional'];
+const KEYWORD_STATUSES = ['idea', 'tracking', 'won', 'dropped'];
+const PAGE_STATUSES = ['active', 'noindex', 'archived'];
 
 export default async function SeoPage() {
   const supabase = createServiceClient();
-  const { data: keywords, error: keywordsError } = await supabase.from('marketing_seo_keywords').select('*').order('created_at', { ascending: false });
-  if (keywordsError) {
-    console.error('[admin-marketing-seo] keyword read failed', keywordsError);
+  const [keywordsResult, pagesResult] = await Promise.all([
+    supabase.from('marketing_seo_keywords').select('*').order('created_at', { ascending: false }),
+    supabase.from('marketing_seo_pages').select('*').order('path', { ascending: true }),
+  ]);
+  const keywordsError = keywordsResult.error;
+  const pagesError = pagesResult.error;
+  const readError = keywordsError ?? pagesError;
+  if (readError) {
+    console.error('[admin-marketing-seo] read failed', readError);
     return <AdminSeoReadError />;
   }
+  const keywords = keywordsResult.data ?? [];
+  const seoPages = pagesResult.data ?? [];
 
   return (
     <div className="space-y-5">
@@ -51,6 +61,56 @@ export default async function SeoPage() {
           </Card>
 
           <Card>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">SEO page registry</h2>
+                <p className="mt-1 text-xs text-muted">Store the latest title, description, audit score, and index policy for each public route.</p>
+              </div>
+              <span className="text-xs text-muted">{seoPages.length} tracked</span>
+            </div>
+            {seoPages.length === 0 ? (
+              <p className="mt-4 text-sm text-muted">No page audits yet. Add the first route below.</p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {seoPages.map((page) => (
+                  <details key={page.id} className="rounded-xl border border-border p-3">
+                    <summary className="cursor-pointer list-none">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-mono text-xs">{page.path}</span>
+                        <span className="text-xs text-muted">{page.score == null ? 'Unscored' : `${page.score}/100`} · {page.status}</span>
+                      </div>
+                    </summary>
+                    <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <input type="hidden" name="id" value={page.id} />
+                      <input name="path" required defaultValue={page.path} className={inputCls} />
+                      <input name="title" defaultValue={page.title ?? ''} placeholder="SEO title" className={inputCls} />
+                      <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder="Meta description" className={`${inputCls} sm:col-span-2`} />
+                      <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder="Score 0–100" className={inputCls} />
+                      <select name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                      <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">Save page audit</button>
+                    </form>
+                    <form action={archiveSeoPage} className="mt-2">
+                      <input type="hidden" name="id" value={page.id} />
+                      <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive audit</button>
+                    </form>
+                  </details>
+                ))}
+              </div>
+            )}
+            <details className="mt-3 rounded-xl border border-dashed border-border p-3">
+              <summary className="cursor-pointer text-sm font-medium">Add page audit</summary>
+              <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
+                <input name="path" required placeholder="/pricing" className={inputCls} />
+                <input name="title" placeholder="SEO title" className={inputCls} />
+                <input name="meta_description" placeholder="Meta description" className={`${inputCls} sm:col-span-2`} />
+                <input name="score" type="number" min="0" max="100" placeholder="Score 0–100" className={inputCls} />
+                <select name="status" defaultValue="active" className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                <button type="submit" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">Add page audit</button>
+              </form>
+            </details>
+          </Card>
+
+          <Card>
             <h2 className="mb-3 font-semibold">Tracked keywords</h2>
             {(keywords ?? []).length === 0 ? (
               <EmptyState icon={Search} title="No keywords tracked" description="Add target keywords on the right." />
@@ -58,7 +118,7 @@ export default async function SeoPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">Keyword</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Target</th><th className="px-3 py-2 font-medium">Source</th>
+                    <th className="px-3 py-2 font-medium">Keyword</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Target</th><th className="px-3 py-2 font-medium">Source</th><th className="px-3 py-2 font-medium">Actions</th>
                   </tr></thead>
                   <tbody className="divide-y divide-border/60">
                     {(keywords ?? []).map((k) => (
@@ -67,6 +127,23 @@ export default async function SeoPage() {
                         <td className="px-3 py-2 text-muted capitalize">{k.intent ?? '—'}</td>
                         <td className="px-3 py-2 font-mono text-xs text-muted">{k.target_path ?? '—'}</td>
                         <td className="px-3 py-2">{k.source === 'ai_suggestion' ? <Badge tone="accent">AI idea</Badge> : <Badge tone="neutral">{k.source}</Badge>}</td>
+                        <td className="px-3 py-2">
+                          <details>
+                            <summary className="cursor-pointer text-xs text-brand-text">Edit</summary>
+                            <form action={updateSeoKeyword} className="mt-2 min-w-64 space-y-2">
+                              <input type="hidden" name="id" value={k.id} />
+                              <input name="keyword" required defaultValue={k.keyword} className={inputCls} />
+                              <select name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">Intent</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
+                              <select name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">Target page</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
+                              <select name="status" defaultValue={k.status} className={inputCls}>{KEYWORD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                              <button type="submit" className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90">Save keyword</button>
+                            </form>
+                            <form action={archiveSeoKeyword} className="mt-2">
+                              <input type="hidden" name="id" value={k.id} />
+                              <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive keyword</button>
+                            </form>
+                          </details>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

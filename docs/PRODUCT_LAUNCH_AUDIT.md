@@ -2795,6 +2795,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: none (standalone seed; not wired into SEED_ALL here).
 - Tests run: clean-bootstrap harness apply (500 rows, conserving, idempotent).
 - Commit: this push.
+
+### PLA-0830 - Closed-loop marketing control plane audit and wiring hardening (A-17/A-18/A-20)
+
+- Timestamp: 2026-07-18 08:50 America/New_York.
+- Service: Super Admin marketing control plane, public acquisition pages, consent-gated attribution, email delivery, and sitemap publication.
+- Routes: `/admin/marketing/{content,landing-pages,seo,aeo,analytics,assets,campaigns/[id],settings,sms,video}`, `/faq`, `/blog/[slug]`, `/lp/[slug]`, `/f/[id]`, `/api/admin/marketing/email/send`, `/api/mkt/{consent,track}`, `/sitemap.xml`.
+- Roles and tier: Super Admin mutations use `requireMarketingAdmin()` and the service-role client; public readers use anonymous-safe reads or server-only service reads; visitor telemetry remains consent and GPC gated.
+- Database objects: `marketing_content_items`, `blog_posts`, `marketing_landing_pages`, `marketing_seo_pages`, `marketing_seo_keywords`, `marketing_aeo_questions`, `marketing_assets`, `marketing_email_campaigns`, `mkt_consent_events`, `mkt_visitors`, `mkt_sessions`, `mkt_touchpoints`, and `marketing_audit_logs`.
+- Findings and resolutions:
+  - AEO questions could be read and added but not edited, published, or deleted from the admin UI. Added validated update/publish/delete actions, public FAQ revalidation, and explicit answer requirements for published rows.
+  - SEO exposed keywords but not the seeded page registry. Added page audit CRUD/archive controls, keyword edit/archive controls, path validation, and returned-row checks.
+  - Landing pages had publish controls but no edit/archive lifecycle and public paths were not revalidated after changes. Added edit/archive controls, slug normalization, old/new path revalidation, and published landing-page sitemap entries.
+  - Blog publishing could drift from the registry or silently accept incomplete lifecycle state. Added status selection to the publish read, body/approval checks, registry synchronization on unpublish/archive, and aligned all nine public categories with the admin publisher.
+  - Public AEO readers previously collapsed database failures into empty content. They now return an availability signal and render a retryable status while preserving core FAQ/article content.
+  - Consent and visitor-attribution failures could become unhandled 500s or silently lose sessions/touchpoints. Added explicit 503 responses and returned-error checks for consent, visitor, session, and touchpoint writes.
+  - Email recipient preview and send paths now distinguish authorization, provider, and internal failures without returning raw provider messages; sending claims the campaign row atomically and verifies delivery-state transitions.
+  - Marketing asset deletion now soft-deletes before storage removal and rolls back the row when storage deletion fails; empty storage paths are handled without a bogus remove call.
+- Security and privacy: no new public write authority; AEO public policy remains published-only; telemetry remains rate limited, consent gated, GPC aware, bounded, and anonymous; provider details are sanitized at the API boundary.
+- Accessibility and UX: admin lifecycle controls are colocated with the affected records, public degraded states preserve the primary page, and forms now expose actionable validation errors instead of silent no-ops.
+- Verification: `npx tsc --noEmit`; targeted ESLint; marketing cluster 46 files / 245 tests; full suite 631 files / 3,734 tests; `npm run build` success with 489 generated routes and only the two pre-existing `messages-module` hook warnings.
+- External dependencies still open: live Supabase migration/RLS and Auth Admin evidence, real Resend/Twilio/Google/Stripe credentials and callback drills, AI citation/ranking providers, embeddings infrastructure, GitHub Actions runners, browser role matrix, and backup/restore rehearsal.
+- Status: CODE COMPLETE locally; launch remains NO-GO until the external blockers and live Super Admin workflow evidence in `docs/LAUNCH_BLOCKERS.md` are cleared.
 - Status: wallet seed is now REPRODUCIBLE + verified. **Remaining for LB-014 (A-02):** wire it (and the other orphan seeds) into the SEED_ALL / harness pipeline, and author seeds for the genuinely-unseeded features (school/sports/medical/routines/grades/home). This fix de-risks the wallet slice — it's ready to wire.
 
 ### PLA-0750 - Systemic root cause of the orphan seeds: ~20 `*_one_family.sql` all pinned to one prod family UUID

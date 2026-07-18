@@ -8,6 +8,16 @@
 
 Reassignments and preserved-work records on session boundaries.
 
+## 2026-07-18 12:50 - CODEX-01
+
+- Completed the closed-loop marketing audit increment across Super Admin AEO/SEO/content/landing controls,
+  public FAQ/blog/landing/form readers, consent-gated attribution, email delivery, assets, and sitemap wiring.
+- Local validation is green: marketing 46 files / 245 tests, full 631 files / 3,734 tests, lint, typecheck, and
+  fresh 489-route production build. The increment is intentionally still NO-GO for live permission/RLS, provider,
+  browser, CI, deployment, and backup evidence.
+- Working tree contains only this marketing increment plus its audit/coordination records. Rebase on `origin/main`,
+  commit as one validated publication unit, push to `main`, and verify remote readback before closing the claim.
+
 ## 2026-07-18 11:30 — QA-01 (agent-02)
 - No reassignment performed. agent-01/03/04 board claims are heartbeat-stale
   (>18h) but their work is committed to `main` and preserved; not reclaiming them

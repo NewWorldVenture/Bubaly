@@ -34,14 +34,14 @@ describe('marketing closed loop — AEO/SEO wired public ↔ admin', () => {
   });
 
   it('the public FAQ reads the same AEO store (single source of truth)', () => {
-    expect(faq).toMatch(/getPublishedAeoQuestions/);
+    expect(faq).toMatch(/(?:getPublishedAeoQuestions|readPublishedAeoQuestions)/);
     expect(faq).toMatch(/FaqStructuredData/);
     expect(reader).toMatch(/from\('marketing_aeo_questions'\)/);
     expect(reader).toMatch(/\.eq\('status', 'published'\)/);
   });
 
   it('every blog article gets an on-topic AEO FAQ block + FAQPage schema linking back', () => {
-    expect(article).toMatch(/getAeoQuestionsForCategory/);
+    expect(article).toMatch(/(?:getAeoQuestionsForCategory|readAeoQuestionsForCategory)/);
     expect(article).toMatch(/FaqStructuredData/);
     expect(article).toMatch(/href="\/faq"/); // links back to the Knowledge Center
   });

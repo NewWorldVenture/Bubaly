@@ -9,6 +9,7 @@ that still need integration retest belong here.
 |------|-------|--------|------------------------|
 | (none from CODEX-01) | `CODEX-01` | 59ef1633 | prior consumer increment integrated and read back on remote `main` |
 | Unified reasoning source-failure contract | `CODEX-01` | this publication | full suite, lint, tsc, fresh 489-route build, docs, and integrated main readback |
+| Closed-loop marketing control-plane audit | `CODEX-01` | pending publication | full suite, lint, tsc, fresh 489-route build, docs, and integrated main readback; live provider/RLS/browser evidence remains external |
 | (none from QA-01) | — | — | — |
 
 Externally-gated verification (cannot be done in-session) is tracked in

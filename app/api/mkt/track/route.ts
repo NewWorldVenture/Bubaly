@@ -62,43 +62,63 @@ export async function POST(req: NextRequest) {
 
   // Privacy gate: only record first-party analytics when the visitor permits it.
   // Necessary-only / denied / GPC visitors are acknowledged but not profiled.
-  const consent = await getConsentState(supabase, anonymousId, { gpc: body.gpc === true });
+  let consent;
+  try {
+    consent = await getConsentState(supabase, anonymousId, { gpc: body.gpc === true });
+  } catch (error) {
+    console.error('[mkt-track] consent read failed', error);
+    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+  }
   if (!canRecordAnalytics(consent)) {
     return NextResponse.json({ ok: true, recorded: false, reason: 'analytics_consent_absent' });
   }
 
   // Upsert the visitor (CDP spine), bump last_seen + session_count.
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('mkt_visitors')
     .select('id, session_count')
     .eq('anonymous_id', anonymousId)
     .maybeSingle();
+  if (existingError) {
+    console.error('[mkt-track] visitor read failed', existingError);
+    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+  }
 
   let visitorId: string | null = existing?.id ?? null;
   if (visitorId) {
-    await supabase.from('mkt_visitors').update({
+    const { error: updateError } = await supabase.from('mkt_visitors').update({
       last_seen: now,
       session_count: (existing!.session_count ?? 0) + 1,
       device_type: clean(body.deviceType) ?? undefined,
       country: clean(body.country) ?? undefined,
     }).eq('id', visitorId);
+    if (updateError) {
+      console.error('[mkt-track] visitor update failed', updateError);
+      return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+    }
   } else {
-    const { data: created } = await supabase.from('mkt_visitors').insert({
+    const { data: created, error: createError } = await supabase.from('mkt_visitors').insert({
       anonymous_id: anonymousId,
       device_type: clean(body.deviceType),
       country: clean(body.country),
       session_count: 1,
     }).select('id').single();
+    if (createError) {
+      console.error('[mkt-track] visitor create failed', createError);
+      return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+    }
     visitorId = created?.id ?? null;
   }
   if (!visitorId) return NextResponse.json({ error: 'Could not record visitor' }, { status: 500 });
 
-  await supabase.from('mkt_sessions').insert({
-    visitor_id: visitorId, source, medium, campaign, landing_path: clean(body.landingPath),
-  });
-  await supabase.from('mkt_touchpoints').insert({
-    visitor_id: visitorId, source, medium, campaign, kind, occurred_at: now,
-  });
+  const [{ error: sessionError }, { error: touchpointError }] = await Promise.all([
+    supabase.from('mkt_sessions').insert({ visitor_id: visitorId, source, medium, campaign, landing_path: clean(body.landingPath) }),
+    supabase.from('mkt_touchpoints').insert({ visitor_id: visitorId, source, medium, campaign, kind, occurred_at: now }),
+  ]);
+  if (sessionError || touchpointError) {
+    console.error('[mkt-track] attribution write failed', sessionError ?? touchpointError);
+    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+  }
 
   return NextResponse.json({ ok: true, recorded: true });
 }

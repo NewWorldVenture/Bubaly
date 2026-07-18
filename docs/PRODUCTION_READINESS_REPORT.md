@@ -3,15 +3,16 @@
 Audit snapshot: 2026-07-18 08:20 America/New_York
 Decision: **NO-GO**
 
-Latest checkpoint: 2026-07-18 12:15 America/New_York. The unified reasoning
-engine now records failed Operating Index, relationship graph, and family signal
-reads, marks reports degraded, persists safe source labels, and surfaces a
-visible warning on `/dashboard/reasoning`.
+Latest checkpoint: 2026-07-18 12:50 America/New_York. The Super Admin marketing
+control plane and public acquisition loop now have validated AEO/SEO/content/
+landing lifecycle controls, sitemap publication, explicit degraded states, and
+consent-gated attribution/provider failure handling.
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 629 Vitest files and 3,726 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
+- 631 Vitest files and 3,734 tests pass in the latest full local gate; the marketing cluster is 46 files and 245 tests green.
 - Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
+- The closed-loop marketing audit added Super Admin AEO/SEO/content/landing edit-publish-archive controls, published landing sitemap entries, explicit public AEO/consent/attribution degradation, atomic email send-state transitions, and asset deletion rollback. These are locally verified; live Super Admin, provider, RLS, browser, and deployment evidence remains open.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.

@@ -17,7 +17,7 @@ const STATUSES = ['draft', 'scheduled', 'active', 'paused', 'completed', 'archiv
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: c, error: campaignError } = await supabase.from('marketing_campaigns').select('*').eq('id', id).maybeSingle();
+  const { data: c, error: campaignError } = await supabase.from('marketing_campaigns').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
   if (campaignError) {
     console.error('[admin-marketing-campaign-detail] campaign read failed', campaignError);
     return <CampaignDetailReadError />;

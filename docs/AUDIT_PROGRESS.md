@@ -14,19 +14,19 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: Unified reasoning source-failure contract plus the preceding dashboard reasoning read boundaries validated with 629 test files and 3,726 tests;
+Latest increment: closed-loop Super Admin marketing audit and wiring hardening validated with 631 test files and 3,734 tests;
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
 
 ## Latest Checkpoint
 
-At 2026-07-18 12:15 UTC, the unified reasoning engine now records failed live
-Operating Index, relationship graph, and family signal reads, prevents degraded
-reports from claiming all-clear, persists safe source labels, and shows a
-visible warning on `/dashboard/reasoning`. Focused 13/13, full 629-file / 3,726-
-test, lint, typecheck, and fresh 489-route build gates passed. The launch
-decision remains NO-GO because live Supabase, role/RLS, integration, CI, and
-deployment evidence is still incomplete.
+At 2026-07-18 12:50 UTC, the Super Admin marketing control plane and public
+closed loop now have validated AEO/SEO/content/landing lifecycle controls,
+published landing pages in the sitemap, explicit public degraded states, and
+consent-gated attribution/provider failure handling. Focused marketing 245/245,
+full 631-file / 3,734-test, lint, typecheck, and fresh 489-route build gates
+passed. A-17 remains in progress because live Super Admin role/RLS, provider,
+browser, and deployment evidence is incomplete; launch remains NO-GO.
 
 ## Weighted Inventory
 
@@ -53,6 +53,10 @@ deployment evidence is still incomplete.
 | A-19 | Mobile, responsive, accessibility and browser compatibility | 5 | In progress | Public Playwright/axe/overflow baseline | Page-by-page device matrix, keyboard, screen reader and touch testing |
 | A-20 | E2E interactions, performance, observability, backups and deployment | 7 | In progress | Public E2E baseline and production build | Full interaction coverage, restore drill, monitoring and launch smoke |
 |  | **Total** | **100** |  | **Verified: 10** |  |
+
+### A-17 checkpoint
+
+The current marketing slice is code-complete locally but remains in progress. It covers Super Admin AEO/SEO/content/landing lifecycle controls, public AEO availability signaling, published landing sitemap publication, consent-gated visitor attribution, email delivery-state handling, and asset-delete rollback. Live permission/RLS, provider, browser, and deployment evidence is still required before A-17 can be marked verified.
 
 ## Completion Rules
 

@@ -3,7 +3,7 @@ import { Section, SectionHeading } from '@/components/marketing/sections';
 import { FAQAccordion, type FAQ } from '@/components/marketing/faq-accordion';
 import { CTASection } from '@/components/marketing/cta';
 import { FaqStructuredData } from '@/components/marketing/structured-data';
-import { getPublishedAeoQuestions } from '@/lib/marketing/aeo';
+import { readPublishedAeoQuestions } from '@/lib/marketing/aeo';
 
 export const metadata: Metadata = {
   title: 'FAQ & Family Knowledge Center',
@@ -28,8 +28,8 @@ export default async function FAQPage() {
   // marketing_aeo_questions render here + feed the FAQPage structured data, so
   // adding/editing an answer in /admin/marketing/aeo updates this page and its
   // rich results automatically — no duplication.
-  const aeo = await getPublishedAeoQuestions(60);
-  const knowledge: FAQ[] = aeo.map((q) => ({ q: q.question, a: q.answer }));
+  const aeo = await readPublishedAeoQuestions(60);
+  const knowledge: FAQ[] = aeo.questions.map((q) => ({ q: q.question, a: q.answer }));
 
   // Everything (core + Knowledge Center) participates in the FAQPage schema.
   const schemaItems = [...FAQS, ...knowledge].slice(0, 100);
@@ -43,6 +43,14 @@ export default async function FAQPage() {
       <Section className="pt-0">
         <FAQAccordion items={FAQS} />
       </Section>
+
+      {!aeo.available && (
+        <Section className="pt-0">
+          <p className="mx-auto max-w-3xl rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">
+            The live Knowledge Center is temporarily unavailable. The core answers above are still available; please refresh shortly for the latest team updates.
+          </p>
+        </Section>
+      )}
 
       {knowledge.length > 0 && (
         <Section className="pt-4">

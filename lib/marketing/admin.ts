@@ -42,7 +42,7 @@ export async function logMarketingAudit(
   },
 ): Promise<void> {
   try {
-    await supabase.from('marketing_audit_logs').insert({
+    const { error } = await supabase.from('marketing_audit_logs').insert({
       actor_id: entry.actorId,
       actor_email: entry.actorEmail,
       action: entry.action,
@@ -50,6 +50,7 @@ export async function logMarketingAudit(
       resource_id: entry.resourceId ?? null,
       metadata: (entry.metadata ?? {}) as Database['public']['Tables']['marketing_audit_logs']['Insert']['metadata'],
     });
+    if (error) console.error('[marketing audit] failed to write log', error);
   } catch (e) {
     console.error('[marketing audit] failed to write log', e);
   }

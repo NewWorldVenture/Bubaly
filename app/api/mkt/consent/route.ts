@@ -53,10 +53,14 @@ export async function POST(req: NextRequest) {
   const userAgent = req.headers.get('user-agent')?.slice(0, 300) ?? null;
 
   const supabase = createServiceClient();
-  await recordConsentEvents(supabase, { anonymousId, decisions, source, gpc, userAgent });
-  const state = await getConsentState(supabase, anonymousId, { gpc });
-
-  return NextResponse.json({ ok: true, state });
+  try {
+    await recordConsentEvents(supabase, { anonymousId, decisions, source, gpc, userAgent });
+    const state = await getConsentState(supabase, anonymousId, { gpc });
+    return NextResponse.json({ ok: true, state });
+  } catch (error) {
+    console.error('[mkt-consent] consent persistence failed', error);
+    return NextResponse.json({ error: 'Consent is temporarily unavailable. Please try again.' }, { status: 503 });
+  }
 }
 
 // Read the current consent state (for hydrating the banner/preference center).
@@ -71,6 +75,11 @@ export async function GET(req: NextRequest) {
   if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
   const gpc = new URL(req.url).searchParams.get('gpc') === '1';
   const supabase = createServiceClient();
-  const state = await getConsentState(supabase, anonymousId, { gpc });
-  return NextResponse.json({ ok: true, state });
+  try {
+    const state = await getConsentState(supabase, anonymousId, { gpc });
+    return NextResponse.json({ ok: true, state });
+  } catch (error) {
+    console.error('[mkt-consent] consent read failed', error);
+    return NextResponse.json({ error: 'Consent is temporarily unavailable. Please try again.' }, { status: 503 });
+  }
 }

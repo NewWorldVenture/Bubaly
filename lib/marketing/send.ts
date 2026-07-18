@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
-import { getMarketingCustomers, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
@@ -17,12 +17,17 @@ export async function resolveRecipients(
   supabase: DB,
   campaign: { segment_id: string | null },
 ): Promise<string[]> {
-  const customers = await getMarketingCustomers(supabase);
+  const customerResult = await getMarketingCustomersWithError(supabase);
+  if (customerResult.error) throw new Error('Could not load marketing customers for this campaign.');
+  const customers = customerResult.customers;
 
   let pool = customers;
   if (campaign.segment_id) {
-    const { data: seg } = await supabase.from('marketing_segments').select('rules').eq('id', campaign.segment_id).maybeSingle();
-    if (seg) pool = evaluateSegment(customers, (seg.rules ?? {}) as SegmentRules);
+    const { data: seg, error: segmentError } = await supabase.from('marketing_segments')
+      .select('rules').eq('id', campaign.segment_id).is('deleted_at', null).maybeSingle();
+    if (segmentError) throw new Error('Could not load the campaign audience segment.');
+    if (!seg) throw new Error('The campaign audience segment no longer exists.');
+    pool = evaluateSegment(customers, (seg.rules ?? {}) as SegmentRules);
   }
 
   const emails = new Set<string>();
@@ -33,10 +38,11 @@ export async function resolveRecipients(
 
   // Remove suppressed addresses (unsubscribes, bounces, complaints).
   if (emails.size > 0) {
-    const { data: suppressed } = await supabase
+    const { data: suppressed, error: suppressionError } = await supabase
       .from('marketing_suppressions')
       .select('email')
       .in('email', [...emails]);
+    if (suppressionError) throw new Error('Could not load marketing suppression preferences.');
     for (const s of suppressed ?? []) emails.delete(s.email);
   }
 
@@ -57,8 +63,10 @@ type SendResult = { sent: number };
  * opens/clicks, and includes a working unsubscribe link + List-Unsubscribe header.
  */
 export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl = APP_URL): Promise<SendResult> {
-  const { data: c, error } = await supabase.from('marketing_email_campaigns').select('*').eq('id', campaignId).maybeSingle();
-  if (error || !c) throw new Error('Campaign not found');
+  const { data: c, error } = await supabase.from('marketing_email_campaigns')
+    .select('*').eq('id', campaignId).is('deleted_at', null).maybeSingle();
+  if (error) throw new Error('Could not load the email campaign.');
+  if (!c) throw new Error('Campaign not found.');
   if (c.status === 'sent' || c.status === 'sending') throw new Error('Campaign already sent');
   if (!emailEnabled()) throw new Error('No email provider configured (set RESEND_API_KEY)');
   if (!c.subject?.trim()) throw new Error('Add a subject before sending');
@@ -66,7 +74,17 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
   const recipients = await resolveRecipients(supabase, c);
   if (recipients.length === 0) throw new Error('No eligible recipients (after suppression/consent filtering)');
 
-  await supabase.from('marketing_email_campaigns').update({ status: 'sending' }).eq('id', campaignId);
+  // Reserve the row atomically. A second browser tab or retried request must
+  // never be able to send the same campaign concurrently.
+  const { data: reserved, error: reserveError } = await supabase.from('marketing_email_campaigns')
+    .update({ status: 'sending' })
+    .eq('id', campaignId)
+    .is('deleted_at', null)
+    .in('status', ['draft', 'failed'])
+    .select('id')
+    .maybeSingle();
+  if (reserveError) throw new Error('Could not reserve the email campaign for sending.');
+  if (!reserved) throw new Error('Campaign is already sending, sent, or no longer available.');
 
   const from = c.from_name ? `${c.from_name} <${FROM_EMAIL.replace(/^.*</, '').replace(/>$/, '')}>` : FROM_EMAIL;
   const baseHtml = c.body_html?.trim() || `<p>${(c.preview_text ?? '').replace(/</g, '&lt;')}</p>`;
@@ -93,15 +111,23 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
     if (!res.ok) {
       const bounded = await readBoundedResponseText(res, 64 * 1024);
       console.error('[marketing send failed]', res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
-      await supabase.from('marketing_email_campaigns').update({ status: 'failed' }).eq('id', campaignId);
-      throw new Error('Provider rejected the send');
+      const { data: failed, error: failedError } = await supabase.from('marketing_email_campaigns')
+        .update({ status: 'failed' }).eq('id', campaignId).eq('status', 'sending').select('id').maybeSingle();
+      if (failedError || !failed) console.error('[marketing send] failed-state update failed', failedError ?? new Error('Campaign claim was lost.'));
+      throw new Error(failedError || !failed
+        ? 'Provider rejected the send and the campaign status could not be updated.'
+        : 'Provider rejected the send');
     }
     sent += chunk.length;
   }
 
-  await supabase.from('marketing_email_campaigns').update({
+  const { data: sentCampaign, error: sentError } = await supabase.from('marketing_email_campaigns').update({
     status: 'sent', sent_at: new Date().toISOString(), recipients: sent,
-  }).eq('id', campaignId);
+  }).eq('id', campaignId).eq('status', 'sending').select('id').maybeSingle();
+  if (sentError || !sentCampaign) {
+    console.error('[marketing send] delivery-state update failed', sentError ?? new Error('Campaign claim was lost after provider acceptance.'));
+    throw new Error('Provider accepted the send, but delivery state could not be recorded. Do not retry until the campaign is checked.');
+  }
 
   return { sent };
 }

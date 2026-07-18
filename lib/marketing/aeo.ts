@@ -16,6 +16,12 @@ export type AeoQuestion = {
   category: string | null;
 };
 
+export type PublicAeoRead = {
+  questions: AeoQuestion[];
+  /** False means the source could not be read; an empty successful result is valid. */
+  available: boolean;
+};
+
 function anonClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,19 +46,31 @@ function toQuestion(r: Row): AeoQuestion {
 }
 
 /** Published AEO questions that carry a real answer (safe to render + cite). */
-export async function getPublishedAeoQuestions(limit = 60): Promise<AeoQuestion[]> {
+export async function readPublishedAeoQuestions(limit = 60): Promise<PublicAeoRead> {
   try {
-    const { data } = await anonClient()
+    const { data, error } = await anonClient()
       .from('marketing_aeo_questions')
       .select('*')
       .eq('status', 'published')
       .not('answer', 'is', null)
       .order('clarity_score', { ascending: false, nullsFirst: false })
       .limit(limit);
-    return (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
-  } catch {
-    return [];
+    if (error) {
+      console.error('[marketing-aeo] published questions read failed', error);
+      return { questions: [], available: false };
+    }
+    return {
+      questions: (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0),
+      available: true,
+    };
+  } catch (error) {
+    console.error('[marketing-aeo] published questions read failed', error);
+    return { questions: [], available: false };
   }
+}
+
+export async function getPublishedAeoQuestions(limit = 60): Promise<AeoQuestion[]> {
+  return (await readPublishedAeoQuestions(limit)).questions;
 }
 
 /**
@@ -60,10 +78,10 @@ export async function getPublishedAeoQuestions(limit = 60): Promise<AeoQuestion[
  * render an on-topic FAQ block + FAQPage schema that links back to the AEO
  * Knowledge Center. Falls back to general questions if a category is thin.
  */
-export async function getAeoQuestionsForCategory(category: string, limit = 4): Promise<AeoQuestion[]> {
+export async function readAeoQuestionsForCategory(category: string, limit = 4): Promise<PublicAeoRead> {
   try {
     const client = anonClient();
-    const { data } = await client
+    const { data, error } = await client
       .from('marketing_aeo_questions')
       .select('*')
       .eq('status', 'published')
@@ -71,17 +89,28 @@ export async function getAeoQuestionsForCategory(category: string, limit = 4): P
       .eq('metadata->>category', category)
       .order('clarity_score', { ascending: false, nullsFirst: false })
       .limit(limit);
+    if (error) {
+      console.error('[marketing-aeo] category questions read failed', error);
+      return { questions: [], available: false };
+    }
     let rows = (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
+    let available = true;
     if (rows.length < limit) {
-      const extra = await getPublishedAeoQuestions(limit * 2);
+      const extra = await readPublishedAeoQuestions(limit * 2);
+      available = extra.available;
       const seen = new Set(rows.map((r) => r.question));
-      for (const q of extra) {
+      for (const q of extra.questions) {
         if (rows.length >= limit) break;
         if (!seen.has(q.question)) { rows = [...rows, q]; seen.add(q.question); }
       }
     }
-    return rows.slice(0, limit);
-  } catch {
-    return [];
+    return { questions: rows.slice(0, limit), available };
+  } catch (error) {
+    console.error('[marketing-aeo] category questions read failed', error);
+    return { questions: [], available: false };
   }
+}
+
+export async function getAeoQuestionsForCategory(category: string, limit = 4): Promise<AeoQuestion[]> {
+  return (await readAeoQuestionsForCategory(category, limit)).questions;
 }

@@ -29,3 +29,11 @@ contract is not yet verified.
 Each row requires: migration present and applied, relationships/indexes reviewed, RLS tested with at least
 two tenants and all relevant roles, storage/realtime/functions verified where used, runtime error handling
 tested, and a production-safe seed/profile path demonstrated.
+
+## Marketing Audit Delta - 2026-07-18
+
+The current local increment verifies the public-to-admin loop for AEO, SEO, content, and landing pages, including
+published-only public AEO reads, published landing-page sitemap reads, consent-gated visitor attribution, and
+server-side Super Admin mutation guards. It also verifies error-aware email delivery state and asset storage
+rollback. This is not a live Supabase proof: migration application, RLS role probes, provider credentials,
+storage behavior, audit-log persistence, and authenticated browser workflows remain open launch gates.

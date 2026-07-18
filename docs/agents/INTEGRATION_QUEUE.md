@@ -16,5 +16,6 @@ backlog.
 | Concierge + Briefing + Graph reasoning read boundaries + Windows test guards | CODEX-01 | fba93554 | 619 Vitest files / 3,690 tests, lint, tsc, fresh 250-route build, remote readback | yes | yes |
 | Decisions + Outcomes + Playbook + Prep Plans reasoning read boundaries | CODEX-01 | 59ef1633 | 627 Vitest files / 3,721 tests, lint, tsc, fresh 489-route build; focused 4/4 tests | yes | yes |
 | Unified reasoning source-failure contract | CODEX-01 | this publication | 629 Vitest files / 3,726 tests, lint, tsc, fresh 489-route build; focused 13/13 tests | pending | pending |
+| Closed-loop marketing control-plane audit | CODEX-01 + MARKETING lanes | pending | 631 Vitest files / 3,734 tests, marketing 46 files / 245 tests, lint, tsc, fresh 489-route build | pending | pending |
 
 Nothing is currently awaiting integration from QA-01.

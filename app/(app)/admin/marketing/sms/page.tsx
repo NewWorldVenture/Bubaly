@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSmsDraft } from '../actions';
+import { isTwilioConfigured } from '@/lib/guardian/twilio';
 
 export const metadata: Metadata = { title: 'Marketing · SMS', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,7 @@ export default async function SmsPage() {
   }
   const { data: sms } = smsResult;
   const { data: segments } = segmentsResult;
-  const ready = !!process.env.TWILIO_AUTH_TOKEN;
+  const ready = isTwilioConfigured();
 
   return (
     <div className="space-y-4">

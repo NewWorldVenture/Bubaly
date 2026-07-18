@@ -31,3 +31,10 @@ have evidence in the issue ledger and a pushed commit.
 - Live schema probes prove availability, not complete RLS correctness.
 - E2E passing counts are recorded with skipped and uncollected tests.
 - Every gap becomes an entry in `docs/PRODUCT_LAUNCH_AUDIT.md` or `docs/LAUNCH_BLOCKERS.md`.
+
+## Marketing Audit Delta - 2026-07-18
+
+The marketing cluster is green at 46 test files and 245 tests. The local contract covers Super Admin AEO/SEO,
+content, and landing lifecycle actions; public FAQ/article/landing/form degraded states; sitemap publication;
+consent and attribution failure handling; email provider/state transitions; and asset-delete rollback. Live role,
+RLS, provider callback, responsive/browser, and end-to-end authenticated evidence remains required.

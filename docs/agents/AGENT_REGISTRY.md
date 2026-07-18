@@ -16,6 +16,10 @@ handles (`agent-01`..`agent-05`, `codex`).
 | `CLAUDE-FRONTEND-01` | `agent-05` | Opus 4.8 | A-05 home/dashboard/display command surfaces + §3e read sweep | (pushed to main) | **ACTIVE** | **2026-07-18 10:18** | Resuming A-05 dashboard wiring/verification matrix (user UI tasks /ai trial-copy + /blog hero art done: `162c9946`,`5e7b6fc1`); next: verify+harden remaining A-05 dashboard command surfaces |
 | `CLAUDE-POLISH-01` | `agent-fable-opus` | Opus 4.8 | Cross-cutting page-level fail-closed read sweep + null-`display_name` crash class + **app-wide UTF-8 mojibake repair** | (pushed to main) | **ACTIVE** | **2026-07-18 10:20** | Registering + logging lane overlaps (below); mojibake repair PLA-0812 shipped (`5c58ca7e`). NOTE: joined this relay before the `docs/agents/` board existed and overlapped codex's server-read lane + agent-05's module claim — all work validated + rebased clean (no file collisions), logged in `CONFLICT_LOG.md`. |
 
+| `MARKETING-ADMIN-01` | `019f7533-1d2a-7f41-8956-769b4e4b7d4e` | delegated agent | Super Admin AEO/SEO/content/landing lifecycle audit | shared working tree | CLOSED | 2026-07-18 12:45 | Changes integrated into Codex marketing publication |
+| `MARKETING-PUBLIC-01` | `019f7533-6383-71f0-a7fa-cefd9ec45134` | delegated agent | Public marketing/AEO/landing/form closed-loop audit | shared working tree | CLOSED | 2026-07-18 12:45 | Changes integrated into Codex marketing publication |
+| `MARKETING-CHANNELS-01` | `019f7533-ab35-7ce2-a076-ea1f5e5d3d57` | delegated agent | Marketing channels, assets, email, attribution, and measurement audit | shared working tree | CLOSED | 2026-07-18 12:45 | Changes integrated into Codex marketing publication |
+
 ## Notes
 - Directive IDs are aliases; the operative identity on the claim board and in
   commit trailers remains the board handle to avoid churn mid-audit.

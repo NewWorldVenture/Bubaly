@@ -13,6 +13,14 @@ function s(fd: FormData, k: string): string | null {
 
 const STATUSES = ['idea', 'brief', 'drafting', 'review', 'approved', 'published'];
 
+function blogMetadata(metadata: unknown): Record<string, unknown> {
+  const root = (metadata ?? {}) as Record<string, unknown>;
+  const nested = root.blog;
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : root;
+}
+
 /** Edit a content item: its draft body, workflow status, and the blog metadata
  *  (category/author/excerpt/featured/tags/slug) used when publishing to the blog. */
 export async function updateContentAction(formData: FormData): Promise<void> {
@@ -21,10 +29,10 @@ export async function updateContentAction(formData: FormData): Promise<void> {
   if (!id) return;
 
   const { data: existing, error: readError } = await supabase
-    .from('marketing_content_items').select('metadata').eq('id', id).maybeSingle();
+    .from('marketing_content_items').select('metadata').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError || !existing) marketingActionFailure('find the marketing content item', readError ?? new Error('Marketing content item not found.'));
   const meta = (existing?.metadata ?? {}) as Record<string, unknown>;
-  const blog = (meta.blog ?? {}) as Record<string, unknown>;
+  const blog = blogMetadata(meta);
 
   const next = {
     ...meta,
@@ -45,7 +53,7 @@ export async function updateContentAction(formData: FormData): Promise<void> {
     status: status && STATUSES.includes(status) ? status : undefined,
     metadata: next as unknown as Json,
     updated_by: actorId,
-  }).eq('id', id).select('id').maybeSingle();
+  }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('update the marketing content item', error ?? new Error('Marketing content item not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_content_item', resourceId: id });
   revalidatePath('/admin/marketing/content');
@@ -61,12 +69,16 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
 
   const { data: item, error: readError } = await supabase
     .from('marketing_content_items')
-    .select('id, title, body, metadata')
+    .select('id, title, body, metadata, status')
     .eq('id', id)
     .is('deleted_at', null)
     .maybeSingle();
   if (readError) marketingActionFailure('load the marketing content item', readError);
-  if (!item || !item.body) return; // nothing to publish without a body
+  if (!item) marketingActionFailure('load the marketing content item', new Error('Marketing content item not found.'));
+  if (!item.body) marketingActionFailure('publish the blog post', new Error('A blog post needs body copy before it can be published.'));
+  if (!['approved', 'published'].includes(item.status)) {
+    marketingActionFailure('publish the blog post', new Error('Approve the content item before publishing it.'));
+  }
 
   const payload = buildBlogPost(item, new Date().toISOString());
   const { data: post, error } = await supabase
@@ -75,7 +87,7 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   if (error || !post) marketingActionFailure('publish the blog post', error ?? new Error('The blog post row was not returned.'));
 
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
-  const blog = (meta.blog ?? {}) as Record<string, unknown>;
+  const blog = blogMetadata(meta);
   const { data: updated, error: updateError } = await supabase.from('marketing_content_items').update({
     status: 'published',
     publish_at: payload.published_at,
@@ -119,8 +131,62 @@ export async function unpublishBlogPostAction(slug: string): Promise<void> {
   const { data, error } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug)
     .select('slug').maybeSingle();
   if (error || !data) marketingActionFailure('unpublish the blog post', error ?? new Error('Blog post not found.'));
+
+  // Keep the admin pipeline honest when a public post is pulled down. The
+  // registry migration stores source slugs at metadata.slug, while the admin
+  // publisher stores metadata.blog.slug; support both shapes during migration.
+  const { data: items, error: itemsError } = await supabase
+    .from('marketing_content_items')
+    .select('id, metadata, status')
+    .eq('kind', 'blog')
+    .is('deleted_at', null);
+  if (itemsError) marketingActionFailure('sync the unpublished blog item', itemsError);
+  const matching = (items ?? []).filter((item) => {
+    const meta = (item.metadata ?? {}) as Record<string, unknown>;
+    const nested = blogMetadata(meta);
+    return nested.slug === slug || meta.slug === slug;
+  });
+  for (const item of matching) {
+    const { data: updated, error: updateError } = await supabase.from('marketing_content_items').update({
+      status: 'approved',
+      publish_at: null,
+    }).eq('id', item.id).is('deleted_at', null).select('id').maybeSingle();
+    if (updateError || !updated) marketingActionFailure('sync the unpublished blog item', updateError ?? new Error('Marketing content item not found.'));
+  }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'unpublish', resource: 'blog_post', resourceId: slug });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');
   revalidatePath(`/blog/${slug}`);
+}
+
+export async function archiveContentAction(formData: FormData): Promise<void> {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = s(formData, 'id');
+  if (!id) return;
+  const { data: item, error: readError } = await supabase.from('marketing_content_items')
+    .select('id, metadata, kind').eq('id', id).is('deleted_at', null).maybeSingle();
+  if (readError || !item) marketingActionFailure('find the marketing content item', readError ?? new Error('Marketing content item not found.'));
+
+  const { data, error } = await supabase.from('marketing_content_items').update({
+    status: 'approved',
+    deleted_at: new Date().toISOString(),
+    updated_by: actorId,
+  }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('archive the marketing content item', error ?? new Error('Marketing content item not found.'));
+
+  if (item.kind === 'blog') {
+    const meta = (item.metadata ?? {}) as Record<string, unknown>;
+    const nestedSlug = blogMetadata(meta).slug;
+    const slug: string | null = typeof nestedSlug === 'string'
+      ? nestedSlug
+      : typeof meta.slug === 'string' ? meta.slug : null;
+    if (slug) {
+      const { error: unpublishError } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug);
+      if (unpublishError) marketingActionFailure('unpublish the archived blog post', unpublishError);
+      revalidatePath(`/blog/${slug}`);
+    }
+  }
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_content_item', resourceId: id });
+  revalidatePath('/admin/marketing/content');
+  revalidatePath('/blog');
 }

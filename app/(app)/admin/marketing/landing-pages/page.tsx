@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { createLandingPage, setLandingPublished } from '../actions';
+import { archiveLandingPage, createLandingPage, setLandingPublished, updateLandingPage } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Landing Pages', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -33,9 +33,23 @@ export default async function LandingPagesPage() {
                   <p className="truncate font-semibold">{p.title}</p>
                   <Badge tone={p.published ? 'success' : 'neutral'}>{p.published ? 'Published' : 'Draft'}</Badge>
                 </div>
-                <p className="font-mono text-xs text-muted">/lp/{p.slug}</p>
-                {p.headline && <p className="mt-1 text-sm text-muted">{p.headline}</p>}
-              </div>
+               <p className="font-mono text-xs text-muted">/lp/{p.slug}</p>
+               {p.headline && <p className="mt-1 text-sm text-muted">{p.headline}</p>}
+               <details className="mt-3 text-sm">
+                 <summary className="cursor-pointer text-xs text-muted hover:text-fg">Edit page</summary>
+                 <form action={updateLandingPage} className="mt-3 grid gap-2 sm:grid-cols-2">
+                   <input type="hidden" name="id" value={p.id} />
+                   <input name="title" required defaultValue={p.title} placeholder="Internal title" className={inputCls} />
+                   <input name="slug" required defaultValue={p.slug} placeholder="url-slug" className={inputCls} />
+                   <input name="headline" defaultValue={p.headline ?? ''} placeholder="Hero headline" className={inputCls} />
+                   <input name="subhead" defaultValue={p.subhead ?? ''} placeholder="Subhead" className={inputCls} />
+                   <input name="cta_label" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_label === 'string' ? (p.metadata as Record<string, unknown>).cta_label as string : ''} placeholder="CTA label" className={inputCls} />
+                   <input name="cta_href" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_href === 'string' ? (p.metadata as Record<string, unknown>).cta_href as string : ''} placeholder="CTA link" className={inputCls} />
+                   <textarea name="body" rows={4} defaultValue={p.body ?? ''} placeholder="Body copy" className="sm:col-span-2 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+                   <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">Save changes</button>
+                 </form>
+               </details>
+             </div>
               <div className="flex shrink-0 flex-col items-end gap-2 text-right text-xs text-muted">
                 <div>
                   <p className="font-semibold text-fg">{p.views}</p> views
@@ -47,14 +61,18 @@ export default async function LandingPagesPage() {
                       View <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
-                  <form action={setLandingPublished}>
+                   <form action={setLandingPublished}>
                     <input type="hidden" name="id" value={p.id} />
                     <input type="hidden" name="publish" value={p.published ? '0' : '1'} />
                     <button className="rounded-lg border border-border px-2 py-1 font-medium hover:bg-elevated">
                       {p.published ? 'Unpublish' : 'Publish'}
-                    </button>
-                  </form>
-                </div>
+                     </button>
+                   </form>
+                   <form action={archiveLandingPage}>
+                     <input type="hidden" name="id" value={p.id} />
+                     <button type="submit" className="text-muted hover:text-rose-400">Archive</button>
+                   </form>
+                 </div>
               </div>
             </Card>
           ))

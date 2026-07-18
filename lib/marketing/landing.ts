@@ -17,14 +17,20 @@ export function landingCta(metadata: unknown): LandingCta {
 /** Allow only "/path" (same-origin) or absolute http(s) URLs; else default. */
 export function safeHref(href: string): string {
   if (!href) return DEFAULT_CTA.href;
-  if (href.startsWith('/') && !href.startsWith('//')) return href;
-  if (/^https?:\/\//i.test(href)) return href;
+  if (/[\u0000-\u001f\u007f]/.test(href)) return DEFAULT_CTA.href;
+  if (href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/\\')) return href;
+  try {
+    const url = new URL(href);
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && url.hostname) return href;
+  } catch {
+    // Invalid URLs use the safe same-origin default.
+  }
   return DEFAULT_CTA.href;
 }
 
 /** Normalize a user-entered slug to lowercase kebab-case. */
 export function normalizeSlug(input: string): string {
-  return (input ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  return (input ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120);
 }
 
 /** Split body copy into paragraphs on blank lines (for rendering). */

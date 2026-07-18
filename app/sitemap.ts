@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
+import { createServiceClient } from '@/lib/supabase/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -53,5 +54,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticEntries, ...categoryEntries, ...postEntries];
+  // Landing pages are published from Super Admin and use a service-role read
+  // because their table is intentionally private to the admin control plane.
+  // A failed admin read must not take down the public sitemap.
+  let landingEntries: MetadataRoute.Sitemap = [];
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
+        .from('marketing_landing_pages')
+        .select('slug, updated_at')
+        .eq('published', true)
+        .is('deleted_at', null)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('[sitemap] published landing-page read failed', error);
+      } else {
+        landingEntries = (data ?? [])
+          .filter((page) => typeof page.slug === 'string' && page.slug.length > 0)
+          .map((page) => ({
+            url: `${SITE_URL}/lp/${encodeURIComponent(page.slug)}`,
+            lastModified: page.updated_at ? new Date(page.updated_at) : now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.7,
+          }));
+      }
+    } catch (error) {
+      console.error('[sitemap] published landing-page read failed', error);
+    }
+  }
+
+  return [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries];
 }

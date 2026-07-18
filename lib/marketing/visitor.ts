@@ -13,6 +13,8 @@ const VID_KEY = 'bubaly_vid';
 const CONSENT_KEY = `bubaly_consent_${CONSENT_POLICY_VERSION}`;
 const TRACKED_KEY = 'bubaly_tracked'; // sessionStorage — one touch per tab session
 const VID_MAX_AGE = 400 * 24 * 60 * 60; // 400 days (Chrome cookie cap)
+let touchInFlight = false;
+let conversionInFlight = false;
 
 function uuid(): string {
   try {
@@ -97,15 +99,16 @@ export async function postConsent(
  */
 export async function trackTouchOnce(anonymousId: string, state: ConsentState, gpc: boolean): Promise<void> {
   if (typeof window === 'undefined' || !state.analytics) return;
+  if (touchInFlight) return;
   try {
     if (sessionStorage.getItem(TRACKED_KEY)) return;
-    sessionStorage.setItem(TRACKED_KEY, '1');
   } catch { /* if sessionStorage is blocked, still fire once */ }
 
+  touchInFlight = true;
   const { source, medium, campaign } = parseUtmParams(location.search);
   const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
   try {
-    await fetch('/api/mkt/track', {
+    const response = await fetch('/api/mkt/track', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -116,5 +119,34 @@ export async function trackTouchOnce(anonymousId: string, state: ConsentState, g
       }),
       keepalive: true,
     });
+    if (response.ok) {
+      try { sessionStorage.setItem(TRACKED_KEY, '1'); } catch { /* storage is optional */ }
+    }
   } catch { /* best-effort */ }
+  finally { touchInFlight = false; }
+}
+
+/** Record a consent-gated conversion for the current public marketing journey. */
+export async function trackConversion(): Promise<void> {
+  if (typeof window === 'undefined' || conversionInFlight) return;
+  const gpc = detectGPC();
+  const state = readLocalConsent()?.state ?? initialConsent(gpc);
+  if (!state.analytics) return;
+
+  conversionInFlight = true;
+  const { source, medium, campaign } = parseUtmParams(location.search);
+  try {
+    await fetch('/api/mkt/track', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        anonymousId: getAnonymousId(), kind: 'conversion', gpc,
+        source, medium, campaign,
+        landingPath: location.pathname.slice(0, 200),
+        deviceType: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+      }),
+      keepalive: true,
+    });
+  } catch { /* conversion telemetry never blocks the user journey */ }
+  finally { conversionInFlight = false; }
 }

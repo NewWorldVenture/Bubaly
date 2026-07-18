@@ -15,7 +15,7 @@ export default async function AnalyticsPage() {
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
     supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null),
-    supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status'),
+    supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null),
   ]);
   const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
   if (readError) {

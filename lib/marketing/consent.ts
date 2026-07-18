@@ -108,21 +108,31 @@ export async function recordConsentEvents(supabase: DB, params: {
       source: params.source ?? 'api',
       gpc: params.gpc ?? false,
       user_agent: params.userAgent ?? null,
-    }));
+  }));
   if (rows.length === 0) return;
-  await supabase.from('mkt_consent_events').insert(rows);
+  const { error } = await supabase.from('mkt_consent_events').insert(rows);
+  if (error) {
+    console.error('[marketing-consent] event write failed', error);
+    throw new Error('Consent could not be saved');
+  }
 }
 
 /** Read a visitor's current consent state (latest per category + GPC). */
 export async function getConsentState(
   supabase: DB, anonymousId: string, opts: { gpc?: boolean } = {},
 ): Promise<ConsentState> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('mkt_consent_events')
     .select('category, decision, created_at')
     .eq('anonymous_id', anonymousId)
     .order('created_at', { ascending: true })
     .limit(500);
+  if (error) {
+    // Never turn an unavailable consent read into the analytics-on default.
+    // Callers will return a retryable error and the tracking path will not write.
+    console.error('[marketing-consent] state read failed', error);
+    throw new Error('Consent state unavailable');
+  }
   const events = (data ?? []).map((r) => ({
     category: r.category as ConsentCategory,
     decision: r.decision as ConsentDecision,

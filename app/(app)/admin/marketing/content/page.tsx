@@ -8,7 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
-import { updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
+import { archiveContentAction, updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
 
 export const metadata: Metadata = { title: 'Marketing · Content', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -44,8 +44,10 @@ export default async function ContentPage() {
           ) : (
             <div className="space-y-2">
               {(items ?? []).map((it) => {
-                const blog = ((it.metadata as Record<string, unknown> | null)?.blog ?? {}) as BlogMeta;
+                const metadata = (it.metadata as Record<string, unknown> | null) ?? {};
+                const blog = ((metadata.blog && typeof metadata.blog === 'object' ? metadata.blog : metadata) ?? {}) as BlogMeta;
                 const isBlog = it.kind === 'blog';
+                const canPublish = isBlog && Boolean(it.body?.trim()) && (it.status === 'approved' || it.status === 'published');
                 return (
                   <Card key={it.id} className="py-3">
                     <div className="flex items-center justify-between gap-3">
@@ -81,7 +83,7 @@ export default async function ContentPage() {
                           <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">Save</button>
                         </div>
                       </form>
-                      {isBlog && (
+                      {isBlog && canPublish && (
                         <form action={publishContentToBlogAction} className="mt-2">
                           <input type="hidden" name="id" value={it.id} />
                           <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
@@ -91,6 +93,10 @@ export default async function ContentPage() {
                         </form>
                       )}
                     </details>
+                    <form action={archiveContentAction} className="mt-2">
+                      <input type="hidden" name="id" value={it.id} />
+                      <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive</button>
+                    </form>
                   </Card>
                 );
               })}

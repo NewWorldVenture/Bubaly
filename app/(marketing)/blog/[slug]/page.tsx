@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
-import { getAeoQuestionsForCategory } from '@/lib/marketing/aeo';
+import { readAeoQuestionsForCategory } from '@/lib/marketing/aeo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 import { HeartButton } from '@/components/blog/heart-button';
@@ -92,13 +92,14 @@ export default async function BlogPostPage({ params }: Params) {
   const post = await getPost(slug);
   if (!post) notFound();
 
-  const [related, { prev, next }, aeoFaqs] = await Promise.all([
+  const [related, { prev, next }, aeo] = await Promise.all([
     getRelatedPosts(slug, post.category, 3),
     getAdjacentPosts(post.date),
     // Category-relevant answers from the admin AEO Knowledge Center → an on-topic
     // FAQ block + FAQPage schema on every article, linking back to the source.
-    getAeoQuestionsForCategory(post.category, 4),
+    readAeoQuestionsForCategory(post.category, 4),
   ]);
+  const aeoFaqs = aeo.questions;
 
   const headings = extractHeadings(post.body);
   const wordCount = post.body.reduce((n, b) => n + b.text.split(/\s+/).length, 0);
@@ -228,6 +229,12 @@ export default async function BlogPostPage({ params }: Params) {
                   Explore the full Family Knowledge Center <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </section>
+            )}
+
+            {!aeo.available && (
+              <p className="mb-10 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">
+                The related Knowledge Center answers are temporarily unavailable. This article is complete; please refresh later for the latest FAQs.
+              </p>
             )}
 
             {/* Did you enjoy it? ♥ + subscribe */}
