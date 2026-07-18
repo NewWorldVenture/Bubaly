@@ -1,4 +1,4 @@
--- 0231_blog_hero_photos.sql
+-- 0232_blog_hero_photos.sql
 -- Unique, free, subject-matched, load-verified hero photo for every published
 -- article. Primary: Wikimedia Commons (CC/public-domain, commercial-OK). Fallback:
 -- Lorem Picsum (CC0) in non-overlapping per-category bands. Each URL used exactly

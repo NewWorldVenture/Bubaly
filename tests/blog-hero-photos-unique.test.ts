@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 // per-slug UPDATE. This guard locks in: full coverage of the seeded articles,
 // zero duplicate image URLs, and only allow-listed (next/image-configured) hosts.
 const ROOT = join(__dirname, '..');
-const MIG = readFileSync(join(ROOT, 'supabase/migrations/0231_blog_hero_photos.sql'), 'utf8');
+const MIG = readFileSync(join(ROOT, 'supabase/migrations/0232_blog_hero_photos.sql'), 'utf8');
 const SEED = readFileSync(join(ROOT, 'supabase/migrations/0226_blog_500_articles.sql'), 'utf8');
 const NEXT = readFileSync(join(ROOT, 'next.config.mjs'), 'utf8');
 
