@@ -207,6 +207,8 @@ create unique index if not exists uq_marketing_assets_content_hash
 
 alter table public.marketing_videos add column if not exists source_hash text;
 alter table public.marketing_videos add column if not exists license text not null default 'embedded_source';
+alter table public.marketing_videos add column if not exists source_url text;
+alter table public.marketing_videos add column if not exists attribution text;
 create unique index if not exists uq_marketing_videos_source_hash
   on public.marketing_videos(source_hash) where source_hash is not null and deleted_at is null;
 

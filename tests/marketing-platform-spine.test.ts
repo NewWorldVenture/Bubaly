@@ -10,6 +10,7 @@ const featureRoute = readFileSync('app/(marketing)/features/[slug]/page.tsx', 'u
 const customRoute = readFileSync('app/(marketing)/p/[slug]/page.tsx', 'utf8');
 const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
 const remoteAssetVerifier = readFileSync('scripts/verify-marketing-assets-remote.mjs', 'utf8');
+const videoActions = readFileSync('app/(app)/admin/marketing/video/actions.ts', 'utf8');
 const provenanceBackfill = readFileSync('scripts/backfill-marketing-asset-provenance.mjs', 'utf8');
 const migrationSource = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
 const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
@@ -69,6 +70,14 @@ describe('marketing platform spine contract', () => {
     expect(providerSync).toContain("onConflict: 'provider,engine,observed_for,page_path,query'");
   });
 
+  it('executes queued provider refreshes and revalidates sitemap jobs', () => {
+    expect(platform).toContain("import { revalidatePath } from 'next/cache';");
+    expect(platform).toContain("import { syncMarketingProviders } from './provider-sync';");
+    expect(platform).toContain("revalidatePath('/sitemap.xml')");
+    expect(platform).toContain('await syncMarketingProviders(supabase)');
+    expect(platform).not.toContain("reason: 'Provider adapter pending configuration.'");
+  });
+
   it('exposes every platform page type through a public route family', () => {
     for (const route of [
       'questions/[slug]', 'guides/[slug]', 'compare/[slug]', 'alternatives/[slug]',
@@ -94,6 +103,10 @@ describe('marketing platform spine contract', () => {
     expect(remoteAssetVerifier).toContain('source_hash');
     expect(remoteAssetVerifier).toContain('duplicate asset hash');
     expect(remoteAssetVerifier).toContain('source_url and attribution');
+    expect(remoteAssetVerifier).toContain('video.source_url || video.url');
+    expect(videoActions).toContain("select('storage_path, content_hash, license, source_url, attribution')");
+    expect(videoActions).toContain('source_hash = asset.content_hash');
+    expect(videoActions).toContain('source_url,');
     expect(provenanceBackfill).toContain("process.argv.includes('--apply')");
     expect(provenanceBackfill).toContain('Dry run only');
     expect(provenanceBackfill).toContain("from('marketing-assets')");

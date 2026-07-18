@@ -25,7 +25,7 @@ const assets = await getRows(
   'marketing_assets',
 );
 const videos = await getRows(
-  'marketing_videos?select=id,title,provider,url,storage_path,source_hash,license&deleted_at=is.null&order=created_at.asc',
+  'marketing_videos?select=id,title,provider,url,storage_path,source_hash,license,source_url,attribution&deleted_at=is.null&order=created_at.asc',
   'marketing_videos',
 );
 
@@ -46,7 +46,10 @@ for (const asset of assets) {
 for (const video of videos) {
   if (!video.source_hash) failures.push(`video ${video.title ?? video.id} has no source_hash`);
   if (!video.license) failures.push(`video ${video.title ?? video.id} has no license`);
-  if (video.provider !== 'upload' && !video.url) failures.push(`video ${video.title ?? video.id} has no source URL`);
+  if (video.provider !== 'upload' && !(video.source_url || video.url)) failures.push(`video ${video.title ?? video.id} has no source URL`);
+  if (video.license !== 'embedded_source' && (!video.source_url || !video.attribution)) {
+    failures.push(`video ${video.title ?? video.id} needs source_url and attribution for license ${video.license}`);
+  }
   if (video.source_hash) {
     const prior = seen.get(video.source_hash);
     if (prior) failures.push(`duplicate media hash: ${prior} == ${video.title ?? video.id}`);

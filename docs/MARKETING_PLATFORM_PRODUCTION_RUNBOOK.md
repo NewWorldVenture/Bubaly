@@ -69,7 +69,10 @@ embeddings.
 - Confirm the public route is published-only and that archive removes it from
   sitemap output and public reads.
 - Confirm duplicate active media hashes are rejected and every uploaded asset
-  has license/source/attribution provenance.
+  has license/source/attribution provenance. Uploaded video rows must reuse the
+  selected Asset Library byte hash so cross-library duplicate media is rejected;
+  external videos must retain a source URL and attribution when their license
+  requires it.
 - Inspect the first worker and provider-sync runs in logs; verify unavailable
   providers are recorded as unavailable rather than represented by invented
   metrics.

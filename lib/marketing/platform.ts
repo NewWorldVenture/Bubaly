@@ -1,12 +1,14 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
+import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, Tables } from '@/lib/database.types';
 import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { getAIConfig } from '@/lib/ai/settings';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { syncMarketingProviders } from './provider-sync';
 
 export type MarketingPlatformDb = SupabaseClient<Database>;
 export type MarketingPage = Tables<'marketing_pages'>;
@@ -376,8 +378,11 @@ async function runJob(supabase: MarketingPlatformDb, job: Tables<'marketing_gene
     case 'generate_questions': return runQuestions(supabase, job);
     case 'embed_page': return runEmbedding(supabase, job);
     case 'generate_metadata': return runRegeneration(supabase, job);
-    case 'sitemap_sync': return { synced: true };
-    case 'refresh_provider_data': return { refreshed: false, reason: 'Provider adapter pending configuration.' };
+    case 'sitemap_sync':
+      revalidatePath('/sitemap.xml');
+      return { synced: true, path: '/sitemap.xml' };
+    case 'refresh_provider_data':
+      return { refreshed: true, results: await syncMarketingProviders(supabase) };
     default: throw new Error(`Unsupported marketing job type: ${job.job_type}`);
   }
 }

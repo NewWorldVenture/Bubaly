@@ -23,11 +23,15 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   let video_id: string | null = null;
   let url: string | null = null;
   let storage_path: string | null = null;
+  let source_hash: string | null = null;
+  let source_url: string | null = null;
+  let attribution: string | null = s(formData, 'attribution');
+  let assetLicense: string | null = null;
 
   if (assetId) {
     const { data: asset, error: assetError } = await supabase
       .from('marketing_assets')
-      .select('storage_path')
+      .select('storage_path, content_hash, license, source_url, attribution')
       .eq('id', assetId)
       .eq('kind', 'video')
       .is('deleted_at', null)
@@ -36,12 +40,18 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
     if (!asset) throw new Error('The selected video asset no longer exists.');
     provider = 'upload';
     storage_path = asset.storage_path;
+    source_hash = asset.content_hash ?? createHash('sha256').update(`${provider}:${storage_path}`).digest('hex');
+    source_url = asset.source_url;
+    attribution = asset.attribution ?? attribution;
+    assetLicense = asset.license;
   } else {
     const parsed = parseVideoUrl(s(formData, 'url'));
     if (!parsed) throw new Error('Enter a valid YouTube or Vimeo URL, or choose an uploaded video asset.');
     provider = parsed.provider;
     video_id = parsed.videoId;
     url = s(formData, 'url');
+    source_hash = createHash('sha256').update(`${provider}:${video_id}`).digest('hex');
+    source_url = url;
   }
 
   const durationRaw = Number(s(formData, 'duration_seconds') ?? '');
@@ -56,8 +66,10 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
     duration_seconds: Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : null,
     status: s(formData, 'status') === 'published' ? 'published' : 'draft',
     tags: parseTags(s(formData, 'tags')),
-    source_hash: createHash('sha256').update(`${provider}:${video_id ?? storage_path ?? url ?? ''}`).digest('hex'),
-    license: s(formData, 'license') ?? 'embedded_source',
+    source_hash,
+    license: assetLicense ?? s(formData, 'license') ?? 'embedded_source',
+    source_url,
+    attribution,
   };
 
   if (id) {

@@ -53,6 +53,7 @@ export default async function VideoPage() {
           </select>
           <input name="duration_seconds" type="number" min="0" placeholder="Duration (sec)" className={inputCls} />
           <input name="url" placeholder="YouTube / Vimeo URL" className={`${inputCls} lg:col-span-2`} />
+          <input name="attribution" placeholder="Attribution (if required)" className={inputCls} />
           <select name="asset_id" defaultValue="" className={inputCls} aria-label="Or pick an uploaded video">
             <option value="">…or pick uploaded video</option>
             {videoAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
