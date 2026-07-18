@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~30% (early)
+## Overall completion: ~31% (early)
 
 Weighting (per the mission brief):
 
@@ -225,6 +225,13 @@ Weighting (per the mission brief):
   `PHYSICAL_DEVICE_TEST_PLAN` — to be authored).
 - **Evidence:** `--list` shows all 4 mobile projects × mobile/overflow/public specs;
   eslint 0 on config + spec.
+- **CI gate (M-009 follow-up):** `scripts/run-e2e.mjs` runs `playwright test` with no
+  project filter, so the existing CI `e2e` job (on PR + push to `main`, Chromium
+  installed) now runs the **mobile device matrix** too — every PR is gated on no
+  horizontal overflow + no sub-16px inputs at real device viewports. CI job renamed
+  to reflect it. The new `mobile.spec` gets its first real execution in CI (the
+  sandbox `next start` cycle was too flaky to run it green locally); a red there is
+  the gate catching a real device-viewport issue.
 
 ### M-010 — PWA update UX: no visible "new version" prompt (Phase 16)
 - **Problem:** `RegisterSW` registered the SW but had **no update handling** — the

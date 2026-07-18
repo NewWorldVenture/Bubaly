@@ -55,7 +55,13 @@ jobs:
           NEXT_PUBLIC_APP_URL: https://example.com
 
   e2e:
-    name: E2E (public, accessibility, and authenticated journey)
+    # `npm run test:e2e` runs playwright with no project filter, so ALL projects
+    # execute here — including the mobile device matrix (iphone-se / iphone / pixel
+    # / ipad, Chromium-emulated) added in playwright.config.ts. The mobile projects
+    # run the mobile-invariant + horizontal-overflow + public-route specs, so every
+    # PR is gated on: no horizontal overflow and no sub-16px inputs at real device
+    # viewports. (WebKit-native runs are opt-in via PW_WEBKIT=1 where installed.)
+    name: E2E (public · a11y · authenticated · mobile device matrix)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:

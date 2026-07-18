@@ -129,7 +129,7 @@ render well; avoid narrow centered phone columns on tablets. Mostly a review pas
 - 🔜 **Remaining:** (a) authed critical journeys (login → create/edit record →
   upload → nav) need CI Supabase creds — extend `PUBLIC_ROUTES` → authed once
   available (see `authenticated.spec.ts`); (b) landscape + dark-mode variants;
-  (c) wire the mobile projects into CI (M-012). Running the full matrix needs a
+  (c) wire the mobile projects into CI — ✅ **DONE**: `run-e2e.mjs` runs all projects with no filter, so the CI `e2e` job (PR + push to main) now executes the mobile matrix as a gate. Running the full matrix needs a
   `next build` + server (~5 min) — kicked once for evidence.
 
 ### M-010 (P2) — PWA update UX + offline states (Phases 16/17)
