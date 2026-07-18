@@ -72,6 +72,38 @@ const CAT_KEYWORDS = {
   'Home & Seasonal': 'home,house,cozy',
 };
 
+// Per-ARTICLE image keywords derived from the post's subject, so each photo
+// aligns to that specific story (homework post → homework photo, sports post →
+// sports photo), not just its category. First signal that matches the subject
+// wins; falls back to the category theme. Combined with a per-post lock, every
+// article gets a distinct, on-topic, free Creative-Commons photo.
+const IMG_SIGNALS = [
+  [/homework|study|studies|spelling|test|grade|note-taking|note\b|notes|science-project|science fair/, 'homework,study,desk'],
+  [/sleep|bedtime|\bnap\b|wind-down|thumb-suck|pacifier|sleeping/, 'child,sleep,bedroom'],
+  [/meal|dinner|breakfast|lunch|cook|recipe|pantry|grocer|snack|pasta|pizza|soup|bak|smoothie|stir-fr|leftover|produce|rice-bowl|sheet-pan|freezer/, 'cooking,kitchen,food'],
+  [/budget|money|allowance|financ|saving|\bbill|spend|paycheck|invest|\bcash|\bcost|debt|jar/, 'money,finance,savings'],
+  [/chore|cleaning|tidy|laundry|declutter|organiz|command center|reset|mudroom|junk drawer|labeling|zones/, 'organized,home,cleaning'],
+  [/screen|tech\b|\bai\b|device|phone|smartphone|gaming|video game|\bapp\b|coding|online|digital|password|\bemail|smartwatch|automat|voice assistant/, 'technology,child,tablet'],
+  [/sport|athlet|practice|\bgame\b|soccer|tryout|coach|\btrack\b|\bteam|instrument|music/, 'sports,children,activity'],
+  [/travel|trip|vacation|road|camping|adventure|hik|beach|flight|passport|museum|\bzoo|aquarium|picnic|stargaz|berry-pick|scavenger|theme-park|airport/, 'travel,family,outdoors'],
+  [/garden|\byard\b|seasonal|holiday|decor|winter|summer|\bfall\b|autumn|spring|frost|maintenance|entryway|attic|closet|snow-day|hosting|guests/, 'home,house,seasonal'],
+  [/read|\bbook|library|reader/, 'reading,books,child'],
+  [/toddler|baby|potty|tantrum|newborn|infant|witching-hour|sprinkler/, 'toddler,parent'],
+  [/teen|teenager|middle school|high school|adolesc|first crush|secretive/, 'teenager,family'],
+  [/wellness|health|mindful|stress|anxiet|emotion|feeling|breathe|gratitude|resilien|burnout|calm|worry|self-care|sensory|overstimul|movement|outside/, 'wellness,calm,nature'],
+  [/calendar|schedul|routine|planner|plan the week|morning|weekly|carpool|appointment|reminder/, 'planner,calendar,desk'],
+  [/\bpet|\bdog\b|\bcat\b/, 'pet,family,dog'],
+  [/school|classroom|teacher|back-to-school|homeschool|supplies|permission slip|report card|backpack|drop-off|pickup/, 'school,children,classroom'],
+  [/friend|\bshy\b|bully|\bkind|social|sibling|rivalry|tattl|share|left out/, 'children,friends,playing'],
+  [/photo|memor|milestone/, 'family,photos,memories'],
+  [/confiden|independ|responsib|mistake|apolog|patien|gratitude|manners|promise/, 'child,parent,together'],
+];
+function imageKeywordsForSubject(subject, category) {
+  const s = subject.toLowerCase();
+  for (const [re, kw] of IMG_SIGNALS) if (re.test(s)) return kw;
+  return CAT_KEYWORDS[category];
+}
+
 const ACCENT = {
   'Parenting': '#7c5dff', 'Organization': '#3b82f6', 'School & Activities': '#10b981',
   'AI & Technology': '#6366f1', 'Wellness': '#f59e0b', 'Family Finances': '#ec4899',
@@ -365,7 +397,7 @@ function buildPost(category, subject, globalIndex, usedSlugs) {
   const excerpt = `${firstSentence(body[0].text)}. ${firstSentence(body[1].text)}.`
     .replace(/\s+/g, ' ').slice(0, 180);
 
-  const heroKeywords = CAT_KEYWORDS[category];
+  const heroKeywords = imageKeywordsForSubject(subject, category);
   const heroImageAlt = `A photo related to ${subject}.`;
 
   // hashtags: always #bubaly + #familylife + category + subject-derived + facet-ish
