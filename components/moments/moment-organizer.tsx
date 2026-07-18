@@ -12,6 +12,7 @@ import {
   PartyPopper, ShieldAlert, ChevronRight, X, Compass,
 } from 'lucide-react';
 import { dismissMomentAction } from '@/app/(app)/dashboard/moments/actions';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import type { MomentKey } from '@/lib/moments/organizer';
 
@@ -27,6 +28,7 @@ const ICON: Record<MomentKey, React.ComponentType<{ className?: string }>> = {
 
 export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
   const router = useRouter();
+  const { error: toastError } = useToast();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
@@ -37,7 +39,13 @@ export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
     setHidden((prev) => new Set(prev).add(key)); // optimistic
     startTransition(async () => {
       const res = await dismissMomentAction(key);
-      if (!res.ok) { setHidden((prev) => { const n = new Set(prev); n.delete(key); return n; }); return; }
+      if (!res.ok) {
+        // Roll back the optimistic hide AND tell the user — a silent revert just
+        // makes the card reappear with no explanation of why dismiss didn't stick.
+        setHidden((prev) => { const n = new Set(prev); n.delete(key); return n; });
+        toastError(res.error ?? 'Could not dismiss this moment. Please try again.');
+        return;
+      }
       router.refresh();
     });
   }

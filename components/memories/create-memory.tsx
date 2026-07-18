@@ -142,8 +142,23 @@ export function CreateMemory() {
     const supabase = createClient();
     const ids = created.map((c) => c.id);
     const paths = created.map((c) => c.path);
-    if (paths.length) await supabase.storage.from('family-media').remove(paths);
-    if (ids.length) await supabase.from('family_photos').delete().in('id', ids);
+    // Delete the DB rows first — they're the source of truth for what shows on the
+    // Memories/Photos timeline. If this fails (RLS/network), the memory is still
+    // live, so DON'T claim it was undone; surface the error and keep the "Created"
+    // screen so the user can retry (created state is preserved).
+    if (ids.length) {
+      const { error: delErr } = await supabase.from('family_photos').delete().in('id', ids);
+      if (delErr) {
+        toastError(describeDbError(delErr));
+        setUndoing(false);
+        return;
+      }
+    }
+    // Rows are gone; best-effort remove the now-orphaned storage objects.
+    if (paths.length) {
+      const { error: rmErr } = await supabase.storage.from('family-media').remove(paths);
+      if (rmErr) toastError('The memory was undone, but its photo files could not be cleaned up.');
+    }
     setCreated([]);
     setUndoing(false);
     setDone(false);
