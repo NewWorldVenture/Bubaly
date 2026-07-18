@@ -2,7 +2,7 @@
 
 **Purpose:** shared ownership contract for parallel Codex/Claude work on the AI-first marketing operating system.
 
-**Updated:** 2026-07-18 11:08 America/New_York
+**Updated:** 2026-07-18 11:24 America/New_York
 **Repository:** `NewWorldVenture/FamilyOS`
 **Current integration branch:** `codex/reasoning-main-publication`
 **Baseline:** `a6ca111e`
@@ -37,14 +37,14 @@ The platform spine is being built around these Supabase objects:
 
 | Lane | Owner | Status | Owned paths | Do not touch | Handoff evidence |
 |---|---|---|---|---|---|
-| Platform spine | `CODEX-01` | CHECKPOINT READY | `supabase/migrations/0231_marketing_platform_spine.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (632 files / 3,738 tests); build PASS; asset audit PASS |
+| Platform spine | `CODEX-01` | CHECKPOINT READY | `supabase/migrations/0231_marketing_platform_spine.sql`, `lib/database.types.ts`, `lib/marketing/platform.ts`, `lib/marketing/provider-sync.ts`, `app/api/cron/marketing/**`, `app/api/cron/marketing-providers/**`, `vercel.json`, `.env.example` | Other lanes' admin/public UI | Typecheck PASS; migration audit PASS; full suite PASS (632 files / 3,742 tests); build PASS; asset audit PASS |
 | Super Admin control center | `MARKETING-ADMIN-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(app)/admin/marketing/platform/**`, `app/(app)/admin/marketing/marketing-subnav.tsx` | `lib/marketing/platform.ts`, migration files | Admin action tests, role boundary test, rendered page smoke |
 | Public page families | `MARKETING-PUBLIC-02` | AVAILABLE AFTER SPINE CHECKPOINT | `app/(marketing)/questions/**`, `guides/**`, `compare/**`, `alternatives/**`, `audiences/**`, `resources/**`, `glossary/**` | `lib/marketing/public-pages.tsx`, `app/sitemap.ts` | Public published/draft/404 tests, metadata, JSON-LD, mobile smoke |
 | Public shared renderer | `MARKETING-PUBLIC-03` | RESERVED | `lib/marketing/public-pages.tsx` | Route folders owned by PUBLIC-02 | Renderer tests and accessibility check |
-| Legacy content bridge | `CODEX-01` | IN PROGRESS | `app/(app)/admin/marketing/content/**`, `app/(app)/admin/marketing/actions.ts` (legacy marketing actions), `lib/marketing/legacy-bridge.ts` | Platform schema and worker internals | Publish/unpublish bridge tests; missing-schema compatibility check |
+| Legacy content bridge | `CODEX-01` | CHECKPOINT READY | `app/(app)/admin/marketing/content/**`, `app/(app)/admin/marketing/actions.ts` (legacy marketing actions), `lib/marketing/legacy-bridge.ts` | Platform schema and worker internals | Blog/landing create, publish, edit, unpublish, archive bridge; missing-schema compatibility; full suite PASS |
 | Provider analytics | `MARKETING-DATA-02` | AVAILABLE | `app/(app)/admin/marketing/seo/**`, `analytics/**`, `intelligence/**`, provider observation UI/tests | Provider adapter implementation | Fixture import tests, no-fabrication tests, degraded-state UI |
 | Asset provenance | `MARKETING-ASSETS-02` | CHECKPOINT READY | `app/(app)/admin/marketing/assets/**`, `video/**`, `lib/marketing/assets.ts`, `lib/marketing/video.ts` | Platform worker and public route files | Asset audit PASS (18 unique shipped raster assets; no remote image URLs); focused contracts PASS |
-| Test and verification | `MARKETING-QA-02` | CHECKPOINT READY | `tests/marketing-platform-*.test.ts`, `tests/marketing-provider-*.test.ts`, `tests/marketing-assets-*.test.ts` | Production code owned by another lane | Full suite PASS (632 files / 3,738 tests) |
+| Test and verification | `MARKETING-QA-02` | CHECKPOINT READY | `tests/marketing-platform-*.test.ts`, `tests/marketing-provider-*.test.ts`, `tests/marketing-assets-*.test.ts` | Production code owned by another lane | Full suite PASS (632 files / 3,742 tests) |
 | Integration owner | `CODEX-01` | ACTIVE | `docs/MARKETING_PLATFORM_COORDINATION.md`, release notes, final integration only | Active feature lanes before handoff | Full test, lint, typecheck, build, migration audit |
 
 ## Parallel Bot Roster
@@ -73,7 +73,7 @@ To claim a lane, append a row with the agent id, timestamp, exact paths, and exp
 | Request | From | To | Status |
 |---|---|---|---|
 | Add public page-family route fixtures and accessibility coverage | `CODEX-01` | `MARKETING-PUBLIC-02`, `MARKETING-QA-02` | OPEN |
-| Bridge legacy blog/landing edits into `marketing_pages` without double-publishing | `CODEX-01` | `CODEX-01` | IN PROGRESS |
+| Bridge legacy blog/landing edits into `marketing_pages` without double-publishing | `CODEX-01` | `CODEX-01` | CHECKPOINT READY |
 | Add provider observation dashboards with explicit unavailable/partial states | `CODEX-01` | `MARKETING-DATA-02` | OPEN |
 | Add duplicate-image and license contract tests | `CODEX-01` | `MARKETING-ASSETS-02`, `MARKETING-QA-02` | OPEN |
 | Validate migration `0231` on PG16/Supabase and apply to production | `CODEX-01` | Supabase operator | EXTERNAL / OPEN |
@@ -84,8 +84,8 @@ To claim a lane, append a row with the agent id, timestamp, exact paths, and exp
 Lane: Platform spine + integration
 Owner: CODEX-01
 Files: migration 0231, platform worker/provider adapters, cron routes, public renderer/routes, sitemap/SEO bridge, asset provenance, coordination docs
-Commit: `c49bd6e6` on codex/reasoning-main-publication
-Tests: npm test -- --reporter=dot -> 632 files / 3,738 tests passed
+Commit: `c5ec7952` on codex/reasoning-main-publication
+Tests: npm test -- --reporter=dot -> 632 files / 3,742 tests passed
 Typecheck: npm run typecheck -> pass
 Migration: npm run db:audit:migrations -> pass; next available 0232; live REST check currently returns 404 for `marketing_pages` until 0231 is applied
 Build: npm run build -> pass; 490 routes generated
