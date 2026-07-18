@@ -12,7 +12,7 @@ handles (`agent-01`..`agent-05`, `codex`).
 | `CLAUDE-SUPABASE-01` | `agent-01` | Opus 4.8 | Auth/RLS/tenant isolation, migrations, security-critical DB | (pushed to main) | IN_REVIEW (heartbeat stale >18h) | 2026-07-17 ~17:36 | A-03/04/06/07/08/12/14 security + RLS proofs |
 | `CLAUDE-INTEGRATIONS-01` | `agent-03` | Opus 4.8 | A-16 notifications/cron, A-11 messages/storage, observability | (pushed to main) | IN_REVIEW (heartbeat stale) | 2026-07-17 ~18:55 | Health endpoint, cron auth, messages/storage RLS |
 | `CLAUDE-SECURITY-01` | `agent-04` | Fable 5 | A-15/17/18/19/20 authz, GRANT scoping, a11y/build gates | (pushed to main) | IN_REVIEW (heartbeat stale) | 2026-07-17 ~00:06 | Admin authz, sync fail-closed, axe/overflow baseline |
-| `CLAUDE-FRONTEND-01` | `agent-05` | Opus 4.8 | A-05 home/dashboard/display command surfaces + §3e read sweep | (pushed to main) | ACTIVE | 2026-07-18 ~09:52 | A-05 false-empty read + seed gaps (behavior_logs, family_facts) |
+| `CLAUDE-FRONTEND-01` | `agent-05` | Opus 4.8 | A-05 home/dashboard/display command surfaces + §3e read sweep | (pushed to main) | **ACTIVE** | **2026-07-18 10:18** | Resuming A-05 dashboard wiring/verification matrix (user UI tasks /ai trial-copy + /blog hero art done: `162c9946`,`5e7b6fc1`); next: verify+harden remaining A-05 dashboard command surfaces |
 
 ## Notes
 - Directive IDs are aliases; the operative identity on the claim board and in

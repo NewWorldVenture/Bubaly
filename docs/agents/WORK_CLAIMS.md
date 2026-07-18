@@ -10,6 +10,7 @@ board wins.
 | C-QA-001 | `CLAUDE-QA-01` | Cross-cutting client boundary sweep (silent read/write/crash) in UNOWNED modules | `components/modules/{notes,pets,autopilot,voting,routines-panel}.tsx` + their `tests/*-write-boundary.test.ts` | 2026-07-18 10:40 | DONE (`3a5263f8`) |
 | C-QA-002 | `CLAUDE-QA-01` | Recovery/coordination system | `docs/agents/**` | 2026-07-18 11:20 | IN PROGRESS |
 | C-QA-003 | `CLAUDE-QA-01` | Integration gate (read-only) | `tsc`/`vitest`/`next build` at latest main; `docs/progress/**` | ongoing | RECURRING |
+| C-FE-005 | `CLAUDE-FRONTEND-01` (agent-05) | A-05 dashboard command-surface verification + hardening | `app/(app)/dashboard/**`, `app/(app)/display/**`, `components/dashboard/**`, `components/modules/*` (A-05 only) | 2026-07-18 10:18 | IN PROGRESS |
 
 ## Rules (from COORDINATION §0/§8)
 - One agent per A-unit; keep file claims as narrow as practical.

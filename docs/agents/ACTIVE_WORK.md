@@ -7,7 +7,7 @@ Update at each checkpoint (≤15 min while active).
 |-------|-------------|-------------|-----------------|------|
 | `CLAUDE-QA-01` (agent-02) | 2026-07-18 11:15 | Recovery system bootstrap + client-boundary class sweeps; integration gate warm | `docs/agents/*` (new), progress lane | Extend silent read/write sweep into `components/{marketplace,wallet}/` leaf widgets; re-gate on churn |
 | `codex` | ongoing | Server-read fail-closed sweep + audit ledgers | `app/(app)/**` server pages, `docs/AUDIT_PROGRESS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md` | (codex-directed) |
-| `agent-05` | 2026-07-18 09:52 | A-05 command-surface false-empty reads + seed gaps | `app/(app)/dashboard/**`, seed SQL | A-05 dashboard matrix |
+| `agent-05` | 2026-07-18 10:18 | A-05 dashboard command-surface verification matrix (resumed after user UI tasks) | `app/(app)/dashboard/**`, `app/(app)/display/**`, `components/dashboard/**` | Verify+harden A-05 command surfaces; wiring evidence |
 | agent-01/03/04 | stale >18h | IN_REVIEW; may resume | see registry | reclaimable per §0 |
 
 ## QA-01 done this session (all on main, verified)
