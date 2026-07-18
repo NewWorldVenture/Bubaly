@@ -152,22 +152,22 @@ VALUES
   ]$json$::jsonb, true
 ),
 (
-  'ai-homework-helper-not-cheater',
-  'AI and Homework: Raising a Kid Who Uses It to Learn, Not to Cheat',
-  'AI can do your kid''s homework for them — or it can become the best tutor they''ve ever had. The difference is the questions they''re taught to ask.',
-  'Marcus Bennett', '2026-06-26', 6, ARRAY['ai','school','learning'], 'AI & Technology', false, '#6366f1',
+  'your-kids-digital-footprint-starts-with-you',
+  'Your Kid''s Digital Footprint Starts With You',
+  'Long before a child opens their first account, a trail already exists — the one their parents posted. ''Sharenting'' deserves a second thought.',
+  'Marcus Bennett', '2026-06-26', 6, ARRAY['ai','privacy','safety'], 'AI & Technology', false, '#6366f1',
   'https://images.unsplash.com/photo-1489710437720-ebb67ec84dd2?auto=format&fit=crop&w=1600&q=80',
-  'A parent and child learning together with a device',
+  'A parent thoughtfully holding a phone with a child nearby',
   'Unsplash',
   $json$[
-    {"type":"p","text":"AI can write your kid's essay, solve their math set, and answer their history questions in seconds. That reality terrifies a lot of parents and teachers, and understandably so. But the tool isn't going away, and pretending it doesn't exist just leaves kids to figure it out alone. The real task isn't banning AI — it's teaching the difference between using it to learn and using it to avoid learning."},
-    {"type":"h2","text":"The line is ''explain'' versus ''do''"},
-    {"type":"p","text":"There's a clear, teachable distinction. ''Write my essay about the Civil War'' is cheating — the AI did the thinking. ''Explain why the Civil War started like I'm twelve, then quiz me'' is tutoring — the kid still does the thinking, with help. Teach your child to ask AI to explain, break down, give examples, and check their reasoning, never to hand over the finished answer. The goal is understanding they keep, not output they borrowed."},
-    {"type":"h2","text":"It can be a patient, personal tutor"},
-    {"type":"p","text":"Used well, AI is a genuinely remarkable learning aid — an infinitely patient tutor that never sighs, explains a concept five different ways until one lands, generates practice problems, and adapts to exactly where a kid is stuck. For a child who's lost in class and too embarrassed to keep raising their hand, that private, judgment-free help can be transformative. That's the promise worth teaching them to reach for."},
-    {"type":"h2","text":"Protect the productive struggle"},
-    {"type":"p","text":"The danger isn't the AI; it's skipping the struggle that learning requires. When something's hard, the instinct will be to just ask the AI for the answer and move on — but that struggle is where the actual learning happens. Coach your kid to sit with a hard problem first, then use AI to get unstuck, not to bypass the whole thing. Learning to wrestle before reaching for help is the meta-skill that matters most."},
-    {"type":"p","text":"AI in homework is here to stay. Teach your kid to treat it as a tutor that explains, not a machine that does — and they'll come out of school with a superpower instead of a crutch."}
+    {"type":"p","text":"Most kids today have a digital footprint before they can walk — not one they made, but one their parents did. The birth announcement, the bath photos, the first-day-of-school sign held up to the camera, the funny meltdown story. It's all loving and normal, and it's also a permanent, searchable record about a person who never got asked. ''Sharenting'' is worth a pause, not a panic."},
+    {"type":"h2","text":"The internet doesn''t forget, and it doesn''t ask"},
+    {"type":"p","text":"A photo posted today can outlive the platform, get scraped, get screenshotted, and resurface in fifteen years when your kid is applying to college or a job. The child in the picture had no say and can't take it back. That's the core issue: you're making a permanent, public decision on behalf of someone who will one day have their own opinion about it. A little foresight now spares them a lot later."},
+    {"type":"h2","text":"A few simple filters before you post"},
+    {"type":"p","text":"You don't have to go dark — just run a quick check. Would your kid be embarrassed by this at fourteen? Does it reveal identifying details (school name, home, full birthdate, anything in a bathroom or bath)? Are you posting it for them or for your own likes? Lock down your audience to people you actually know, skip the truly private stuff, and when in doubt, share it in a group chat instead of a public feed."},
+    {"type":"h2","text":"Model the consent you want them to learn"},
+    {"type":"p","text":"Here's the quiet payoff: how you handle their image teaches them how to handle everyone's. Ask an older kid ''is it okay if I post this?'' and honor a no. You're modeling digital consent — the exact habit you'll want them to have before they post about their friends someday. A kid who grew up being asked is far more likely to ask."},
+    {"type":"p","text":"Share the joy of your family — just remember there's a real person in the photo who'll inherit the footprint. A moment's thought before you post is one of the first privacy lessons you'll ever teach, and you teach it by living it."}
   ]$json$::jsonb, true
 ),
 
