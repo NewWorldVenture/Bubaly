@@ -238,7 +238,7 @@ Weighting (per the mission brief):
   (no runner assigned; provisioning failure, not a test failure). This is the
   known GitHub Actions runner/billing/org-policy blocker (LB-015), owned by the
   org — not a code issue. Mobile matrix evidence therefore comes from local runs
-  until runners are restored, at which point every PR is auto-gated.
+  until runners are restored, at which point every PR is auto-gated. Local sandbox execution is **also** not viable (3 attempts: WebKit binary absent → chromium-pinned; then the `next start`+browser cycle aborts after the build completes) — so automated mobile-matrix *execution* evidence is blocked on infrastructure (CI runners, LB-015), not on code. Static guards (M-002 CSS / M-003 overflow) + config enumeration (225 tests) stand in until runners return; `docs/PHYSICAL_DEVICE_TEST_PLAN.md` covers what emulation can never prove.
 
 ### M-010 — PWA update UX: no visible "new version" prompt (Phase 16)
 - **Problem:** `RegisterSW` registered the SW but had **no update handling** — the
