@@ -27,6 +27,7 @@ const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.
 const platformAdmin = readFileSync('app/(app)/admin/marketing/platform/page.tsx', 'utf8');
 const runtimeVerifier = readFileSync('scripts/verify-marketing-runtime-remote.mjs', 'utf8');
 const marketingSettings = readFileSync('app/(app)/admin/marketing/settings/page.tsx', 'utf8');
+const backfillQueueMigration = readFileSync('supabase/migrations/0239_marketing_backfill_queue_cleanup.sql', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -184,6 +185,9 @@ describe('marketing platform spine contract', () => {
     expect(runtimeVerifier).toContain('app_settings?select=value&key=eq.ai_provider');
     expect(marketingSettings).toContain('getAIConfigView');
     expect(marketingSettings).toContain('ai.openaiKeySet');
+    expect(backfillQueueMigration).toContain("NEW.updated_by IS NULL");
+    expect(backfillQueueMigration).toContain("NEW.content ? 'source'");
+    expect(backfillQueueMigration).toContain("job.created_at <= page.created_at + interval '5 minutes'");
     expect(productionMigrationWorkflow).toContain('marketing:verify:runtime:remote');
   });
 

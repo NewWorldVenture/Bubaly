@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { parseFormFields } from '@/lib/marketing/forms';
 import { Section, SectionHeading } from '@/components/marketing/sections';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 import { PublicForm } from './form-renderer';
 
 export const dynamic = 'force-dynamic';
@@ -45,35 +46,39 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
   const form = await getForm(id);
   if (!form) notFound();
 
+  const m = meta(form);
+  const title = metaString(m, 'title') ?? form.name;
+  const description = metaString(m, 'description') ?? 'A secure Bubaly form for families and their communities.';
   const fields = parseFormFields(form.fields);
   if (fields.length === 0) {
     return (
-      <Section className="pt-20">
-        <SectionHeading
-          eyebrow="Form unavailable"
-          title={metaString(meta(form), 'title') ?? form.name}
-          description="This form is temporarily unavailable because it has no usable fields. Please try again later or contact us directly."
-        />
-      </Section>
+      <>
+        <Section className="pt-20">
+          <SectionHeading
+            eyebrow="Form unavailable"
+            title={title}
+            description="This form is temporarily unavailable because it has no usable fields. Please try again later or contact us directly."
+          />
+        </Section>
+        <MarketingAeoSection path={`/f/${id}`} name={title} description={description} />
+      </>
     );
   }
 
-  const m = meta(form);
   return (
-    <Section className="pt-20">
-      <SectionHeading
-        eyebrow="Form"
-        title={metaString(m, 'title') ?? form.name}
-        description={metaString(m, 'description')}
-      />
-      <div className="mx-auto mt-12 max-w-xl">
-        <PublicForm
-          formId={form.id}
-          fields={fields}
-          submitLabel={metaString(m, 'submit_label')}
-          successMessage={metaString(m, 'success_message')}
-        />
-      </div>
-    </Section>
+    <>
+      <Section className="pt-20">
+        <SectionHeading eyebrow="Form" title={title} description={description} />
+        <div className="mx-auto mt-12 max-w-xl">
+          <PublicForm
+            formId={form.id}
+            fields={fields}
+            submitLabel={metaString(m, 'submit_label')}
+            successMessage={metaString(m, 'success_message')}
+          />
+        </div>
+      </Section>
+      <MarketingAeoSection path={`/f/${id}`} name={title} description={description} />
+    </>
   );
 }

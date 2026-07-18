@@ -429,3 +429,21 @@ embedding provider configured, and `ai_citation`, `bing_webmaster`, and
 `google_search_console` still `not_configured`. Do not mark the platform runtime
 ready until the queue is processed and `marketing:verify:runtime:remote --strict`
 passes with real provider credentials.
+
+### Public route and bootstrap queue checkpoint - 2026-07-18
+
+The public form route now delegates to the shared Supabase-backed AEO/schema
+section, including its empty-field degraded state. A route contract test covers
+all marketing `page.tsx` files, allowing legal pages to delegate through
+`LegalPage` and dynamic registry pages through `MarketingPageView`; only the
+explicit no-index demo upgrade utility is exempt.
+
+Migration `0239_marketing_backfill_queue_cleanup.sql` fixes the bootstrap queue
+shape: source-marked backfill inserts with no actor no longer enqueue a needless
+`regenerate_page` job, and only matching same-insert queued jobs are removed.
+Admin-created pages and all later edits still enqueue automatic regeneration.
+This is code-ready but requires the production migration workflow to apply it;
+the current remote database therefore still reports 2,059 queued jobs and 0
+ready vectors until migration apply and scheduled worker execution occur.
+Published route contract and migration safety coverage: 654 test files / 3,876
+tests, typecheck, all remote marketing gates, and the 1,281-route build passed.

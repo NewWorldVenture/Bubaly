@@ -55,7 +55,7 @@ export default async function MarketingSettingsPage() {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-muted">Provider status reflects server environment variables. Connect a provider to enable its channel.</p>
+        <p className="mt-3 text-xs text-muted">Provider status reflects server environment variables and the stored admin AI configuration. Connect a provider to enable its channel.</p>
       </Card>
 
       <Card>
