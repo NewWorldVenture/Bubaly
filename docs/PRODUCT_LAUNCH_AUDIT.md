@@ -29,7 +29,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: guard asserts the bounded fetcher; behavior analytics (`lib/behavior/insights.ts`) confirmed recent-scoped (trend=6wk, streak=recent, `total` not surfaced in JSX)
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
 - Status: Verified · Remaining dependencies: none
-- Follow-up (same class, FIXED): `care-module` (`care_log`) had the identical unbounded read (`This week` count + day-grouped timeline are recent-focused) — bounded to the same rolling 365-day / 1000-row window; guard extended in `tests/behavior-read-bounded.test.ts` (2 assertions). A-05 growth-table read sweep continues (calendar/notifications live in A-06/A-16 owners' lanes)
+- Follow-up (same class, FIXED ×2): (1) `care-module` (`care_log`) — `This week` count + day-grouped timeline are recent-focused; (2) `security-module` (`home_security_events`, home-management auto-log) — 7-day count + 14-day activity strip + recent event list are recent-focused. Both bounded to the same rolling 365-day / 1000-row window; guard `tests/behavior-read-bounded.test.ts` now covers all 3 (behavior_logs, care_log, home_security_events). Edge note: an extreme-volume home (>1000 security events inside the window) shows the 1000 most-recent — the 14-day strip stays correct at any realistic rate. A-05 growth-table sweep continues; collection-style tables (albums, policies, pets, polls, home_assets) are bounded-by-nature and intentionally left unbounded. (calendar=A-06, notifications/inbox=A-16, wallet/expenses=A-08 are other owners' lanes)
 
 ### PLA-0812 - Widespread UTF-8 mojibake corrupted user-facing strings across ~79 files
 

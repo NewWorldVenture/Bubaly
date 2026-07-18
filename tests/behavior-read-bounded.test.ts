@@ -11,6 +11,7 @@ import fs from 'node:fs';
 
 const src = fs.readFileSync('components/modules/behavior-module.tsx', 'utf8');
 const care = fs.readFileSync('components/modules/care-module.tsx', 'utf8');
+const security = fs.readFileSync('components/modules/security-module.tsx', 'utf8');
 
 describe('A-05 growth-table module reads are bounded (perf)', () => {
   it('behavior_logs: rolling window AND a hard row cap', () => {
@@ -23,6 +24,13 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
 
   it('care_log: rolling window AND a hard row cap', () => {
     const fetcher = care.slice(care.indexOf("table: 'care_log'"), care.indexOf("const memberName"));
+    expect(fetcher).toContain(".gte('occurred_at'");
+    expect(fetcher).toMatch(/\.limit\(1000\)/);
+    expect(fetcher).toContain('Date.now()');
+  });
+
+  it('home_security_events: rolling window AND a hard row cap', () => {
+    const fetcher = security.slice(security.indexOf("table: 'home_security_events'"), security.indexOf('const [form'));
     expect(fetcher).toContain(".gte('occurred_at'");
     expect(fetcher).toMatch(/\.limit\(1000\)/);
     expect(fetcher).toContain('Date.now()');

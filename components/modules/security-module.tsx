@@ -24,7 +24,13 @@ export function SecurityModule() {
 
   const { data: events, loading, error, refresh } = useRealtimeQuery<Event>({
     table: 'home_security_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('home_security_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
+    // Bound the read: home_security_events auto-accumulates over time, but the views
+    // are recent-focused (7-day count, 14-day activity strip, recent event list).
+    // Load a rolling 365-day window (hard-capped at 1000 rows) instead of the full
+    // history so the client payload stays bounded as events pile up.
+    fetcher: (sb) => sb.from('home_security_events').select('*').eq('family_id', familyId)
+      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('occurred_at', { ascending: false }).limit(1000),
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
