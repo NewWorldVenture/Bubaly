@@ -56,6 +56,98 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
 - Status: Verified · Remaining dependencies: none
 - Follow-up (same over-fetch class, FIXED): `briefing-module` loaded the full `calendar_events` history to render only TODAY's events (`rawEvents` is used solely for the today filter + KitchenMode; weekly/tomorrow data comes from a separate briefing source). Bounded to a small window around today (`.gte(now-1d).lte(now+2d).limit(200)`); guard extended (6 total). `todo_items`/`opportunities` in next-actions are bounded-by-nature (open-only / small collections), left as-is. **A-05 calendar-consumer over-fetch sweep now covers next-actions + briefing; command-center/conflicts SSR pages were already date-range-bounded (verified).**
+### PLA-0822 - Decisions hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Decision Engine relationship insights.
+- Route: `/dashboard/decisions`.
+- Affected files: `app/(app)/dashboard/decisions/page.tsx`, `tests/decisions-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Decision Engine-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the primary decision tool remains renderable.
+- Severity / launch impact: P1; the decision page could present missing relationship context as a healthy empty state.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/decisions`, and observe the old `.catch(() => null)` path omit the relationship panel.
+- Expected / actual: preserve the decision tool and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `DecisionsModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/decisions-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0823 - Outcomes hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Outcomes planning relationship insights.
+- Route: `/dashboard/outcomes`.
+- Affected files: `app/(app)/dashboard/outcomes/page.tsx`, `tests/outcomes-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Outcomes-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the outcome planner can still render its plans.
+- Severity / launch impact: P1; missing relationship context could be mistaken for an empty, healthy result.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/outcomes`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the outcome planner and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `OutcomesLauncher`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/outcomes-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0824 - Playbook hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Family Playbook relationship insights.
+- Route: `/dashboard/playbook`.
+- Affected files: `app/(app)/dashboard/playbook/page.tsx`, `tests/playbook-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Playbook-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the primary playbook remains renderable.
+- Severity / launch impact: P1; missing relationship context could be mistaken for a healthy empty playbook insight section.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/playbook`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the playbook and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `PlaybookModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/playbook-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0825 - Prep Plans hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Prep Plans relationship insights.
+- Route: `/dashboard/prep-plans`.
+- Affected files: `app/(app)/dashboard/prep-plans/page.tsx`, `tests/prep-plans-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Prep Plans-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the planning module remains renderable.
+- Severity / launch impact: P1; missing relationship context could be mistaken for a healthy empty planning insight section.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/prep-plans`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the planning module and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `PlanningModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/prep-plans-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
 ### PLA-0818 - Concierge hid shared reasoning failures as an empty relationship panel
 
 - Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.

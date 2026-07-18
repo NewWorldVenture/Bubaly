@@ -5,8 +5,8 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 619 Vitest files and 3,690 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
-- Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 250 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
+- 627 Vitest files and 3,721 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
+- Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
@@ -39,6 +39,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   summary.
 - Windows test guards now use Node filesystem traversal instead of Unix-only shell commands, removing dead command
   warnings from the full verification output.
+- Decisions, Outcomes, Playbook, and Prep Plans now preserve the primary module while visibly reporting shared
+  reasoning-context read failures from Supabase.
 - Calm now preserves inbox and shared reasoning-context failures and renders its retryable state before showing
   partial household guidance.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;

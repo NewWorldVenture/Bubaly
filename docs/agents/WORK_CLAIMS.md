@@ -20,3 +20,5 @@ board wins.
   in `CONFLICT_LOG.md`, resolve ownership first.
 - `git fetch origin main && git rebase` before every push; keep BOTH sides on doc
   conflicts.
+
+| C-CODEX-002 | `CODEX-01` | A-05 reasoning-consumer read boundaries | `app/(app)/dashboard/{decisions,outcomes,playbook,prep-plans}/page.tsx` + matching `tests/*-reasoning-read-boundary.test.ts` | 2026-07-18 11:20 | CODE COMPLETE; focused tests and typecheck passed; awaiting full integration gate |

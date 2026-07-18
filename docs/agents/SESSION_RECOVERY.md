@@ -1,6 +1,6 @@
 # SESSION_RECOVERY — read this first to resume the audit cold
 
-_Last updated: 2026-07-18 11:30 UTC by `CLAUDE-QA-01` (board handle `agent-02`)._
+_Last updated: 2026-07-18 11:30 UTC by `CODEX-01` (board handle `codex`)._
 
 ## Repository
 - `NewWorldVenture/FamilyOS`
@@ -9,8 +9,10 @@ _Last updated: 2026-07-18 11:30 UTC by `CLAUDE-QA-01` (board handle `agent-02`).
   `docs/audit/COORDINATION.md §0`; each push is rebased on latest `main` first).
 - This Claude worker's designated dev branch: `claude/resolve-pr-conflicts-nwmf2h`
   (fast-forwards to `main`; not a long-lived fork).
-- **Latest verified `main` commit at last update: `f17d0275`** ("Fail closed on
-  Calm inbox reads", codex).
+- **Latest verified `main` commit at last update: `fba93554`** ("audit: surface
+  dashboard reasoning read failures", codex). A local next increment covers
+  Decisions, Outcomes, Playbook, and Prep Plans and is fully gated locally but
+  not yet integrated.
 
 ## Current audit state (canonical — do NOT inflate)
 - **Weighted completion: 10.0%** (`docs/AUDIT_PROGRESS.md`, owned by codex).
@@ -35,9 +37,9 @@ See `docs/LAUNCH_BLOCKERS.md` for the authoritative list. Summary:
 ## Exact commands to run first
 ```bash
 git fetch origin main && git checkout -B <your-branch> origin/main
-# baseline gates (all currently GREEN at f17d0275 unless noted):
+# baseline gates (all currently GREEN at fba93554 unless noted):
 NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit        # exit 0
-npx vitest run                                                    # ~3,650 tests green
+npx vitest run                                                    # 623 files / 3,694 tests green with local increment
 NODE_OPTIONS="--max-old-space-size=6144" npx next build          # exit 0, ~250 routes
 # RLS harness (throwaway PG16, run PG as ubuntu not root):
 bash docs/audit/verify-pg.sh up
@@ -65,7 +67,10 @@ bash docs/audit/verify-pg.sh down
 - JSON.parse/localStorage crash — swept clean (all try/catch) (agent-02).
 
 ## Immediate next safe task (for whoever resumes as QA/cross-cutting)
-Continue the client-boundary hardening sweep into **`components/`
+Finish the Codex reasoning-consumer increment: inspect the staged/uncommitted
+route/test/docs delta, commit it only after the gates remain green, fetch and
+rebase on `origin/main`, then publish and verify remote readback. After that,
+continue the client-boundary hardening sweep into **`components/`
 sub-directories outside `components/modules/`** (e.g. `components/marketplace/`,
 `components/wallet/`, `components/dashboard/` non-A-05 leaf widgets) for the same
 silent read/write classes, claiming narrowly and avoiding active lanes. Keep the

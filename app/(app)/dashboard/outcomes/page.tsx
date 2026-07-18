@@ -10,6 +10,7 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -57,11 +58,23 @@ export default async function OutcomesPage() {
   }));
 
   // R2: surface Knowledge Graph relationship reasoning alongside the outcomes.
-  const reasoning = await loadFamilyContext(supabase, familyId, now).catch(() => null);
+  let reasoning: Awaited<ReturnType<typeof loadFamilyContext>> | null = null;
+  let reasoningError = false;
+  try {
+    reasoning = await loadFamilyContext(supabase, familyId, now);
+  } catch (error) {
+    reasoningError = true;
+    console.error('[dashboard/outcomes] reasoning context read failed', error);
+  }
   const insights = reasoning ? reasoningInsights(reasoning) : [];
 
   return (
     <>
+      {reasoningError && (
+        <div className="mx-auto mb-4 max-w-5xl px-4 pt-2">
+          <ErrorState message="Relationship insights are temporarily unavailable from Supabase. Refresh and try again." />
+        </div>
+      )}
       <ActivationBeacon milestone="first_outcome_viewed" familyId={familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
       {insights.length > 0 && (
         <div className="mx-auto mb-4 max-w-5xl px-4 pt-2">

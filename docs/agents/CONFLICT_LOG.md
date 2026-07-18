@@ -11,5 +11,6 @@ Detected ownership overlaps and resolutions.
 
 | 2026-07-18 10:30 | `CODEX-01` / concurrent dashboard lanes | Reasoning-route source changes and audit-ID ownership converged while `main` advanced through PLA-0813 | Kept current `main` files and claim board; applied only additive route/test changes and renumbered new ledger entries to PLA-0818..0821 after the latest main rebase. No force-push or history rewrite. |
 | 2026-07-18 10:50 | `CODEX-01` / QA portability lane | Final full verification exposed Unix-only `grep`/`true` commands in two existing regression tests on Windows | Replaced shell scans with Node filesystem traversal; preserved assertions, changed only test portability, and kept the repair in the same additive publication unit. |
+| 2026-07-18 11:20 | `CODEX-01` / A-05 dashboard lane | Four reasoning-consumer server pages were unclaimed after the published Briefing/Concierge/Graph increment; delegated agents touched only their assigned route/test pairs | Kept disjoint ownership: Decisions + Playbook and Outcomes + Prep Plans were separate write sets; no component, docs, or coordination overlap. Both focused suites and typecheck passed before integration. |
 
 No unresolved conflicts at 2026-07-18 10:30 (overlaps logged + non-destructive; ownership unchanged).
