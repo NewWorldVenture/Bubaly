@@ -105,3 +105,6 @@ jobs:
 
       - name: Verify SEO and AEO coverage
         run: npm run marketing:verify:coverage:remote
+
+      - name: Report marketing runtime readiness
+        run: npm run marketing:verify:runtime:remote

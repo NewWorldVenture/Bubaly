@@ -25,6 +25,7 @@
     "marketing:backfill:pages": "node scripts/backfill-marketing-pages.mjs",
     "marketing:verify:assets:remote": "node scripts/verify-marketing-assets-remote.mjs",
     "marketing:verify:coverage:remote": "node scripts/verify-marketing-coverage-remote.mjs",
+    "marketing:verify:runtime:remote": "node scripts/verify-marketing-runtime-remote.mjs",
     "marketing:verify:public:remote": "node scripts/verify-marketing-public-access.mjs",
     "marketing:verify:remote": "node scripts/verify-marketing-platform.mjs",
     "db:seed:calendar": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_calendar.sql",

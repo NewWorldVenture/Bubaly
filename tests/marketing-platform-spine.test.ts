@@ -25,6 +25,7 @@ const blogGenerator = readFileSync('scripts/generate-blog-posts.mjs', 'utf8');
 const coverageBackfill = readFileSync('scripts/backfill-marketing-coverage.mjs', 'utf8');
 const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.mjs', 'utf8');
 const platformAdmin = readFileSync('app/(app)/admin/marketing/platform/page.tsx', 'utf8');
+const runtimeVerifier = readFileSync('scripts/verify-marketing-runtime-remote.mjs', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -173,6 +174,15 @@ describe('marketing platform spine contract', () => {
     expect(productionMigrationWorkflow).toContain('marketing:verify:coverage:remote');
   });
 
+  it('reports runtime backlog and vector/provider readiness without fabricating health', () => {
+    expect(runtimeVerifier).toContain('marketing_generation_jobs');
+    expect(runtimeVerifier).toContain('marketing_embeddings');
+    expect(runtimeVerifier).toContain('marketing_provider_syncs');
+    expect(runtimeVerifier).toContain("const strict = process.argv.includes('--strict');");
+    expect(runtimeVerifier).toContain('truthful warnings');
+    expect(productionMigrationWorkflow).toContain('marketing:verify:runtime:remote');
+  });
+
   it('does not enqueue regeneration for archived canonical pages', () => {
     expect(migrationSource).toContain('new.deleted_at is null and new.version is distinct from old.version');
     expect(migrationSource).toContain("locked_at < now() - interval '15 minutes'");
@@ -198,6 +208,10 @@ describe('marketing platform spine contract', () => {
     expect(platformAdmin).toContain("eq('status', 'running').lt('locked_at', staleWorkerCutoff)");
     expect(platformAdmin).toContain("select('job_type, target_path, completed_at')");
     expect(platformAdmin).toContain("marketing_provider_observations");
+    expect(platformAdmin).toContain("marketing_embeddings");
+    expect(platformAdmin).toContain("const embeddingStatuses = ['ready', 'queued', 'failed', 'stale']");
+    expect(platformAdmin).toContain('Vector index health');
+    expect(platformAdmin).toContain('No ready vectors are currently persisted');
     expect(platformAdmin).toContain('Provider status is live from Supabase');
     expect(platformAdmin).toContain('Unconfigured sources never appear as measured traffic');
     expect(platformAdmin).toContain('Last successful job:');

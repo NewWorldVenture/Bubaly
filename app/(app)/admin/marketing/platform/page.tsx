@@ -18,6 +18,7 @@ export default async function MarketingPlatformPage() {
   const supabase = createServiceClient();
   const providerNames = ['google_search_console', 'bing_webmaster', 'ai_citation'] as const;
   const jobStatuses = ['queued', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled'] as const;
+  const embeddingStatuses = ['ready', 'queued', 'failed', 'stale'] as const;
   const staleWorkerCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const [pagesResult, templatesResult, rulesResult, jobsResult, syncResult] = await Promise.all([
     supabase.from('marketing_pages').select('*').is('deleted_at', null).order('updated_at', { ascending: false }).limit(40),
@@ -26,7 +27,7 @@ export default async function MarketingPlatformPage() {
     supabase.from('marketing_generation_jobs').select('*').order('created_at', { ascending: false }).limit(30),
     supabase.from('marketing_provider_syncs').select('*').order('provider'),
   ]);
-  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats] = await Promise.all([
+  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults] = await Promise.all([
     Promise.all(jobStatuses.map(async (status) => ({
       status,
       result: await supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status),
@@ -40,14 +41,20 @@ export default async function MarketingPlatformPage() {
       ]);
       return { provider, countResult, latestResult };
     })),
+    Promise.all(embeddingStatuses.map(async (status) => ({
+      status,
+      result: await supabase.from('marketing_embeddings').select('id', { count: 'exact', head: true }).eq('status', status),
+    }))),
   ]);
   const error = pagesResult.error ?? templatesResult.error ?? rulesResult.error ?? jobsResult.error ?? syncResult.error;
   const observationError = observationStats.find(({ countResult, latestResult }) => countResult.error ?? latestResult.error);
+  const embeddingError = embeddingCountResults.find(({ result }) => result.error)?.result.error;
   const operationsError = jobCountResults.find(({ result }) => result.error)?.result.error
     ?? staleJobsResult.error
     ?? latestSuccessResult.error
     ?? observationError?.countResult.error
-    ?? observationError?.latestResult.error;
+    ?? observationError?.latestResult.error
+    ?? embeddingError;
   if (error || operationsError) return <ErrorState message="Could not load the marketing platform control center. Refresh and try again." />;
   const pages = pagesResult.data ?? [];
   const templates = templatesResult.data ?? [];
@@ -64,6 +71,7 @@ export default async function MarketingPlatformPage() {
     latest: latestResult.data?.observed_for ?? null,
     latestStatus: latestResult.data?.source_status ?? null,
   }]));
+  const embeddingCounts = Object.fromEntries(embeddingCountResults.map(({ status, result }) => [status, result.count ?? 0])) as Record<(typeof embeddingStatuses)[number], number>;
   const published = pages.filter((page) => page.status === 'published').length;
 
   return (
@@ -77,12 +85,13 @@ export default async function MarketingPlatformPage() {
         <Link href="#new-page" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90"><Plus className="h-4 w-4" /> New page</Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Metric icon={FileText} label="Pages" value={pages.length} />
         <Metric icon={Sparkles} label="Published" value={published} />
         <Metric icon={Layers3} label="Templates" value={templates.length} />
         <Metric icon={Activity} label="Jobs active" value={activeJobs} />
         <Metric icon={RefreshCw} label="Jobs needing review" value={failed} />
+        <Metric icon={Layers3} label="Vector chunks ready" value={embeddingCounts.ready} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
@@ -117,6 +126,13 @@ export default async function MarketingPlatformPage() {
                 {sync.last_error ? <p className="mt-1 text-xs text-danger">{sync.last_error}</p> : null}
               </div>;
             })}</div>
+          </Card>
+
+          <Card>
+            <div className="mb-3 flex items-center gap-2"><Layers3 className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">Vector index health</h3></div>
+            <p className="mb-3 text-xs text-muted">Only persisted rows in the Supabase vector index count as ready.</p>
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">{embeddingStatuses.map((status) => <div key={status} className="rounded-lg border border-border px-2 py-2"><span className="block capitalize text-muted">{status}</span><span className="mt-1 block text-lg font-bold tabular-nums">{embeddingCounts[status].toLocaleString()}</span></div>)}</div>
+            {embeddingCounts.ready === 0 ? <p className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">No ready vectors are currently persisted.</p> : null}
           </Card>
         </div>
       </div>
