@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~7% (early)
+## Overall completion: ~11% (early)
 
 Weighting (per the mission brief):
 
@@ -81,6 +81,23 @@ Weighting (per the mission brief):
 - **Test:** `tests/mobile-forms.test.ts` (6) — asserts the `!important` + coarse
   scope and the auth/OTP/phone keyboard attributes.
 - **Evidence:** guard green (8 mobile tests total); `tsc`/`eslint` clean.
+
+### M-003 — Horizontal-overflow sweep (Phase 4): swept, found already-compliant, ratcheted
+- **Severity:** n/a (no defect found). **Phase:** 4 (responsive layout / no h-scroll).
+- **Finding:** the dashboard is already well-built for horizontal overflow. Swept
+  every module + dashboard route for the classic causes and found **zero real
+  offenders**: all `<table>`s are inside `overflow-x-auto` wrappers (0 unwrapped);
+  wide admin tables use `w-full min-w-[720px]` *inside* a scroll container (correct);
+  card carousels (memories) use `w-[200px] shrink-0` inside `overflow-x-auto`
+  (a correct swipeable pattern, not page overflow); other fixed widths are
+  `max-w-[…]` (responsive) or `lg:`-prefixed (desktop-only).
+- **Action:** deliberately did **not** add a global `overflow-x: hidden` — that
+  masks real overflow and can break `position: sticky`. Instead added a regression
+  ratchet locking the good state so a future change can't drop a raw page-widening
+  table in.
+- **Test:** `tests/mobile-no-horizontal-overflow.test.ts` (2) — asserts every
+  module `<table>` sits in an `overflow-x-auto` container.
+- **Evidence:** live grep → 0 unwrapped tables; guard green (10 mobile tests total).
 
 ## Next steps (autonomous, in order)
 1. Complete Phase 1 route inventory → `MOBILE_AUDIT.md` (every route × role × data
