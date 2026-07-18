@@ -3065,3 +3065,15 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Verified on PG16: 0226 apply INSERT 0 525 + idempotent; **545/545 published posts have a distinct hero_image_url (0 null)**; School & Activities images now span school/sports/reading/wellness/tech instead of one shared photo. Guard tests green.
 - **Owner action required:** apply 0226 (regenerated, idempotent) to prod so the live site picks up the unique, content-aligned images — until then prod shows the old pool. Free CC photos via LoremFlickr keyword-matched per article; quality is best-effort CC (the sandbox network policy blocks image CDNs so per-image previews can't be verified here — they render in prod).
 - Commit: this push (0c8e1ad7).
+
+### PLA-0810 - Blog batch 2: +503 new articles, self-wired into the closed loop (A-17)
+
+- Timestamp: 2026-07-18 16:45 UTC · Service: A-17 marketing (blog content).
+- Delivered a second batch of blog articles per the owner's "another 500" request, reusing all batch-1 machinery (frames, facets, hashtags, Bubaly CTA) with 503 brand-new, distinct topics (`scripts/blog-subjects-batch2.mjs`) → `0232_blog_500_more_articles.sql`.
+- **No repeated topics:** batch-2 subjects de-duplicated against batch 1 (0 exact-subject dupes, 0 internal dupes); generator seeds its slug set with batch-1 slugs and skips/disambiguates, so **0 slug overlap** with 0226. `ON CONFLICT (slug) DO NOTHING` guarantees batch 2 never overwrites a batch-1 article.
+- **Images aligned to the new architecture:** the codebase moved off LoremFlickr (0231 `_hero_photos` assigns unique free-license real photos to batch 1; `_drop_loremflickr_covers` nulls the rest; `lib/blog/posts.ts` strips it; image-less posts render the bespoke `<BlogCover>`). Batch-2 posts therefore store **NO hero URL** (0 loremflickr, 0 unverified-license URLs) and render the unique, on-brand `BlogCover` — professional + free + zero third-party image deps. (Real curated photos can later extend to batch 2 via the same 0231 hero-photos pattern.)
+- **Closed loop, self-wired:** 0232 also re-runs the content-registry + per-post-AEO INSERT…SELECT (idempotent) so the new posts are immediately in `/admin/marketing/content` and the AEO Knowledge Center. PG16 full bootstrap `migration_fail=0`: **1,048 published articles**, 1,048 registered as content, **2,096 per-post AEO** (2×1,048). Sitemap, category tabs, FAQ blocks, hashtags, JSON-LD all pick them up automatically.
+- Migration hygiene: renumbered to **0232** (a prior agent's blog-image work created two `0231_*` files); registered that pre-existing `0231` duplicate in `KNOWN_DUPLICATE_MIGRATIONS` and bumped the safety test to next=0233 so CI is green.
+- Verified: PG16 bootstrap fail=0 (1,048/1,048/2,096); `tsc` 0; guard tests `tests/blog-batch2-contract.test.ts` (6) + existing blog/migration tests green; `next build` (below).
+- Supabase impact: 0232 additive (apply to prod). Owner action to see batch-2 images as real photos: extend the 0231 hero-photos curation to the new slugs (or let BlogCover stand).
+- Commit: this push.
