@@ -38,14 +38,20 @@ export function ProfileNudge() {
 
   const save = (value: string | string[]) => {
     startTransition(async () => {
-      const s = await saveProfileAnswerAction(q.field, value);
-      setKnown(s.known); setSkipped(s.skipped); setMulti([]);
+      // Best-effort (like the initial state read): a failed save must not throw
+      // an unhandled rejection — the nudge simply stays until it succeeds.
+      try {
+        const s = await saveProfileAnswerAction(q.field, value);
+        setKnown(s.known); setSkipped(s.skipped); setMulti([]);
+      } catch { /* best-effort */ }
     });
   };
   const skip = () => {
     startTransition(async () => {
-      const s = await skipProfileFieldAction(q.field);
-      setKnown(s.known); setSkipped(s.skipped); setMulti([]);
+      try {
+        const s = await skipProfileFieldAction(q.field);
+        setKnown(s.known); setSkipped(s.skipped); setMulti([]);
+      } catch { /* best-effort */ }
     });
   };
 
