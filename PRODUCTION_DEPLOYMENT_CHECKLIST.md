@@ -11,6 +11,8 @@
 
 - [ ] Back up the target database and confirm a tested restore path.
 - [ ] Run `npm run db:audit:migrations`, then reconcile and apply migrations in order through the validated current set, including `0208_atomic_wallet_goal_funding.sql` and `0210_onboarding_idempotency.sql`.
+- [ ] Apply `0231_marketing_platform_spine.sql` with the ordered migration set before enabling the marketing control center or public canonical page families.
+- [ ] Run `npm.cmd run marketing:verify:remote` against the production Supabase URL and require all 11 platform schema/provenance checks to pass.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles, including a
       non-manager attempt to update `family_members.role`, `is_active`, or `family_id` after applying `0211`.

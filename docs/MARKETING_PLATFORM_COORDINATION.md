@@ -2,11 +2,12 @@
 
 **Purpose:** shared ownership contract for parallel Codex/Claude work on the AI-first marketing operating system.
 
-**Updated:** 2026-07-18 11:24 America/New_York
+**Updated:** 2026-07-18 11:34 America/New_York
 **Repository:** `NewWorldVenture/FamilyOS`
 **Current integration branch:** `codex/reasoning-main-publication`
 **Baseline:** `a6ca111e`
 **Next migration number:** `0232` (migration `0231_marketing_platform_spine.sql` is committed locally and awaiting Supabase apply)
+**Production runbook:** `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`
 
 ## Rules
 
@@ -90,7 +91,7 @@ Typecheck: npm run typecheck -> pass
 Migration: npm run db:audit:migrations -> pass; next available 0232; live REST check currently returns 404 for `marketing_pages` until 0231 is applied
 Build: npm run build -> pass; 490 routes generated
 Assets: npm run marketing:audit:assets -> pass; 18 unique shipped raster assets, no remote image URLs
-Known follow-ups: run `npm run marketing:verify:remote` after applying migration 0231; configure real provider/API secrets; complete the other Claude lane handoffs
+Known follow-ups: follow `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`; run `npm run marketing:verify:remote` after applying migration 0231; configure real provider/API secrets; complete the other Claude lane handoffs
 ```
 
 ## Checkpoint Contract
