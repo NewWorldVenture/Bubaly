@@ -908,6 +908,7 @@ export function MessagesModule() {
                 {/* Text input */}
                 <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as React.FormEvent); } }}
+                  enterKeyHint="send"
                   placeholder="Type a message..."
                   className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm placeholder:text-muted focus:outline-none" />
 

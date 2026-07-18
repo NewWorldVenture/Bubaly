@@ -660,6 +660,26 @@ Weighting (per the mission brief):
 - **Parallel-bot note:** new helper file + mechanical same-shape edits to 5
   files nobody has in flight (agent-05 module heartbeat stale per §0).
 
+### M-031 — Chat composers didn't tell the mobile keyboard to show "Send" — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P3, Phase 7):** the four Enter-submitting chat composers — Messages
+  (input), Assistant (expanded textarea + bar input), Concierge (textarea) — had
+  no `enterKeyHint`, so the iOS/Android return key read "return" while plain
+  Enter actually sends the message (users hunt for the send button or fear a
+  newline).
+- **Fix:** `enterKeyHint="send"` on all four. The Kitchen AI-Chef textarea is
+  **deliberately excluded** — it submits on Cmd/Ctrl+Enter only (plain Enter is
+  a newline), so a "send" hint there would lie.
+- **Also swept (clean):** the mobile **permission-flow** class — all 3
+  `getUserMedia` sites (camera-capture: fallback picker + friendly errors;
+  messages voice + use-voice hook: toasts on denial) and all 5 geolocation
+  sites (weather ×2, locator, check-in, display-weather: denial fallbacks /
+  timeouts / toasts). No unhandled-denial hang anywhere.
+- **Guard:** `tests/mobile-chat-enterkeyhint.test.ts` (2) — exact hint counts
+  per composer file + the kitchen-chef exclusion stays hint-free.
+- **Evidence:** guard green; tsc 0; eslint 0 errors (2 documented pre-existing
+  warnings). Attribute-only edits to 3 files nobody has in flight.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
