@@ -1,12 +1,15 @@
 import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { Smartphone, Bell, WifiOff, RefreshCw } from 'lucide-react';
 import { Section, SectionHeading, FeatureCard } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
 
-export const metadata: Metadata = {
-  title: 'Mobile App',
-  description: 'Bubaly goes everywhere your family does — native iOS and Android apps, plus an installable web app.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/mobile', {
+    title: 'Mobile App',
+    description: 'Bubaly goes everywhere your family does — native iOS and Android apps, plus an installable web app.',
+  });
+}
 
 const POINTS = [
   { icon: Smartphone, title: 'iOS & Android', description: 'Native companion apps built with Expo, sharing the same data and design language as the web.' },

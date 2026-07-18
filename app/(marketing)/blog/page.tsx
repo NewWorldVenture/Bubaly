@@ -2,15 +2,29 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, BookOpen, Calendar, Clock, Mail, Tag } from 'lucide-react';
-import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
+import { getAllPosts, getFeaturedPost, getPostsByCategory, getCategoryCounts, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
+import { articleHashtags, toHashtag } from '@/lib/blog/engagement';
+import { BlogListStructuredData } from '@/components/marketing/structured-data';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
+import { BlogHeroArt } from '@/components/blog/blog-hero-art';
+import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 
 export const metadata: Metadata = {
   title: 'Blog — Tips, Stories & Insights for Modern Families',
   description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+  keywords: [
+    'family organization', 'parenting tips', 'family life', 'meal planning', 'family finances',
+    'kids activities', 'family wellness', 'family travel', 'home organization', 'bubaly',
+  ],
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/blog` },
+  openGraph: {
+    type: 'website',
+    title: 'The Bubaly Blog — Tips, Stories & Insights for Modern Families',
+    description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+  },
 };
 
 export const revalidate = 3600;
@@ -22,6 +36,9 @@ const CATEGORY_COLORS: Record<BlogCategory, string> = {
   'AI & Technology': 'border-indigo-200 bg-indigo-100 text-indigo-800 dark:border-indigo-400/20 dark:bg-indigo-500/15 dark:text-indigo-300',
   'Wellness': 'border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/15 dark:text-amber-300',
   'Family Finances': 'border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-400/20 dark:bg-rose-500/15 dark:text-rose-300',
+  'Recipes & Food': 'border-orange-200 bg-orange-100 text-orange-800 dark:border-orange-400/20 dark:bg-orange-500/15 dark:text-orange-300',
+  'Travel & Adventures': 'border-cyan-200 bg-cyan-100 text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-500/15 dark:text-cyan-300',
+  'Home & Seasonal': 'border-teal-200 bg-teal-100 text-teal-800 dark:border-teal-400/20 dark:bg-teal-500/15 dark:text-teal-300',
 };
 
 const ACCENT_BG: Record<BlogCategory, string> = {
@@ -31,6 +48,9 @@ const ACCENT_BG: Record<BlogCategory, string> = {
   'AI & Technology': 'from-indigo-600/30 to-indigo-900/10',
   'Wellness': 'from-amber-600/30 to-amber-900/10',
   'Family Finances': 'from-rose-600/30 to-rose-900/10',
+  'Recipes & Food': 'from-orange-600/30 to-orange-900/10',
+  'Travel & Adventures': 'from-cyan-600/30 to-cyan-900/10',
+  'Home & Seasonal': 'from-teal-600/30 to-teal-900/10',
 };
 
 const CATEGORY_ICON_COLORS: Record<BlogCategory, string> = {
@@ -40,16 +60,19 @@ const CATEGORY_ICON_COLORS: Record<BlogCategory, string> = {
   'AI & Technology': 'bg-indigo-500/20',
   'Wellness': 'bg-amber-500/20',
   'Family Finances': 'bg-rose-500/20',
+  'Recipes & Food': 'bg-orange-500/20',
+  'Travel & Adventures': 'bg-cyan-500/20',
+  'Home & Seasonal': 'bg-teal-500/20',
 };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Hero photo with a graceful gradient fallback for image-less posts. */
+/** Hero photo, or a bespoke generated cover (unique per title) for image-less posts. */
 function PostImage({ post, sizes, className, priority }: { post: BlogPost; sizes: string; className?: string; priority?: boolean }) {
   if (!post.heroImageUrl) {
-    return <div className={cn('bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]', className)} />;
+    return <BlogCover title={post.title} category={post.category} seed={post.slug} className={cn('h-full w-full object-cover', className)} />;
   }
   return (
     <div className={cn('relative overflow-hidden', className)}>
@@ -66,33 +89,39 @@ function PostImage({ post, sizes, className, priority }: { post: BlogPost; sizes
   );
 }
 
-type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string }> };
+type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string; tag?: string }> };
 
 export default async function BlogPage({ searchParams }: Props) {
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
+  const activeTag = params.tag ? toHashtag(params.tag) : null;
   const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
 
-  const [allPosts, featured] = await Promise.all([
+  const [allPostsRaw, featured, categoryCounts] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
-    activeCategory ? Promise.resolve(undefined) : getFeaturedPost(),
+    activeCategory || activeTag ? Promise.resolve(undefined) : getFeaturedPost(),
+    // Always fetch per-category counts (independent of the active filter) so
+    // EVERY tab shows an accurate count, even when a category/tag is selected.
+    getCategoryCounts(),
   ]);
+  const totalCount = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
 
-  const postsForGrid = activeCategory
+  // Optional hashtag filter (from the Popular Tags cloud): match against each
+  // post's normalized hashtag set so legacy + new posts both filter correctly.
+  const allPosts = activeTag
+    ? allPostsRaw.filter((p) => articleHashtags(p.tags, 12).includes(activeTag))
+    : allPostsRaw;
+
+  const postsForGrid = activeCategory || activeTag
     ? allPosts
     : allPosts.filter((p) => !p.featured);
 
   const recentPosts = allPosts.slice(0, 5);
 
-  const categoryCounts = new Map<string, number>();
-  if (!activeCategory) {
-    for (const p of allPosts) {
-      categoryCounts.set(p.category, (categoryCounts.get(p.category) ?? 0) + 1);
-    }
-  }
-
   return (
     <PageWrap>
+      <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
+
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (
         <Container className="pt-6">
@@ -110,40 +139,26 @@ export default async function BlogPage({ searchParams }: Props) {
       )}
 
       {/* Hero */}
-      <Container className="pb-0 pt-16 lg:pt-20">
+      <Container className="pb-0 pt-8 lg:pt-10">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
-            <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
+            <h1 className="text-4xl font-black leading-[1.06] sm:text-5xl">
               Tips, stories &amp; insights<br />
               <GradientText>for modern families.</GradientText>
             </h1>
-            <p className="mt-5 text-lg leading-8 text-white/60">
+            <p className="mt-3 text-base leading-7 text-white/60">
               Practical advice, real stories, and smart tips to help you stay organized and enjoy more time together.
             </p>
             <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, category: p.category }))} />
           </div>
           <div className="hidden lg:flex lg:justify-end">
-            <div className="relative h-64 w-80">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-600/20 to-blue-900/20" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="grid grid-cols-3 gap-4 p-8">
-                  {['📅', '✅', '❤️', '🤖', '🛒', '📚'].map((emoji, i) => (
-                    <div key={i} className="grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.06] text-2xl">
-                      {emoji}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-                <div className="h-24 w-24 rounded-full bg-violet-600/30 blur-2xl" />
-              </div>
-            </div>
+            <BlogHeroArt className="h-auto w-full max-w-[360px]" />
           </div>
         </div>
 
         {/* Category tabs */}
-        <div className="mt-10 flex flex-wrap gap-2 border-b border-white/8 pb-0">
+        <div className="mt-6 flex flex-wrap gap-2 border-b border-white/8 pb-0">
           <Link
             href="/blog"
             className={cn(
@@ -154,6 +169,7 @@ export default async function BlogPage({ searchParams }: Props) {
             )}
           >
             All Articles
+            <span className="ml-1.5 text-xs text-white/30">({totalCount})</span>
           </Link>
           {ALL_CATEGORIES.map((cat) => (
             <Link
@@ -167,9 +183,8 @@ export default async function BlogPage({ searchParams }: Props) {
               )}
             >
               {cat}
-              {!activeCategory && categoryCounts.has(cat) && (
-                <span className="ml-1.5 text-xs text-white/30">({categoryCounts.get(cat)})</span>
-              )}
+              {/* Always show an accurate count on every tab. */}
+              <span className="ml-1.5 text-xs text-white/30">({categoryCounts[cat] ?? 0})</span>
             </Link>
           ))}
         </div>
@@ -228,7 +243,7 @@ export default async function BlogPage({ searchParams }: Props) {
 
             {/* Grid */}
             <h2 className="mb-5 text-lg font-bold">
-              {activeCategory ? `${activeCategory} Articles` : 'Latest Articles'}
+              {activeCategory ? `${activeCategory} Articles` : activeTag ? `Articles tagged ${activeTag}` : 'Latest Articles'}
             </h2>
             {postsForGrid.length === 0 ? (
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-10 text-center">
@@ -307,9 +322,7 @@ export default async function BlogPage({ searchParams }: Props) {
                     >
                       <div className={cn('h-2 w-2 rounded-full', CATEGORY_ICON_COLORS[cat])} />
                       <span className="flex-1">{cat}</span>
-                      {categoryCounts.has(cat) && (
-                        <span className="text-xs text-white/30">{categoryCounts.get(cat)}</span>
-                      )}
+                      <span className="text-xs text-white/30">{categoryCounts[cat] ?? 0}</span>
                     </Link>
                   </li>
                 ))}
@@ -320,10 +333,14 @@ export default async function BlogPage({ searchParams }: Props) {
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
               <h3 className="mb-4 font-bold">Popular Tags</h3>
               <div className="flex flex-wrap gap-2">
-                {Array.from(new Set(allPosts.flatMap((p) => p.tags))).slice(0, 12).map((tag) => (
-                  <span key={tag} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/60">
+                {Array.from(new Set(allPosts.flatMap((p) => articleHashtags(p.tags, 6)))).slice(0, 14).map((tag) => (
+                  <Link
+                    key={tag}
+                    href={`/blog?tag=${encodeURIComponent(tag.replace(/^#/, ''))}`}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/60 transition hover:border-violet-400/30 hover:text-violet-200"
+                  >
                     {tag}
-                  </span>
+                  </Link>
                 ))}
               </div>
             </div>

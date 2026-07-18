@@ -143,8 +143,9 @@ export function contextSummary(ctx: FamilyContext): string {
 
 /**
  * Load a family's knowledge graph from Supabase into the pure `Graph` shape.
- * Resilient by design: a missing table / rejected read degrades to an empty
- * graph rather than throwing (so a surface never crashes on a drifted DB).
+ * A missing table or rejected read is a data-integrity failure, not an empty
+ * graph. Throwing lets each route render a truthful retryable state instead of
+ * presenting a partial relationship view as current.
  */
 export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<Graph> {
   const [ents, edges] = await Promise.all([
@@ -155,12 +156,11 @@ export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<G
       .select('id, source_id, target_id, relation, weight, attributes')
       .eq('family_id', familyId).limit(8000),
   ]);
-  // Graceful degradation is intentional (the graph is a reasoning *enhancement*,
-  // not a source of truth), but a swallowed read error would silently make every
-  // AI surface reason over an empty graph forever with no signal. Log the failure
-  // so a drifted/broken graph table is observable while still degrading to empty.
-  if (ents.error) console.error('[reasoning-context] graph_entities read failed', { familyId, error: ents.error });
-  if (edges.error) console.error('[reasoning-context] graph_edges read failed', { familyId, error: edges.error });
+  const readError = ents.error ?? edges.error;
+  if (readError) {
+    console.error('[reasoning] graph read failed', readError);
+    throw readError;
+  }
   // R3: keep the graph current at the point of use. Fire-and-forget + dynamic
   // import so context.ts's static graph stays free of `server-only`/`next` deps
   // (the pure core + its tests still import cleanly). No-op outside a request.

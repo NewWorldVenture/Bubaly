@@ -90,7 +90,7 @@ export function DevicesModule() {
                   <button onClick={() => cycleStatus(d)} title="Cycle status" className={d.status === 'online' ? 'text-success' : d.status === 'offline' ? 'text-danger' : 'text-muted'}><Icon className="h-4 w-4" /></button>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{d.name}</p>
-                    <p className="text-xs text-muted">{d.type}{d.brand ? ` Â· ${d.brand}` : ''} Â· {integrationLabel(d.integration)}{d.last_state ? ` Â· ${d.last_state}` : ''}</p>
+                    <p className="text-xs text-muted">{d.type}{d.brand ? ` · ${d.brand}` : ''} · {integrationLabel(d.integration)}{d.last_state ? ` · ${d.last_state}` : ''}</p>
                   </div>
                   <button onClick={() => edit(d)} className="text-muted hover:text-fg" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(d.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -115,7 +115,7 @@ export function DevicesModule() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Status">{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{DEVICE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</Select>}</Field>
-              <Field label="Last state">{(id) => <Input id={id} value={form.last_state} onChange={(e) => setForm({ ...form, last_state: e.target.value })} placeholder="On, 72Â°F, Lockedâ€¦" />}</Field>
+              <Field label="Last state">{(id) => <Input id={id} value={form.last_state} onChange={(e) => setForm({ ...form, last_state: e.target.value })} placeholder="On, 72°F, Locked…" />}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">

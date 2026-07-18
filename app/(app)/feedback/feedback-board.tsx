@@ -145,6 +145,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
   const { error } = useToast();
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [draft, setDraft] = useState('');
   const [pending, start] = useTransition();
 
@@ -153,8 +154,12 @@ function CommentThread({ ideaId }: { ideaId: string }) {
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      const { data } = await sb.from('feedback_comments')
+      const { data, error: readErr } = await sb.from('feedback_comments')
         .select('id, author_name, is_team, body, created_at').eq('idea_id', ideaId).order('created_at', { ascending: true }).limit(200);
+      // Don't render a failed read as an empty discussion. Set [] so the reload
+      // guard below doesn't loop, but flag the error so we show a retry instead.
+      if (readErr) { setLoadError(true); setComments([]); return; }
+      setLoadError(false);
       setComments((data ?? []) as Comment[]);
     } finally { setLoading(false); }
   }
@@ -175,6 +180,18 @@ function CommentThread({ ideaId }: { ideaId: string }) {
   return (
     <div className="mt-3 border-t border-border/60 pt-3">
       {loading && <p className="py-2 text-center text-xs text-muted">Loading discussion…</p>}
+      {loadError && !loading && (
+        <p className="py-2 text-center text-xs text-danger">
+          Couldn’t load the discussion.{' '}
+          <button
+            type="button"
+            onClick={() => { setLoadError(false); setComments(null); }}
+            className="font-medium underline"
+          >
+            Retry
+          </button>
+        </p>
+      )}
       <div className="space-y-2.5">
         {(comments ?? []).map((c) => (
           <div key={c.id} className="flex gap-2.5">

@@ -6,7 +6,16 @@ import {
   estimateReadingMinutes,
   deriveExcerpt,
   buildBlogPost,
+  BLOG_CATEGORIES,
 } from '@/lib/marketing/blog-publish';
+import { ALL_CATEGORIES } from '@/lib/blog/posts';
+
+describe('admin/public blog category contract', () => {
+  it('keeps the admin category picker aligned with every public category', () => {
+    expect(BLOG_CATEGORIES).toEqual(expect.arrayContaining(ALL_CATEGORIES));
+    expect(BLOG_CATEGORIES).toHaveLength(ALL_CATEGORIES.length);
+  });
+});
 
 describe('normalizeCategory', () => {
   it('keeps valid categories, defaults otherwise', () => {

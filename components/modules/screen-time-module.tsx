@@ -176,8 +176,8 @@ export function ScreenTimeModule() {
             <div key={e.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm">
-                  <span className="font-medium">{formatMinutes(e.minutes)}</span> Â· <span className={categoryMeta(e.category).productive ? 'text-success' : ''}>{categoryMeta(e.category).label}</span>
-                  {m ? ` Â· ${m.display_name}` : ''}{e.device ? ` Â· ${e.device}` : ''}
+                  <span className="font-medium">{formatMinutes(e.minutes)}</span> · <span className={categoryMeta(e.category).productive ? 'text-success' : ''}>{categoryMeta(e.category).label}</span>
+                  {m ? ` · ${m.display_name}` : ''}{e.device ? ` · ${e.device}` : ''}
                 </p>
                 {e.note && <p className="text-xs text-muted">{e.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
@@ -194,7 +194,7 @@ export function ScreenTimeModule() {
             <Field label="Child">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(ev) => setForm({ ...form, member_id: ev.target.value })}>
-                  <option value="">â€” Select â€”</option>
+                  <option value="">— Select —</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
@@ -210,7 +210,7 @@ export function ScreenTimeModule() {
                 </Select>
               )}
             </Field>
-            <Field label="Device (optional)">{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder="iPad, Switch, TVâ€¦" />}</Field>
+            <Field label="Device (optional)">{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder="iPad, Switch, TV…" />}</Field>
             <Field label="Note (optional)">{(id) => <Textarea id={id} value={form.note} onChange={(ev) => setForm({ ...form, note: ev.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>

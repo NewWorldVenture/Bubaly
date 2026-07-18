@@ -86,7 +86,7 @@ export function PlayDatesView() {
         <div className="space-y-6">
           <section>
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Upcoming</h2>
-            {upcoming.length === 0 ? <p className="rounded-2xl border border-dashed border-border bg-surface/30 px-4 py-8 text-center text-sm text-muted">Nothing coming up â€” schedule one!</p>
+            {upcoming.length === 0 ? <p className="rounded-2xl border border-dashed border-border bg-surface/30 px-4 py-8 text-center text-sm text-muted">Nothing coming up — schedule one!</p>
               : <div className="grid gap-3 sm:grid-cols-2">{upcoming.map((pd) => <Card key={pd.id} pd={pd} />)}</div>}
           </section>
           {past.length > 0 && (
@@ -129,7 +129,7 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
       <form onSubmit={submit} className="space-y-4">
         <Field label="Title">{(id) => <Input id={id} value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} placeholder="Playdate at the park" required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Child">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Child">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="When">{(id) => <Input id={id} type="datetime-local" value={v.starts_at} onChange={(e) => setV({ ...v, starts_at: e.target.value })} required />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">

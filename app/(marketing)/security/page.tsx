@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import Link from 'next/link';
 import {
   AlertTriangle, ArrowRight, CheckCircle2, Cloud, Database, Download,
@@ -10,11 +11,13 @@ import { Container, GradientText, PageWrap } from '@/components/marketing/visual
 import { FAQAccordion } from '@/components/marketing/faq-accordion';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = {
-  title: 'Security — Enterprise-Grade Protection for Your Family',
-  description:
-    'Bank-level encryption, SOC 2 compliance, GDPR/CCPA/HIPAA adherence, and full data sovereignty. Your family\'s privacy is our top priority.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/security', {
+    title: 'Security — Enterprise-Grade Protection for Your Family',
+    description:
+      'Bank-level encryption, SOC 2 compliance, GDPR/CCPA/HIPAA adherence, and full data sovereignty. Your family\'s privacy is our top priority.',
+  });
+}
 
 const PILLARS = [
   { icon: Shield, title: 'Privacy by Design', desc: 'Every feature is architected to minimize data exposure and maximize your control.' },

@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { GraduationCap, BookOpen, CalendarClock, Award, NotebookPen } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family School' };
@@ -16,12 +18,29 @@ export default async function FamilySchoolPage() {
   const now = new Date().toISOString();
   const in14 = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  const [{ data: members }, { data: classes }, { data: grades }, { data: events }] = await Promise.all([
+  const [membersRes, classesRes, gradesRes, eventsRes] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('school_classes').select('*').eq('family_id', familyId).order('day_of_week'),
     supabase.from('grades').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(8),
     supabase.from('school_events').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).order('starts_at').limit(8),
   ]);
+
+  // Classes, grades, and school events are source-of-truth: a dropped error
+  // would render "No classes added yet" / "No grades recorded yet" / "No school
+  // events" for a family that actually has them — a reassuring-but-wrong picture
+  // (a parent believes a kid has no grades). Fail closed on a real read error; a
+  // genuinely missing table (unapplied migration) is still tolerated as empty.
+  const schoolError = [membersRes.error, classesRes.error, gradesRes.error, eventsRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (schoolError) {
+    console.error('[dashboard/family-school] school read failed', schoolError);
+    return <ErrorState message="Could not load your family school hub from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const classes = classesRes.data;
+  const grades = gradesRes.data;
+  const events = eventsRes.data;
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const avgScore = (grades ?? []).filter((g) => g.score != null && g.max_score).length

@@ -1,4 +1,4 @@
-// Family API â€” the orchestration hub (North Star pillar #9). Bubaly's long-term
+// Family API — the orchestration hub (North Star pillar #9). Bubaly's long-term
 // role is to CONNECT the services a family already uses (calendars, email,
 // banking, grocery, smart home) rather than replace them. This module is the
 // pure, tested provider registry + the logic that merges the catalog with a
@@ -48,7 +48,7 @@ export const PROVIDERS_BY_ID: Record<string, Provider> = Object.fromEntries(PROV
 export const CONNECTABLE_PROVIDERS: Provider[] = PROVIDERS.filter((p) => p.syncProvider);
 
 export const CONNECTION_STATUS_LABELS: Record<ConnectionStatus, string> = {
-  connected: 'Connected', syncing: 'Syncingâ€¦', error: 'Needs attention', disconnected: 'Not connected',
+  connected: 'Connected', syncing: 'Syncing…', error: 'Needs attention', disconnected: 'Not connected',
 };
 
 /** A saved connection row (subset the merge needs). */

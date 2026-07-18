@@ -1,6 +1,6 @@
 'use client';
 
-// Recurring-routine templates (Friction #10) â€” the "Moments" home for detected
+// Recurring-routine templates (Friction #10) — the "Moments" home for detected
 // routines, surfaced in the calendar right rail. Detects repeating events from
 // history and lets a family save them as reusable routines, then apply a
 // routine to a week (materializing concrete calendar_events). 100% Supabase.
@@ -31,10 +31,10 @@ type Item = Tables<'routine_template_items'>;
 const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const CATEGORIES: EventCategory[] = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
 const CATEGORY_EMOJI: Record<string, string> = {
-  general: 'ðŸ“Œ', school: 'ðŸ«', sports: 'ðŸ€', appointment: 'ðŸ©º', medication: 'ðŸ’Š',
-  maintenance: 'ðŸ”§', birthday: 'ðŸŽ‚', holiday: 'ðŸŽ‰', other: 'ðŸ“Ž',
+  general: '📌', school: '🏫', sports: '🏀', appointment: '🩺', medication: '💊',
+  maintenance: '🔧', birthday: '🎂', holiday: '🎉', other: '📎',
 };
-const ROUTINE_ICONS = ['ðŸ”', 'â˜€ï¸', 'ðŸŒ™', 'ðŸ«', 'ðŸ€', 'ðŸ½ï¸', 'ðŸ›ï¸', 'ðŸ“š', 'ðŸ§¹', 'ðŸš—'];
+const ROUTINE_ICONS = ['🔁', '☀️', '🌙', '🏫', '🏀', '🍽️', '🛏️', '📚', '🧹', '🚗'];
 
 function minutesToTimeValue(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
@@ -98,7 +98,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     return run(`save:${sig}`, async () => {
       const sb = createClient();
       const { data: tpl, error } = await sb.from('routine_templates').insert({
-        family_id: familyId, name: s.title, icon: CATEGORY_EMOJI[s.category] ?? 'ðŸ”',
+        family_id: familyId, name: s.title, icon: CATEGORY_EMOJI[s.category] ?? '🔁',
         weekday_mask: 1 << s.weekday, source: 'detected', created_by: userId,
       }).select('id').single();
       if (error || !tpl) throw error ?? new Error('Could not save');
@@ -112,7 +112,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     });
   }
 
-  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading routinesâ€¦</div>;
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading routines…</div>;
   if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {
@@ -167,7 +167,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{s.title}</p>
                   <p className="text-[10px] text-muted">
-                    {weekdayLong(s.weekday)}s at {minutesToLabel(s.startMinutes)} Â· seen {s.occurrences}Ã—
+                    {weekdayLong(s.weekday)}s at {minutesToLabel(s.startMinutes)} · seen {s.occurrences}×
                   </p>
                 </div>
               </div>
@@ -195,10 +195,10 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             return (
               <div key={t.id} className="group rounded-xl border border-border bg-surface/40 p-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-elevated text-base">{t.icon ?? 'ðŸ”'}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-elevated text-base">{t.icon ?? '🔁'}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold">{t.name}</p>
-                    <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} Â· {its.length} step{its.length === 1 ? '' : 's'}</p>
+                    <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} · {its.length} step{its.length === 1 ? '' : 's'}</p>
                   </div>
                   <button onClick={() => setEditing({ template: t, items: its })} aria-label="Edit routine"
                     className="rounded p-1 text-muted opacity-0 transition hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
@@ -242,7 +242,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
   const { error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(template?.name ?? '');
-  const [icon, setIcon] = useState(template?.icon ?? 'ðŸ”');
+  const [icon, setIcon] = useState(template?.icon ?? '🔁');
   const [mask, setMask] = useState(template?.weekday_mask ?? WEEKDAYS_WEEKDAYS);
   const [rows, setRows] = useState<DraftItem[]>(
     initialItems && initialItems.length
@@ -267,8 +267,11 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       if (templateId) {
         const { error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId);
         if (error) throw error;
-        // Replace items wholesale (simple + correct for a small list).
-        await sb.from('routine_template_items').delete().eq('template_id', templateId);
+        // Replace items wholesale (simple + correct for a small list). If the
+        // delete fails we must NOT insert or the template keeps the old steps
+        // alongside the new ones (duplicates).
+        const { error: delErr } = await sb.from('routine_template_items').delete().eq('template_id', templateId);
+        if (delErr) throw delErr;
       } else {
         const { data, error } = await sb.from('routine_templates').insert({
           family_id: familyId, name: cleanName, icon, weekday_mask: mask, source: 'manual', created_by: userId,

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
+import { ErrorState } from '@/components/ui/states';
 import { MealVoteClient, type VoteView } from './vote-client';
 
 export const metadata: Metadata = { title: 'Meal Voting' };
@@ -11,12 +13,29 @@ export default async function MealVotePage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: votes }, { data: options }, { data: ballots }, { data: recipes }] = await Promise.all([
+  const [votesRes, optionsRes, ballotsRes, recipesRes] = await Promise.all([
     supabase.from('meal_votes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
     supabase.from('meal_vote_options').select('id, vote_id, recipe_id, label, photo_url').eq('family_id', familyId),
     supabase.from('meal_vote_ballots').select('vote_id, option_id, member_id, choice').eq('family_id', familyId),
     supabase.from('family_recipes').select('id, name, photo_url').eq('family_id', familyId).order('is_favorite', { ascending: false }).order('updated_at', { ascending: false }).limit(100),
   ]);
+
+  // The votes, their options, the cast ballots, and the recipe picker are
+  // source-of-truth: a dropped error would render an empty voting page (a family
+  // misses an active meal vote, or can't start one) that lies. Fail closed on a
+  // real read error; a genuinely missing table (unapplied migration) is still
+  // tolerated as empty.
+  const voteError = [votesRes.error, optionsRes.error, ballotsRes.error, recipesRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (voteError) {
+    console.error('[dashboard/recipes/vote] meal vote read failed', voteError);
+    return <ErrorState message="Could not load meal voting from Supabase. Refresh and try again." />;
+  }
+
+  const votes = votesRes.data;
+  const options = optionsRes.data;
+  const ballots = ballotsRes.data;
+  const recipes = recipesRes.data;
 
   const optionsByVote = new Map<string, VoteView['options']>();
   for (const o of options ?? []) {

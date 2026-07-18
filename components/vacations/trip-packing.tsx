@@ -87,7 +87,8 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
 
   async function toggle(it: PackItem) {
-    await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id);
+    const { error } = await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id);
+    if (error) toastError(error.message);
   }
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +99,8 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     setForm(null);
   }
   async function remove(id: string) {
-    await createClient().from('vacation_packing_items').delete().eq('id', id);
+    const { error } = await createClient().from('vacation_packing_items').delete().eq('id', id);
+    if (error) toastError(error.message);
   }
 
   if (loading) return <LoadingBlock />;
@@ -122,7 +124,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       )}
 
       {items.length === 0 ? (
-        <EmptyState icon={Luggage} title="Nothing packed yet" description="Tap â€œSmart listâ€ to auto-generate a packing list from your trip type, weather, and activities." />
+        <EmptyState icon={Luggage} title="Nothing packed yet" description="Tap “Smart list” to auto-generate a packing list from your trip type, weather, and activities." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {PACK_CATEGORIES.filter((c) => byCategory.has(c.value)).map((cat) => (
@@ -132,7 +134,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
                 {byCategory.get(cat.value)!.map((it) => (
                   <li key={it.id} className="group flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={it.packed} onChange={() => toggle(it)} className="h-4 w-4 rounded border-border" />
-                    <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` Ã—${it.quantity}` : ''}</span>
+                    <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` ×${it.quantity}` : ''}</span>
                     {it.ai_suggested && <Sparkles className="h-3 w-3 text-brand-text/60" />}
                     <button onClick={() => remove(it.id)} className="hidden text-muted hover:text-danger group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>

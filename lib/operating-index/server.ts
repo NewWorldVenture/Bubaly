@@ -81,6 +81,18 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
     supabase.from('family_messages').select('conversation_id, read_by').eq('family_id', familyId).is('deleted_at', null).gte('created_at', since7).limit(1000),
   ]);
 
+  const readError = [
+    membersRes.error, eventsRes.error, remindersRes.error, recentChoresRes.error,
+    openChoresRes.error, docsRes.error, maintRes.error, billsRes.error,
+    approvalsRes.error, mealVotesRes.error, pollsRes.error, goalsRes.error,
+    budgetsRes.error, expensesRes.error, accountsRes.error, pantryRes.error,
+    messagesRes.error,
+  ].find(Boolean);
+  if (readError) {
+    console.error('[operating-index] snapshot input read failed', readError);
+    throw readError;
+  }
+
   const members = membersRes.data ?? [];
   const events = eventsRes.data ?? [];
   const openChores = openChoresRes.data ?? [];
@@ -198,6 +210,12 @@ async function buildOrchestratorReport(
       .in('category', NEEDS_LOCATION_LIST).order('starts_at').limit(10),
   ]);
 
+  const readError = [tomorrowRes.error, autoRes.error, approvalsRes.error, missingRes.error].find(Boolean);
+  if (readError) {
+    console.error('[operating-index] orchestrator input read failed', readError);
+    throw readError;
+  }
+
   const tomorrowEvents: DayEvent[] = (tomorrowRes.data ?? []).map((e) => ({
     id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     assigneeId: e.assignee_id, location: e.location, needsLocation: NEEDS_LOCATION.has(e.category),
@@ -236,13 +254,17 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
   const today = asOfDate(now);
 
   // Prior snapshot (most recent day before today) for the trend + evening recap.
-  const { data: recent } = await supabase
+  const { data: recent, error: recentError } = await supabase
     .from('family_operating_index')
     .select('as_of_date, composite, dimensions, suggestions')
     .eq('family_id', familyId)
     .lt('as_of_date', today)
     .order('as_of_date', { ascending: false })
     .limit(1);
+  if (recentError) {
+    console.error('[operating-index] prior snapshot read failed', recentError);
+    throw recentError;
+  }
   const priorRow = recent && recent.length ? recent[0] : null;
   const priorComposite = priorRow ? priorRow.composite : null;
 

@@ -5,7 +5,13 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
+import { articleHashtags } from '@/lib/blog/engagement';
+import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
+import { readAeoQuestionsForCategory } from '@/lib/marketing/aeo';
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 import { HeartButton } from '@/components/blog/heart-button';
+import { BlogCover } from '@/components/blog/blog-cover';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -25,6 +31,9 @@ const CATEGORY_COLORS: Record<BlogCategory, string> = {
   'AI & Technology': 'border-indigo-400/20 bg-indigo-500/15 text-indigo-300',
   'Wellness': 'border-amber-400/20 bg-amber-500/15 text-amber-300',
   'Family Finances': 'border-rose-400/20 bg-rose-500/15 text-rose-300',
+  'Recipes & Food': 'border-orange-400/20 bg-orange-500/15 text-orange-300',
+  'Travel & Adventures': 'border-cyan-400/20 bg-cyan-500/15 text-cyan-300',
+  'Home & Seasonal': 'border-teal-400/20 bg-teal-500/15 text-teal-300',
 };
 
 const ACCENT_BG: Record<BlogCategory, string> = {
@@ -34,6 +43,9 @@ const ACCENT_BG: Record<BlogCategory, string> = {
   'AI & Technology': 'from-indigo-600/30 to-indigo-900/10',
   'Wellness': 'from-amber-600/30 to-amber-900/10',
   'Family Finances': 'from-rose-600/30 to-rose-900/10',
+  'Recipes & Food': 'from-orange-600/30 to-orange-900/10',
+  'Travel & Adventures': 'from-cyan-600/30 to-cyan-900/10',
+  'Home & Seasonal': 'from-teal-600/30 to-teal-900/10',
 };
 
 export async function generateStaticParams() {
@@ -44,17 +56,34 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPost(slug);
   if (!post) return { title: 'Post not found' };
+  const keywords = articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''));
+  const canonical = `${SITE_URL}/blog/${post.slug}`;
   return {
     title: post.title,
     description: post.excerpt,
+    keywords,
+    authors: [{ name: post.author }],
+    category: post.category,
+    alternates: { canonical },
     openGraph: {
       type: 'article',
+      url: canonical,
       title: post.title,
       description: post.excerpt,
       authors: [post.author],
+      publishedTime: post.date,
+      modifiedTime: post.date,
+      section: post.category,
+      tags: keywords,
       ...(post.heroImageUrl
         ? { images: [{ url: post.heroImageUrl, alt: post.heroImageAlt ?? post.title }] }
         : {}),
+    },
+    twitter: {
+      card: post.heroImageUrl ? 'summary_large_image' : 'summary',
+      title: post.title,
+      description: post.excerpt,
+      ...(post.heroImageUrl ? { images: [post.heroImageUrl] } : {}),
     },
   };
 }
@@ -64,15 +93,31 @@ export default async function BlogPostPage({ params }: Params) {
   const post = await getPost(slug);
   if (!post) notFound();
 
-  const [related, { prev, next }] = await Promise.all([
+  const [related, { prev, next }, aeo] = await Promise.all([
     getRelatedPosts(slug, post.category, 3),
     getAdjacentPosts(post.date),
+    // Category-relevant answers from the admin AEO Knowledge Center → an on-topic
+    // FAQ block + FAQPage schema on every article, linking back to the source.
+    readAeoQuestionsForCategory(post.category, 4),
   ]);
+  const aeoFaqs = aeo.questions;
 
   const headings = extractHeadings(post.body);
+  const wordCount = post.body.reduce((n, b) => n + b.text.split(/\s+/).length, 0);
 
   return (
     <>
+      <BlogPostStructuredData
+        slug={post.slug}
+        title={post.title}
+        excerpt={post.excerpt}
+        author={post.author}
+        category={post.category}
+        date={post.date}
+        heroImageUrl={post.heroImageUrl}
+        keywords={articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''))}
+        wordCount={wordCount}
+      />
       <ReadingProgress />
 
       <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8">
@@ -114,11 +159,14 @@ export default async function BlogPostPage({ params }: Params) {
                 )}
               </figure>
             ) : (
-              <div className={cn('mb-8 flex h-48 items-end rounded-2xl bg-gradient-to-br p-6 sm:h-56', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')}>
-                <div className={cn('inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
-                  {post.category}
+              <figure className="mb-8">
+                <div className="relative flex h-48 items-end overflow-hidden rounded-2xl p-6 sm:h-80">
+                  <BlogCover title={post.title} category={post.category} seed={post.slug} className="absolute inset-0 h-full w-full object-cover" />
+                  <div className={cn('relative inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur', CATEGORY_COLORS[post.category])}>
+                    {post.category}
+                  </div>
                 </div>
-              </div>
+              </figure>
             )}
 
             {/* Title & meta */}
@@ -137,14 +185,12 @@ export default async function BlogPostPage({ params }: Params) {
               <HeartButton slug={post.slug} />
             </div>
 
-            {/* Tags */}
-            {post.tags.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {post.tags.map((t) => (
-                  <Badge key={t} tone="brand">{t}</Badge>
-                ))}
-              </div>
-            )}
+            {/* Hashtags (social-ready; always includes #bubaly) */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {articleHashtags(post.tags).map((t) => (
+                <Badge key={t} tone="brand">{t}</Badge>
+              ))}
+            </div>
 
             {/* Share */}
             <div className="mt-6 flex items-center gap-3 border-b border-white/8 pb-6">
@@ -169,12 +215,38 @@ export default async function BlogPostPage({ params }: Params) {
               )}
             </div>
 
+            {/* AEO FAQ — answers from the Knowledge Center, on-topic for this
+                article, feeding FAQPage rich results and voice/AI answers. */}
+            {aeoFaqs.length > 0 && (
+              <section className="mb-10 rounded-2xl border border-white/8 bg-white/[0.02] p-6" aria-labelledby="article-faq">
+                <FaqStructuredData items={aeoFaqs.map((q) => ({ q: q.question, a: q.answer }))} />
+                <h2 id="article-faq" className="scroll-mt-24 text-xl font-bold sm:text-2xl">Frequently asked questions</h2>
+                <dl className="mt-5 space-y-5">
+                  {aeoFaqs.map((q) => (
+                    <div key={q.question}>
+                      <dt className="font-semibold text-white/90">{q.question}</dt>
+                      <dd className="mt-1.5 text-sm leading-7 text-white/60">{q.answer}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <Link href="/faq" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+                  Explore the full Family Knowledge Center <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </section>
+            )}
+
+            {!aeo.available && (
+              <p className="mb-10 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">
+                The related Knowledge Center answers are temporarily unavailable. This article is complete; please refresh later for the latest FAQs.
+              </p>
+            )}
+
             {/* Did you enjoy it? ♥ + subscribe */}
             <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
                   <HeartButton slug={post.slug} />
-                  <p className="text-sm text-white/60">Enjoyed this one? Give it a heart.</p>
+                  <p className="text-sm text-white/60">Enjoyed this one? Sign in and save it to your account.</p>
                 </div>
               </div>
               <div className="mt-5 border-t border-white/8 pt-5">
@@ -254,7 +326,9 @@ export default async function BlogPostPage({ params }: Params) {
                               <Image src={r.heroImageUrl} alt={r.heroImageAlt ?? r.title} fill sizes="48px" className="object-cover" />
                             </div>
                           ) : (
-                            <div className={cn('h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br', ACCENT_BG[r.category] ?? 'from-violet-600/20 to-blue-900/10')} />
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+                              <BlogCover title={r.title} category={r.category} seed={r.slug} className="absolute inset-0 h-full w-full object-cover" />
+                            </div>
                           )}
                           <div className="min-w-0">
                             <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>

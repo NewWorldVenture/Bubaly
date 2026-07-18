@@ -32,6 +32,15 @@ export default async function ProfilePage() {
       .eq('family_id', familyId).eq('member_id', memberId).eq('status', 'achieved'),
   ]);
 
+  // The member identity is the primary content and safely falls back to the
+  // already-loaded ctx member, so we don't fail the whole page closed. The
+  // contribution STATS are a secondary enhancement that degrades to 0 on a read
+  // failure — but a silently-swallowed error would make "0 points / 0 chores"
+  // indistinguishable from a real read failure, so log each so it's diagnosable.
+  if (doneQ.error) console.error('[dashboard/profile] chore-points read failed', { memberId, error: doneQ.error });
+  if (upcomingQ.error) console.error('[dashboard/profile] upcoming-events read failed', { memberId, error: upcomingQ.error });
+  if (milestonesQ.error) console.error('[dashboard/profile] milestones read failed', { memberId, error: milestonesQ.error });
+
   const done = doneQ.data ?? [];
   const stats: ProfileStats = {
     points30d: done.reduce((s, r) => s + (r.points_awarded ?? 0), 0),

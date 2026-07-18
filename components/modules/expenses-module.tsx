@@ -33,7 +33,7 @@ export function ExpensesModule() {
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const memberName = (id: string | null) => (id ? memberById.get(id)?.display_name ?? 'Member' : 'â€”');
+  const memberName = (id: string | null) => (id ? memberById.get(id)?.display_name ?? 'Member' : '—');
 
   const { data: splits, loading: splitsLoading, error: splitsError, refresh: refreshSplits } = useRealtimeQuery<SplitRow>({
     table: 'expense_splits', familyId, deps: [familyId],
@@ -181,8 +181,8 @@ export function ExpensesModule() {
             <div key={sp.id} className="rounded-xl border border-border bg-surface/40 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-medium">{sp.description} <span className="text-muted">Â· {usd(sp.total_cents)}</span></p>
-                  <p className="text-xs text-muted">{sp.category ?? 'Other'} Â· paid by {memberName(sp.paid_by)} Â· {fmtDate(sp.spent_on)}</p>
+                  <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
+                  <p className="text-xs text-muted">{sp.category ?? 'Other'} · paid by {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
                 <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label="Delete">
                   {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -195,7 +195,7 @@ export function ExpensesModule() {
                     onClick={() => toggleSettled(s)}
                     disabled={isPending(`settle:${s.id}`)}
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition disabled:opacity-60 ${s.settled ? 'bg-success/15 text-success' : 'bg-border/40 text-muted hover:bg-border/70'}`}
-                    title={s.settled ? 'Settled â€” click to unsettle' : 'Mark settled'}
+                    title={s.settled ? 'Settled — click to unsettle' : 'Mark settled'}
                   >
                     {isPending(`settle:${s.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : s.settled && <Check className="h-3 w-3" />} {memberName(s.member_id)} {usd(s.share_cents)}
                   </button>
@@ -209,14 +209,14 @@ export function ExpensesModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title="Split an expense">
           <form onSubmit={save} className="space-y-3">
-            <Field label="Description">{(id) => <Input id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Dinner, groceriesâ€¦" />}</Field>
+            <Field label="Description">{(id) => <Input id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Dinner, groceries…" />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
               <Field label="Date">{(id) => <Input id={id} type="date" value={form.spent_on} onChange={(e) => setForm({ ...form, spent_on: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-              <Field label="Paid by">{(id) => <Select id={id} value={form.paid_by} onChange={(e) => setForm({ ...form, paid_by: e.target.value })}><option value="">â€” Select â€”</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label="Paid by">{(id) => <Select id={id} value={form.paid_by} onChange={(e) => setForm({ ...form, paid_by: e.target.value })}><option value="">— Select —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
             <Field label="Split between (default: everyone)">
               {() => (

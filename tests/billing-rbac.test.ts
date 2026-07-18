@@ -24,7 +24,7 @@ describe('A-09 every billing route enforces auth + family-admin RBAC', () => {
   it('discovers the billing mutation routes', () => {
     expect(routes.length).toBeGreaterThanOrEqual(4);
     for (const name of ['checkout', 'change-plan', 'cancel', 'portal']) {
-      expect(routes.some((r) => r.includes(`/${name}/`))).toBe(true);
+      expect(routes.some((r) => r.split(/[\\/]/).includes(name))).toBe(true);
     }
   });
 

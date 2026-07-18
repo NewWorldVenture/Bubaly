@@ -1,13 +1,18 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-16 12:40 America/New_York
+Audit snapshot: 2026-07-18 08:20 America/New_York
 Decision: **NO-GO**
+
+Latest checkpoint: 2026-07-18 12:50 America/New_York. The Super Admin marketing
+control plane and public acquisition loop now have validated AEO/SEO/content/
+landing lifecycle controls, sitemap publication, explicit degraded states, and
+consent-gated attribution/provider failure handling.
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 510 Vitest files and 3,270 tests pass in the latest full local gate.
-- Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
-- The build generates 250 static routes.
+- 631 Vitest files and 3,734 tests pass in the latest full local gate; the marketing cluster is 46 files and 245 tests green.
+- Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
+- The closed-loop marketing audit added Super Admin AEO/SEO/content/landing edit-publish-archive controls, published landing sitemap entries, explicit public AEO/consent/attribution degradation, atomic email send-state transitions, and asset deletion rollback. These are locally verified; live Super Admin, provider, RLS, browser, and deployment evidence remains open.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
@@ -29,6 +34,21 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   rendering the persisted recap.
 - Command Center now preserves family-source and Operating Index read failures and renders a retryable state
   before computing readiness scores and issues.
+- Shared Operating Index and graph loaders now preserve rejected Supabase reads; Family Operating Index renders
+  a retryable state before showing scores or relationship insights.
+- Family Assistant now preserves shared reasoning-context failures and renders its retryable state before showing
+  partial relationship guidance.
+- Concierge now logs and visibly reports shared reasoning failures while preserving the primary Concierge module.
+- Daily Briefing now preserves shared reasoning-context failures and renders a retryable page state before showing
+  relationship guidance.
+- Knowledge Graph now preserves shared reasoning-context failures and renders a retry link before showing its graph
+  summary.
+- Windows test guards now use Node filesystem traversal instead of Unix-only shell commands, removing dead command
+  warnings from the full verification output.
+- Decisions, Outcomes, Playbook, and Prep Plans now preserve the primary module while visibly reporting shared
+  reasoning-context read failures from Supabase.
+- Calm now preserves inbox and shared reasoning-context failures and renders its retryable state before showing
+  partial household guidance.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;
   goal funding is published in migration `0208` and commit `7a20e160`.
 - Wallet activation now fails closed on disclosure, member, child-wallet, bucket, and rule provisioning

@@ -104,8 +104,8 @@ export function CheckInView() {
                     <span className={cn('rounded-full px-1.5 py-0.5 text-[11px] font-semibold', meta.tint)}>{meta.emoji} {meta.label}</span>
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {[c.place_label, c.note].filter(Boolean).join(' Â· ')}
-                    {(c.place_label || c.note) ? ' Â· ' : ''}{relTime(c.created_at)}
+                    {[c.place_label, c.note].filter(Boolean).join(' · ')}
+                    {(c.place_label || c.note) ? ' · ' : ''}{relTime(c.created_at)}
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>

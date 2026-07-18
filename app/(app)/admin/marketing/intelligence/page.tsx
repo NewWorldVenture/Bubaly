@@ -68,7 +68,7 @@ export default async function IntelligencePage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Customer Intelligence â€” visitor tracking, a CDP profile spine, and multi-touch attribution. Feed it from any surface via
+        Customer Intelligence — visitor tracking, a CDP profile spine, and multi-touch attribution. Feed it from any surface via
         <code className="mx-1 rounded bg-elevated px-1 py-0.5 text-xs">POST /api/mkt/track</code>.
       </p>
 
@@ -102,7 +102,7 @@ export default async function IntelligencePage() {
 
       <Card>
         <h2 className="mb-1 text-base font-semibold">Attribution by model</h2>
-        <p className="mb-4 text-xs text-muted">Conversion credit distributed across channels â€” compare how each model values your touches.</p>
+        <p className="mb-4 text-xs text-muted">Conversion credit distributed across channels — compare how each model values your touches.</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {attribution.map(({ model, rows }) => (
             <div key={model} className="rounded-xl border border-border bg-surface/30 p-3">

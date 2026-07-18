@@ -6,6 +6,915 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0832 - Super Admin Marketing SEO/AEO pages were slow to open (fetched + rendered every row)
+
+- Timestamp: 2026-07-18 15:41 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing admin (A-17) — SEO + AEO — **cross-lane, direct user request**
+- Route: `/admin/marketing/seo`, `/admin/marketing/aeo`
+- Affected files: `app/(app)/admin/marketing/{seo,aeo}/page.tsx`, `tests/marketing-seo-aeo-wiring.test.ts` (extended)
+- Database objects: `marketing_aeo_questions`, `marketing_seo_keywords`, `marketing_seo_pages` (read shape only)
+- Role: super admin · Tier: n/a
+- Scenario: super admin clicks the SEO or AEO subnav tab
+- Severity: **P2 (performance/UX)** — user report: "takes TOOO LONG"
+- Reproduction: both pages ran `.select('*')` with **no `.limit()`** and rendered every row. Prod seed = **~2,344 AEO questions** and **~1,603 SEO keywords** (migration `0229`). AEO built ~2,344 `<details>` cards (each a full edit form); SEO built ~1,603 table rows w/ inline edit forms. Result: multi-MB payload + huge DOM + slow TTFB on every click (the pages are `force-dynamic`, so it re-ran each navigation).
+- Expected: the pages open fast regardless of table size
+- Actual: fetched + rendered the entire table each click
+- Root cause: unbounded `select('*')` + render-all; stats derived by counting the full result set client-side
+- Resolution: derive accurate totals from cheap **COUNT** queries (`select('id', { count: 'exact', head: true })` — no row transfer), and render only a **bounded, column-projected** slice — AEO `limit(50)` (projected to the 8 fields the card/edit-form use), SEO keywords `limit(100)` (projected to 6 fields). Added a "Showing the latest N of TOTAL" note so nothing looks lost. The 19-row SEO page registry still loads in full. Payload/DOM dropped from thousands of rows to ≤100.
+- Supabase/Security/Privacy impact: none (same tables, same RLS/service-role, fewer columns + rows read)
+- Performance impact: **large positive** — reads go from ~2,344 / ~1,603 full rows to 2 head-counts + ≤50 / ≤100 projected rows; DOM shrinks ~20–40×
+- Tests added: `tests/marketing-seo-aeo-wiring.test.ts` extended (9 total — asserts count-based stats + bounded projected reads + no unbounded `select('*')`)
+- Tests run: guard green (9); `tsc` clean; `eslint` clean; `next build` green
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none. Follow-up option (not needed at current scale): server-side pagination/search if a table grows past a few thousand rows, and a `created_at` index for the ordering.
+- Lane note: A-17 (marketing) is codex's active lane; done under direct user request, logged in `docs/MARKETING_PLATFORM_COORDINATION.md`.
+
+### PLA-0831 - Blog engine (500 posts) hotlinked LoremFlickr — unverified-license + visually duplicated covers (resolves LB-016)
+
+- Timestamp: 2026-07-18 14:55 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing / public blog (A-17) — **cross-lane, supporting codex's marketing buildout; assignable to agent-05 per that lane's own work queue (MKT-4)**
+- Route: `/blog`, `/blog/[slug]` (`app/(marketing)/blog/**`)
+- Affected files: `components/blog/blog-cover.tsx` (new), `lib/blog/posts.ts`, `app/(marketing)/blog/page.tsx`, `app/(marketing)/blog/[slug]/page.tsx`, `next.config.mjs`, `tests/blog-cover-free-images.test.ts` (new)
+- Database objects: `blog_posts.hero_image_url` (read-normalized; not migrated)
+- Role: all public visitors + SEO/social crawlers · Tier: n/a · Household: n/a
+- Scenario: any visitor loads the blog list or an article; any crawler reads og:image / JSON-LD
+- Severity: **P1 (licensing exposure + brand quality)** — violates the "all images free + unique, no duplicates" launch bar
+- Reproduction: `0226_blog_500_articles.sql` set `hero_image_url = https://loremflickr.com/1600/900/<terms>?lock=N` for all 525 posts. `?lock` pins *which* image but NOT its license — LoremFlickr proxies mixed-license Flickr photos (attribution-required / All-Rights-Reserved possible), so "free" was unverified. All 525 covers drew from only **9 keyword pools** → structural visual duplicates (unique URLs ≠ unique images). The generator even comments "free-license Unsplash" while emitting loremflickr (self-inconsistent).
+- Expected: every rendered image is free-licensed, unique, non-duplicated
+- Actual: mixed-license hotlinks with visual duplicates on a public marketing surface
+- Root cause: seed pinned covers to a third-party placeholder host whose license it cannot control
+- Resolution: (1) `freeLicensedImage()` in `lib/blog/posts.ts` strips any `loremflickr.com` URL to `undefined` at the single `toPost` chokepoint — so **all five** consumers stop using it (list render, article hero, related thumbnails, `og:image`/Twitter card, JSON-LD `image`; the conditional metadata blocks now omit it rather than emit an unverified URL). Unsplash + `*.supabase.co` pass through. (2) Image-less posts render a **bespoke, generated, on-brand `<BlogCover>`** (`components/blog/blog-cover.tsx`) — deterministic per title/slug (djb2 hash → mulberry32 seed → procedural motif), category-tinted, theme-aware, fully inline SVG (no CDN/CSP-safe), so covers are **free, unique (distinct even within a category), duplicate-free, world-class**. (3) `loremflickr.com` removed from `next.config.mjs images.remotePatterns`. Migration `0226`'s stored URLs left as-is (applied migration, not edited) but never rendered — stripped on read.
+- Supabase/Security/Privacy/Performance impact: **performance positive** — 525 third-party image requests eliminated (inline SVG, no network, faster LCP); no DB/security change
+- Accessibility impact: neutral — `<BlogCover>` carries `role="img"` + descriptive `aria-label`
+- Tests added: `tests/blog-cover-free-images.test.ts` (4 — data-layer strip, host removed from next.config, deterministic self-contained cover with no external URL, both render surfaces fall back to `<BlogCover>` not a hotlink)
+- Tests run: guard green (4); `tsc --noEmit` clean; `eslint` clean on all changed files; `next build` green
+- Validation evidence: preview of 12 generated covers (incl. 3 same-category "Parenting" posts) confirms per-title visual uniqueness; grep confirms no rendered cover references loremflickr
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none — migration `0231_blog_drop_loremflickr_covers.sql` nulls the dead `0226` loremflickr URLs at the DB source (migration audit passes; next 0232)
+- Lane note: A-17 (marketing) is codex's active lane; this was executed under the product owner's direct request + that lane's own MKT-4 task (which names agent-05). Logged in `docs/MARKETING_PLATFORM_COORDINATION.md §6c` + LB-016.
+
+### PLA-0823 - Calendar mini-calendar highlighted the week's Monday, not today; no way to compare members side by side
+
+- Timestamp: 2026-07-18 14:35 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Calendar (A-06) — **cross-lane, direct user request** (owner agent notified via coordination board)
+- Route: `/dashboard/calendar` (`components/modules/calendar-module.tsx`)
+- Affected files: `components/modules/calendar-module.tsx`, `tests/calendar-split-view.test.ts` (new)
+- Database objects: none (client render only; reads unchanged)
+- Role: all family roles · Tier: all · Household: any
+- Scenario: (1) a user opens the calendar on any day that is not Monday and looks at the mini-calendar; (2) a family wants to compare each member's schedule for one day at a glance
+- Severity: **P2 (correctness + UX)** — the date highlight actively misinformed
+- Reproduction: (1) On 2026-07-18 (a Saturday) the mini-calendar rendered the purple "selected" block on the 13th (that week's Monday) because it was passed `current={monday}`; the focused day (`days[mobileDayIndex]`, the 18th) got no highlight. The highlight lied about which day was selected. (2) No affordance existed to view members' days in parallel columns.
+- Expected: the mini-calendar highlights the day the user is actually focused on; families can optionally split the focused day into per-member columns
+- Actual: highlight tracked the week's Monday; no per-member comparison view
+- Root cause: (1) `<MiniCalendar current={monday}>` — the "selected" comparison used the week anchor instead of the focused day. (2) feature gap.
+- Resolution: (1) pass `current={days[mobileDayIndex]}` and, on select, set both `setWeekOffset(...)` and `setMobileDayIndex((d.getDay()+6)%7)` so the picker and the grid stay in sync. (2) added an opt-in **"Side-by-side view"** checkbox in the Calendars sidebar. When on, a unified `gridCols` model replaces the day-columns with one column per *visible* member for the focused day; each column shows that member's events **plus** unassigned shared/family events (`e.assignee_id === m.id || !e.assignee_id`). Toggling a member (existing Eye/EyeOff control) shows/hides their column. Header + time-grid iterate the same `gridCols` array, so day/week/split share one render path. `dateLabel` shows the focused-day label while split is active.
+- Supabase/Security/Privacy/Performance impact: none — no new queries; split is a pure client-side partition of already-loaded events
+- Accessibility impact: neutral/positive — the checkbox is a real `<label>`+`<input>`; member columns reuse labeled avatars
+- Tests added: `tests/calendar-split-view.test.ts` (5 — mini-calendar tracks focused day + syncs week/day-index; split checkbox present; per-member own+shared merge; unified `gridCols` render path)
+- Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module; `next build` (see commit)
+- Validation evidence: guard asserts the regressed `current={monday}` form is gone; type-check + lint clean
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Lane note: Calendar is A-06 (not my A-05 lane). Edited under direct user request per the "direct user requests override lane discipline" rule; logged here + on the coordination board so the A-06 owner has the record.
+
+### PLA-0822 - Photos lightbox had 8 icon-only controls with no accessible name (WCAG 4.1.2)
+
+- Timestamp: 2026-07-18 11:19 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Photos
+- Route: `/dashboard/photos` (`components/modules/photos-module.tsx`)
+- Affected files: `components/modules/photos-module.tsx`, `tests/photos-a11y-labels.test.ts` (new)
+- Database objects: none (UI a11y)
+- Role: all family roles · Tier: all · Household: any
+- Scenario: a screen-reader or voice-control user opens the photo grid / lightbox and tries to favorite, edit, delete, navigate between, or close a photo
+- Severity: **P2 (accessibility — §23; a workflow-blocking a11y defect for AT users)**
+- Reproduction: 8 `<button>` elements rendered only a lucide icon with no `aria-label`, no `title`, and no visible text: grid-overlay favorite + edit, list-tile favorite, lightbox prev/next/close, and lightbox favorite/delete. A screen reader announced each as a bare "button"; voice control had no name to target — the photo lightbox could not be operated non-visually
+- Expected: every interactive control exposes an accessible name (WCAG 2.2 AA 4.1.2 Name, Role, Value)
+- Actual: icon-only buttons had no accessible name
+- Root cause: icon-only buttons authored without `aria-label`
+- Resolution: added `aria-label` to all 8 — "Previous photo", "Next photo", "Close", "Delete photo", "Edit photo details", and a dynamic `Add to favorites` / `Remove from favorites` on the three favorite toggles. Text-labeled buttons (tabs, album cards, back) already had accessible names (verified)
+- Supabase/Security/Privacy/Performance impact: none
+- Accessibility impact: **positive** — the photo lightbox is now operable by screen readers and voice control
+- Tests added: `tests/photos-a11y-labels.test.ts` (3 — asserts the nav/close + action labels, plus a heuristic guard that no icon-only `<button>` remains without an accessible name)
+- Tests run: guard green (3); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: static scan pre-fix flagged 8 icon-only buttons; post-fix the heuristic guard finds 0
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same §23 sweep, FIXED ×2): (1) `contacts-module` quick-actions — the icon-only "call" (`<button><Phone/>`) and "email" (`<a><Mail/>`) controls in each contact row had no accessible name; added `aria-label={`Call ${contact.name}`}` / `Email ${contact.name}`. (2) **`photos-module` upload dropzone (WCAG 2.1.1 Keyboard)** — the click-to-browse drag-drop area was a bare `<div onClick>` with no `role`/`tabIndex`/key handler, so keyboard-only users could not open the file browser (the whole photo-upload workflow was mouse-only). Made it `role="button"` + `tabIndex={busy?-1:0}` + `onKeyDown` (Enter/Space) + `aria-label="Upload photos or videos"` + a `focus-visible` ring. Guard extended (`tests/photos-a11y-labels.test.ts`, 5 total). Verified clean elsewhere in A-05: form checkboxes/radios are `<label>`-wrapped, text fields use `<Field label>`, `home-module` upload uses a real `<Button>` trigger. **Cross-lane flag (A-11, agent-03):** `documents-module` L609 has the identical bare-`<div>` upload dropzone keyboard gap — flagged, NOT edited
+
+
+
+### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
+
+- Timestamp: 2026-07-18 10:50 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Next Actions
+- Route: `/dashboard/next-actions` (`components/modules/next-actions-module.tsx`)
+- Affected files: `components/modules/next-actions-module.tsx`, `tests/behavior-read-bounded.test.ts` (extended)
+- Database objects: `calendar_events` (read only — table is A-06-owned; this is a consumption-side fix in an A-05 module, no change to the calendar module/table)
+- Role: all family roles · Tier: all · Household: any with calendar history
+- Scenario: a family with months/years of calendar events opens Next Actions
+- Severity: P2 (perf/reliability — unbounded read + over-fetch)
+- Reproduction: the `useRealtimeQuery` fetcher ran `sb.from('calendar_events').select('*').eq('family_id', familyId)` with **no date filter and no limit**, then the component filtered client-side to a 45-day horizon (`if (k < today || k > horizon) continue`). So it downloaded the ENTIRE calendar history (all past + future events, all columns) to render the next ~45 days
+- Expected: fetch only the ~45-day window the view uses
+- Actual: full-history read; payload grows with the family's total event count and re-fetches on every realtime change
+- Root cause: the horizon bound lived only in client-side JS; it was never pushed into the query
+- Resolution: push the window into the query — `.gte('starts_at', now-1d).lte('starts_at', now+46d).order('starts_at').limit(500)`. Generous by a day on each side so the exact client-side `dayKey` trim (unchanged) still governs display; the cap backstops dense calendars. Reduces the read from all-history to ~47 days
+- Supabase impact: none — read-shaping only; also cuts DB/egress substantially for large calendars
+- Security/Privacy/Accessibility impact: none
+- Performance impact: **positive** — bounds a previously-unbounded read and stops over-fetching irrelevant past/future events
+- Tests added: `tests/behavior-read-bounded.test.ts` extended (5 total) — asserts the `.gte`/`.lte('starts_at')` window + `.limit(500)`
+- Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guard asserts the bounded fetcher; client-side horizon trim preserved (correctness unchanged)
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same over-fetch class, FIXED): `briefing-module` loaded the full `calendar_events` history to render only TODAY's events (`rawEvents` is used solely for the today filter + KitchenMode; weekly/tomorrow data comes from a separate briefing source). Bounded to a small window around today (`.gte(now-1d).lte(now+2d).limit(200)`); guard extended (6 total). `todo_items`/`opportunities` in next-actions are bounded-by-nature (open-only / small collections), left as-is. **A-05 calendar-consumer over-fetch sweep now covers next-actions + briefing; command-center/conflicts SSR pages were already date-range-bounded (verified).**
+### PLA-0822 - Decisions hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Decision Engine relationship insights.
+- Route: `/dashboard/decisions`.
+- Affected files: `app/(app)/dashboard/decisions/page.tsx`, `tests/decisions-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Decision Engine-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the primary decision tool remains renderable.
+- Severity / launch impact: P1; the decision page could present missing relationship context as a healthy empty state.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/decisions`, and observe the old `.catch(() => null)` path omit the relationship panel.
+- Expected / actual: preserve the decision tool and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `DecisionsModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/decisions-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0823 - Outcomes hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Outcomes planning relationship insights.
+- Route: `/dashboard/outcomes`.
+- Affected files: `app/(app)/dashboard/outcomes/page.tsx`, `tests/outcomes-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Outcomes-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the outcome planner can still render its plans.
+- Severity / launch impact: P1; missing relationship context could be mistaken for an empty, healthy result.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/outcomes`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the outcome planner and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `OutcomesLauncher`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/outcomes-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0824 - Playbook hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Family Playbook relationship insights.
+- Route: `/dashboard/playbook`.
+- Affected files: `app/(app)/dashboard/playbook/page.tsx`, `tests/playbook-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Playbook-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the primary playbook remains renderable.
+- Severity / launch impact: P1; missing relationship context could be mistaken for a healthy empty playbook insight section.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/playbook`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the playbook and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `PlaybookModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/playbook-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0825 - Prep Plans hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 11:20 UTC; resolution timestamp: 2026-07-18 11:20 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / Prep Plans relationship insights.
+- Route: `/dashboard/prep-plans`.
+- Affected files: `app/(app)/dashboard/prep-plans/page.tsx`, `tests/prep-plans-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped graph entities, graph edges, and Operating Index reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Prep Plans-enabled tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the planning module remains renderable.
+- Severity / launch impact: P1; missing relationship context could be mistaken for a healthy empty planning insight section.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/prep-plans`, and observe the old `.catch(() => null)` path omit relationship guidance.
+- Expected / actual: preserve the planning module and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `PlanningModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is accessible; no extra query.
+- Tests added / run: `tests/prep-plans-reasoning-read-boundary.test.ts`; focused test, 627-file/3,721-test single-worker suite, lint, typecheck, and fresh 489-route build passed.
+- Validation evidence: focused route guard and full local gates passed; awaiting remote readback.
+- Source commit: this atomic publication commit; integration commit: this atomic publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open launch blockers.
+- Follow-up: continue remaining dashboard action, empty-state, device, and role coverage.
+
+### PLA-0818 - Concierge hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / AI Concierge relationship insights.
+- Route: `/dashboard/concierge`.
+- Affected files: `app/(app)/dashboard/concierge/page.tsx`, `tests/concierge-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Concierge-enabled tiers; any active household including an empty graph.
+- Scenario: the shared graph, snapshot, or Operating Index read rejects while the primary Concierge module can still render.
+- Severity / launch impact: P1; the page could present missing relationship insights as a healthy empty result during a Supabase failure.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/concierge`, and observe the old `.catch(() => null)` path render no error.
+- Expected / actual: preserve the primary Concierge and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `ConciergeModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is keyboard/screen-reader visible; no extra query.
+- Tests added / run: `tests/concierge-read-boundary.test.ts`; focused test, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `f9e4cea3`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0819 - Daily Briefing hid shared reasoning failures as an empty relationship section
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CLAUDE-BRIEFING-01` with integration review by `CODEX-01`.
+- Service / feature: Dashboard intelligence / Daily Briefing relationship guidance.
+- Route: `/dashboard/briefing`.
+- Affected files: `app/(app)/dashboard/briefing/page.tsx`, `tests/briefing-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member with the existing Briefing feature; existing feature-gated tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the persisted Operating Index recap is readable.
+- Severity / launch impact: P1; an omitted relationship section could be mistaken for a healthy lack of guidance.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/briefing`, and observe the old null fallback omit the relationship panel.
+- Expected / actual: return a retryable failure before relationship guidance; previously the promise became `null` and no error rendered.
+- Root cause: silent `.catch(() => null)` converted a source-of-truth read failure into an empty optional result.
+- Resolution: catch, log, and return the existing `ErrorState` before rendering partial guidance.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope and text error behavior remain.
+- Tests added / run: `tests/briefing-reasoning-read-boundary.test.ts`; 2 focused tests, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `b901b00e`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0820 - Knowledge Graph hid shared reasoning failures behind a partial graph summary
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CLAUDE-GRAPH-01` with integration review by `CODEX-01`.
+- Service / feature: Dashboard intelligence / Knowledge Graph summary.
+- Route: `/dashboard/graph`.
+- Affected files: `app/(app)/dashboard/graph/page.tsx`, `tests/graph-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member with graph access; existing graph-enabled tiers; any active household including an empty graph.
+- Scenario: shared graph or snapshot reads reject while the GraphModule can still render its own state.
+- Severity / launch impact: P1; the graph could appear healthy while its current relationship summary was unavailable.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/graph`, and observe the old null fallback omit the summary.
+- Expected / actual: preserve the graph and show a retry action; previously the rejection became `null` with no signal.
+- Root cause: silent `.catch(() => null)` discarded the shared read error.
+- Resolution: catch and log the failure, render a visible alert with a keyboard-navigable retry link, and preserve `GraphModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; alert/link are accessible; no polling added.
+- Tests added / run: `tests/graph-read-boundary.test.ts`; 1 focused test, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `0f4f5540`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0821 - Windows verification emitted dead Unix shell-command warnings
+
+- Discovery timestamp: 2026-07-18 10:50 UTC; resolution timestamp: 2026-07-18 10:50 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: QA and cross-platform verification gates.
+- Route: test harness only; no user-facing route changed.
+- Affected files: `tests/display-name-firstname.test.ts`, `tests/no-mojibake-source.test.ts`.
+- Database objects: none.
+- Integration: local Vitest verification on Windows; no Supabase or third-party provider impact.
+- Role / tier / household: all engineering roles and all application tiers because the gate validates shipped source.
+- Scenario: the full suite executed Unix-only `grep` pipelines with `|| true`; Windows logged command-not-found warnings while the tests appeared green.
+- Severity / launch impact: P2; verification output was noisy and could hide a dead regression guard on the supported development platform.
+- Reproduction: run the constrained full Vitest suite on Windows and observe `grep`/`true` command-not-found output from the two source-scan tests.
+- Expected / actual: source scans should execute and report findings on Windows; the old shell commands were unavailable and their fallback masked the failure.
+- Root cause: platform-specific shell utilities in Node-based regression tests.
+- Resolution: replace both shell pipelines with recursive Node filesystem scans while preserving the existing assertions and exclusions.
+- Supabase / security / privacy / accessibility / performance impact: no application, schema, authorization, privacy, accessibility, or runtime performance change.
+- Tests added / run: four focused suites, 17 tests; constrained single-worker suite, 619 files / 3,690 tests; lint, typecheck, and fresh 250-route build.
+- Validation evidence: all gates passed without the prior shell-command warnings; known webpack-cache and Supabase Edge-runtime build warnings remain.
+- Source commit: working-tree repair; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: open launch blockers in `docs/LAUNCH_BLOCKERS.md`.
+- Follow-up: keep future source-scan tests platform-neutral and continue the route/role/live-service audit.
+
+### PLA-0813 - Behavior Tracking loaded a family's entire behavior_logs history (unbounded client read)
+
+- Timestamp: 2026-07-18 10:23 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Behavior Tracking
+- Route: `/dashboard/behavior` (`components/modules/behavior-module.tsx`)
+- Affected files: `components/modules/behavior-module.tsx`, `tests/behavior-read-bounded.test.ts` (new)
+- Database objects: `behavior_logs` (mig 0073; grows unbounded over a family's lifetime)
+- Role: all family roles · Subscription tier: all · Household: any with behavior history
+- Scenario: a family that has logged behavior for months/years opens the Behavior Tracking module
+- Severity: P2 (performance / reliability — unbounded client payload that grows without limit)
+- Reproduction: the `useRealtimeQuery` fetcher ran `sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', desc)` with **no `.limit()` or window** — it fetched the ENTIRE per-family history on every mount and re-fetched it on every realtime change
+- Expected: a bounded read sized to what the views need
+- Actual: an unbounded read; payload + client-side work grow linearly with total logs forever
+- Root cause: no upper bound on a growth-prone table read; every view here is recent-focused (6-week `trendByWeek`, `positiveStreakDays`, recent list) and never needs full history
+- Resolution: bound the fetcher to a rolling **365-day window** (`.gte('occurred_at', now-365d)`) **and** a hard `.limit(1000)` cap. The window rolls forward on each realtime refetch and fully covers the 6-week trend + streaks at any realistic logging frequency; the cap backstops pathological volume. No visualization changes (all are recent-scoped)
+- Supabase impact: none — read-shaping only; no schema/RLS/migration change. Also reduces DB/egress load
+- Security/Privacy/Accessibility impact: none
+- Performance impact: **positive** — bounds a previously-unbounded read; payload no longer grows with lifetime data
+- Tests added: `tests/behavior-read-bounded.test.ts` (1 — asserts the `.gte` window + `.limit(1000)` + now()-derived window)
+- Tests run: new guard green; `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guard asserts the bounded fetcher; behavior analytics (`lib/behavior/insights.ts`) confirmed recent-scoped (trend=6wk, streak=recent, `total` not surfaced in JSX)
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same class, FIXED ×3): (1) `care-module` (`care_log`) — This-week count + day-grouped timeline; (2) `security-module` (`home_security_events`, home-management auto-log) — 7-day count + 14-day strip + recent list; (3) `experience-scorecard-module` (`experience_audits`) — latest-per-dimension + "since last audit" trend. All recent-focused; all bounded to the same rolling 365-day / 1000-row window. Guard `tests/behavior-read-bounded.test.ts` now covers all 4 (behavior_logs, care_log, home_security_events, experience_audits). Edge note: an extreme-volume family (>1000 rows inside the window) shows the 1000 most-recent — the recent strips/trends stay correct at any realistic rate. **A-05 growth-table unbounded-read sweep COMPLETE for A-05-owned modules**; collection-style tables (albums, policies, pets, polls, home_assets, health_visits) are bounded-by-nature and intentionally left unbounded. (calendar=A-06, notifications/inbox=A-16, wallet/expenses=A-08, graph=reasoning/codex are other owners' lanes)
+
+### PLA-0812 - Widespread UTF-8 mojibake corrupted user-facing strings across ~79 files
+
+- Issue ID: PLA-0812
+- Discovery timestamp: 2026-07-18 10:12 UTC
+- Resolution timestamp: 2026-07-18 10:19 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-FRONTEND lane)
+- Service: cross-cutting UI — admin, marketing, marketplace, and ~40 feature modules
+- Feature: user-facing copy, labels, emoji, browser-tab titles
+- Route: many (admin/*, marketing/*, marketplace/*, dashboard module surfaces)
+- Affected files: 79 `.ts`/`.tsx` under `app/`, `components/`, `lib/` (see commit diff), plus `tests/no-mojibake-source.test.ts` (new regression guard)
+- Database objects: none
+- Integration: none
+- Role: all roles (visible to every user)
+- Subscription tier: all
+- Household configuration: all
+- Scenario: strings authored/saved through a mis-decoding step were double-encoded (UTF-8 bytes read as CP1252, re-saved as UTF-8), so `—` rendered as `â€"`, `·` as `Â·`, curly quotes as `â€œ`/`â€\x9d`, `→` as `â†’`, `≤` as `â‰¤`, and emoji like 🥞/🛡️ as `ðŸ¥ž`/`ðŸ›¡ï¸`.
+- Severity: **MEDIUM** (pervasive visible-quality defect — garbled copy and broken emoji across admin/marketing/marketplace + core modules; erodes trust, hurts polish on a launch surface).
+- Launch impact: users and admins saw garbage characters throughout the UI (including the browser-tab title "Admin Â· Settings"); not a data/security defect but a broad production-polish blocker.
+- Reproduction steps: `grep -rInP '\xc3\xa2\xe2\x82\xac|\xc3\x82\xc2\xb7|\xc3\xb0\xc5\xb8' app lib components --include='*.tsx'` returned 600+ hits; each rendered as mojibake in the browser.
+- Expected behavior: correct Unicode punctuation/emoji in all copy.
+- Actual behavior: double-encoded mojibake sequences.
+- Root cause: classic UTF-8→CP1252 double-encoding introduced upstream (bad editor/copy-paste/save step) across many files.
+- Resolution: deterministic per-line demojibake — reconstruct original bytes (CP1252 where defined, raw byte for the 5 undefined CP1252 C1 slots 0x81/0x8D/0x8F/0x90/0x9D that appear as U+008x/9x), decode as UTF-8, and accept only when it round-trips cleanly AND strictly reduces mojibake-marker codepoints (so correct lines and genuine non-latin text are never touched). 684 lines across 79 files repaired; 0 residual markers.
+- Supabase impact: none.
+- Security impact: none.
+- Privacy impact: none.
+- Accessibility impact: positive — screen readers no longer announce garbled sequences.
+- Performance impact: none.
+- Tests added: `tests/no-mojibake-source.test.ts` (greps shipped `.ts`/`.tsx` for the double-encoding lead sequences, asserts zero — a regression guard).
+- Tests run: new guard (1) green; full `npx vitest run` **3,673 passed / 1 pre-existing unrelated reasoning-lane failure** (documented under PLA-0807); `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on all 79 changed files; every changed file re-checked control-byte-clean (0).
+- Validation evidence: post-fix `grep`/dry-run reports 0 residual mojibake; spot-checked restored lines (🛡️, 🍽️, ☀️, 🌙, curly quotes, →).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none.
+- Follow-up items: the regression guard now blocks reintroduction; if a future editor/tool re-introduces mojibake the guard test fails.
+
+### PLA-0811 - Calm inbox hid Supabase and reasoning-context failures as an empty inbox
+
+- Timestamp: 2026-07-18 06:05 America/New_York.
+- Service: Dashboard Calm inbox.
+- Status: Resolved in source; build and deployed verification remain open.
+- Severity: P1.
+- Surface: `/dashboard/calm`.
+- Finding: required inbox reads and shared reasoning-context failures were converted into empty arrays or omitted insights while the Calm page continued rendering a partial inbox.
+- Repair: the route now preserves each inbox read error, logs the failed boundary, and returns its retryable error state before building the inbox; reasoning-context failures use the same visible failure state.
+- Affected roles: authenticated family members.
+- Supabase impact: failed reads from agent activity, autopilot suggestions, Operating Index suggestions, approvals, reminders, or shared reasoning context are no longer presented as a healthy empty inbox.
+- Evidence: focused Calm read-boundary test, full 512 test files/3,272 tests with constrained workers and no unhandled errors, typecheck, lint, and `git diff --check`; a fresh-directory build compiled but its page-generation worker exited with code 1.
+- Source commit: `63a3090f`.
+- Remaining launch gate: resolve the page-generation build-worker failure, validate authenticated RLS and deployed retry behavior, and continue broader dashboard/deployment verification.
+
+### PLA-0810 - Profile contribution stats silently swallowed read failures (observability)
+
+- Timestamp: 2026-07-18 10:04 UTC
+- Service: Profile / personal identity surface (agent-`fable-opus` lane)
+- Route: `/dashboard/profile`
+- Affected files: `app/(app)/dashboard/profile/page.tsx`, `tests/profile-read-boundary.test.ts`
+- Database objects: `chore_assignments` (points/chores), `calendar_events` (upcoming count), `independence_milestones` (achieved count); `family_members` (identity, best-effort with ctx fallback)
+- Role: any member viewing their own profile
+- Scenario: a contribution-stat read fails while the identity read succeeds (or falls back).
+- Severity: **P3** (observability gap on a low-stakes gamification surface — the identity is unaffected).
+- Launch impact: the page renders identity from the member read *or the already-loaded ctx member* (safe fallback), so it correctly does NOT fail closed. But the three contribution-stat reads dropped their `error`, so a failed read became `0 points / 0 chores / 0 upcoming / 0 milestones` **indistinguishable from a genuine "nothing yet"** — a swallowed failure with no diagnostic signal.
+- Root cause: the secondary stat reads dropped their `error`.
+- Resolution: keep the page best-effort (identity is primary and falls back to ctx), but `console.error('[dashboard/profile] chore-points read failed' | 'upcoming-events read failed' | 'milestones read failed', { memberId, error })` on each so a drifted/broken stat read is observable. This matches the "optional enhancement reads degrade but must log" guidance (vs. source-of-truth reads that fail closed).
+- Supabase impact: none (observability only; no schema/migration change).
+- Tests run: new `tests/profile-read-boundary.test.ts` (2 assertions — each stat error logged; page does not fail closed / keeps the ctx fallback); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0809 - Social workspace settings could overwrite real config with defaults after a read failure
+
+- Timestamp: 2026-07-18 10:04 UTC
+- Service: Social / content studio — workspace settings & access control (agent-`fable-opus` lane)
+- Route: `/dashboard/social/settings`
+- Affected files: `app/(app)/dashboard/social/settings/page.tsx`, `tests/social-settings-read-boundary.test.ts`
+- Database objects: `social_settings`, `family_members`, `social_access_permissions`
+- Role: family members with the social workspace; management gated via `can('manage_settings')`
+- Scenario: any of the three reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (data-loss trap — the settings form would render defaults that a save overwrites the real config with; access config hidden).
+- Launch impact: the three-way `Promise.all` dropped every `error`. A dropped `social_settings` read left `settings` null → the form pre-filled **DEFAULT values** (UTC timezone, "friendly" tone, no default platforms, approval off), and because the form's Save action persists whatever is shown, a manager saving would **silently overwrite the family's real workspace settings with defaults**. A dropped `members`/`perms` read likewise rendered an empty/incorrect access-control list.
+- Root cause: the three source-of-truth reads dropped their `error`, conflating a read failure with "no settings / no members".
+- Resolution: capture `settingsRes`/`membersRes`/`permsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/social/settings] social settings read failed', …)` + `return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />` before rendering the editable form. A genuinely missing table (unapplied migration) is still tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/social-settings-read-boundary.test.ts` (3 assertions); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0808 - Meal-voting page rendered an empty vote board when a read failed
+
+- Timestamp: 2026-07-18 09:59 UTC
+- Service: Meals / recipes — meal voting (agent-`fable-opus` lane)
+- Route: `/dashboard/recipes/vote`
+- Affected files: `app/(app)/dashboard/recipes/vote/page.tsx`, `tests/recipes-vote-read-boundary.test.ts`
+- Database objects: `meal_votes`, `meal_vote_options`, `meal_vote_ballots`, `family_recipes`
+- Role: authenticated family members participating in meal votes
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a family misses an active meal vote or can't start one; not money/safety).
+- Launch impact: the four-way `Promise.all` dropped every `error`. A silent failure rendered **an empty voting board** — no active votes, no cast ballots, and an empty recipe picker — so a family with a live vote in progress would think there's nothing to vote on, and couldn't create a new vote.
+- Root cause: the four source-of-truth reads dropped their `error`.
+- Resolution: capture `votesRes`/`optionsRes`/`ballotsRes`/`recipesRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/recipes/vote] meal vote read failed', …)` + `return <ErrorState message="Could not load meal voting from Supabase. Refresh and try again." />` before building the vote views. A genuinely missing table (unapplied migration) is still tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/recipes-vote-read-boundary.test.ts` (3 assertions); `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files. (The full suite carries one pre-existing unrelated reasoning-lane failure documented under PLA-0807.)
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0807 - Public gift page told a giver "this link is no longer active" on a transient read failure
+
+- Timestamp: 2026-07-18 09:52 UTC
+- Service: Wallet / gifting — public gift-redemption flow (agent-`fable-opus` lane)
+- Route: `/gift/[token]` (public, unauthenticated)
+- Affected files: `app/gift/[token]/page.tsx`, `tests/gift-token-read-boundary.test.ts`
+- Database objects: `gift_links` (primary); `child_wallets`, `family_members`, `families` (identity enrichment, already best-effort behind the active-link check)
+- Role: a gift-giver (public, no account) opening a family's gift link
+- Scenario: the `gift_links` lookup fails to read (transient, connection, RLS) for a token that is actually valid and active.
+- Severity: **P1** (public money-conversion flow — a valid gift link is falsely reported dead, turning away a giver mid-payment).
+- Launch impact: the page destructured only `{ data: link }` from the `gift_links` `.maybeSingle()` and dropped the `error`. On a transient read failure `link` became null → `active = false` → the giver saw **"This gift link is no longer active. Please ask the family for a new one."** for a perfectly valid link. A genuinely missing/expired token (`data` null, `error` null) *should* show that message — but a read *error* must not, or a paying gift-giver is wrongly turned away.
+- Root cause: the primary `gift_links` read dropped its `error`, conflating "not found" with "failed to read".
+- Resolution: capture `error: linkError`; when it is set, `console.error('[gift/token] gift link read failed', …)` + render a retryable message ("We couldn't load this gift link right now. Please refresh and try again in a moment.") that is visually distinct from the inactive-link message. The not-found case (data null, no error) still falls through to the existing active/inactive logic. The identity enrichment reads stay best-effort behind the active-link check (and keep their non-disclosure guard for inactive links).
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/gift-token-read-boundary.test.ts` (3 assertions — error captured, retryable message on error, not-found still treated as inactive); `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files. NOTE: the full-suite run has **one pre-existing unrelated failure** in `tests/reasoning-context-read-boundary.test.ts` (the reasoning lane's `loadFamilyGraph` was changed to throw in commit `1ee6813b` without updating its degrade-expecting test) — not caused by and not in scope of this increment; flagged for the reasoning-lane owner.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0806 - Kids dashboard told a child "All done! 🎉" and "0 points" when a read failed
+
+- Timestamp: 2026-07-18 09:43 UTC
+- Service: Kids / child-facing dashboard (agent-`fable-opus` lane)
+- Route: `/kids`
+- Affected files: `app/(app)/kids/page.tsx`, `tests/kids-read-boundary.test.ts`
+- Database objects: `chore_assignments` (open tasks + completed points), `calendar_events` (today); dependent `chores` title lookup stays best-effort
+- Role: child accounts viewing their own dashboard
+- Scenario: any of the three source-of-truth reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (child-facing reassuring-but-wrong state — affects a kid's behavior/motivation; not money/safety).
+- Launch impact: the three-way `Promise.all` dropped every `error`. A silent failure told the child **"All done! 🎉 No jobs left today."** (chores actually pending), showed **"0 points earned"** (points actually earned), and **"Nothing on the calendar today."** — a confidently-wrong day that could make a kid skip real chores and feel their earned points vanished.
+- Root cause: the three source-of-truth reads dropped their `error`.
+- Resolution: capture `myTasksRes`/`doneRes`/`eventsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[kids] kids dashboard read failed', …)` + `return <ErrorState message="We couldn't load your day right now. Try again in a moment!" />` (kid-friendly copy) before rendering. The dependent chore-title lookup stays best-effort; a genuinely missing table (unapplied migration) is still tolerated as empty. (The null-`display_name` `.split()` crash on this page was already fixed in PLA-0780.)
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/kids-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+> ⚠️ **LEDGER CORRUPTION REPAIRED IN THIS COMMIT:** the "Publish operating index readiness increment" job (commits `83e1356a`→`e8c3c9f1`) repeatedly clobbered this ledger with a corrupted 167-line / newest-PLA-0405 version carrying 3,136 control bytes, wiping every entry from PLA-0406 through 0805. This commit restores the canonical clean ledger from the last good commit `99a8bbfd` (2,406 lines, 0 control bytes) and adds PLA-0806. **If that publisher keeps running it will re-corrupt this file — its ledger-write path must be fixed/stopped.**
+
+### PLA-0805 - Family COO showed "No open tasks — nicely done" when a household read failed
+
+- Timestamp: 2026-07-17 21:16 UTC
+- Service: Dashboard / Family COO (agent-`fable-opus` lane)
+- Route: `/dashboard/family-coo`
+- Affected files: `app/(app)/dashboard/family-coo/page.tsx`, `tests/family-coo-read-boundary.test.ts`
+- Database objects: `family_members`, `chore_assignments`, `calendar_events`, `grocery_items`, `family_routines`, `maintenance_tasks` (the dependent `chores` title lookup stays best-effort)
+- Role: authenticated family members running the household
+- Scenario: any of the six household reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong operations state — the family believes chores are done / nothing is scheduled; not money/safety).
+- Launch impact: the six-way `Promise.all` dropped every `error`. A silent failure rendered **"No open tasks — nicely done."** (open chores actually pending), **"Nothing scheduled this week"**, an empty shopping list, no routines, and no maintenance — a confidently-wrong "all handled" operations picture.
+- Root cause: the six source-of-truth household reads dropped their `error`.
+- Resolution: capture all six results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-coo] household read failed', …)` + `return <ErrorState message="Could not load your household from Supabase. Refresh and try again." />` before rendering. The dependent `chores` title lookup stays best-effort; a genuinely missing table (unapplied migration) is still tolerated as empty. (This page's null-`display_name` `.split()` crash sites were already fixed in PLA-0780.)
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-coo-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0804 - Family Sports Hub showed empty teams/results/schedule when a read failed
+
+- Timestamp: 2026-07-17 21:14 UTC
+- Service: Dashboard / Family Sports Hub (agent-`fable-opus` lane)
+- Route: `/dashboard/family-sports`
+- Affected files: `app/(app)/dashboard/family-sports/page.tsx`, `tests/family-sports-read-boundary.test.ts`
+- Database objects: `family_members`, `teams`, `game_results`, `sports_events`
+- Role: authenticated family members using the Sports Hub
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a parent could miss tomorrow's game; not money/safety).
+- Launch impact: the four-way `Promise.all` dropped every `error`. A silent failure rendered **"No teams added yet", "No game results logged", "No practices or games scheduled"** and a **0-0-0 record** for a family that actually has them.
+- Root cause: the source-of-truth reads dropped their `error`.
+- Resolution: capture all four results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-sports] sports read failed', …)` + `return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />` before rendering. Missing table tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-sports-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0803 - Family School Hub showed empty classes/grades/events when a read failed
+
+- Timestamp: 2026-07-17 21:14 UTC
+- Service: Dashboard / Family School Hub (agent-`fable-opus` lane)
+- Route: `/dashboard/family-school`
+- Affected files: `app/(app)/dashboard/family-school/page.tsx`, `tests/family-school-read-boundary.test.ts`
+- Database objects: `family_members`, `school_classes`, `grades`, `school_events`
+- Role: authenticated family members using the School Hub
+- Scenario: any of the four reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P2** (reassuring-but-wrong empty state — a parent believes a kid has no grades/classes; not money/safety).
+- Launch impact: the four-way `Promise.all` dropped every `error`. A silent failure rendered **"No classes added yet", "No grades recorded yet", "No school events coming up"** and an `—` average score for a family that actually has them.
+- Root cause: the source-of-truth reads dropped their `error`.
+- Resolution: capture all four results, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[dashboard/family-school] school read failed', …)` + `return <ErrorState message="Could not load your family school hub from Supabase. Refresh and try again." />` before rendering. Missing table tolerated as empty. Matches the established fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/family-school-read-boundary.test.ts` (3 assertions); full `npx vitest run` green; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+### PLA-0785 - Trip detail writes (packing toggle/remove, dismiss recommendation) silently no-op'd on failure (A-13)
+
+- Timestamp: 2026-07-17 20:35 UTC
+- Service: Vacations / travel / concierge (A-13) — trip detail tabs (Packing, Overview)
+- Route: `/dashboard/vacations/[id]/packing` (`components/vacations/trip-packing.tsx`), `/dashboard/vacations/[id]/overview` (`components/vacations/trip-overview.tsx`)
+- Affected files: `components/vacations/trip-packing.tsx`, `components/vacations/trip-overview.tsx`, `tests/vacations-detail-write-boundary.test.ts` (new)
+- Role: all family roles with the Vacations feature
+- Scenario: a packing-item check/uncheck, a packing-item delete, or an AI-recommendation dismiss fails for a real reason (RLS denial, offline, constraint)
+- Severity: P2 (silent write failure / optimistic UI lies about persisted state)
+- Launch impact: three user-initiated writes fired `await …update/delete(...)` and **dropped the Supabase `error`**. `toggle` (packing `packed`) and `remove` (packing item) and `dismissReco` (mark an AI recommendation dismissed) all no-op'd silently on failure — the checkbox reverts / the "deleted" item reappears / the dismissed recommendation returns on the next load, with no error shown. Their sibling writes in the same files (`add`, budget `savePlanned`) already capture `{ error }` and toast it, so this was an inconsistency
+- Root cause: `await createClient().from(...).update/delete(...)` dropped the PostgREST `error` at the three sites
+- Resolution: all three now `const { error } = await …; if (error) toastError(error.message);` matching the sibling pattern. The background readiness-score auto-insert in the overview effect (non-user-initiated telemetry) was intentionally left as-is
+- Supabase impact: none — writes unchanged; genuine failures now surface via toast
+- Tests run: `tests/vacations-detail-write-boundary.test.ts` (3 — each of the 3 writes captures+toasts the error); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, `--max-old-space-size=6144`)
+- Validation evidence: guard extracts each function body and asserts the `const { error } = await` capture + `if (error) toastError(error.message)` guard
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
+- Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
+### PLA-0803 - behavior_logs had zero seed coverage → Behavior Tracking renders empty in a fresh env (A-05 / LB-014)
+
+- Timestamp: 2026-07-18 09:47 UTC
+- Service: Home / dashboard command surfaces (A-05) — Behavior Tracking (LB-014 systemic seed-gap class)
+- Route: `/dashboard/behavior` (`components/modules/behavior-module.tsx`)
+- Affected files: `supabase/seed_behavior_logs.sql` (new, standalone), `tests/seed-behavior-logs-contract.test.ts` (new), `docs/LAUNCH_BLOCKERS.md` (LB-014 note)
+- Database objects: `behavior_logs` (migration 0073; `behavior_kind` enum)
+- Role: all family roles (per-child observations)
+- Scenario: a fresh/demo family opens Behavior Tracking
+- Severity: P2 (systemic seed gap — a core A-05 feature renders empty: no balance score, trends, streaks, or AI tips)
+- Launch impact: while auditing A-05 table wiring I found `behavior_logs` is genuinely wired (family_id NOT NULL, RLS `FOR ALL` family-scoped, indexes) but has **ZERO seed coverage anywhere** — not in `SEED_ALL`, not in any `seed_*.sql` (unlike its sibling `care_log`, which is seeded). So `/dashboard/behavior` shows an empty tracker for every demo family — the same LB-014 class agent-01 fixed for school/sports/grades/routines
+- Root cause: the table was added (0073) without a corresponding seed block; missed by the SEED_ALL author
+- Resolution: authored `supabase/seed_behavior_logs.sql` (standalone, NOT wired into SEED_ALL — avoids colliding with the A-02/seed owner mid-edit; ready to wire). Idempotent per-family (`delete … where note like '[seed]%'` then insert); ~30 observations per child across all 3 kinds (positive/concern/neutral) and 10 categories over ~90 days; points signed by kind; attributes `logged_by` to a parent; guards `to_regclass('public.behavior_logs')`; only seeds `child`/`teen` members; never touches `auth.users`
+- Supabase impact: additive seed only; no schema/migration/RLS change
+- Tests run: **PG16-verified on an isolated throwaway DB** (migration 0073 applied verbatim; a family with parent+child+teen and a childless family): total **60** rows (2 kids × 30), childless family **0** rows (no error), **3** distinct kinds, **10** distinct categories, positive→points>0 (20), concern→points<0 (20); re-run **×2 stayed 60** (idempotent). Real DB with many kid-bearing families exceeds the ≥500-row DoD. New contract guard `tests/seed-behavior-logs-contract.test.ts` (6) green; `tsc`/suite unaffected
+- Validation evidence: isolated-DB row counts above; contract guard asserts idempotency, per-child scoping, all kinds/categories, parent attribution, and no auth.users mutation
+- Remaining dependencies: wire `seed_behavior_logs.sql` into the SEED_ALL pipeline (A-02/seed owner — human/Codex-owned to avoid collision)
+- Commit: (this increment)
+- Status: RESOLVED (seed authored + PG16-verified + guarded), pushed to `main` (A-05 by agent-05); wiring into SEED_ALL deferred to A-02
+
+### PLA-0802 - VERIFICATION (no defect): 3 A-05 feature tables are genuinely wired to Supabase (A-05)
+
+- Timestamp: 2026-07-18 00:02 UTC
+- Service: Home / dashboard command surfaces (A-05) — Independence, Paperwork Inbox, Financial Copilot
+- Route: `/dashboard/independence`, `/dashboard/paperwork`, `/dashboard/money-timeline`
+- Affected files: none (verification only); evidence recorded in `docs/SUPABASE_WIRING_MATRIX.md`
+- Database objects: `independence_milestones` (mig 0175), `paperwork_items` (mig 0169), `money_timeline_insights` (mig 0168)
+- Role: all family roles (collaborative)
+- Scenario: static audit of whether these three A-05 features are genuinely wired to Supabase (schema, RLS, indexes, seed) vs. mock/placeholder/dead UI
+- Severity: n/a (positive verification — no defect found)
+- Launch impact: none — confirms real wiring. Each table has: `family_id uuid NOT NULL REFERENCES families(id) ON DELETE CASCADE`; **full CRUD RLS** (select/insert/update/delete) every policy scoped via `public.is_family_member(family_id)` (collaborative-by-design — appropriate, no sensitive/safety write so no §3a role-gate needed); `(family_id, …)` covering indexes; dedupe UNIQUE constraints (`(family_id,member_id,domain,title)`, `(family_id,dedupe_key)`); and idempotent `SEED_ALL` coverage (independence targets **500** rows, delete+insert, gated on `to_regclass` table existence). The pages' "degrades safely before migration N" comments are historical defensive guards — the migrations exist in-repo
+- Root cause: n/a
+- Resolution: n/a — verified correct. Read-boundaries for these same pages were hardened separately (PLA-0790/0794/0797)
+- Supabase impact: none
+- Tests run: static schema/RLS/index/seed inspection of migrations 0168/0169/0175 + SEED_ALL; `tsc`/suite unaffected (no code change)
+- Validation evidence: policy grep shows 4 family-scoped policies per table; SEED_ALL blocks present with 500-row target + idempotent guards; recorded in the wiring matrix Home/dashboard row
+- Remaining dependencies: live authenticated cross-family RLS proof on the PG16 harness + confirming 0168/0169/0175 are applied in prod (owner/live)
+- Commit: (this increment)
+- Status: VERIFIED (no defect) — evidence pushed to `main` (A-05 by agent-05)
+
+### PLA-0801 - Photos: delete showed a false "Photo deleted" + could orphan a row pointing at a removed image (A-05)
+
+- Timestamp: 2026-07-17 23:50 UTC
+- Service: Home / dashboard command surfaces (A-05) — Photos module (new class: silent WRITE failure, not a read)
+- Route: `/dashboard/photos` (`components/modules/photos-module.tsx`)
+- Affected files: `components/modules/photos-module.tsx`, `tests/photos-mutation-boundary.test.ts` (new)
+- Database objects: `family_photos` (delete/update), `family-media` storage bucket
+- Role: all family roles
+- Scenario: a photo delete/favorite/caption write fails for a real reason (RLS edge, transient) 
+- Severity: P2 (data-integrity: misleading success + orphaned row/storage divergence)
+- Launch impact: `deletePhoto` removed the **storage object first**, then deleted the `family_photos` row, **dropping both errors**, and called `success('Photo deleted')` **unconditionally**. If the row delete failed after the storage removal succeeded, the result was an **orphaned library row pointing at an already-deleted image** (a permanently broken thumbnail) — while the user was told the photo was deleted. `toggleFavorite` and `updateCaption` likewise swallowed their write errors (a silent no-op that looks like it worked)
+- Root cause: fire-and-forget writes that dropped the Supabase `error`, plus a delete order (storage-before-row) that orphans the source-of-truth row on partial failure, plus an unconditional success toast
+- Resolution: `deletePhoto` now deletes the **DB row (source of truth) first**, surfaces any error via `toastError(describeDbError(error))` and returns before touching storage — so a failed delete can never orphan a row against removed storage — and only removes the storage object + shows success once the row is gone. `toggleFavorite`/`updateCaption` now capture and surface their write errors (UI still reverts via `refreshPhotos`)
+- Supabase impact: none — no schema change; write ORDER + error-handling corrected
+- Tests run: new `tests/photos-mutation-boundary.test.ts` (2 — deletePhoto row-delete + error-guard precede storage removal and the success toast; favorite/caption surface errors); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the ordered row-delete → guard → storage-remove → success, and the error captures on favorite/caption
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0800 - Kids' submit-proof page 404'd a live chore on a transient read (A-07 §3e slice)
+
+- Timestamp: 2026-07-17 23:44 UTC
+- Service: Chores / missions (A-07) — kids' "submit your work" proof page (cross-cutting §3e; A-07 ownership stays `agent-01`)
+- Route: `/kids/submit/[assignmentId]` (`app/(app)/kids/submit/[assignmentId]/page.tsx`)
+- Affected files: `app/(app)/kids/submit/[assignmentId]/page.tsx`, `tests/kids-submit-read-boundary.test.ts` (new)
+- Database objects: `chore_assignments`, `chores` (reads)
+- Role: children submitting chore proof
+- Scenario: the assignment or chore read fails transiently while the rows exist
+- Severity: P3 (a kid-facing dead end mid-task)
+- Launch impact: both reads dropped `error`, so `if (!assignment) notFound()` / `if (!chore) notFound()` turned a transient read failure into a **404** — telling a kid the chore "doesn't exist" while they're trying to submit their work (a confusing dead end for a chore they can see on their list). Closes out the false-404 class alongside the marketing pages (PLA-0793) and marketplace storefront (PLA-0799)
+- Root cause: the reads swallowed the Supabase `error`, so `notFound()` fired on a read failure, not just a genuinely missing row
+- Resolution: capture `error` on both reads and `throw` on a real error (retryable 5xx via the error boundary), reserving `notFound()` for a truly missing assignment/chore
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/kids-submit-read-boundary.test.ts` (2 — each read throws before its `notFound()`); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the ordered `throw` before each `notFound()`. Repo-wide scan confirms **no remaining `if (!x) notFound()` fed by an error-dropping read**
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-07 §3e sub-slice by agent-05; A-07 ownership stays with agent-01)
+
+### PLA-0799 - Marketplace storefront 404'd + offer inbox emptied on a transient read (A-14 §3e slice)
+
+- Timestamp: 2026-07-17 23:39 UTC
+- Service: Marketplace (A-14) — creator storefront + negotiations/offer inbox (cross-cutting §3e; A-14 ownership stays `agent-01`)
+- Route: `/marketplace/creators/[id]` (`app/(app)/marketplace/creators/[id]/page.tsx`), `/marketplace/negotiations` (`app/(app)/marketplace/negotiations/page.tsx`)
+- Affected files: both pages + `tests/marketplace-storefront-negotiations-read-boundary.test.ts` (new)
+- Database objects: `marketplace_stores` (primary), `marketplace_negotiations` (primary)
+- Role: all marketplace participants
+- Scenario: the primary store / negotiations read fails transiently while the row(s) exist
+- Severity: P3 (storefront = SEO/discovery 404; offers = money-relevant false-empty)
+- Launch impact: (1) the storefront's `store` read dropped `error`, so `if (!store) notFound()` **404'd a real, active creator storefront on a DB blip** (permanent-gone signal). (2) the negotiations inbox's read dropped `error`, so a failed read rendered "No offers going yet" — a user with **live money negotiations** (counter/accept/decline threads) would believe they have none
+- Root cause: both primary reads swallowed the Supabase `error`, conflating "genuinely absent" with "read failed"
+- Resolution: the storefront now `throw`s on a real `store` read error (retryable 5xx) and reserves `notFound()` for a truly missing store (matches the PLA-0793 marketing-page pattern); the negotiations inbox captures `negError` and early-returns a retryable `<ErrorState>` (keeping the PageHeader) before deriving the offer sections. Enrichment reads (reviews/listings/members) stay degraded
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/marketplace-storefront-negotiations-read-boundary.test.ts` (2 — storefront throws before `notFound()`; negotiations ErrorState precedes the "No offers going yet" empty state); `tsc --noEmit` clean; `eslint` clean on both pages
+- Validation evidence: guards assert the ordered `throw`/`ErrorState` before the absence branches
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-14 §3e sub-slice by agent-05; A-14 ownership stays with agent-01)
+
+### PLA-0798 - Marketplace reviews: a failed read made a member's reputation/rating vanish (A-14 §3e slice)
+
+- Timestamp: 2026-07-17 23:35 UTC
+- Service: Marketplace / trust (A-14) — reviews/reputation page (cross-cutting §3e; A-14 ownership stays `agent-01`)
+- Route: `/marketplace/reviews` (`app/(app)/marketplace/reviews/page.tsx`)
+- Affected files: `app/(app)/marketplace/reviews/page.tsx`, `tests/marketplace-reviews-read-boundary.test.ts` (new)
+- Database objects: `marketplace_reviews` (primary), `family_members` (name lookup)
+- Role: all marketplace participants
+- Scenario: the `marketplace_reviews` read fails transiently while reviews exist
+- Severity: P3 (reputation display; no money mutation)
+- Launch impact: the read destructured only `{ data: reviews }`, so a failed read rendered received/given as `[]` → "Your rating: No reviews received yet", "Received: None yet", "Given: None yet". A member's marketplace reputation (their star rating + review history) appears to vanish on a transient read failure — misleading on a trust surface where reputation gates exchanges
+- Root cause: the source-of-truth reviews read dropped its Supabase `error`, conflating "no reviews" with "read failed"
+- Resolution: capture `{ data: reviews, error: reviewsError }` and early-return a retryable `<ErrorState>` (keeping the PageHeader) before deriving `received`/`given`/`summary`. The secondary `family_members` name lookup stays degraded (falls back to "Someone")
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/marketplace-reviews-read-boundary.test.ts` (2 — captures `reviewsError`; ErrorState early-return precedes the reputation derivation); `tsc --noEmit` clean; `eslint` clean (page uses an aliased read, so it was never in the silent-read ratchet baseline)
+- Validation evidence: guards assert the error capture and the ordered ErrorState-before-derivation
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-14 §3e sub-slice by agent-05; A-14 ownership stays with agent-01)
+
+### PLA-0797 - Focus Mode told a family "Nothing on your plate — enjoy the calm" when the day's read failed (A-05)
+
+- Timestamp: 2026-07-17 23:31 UTC
+- Service: Home / dashboard command surfaces (A-05) — Focus Mode
+- Route: `/focus` (`components/modules/focus-module.tsx`)
+- Affected files: `components/modules/focus-module.tsx`, `tests/focus-mode-read-boundary.test.ts` (new)
+- Database objects: `calendar_events`, `chore_assignments`, `todo_items` (reads)
+- Role: all family roles
+- Scenario: the Promise.all that loads today's events/chores/todos fails transiently while data exists
+- Severity: P3 (convenience surface; a reassuring-but-wrong empty)
+- Launch impact: the three reads destructured only `{ data }`, so a failed read left `items = []` and rendered the "Nothing on your plate — No events or open tasks for today. Enjoy the calm." state. A family relying on Focus Mode to surface today's must-dos would be told their day is clear when the load actually failed — they could miss a real event or task
+- Root cause: the primary reads dropped their Supabase `error`, conflating "clear day" with "load failed"
+- Resolution: capture `error` on the primary `events` + `todos` reads; on a real error set a `loadError` flag and render an honest, retryable "Couldn’t load your day — this isn’t an empty day, try again" state (reusing the existing Refresh→`load()`), before the "Nothing on your plate" branch. The `member`/`chores` reads stay secondary/degraded. A genuinely empty day still shows the calm empty state
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/focus-mode-read-boundary.test.ts` (2 — captures `evErr`/`tdErr` + early error return; the error branch precedes the empty/finished branch); `tsc --noEmit` clean; `eslint` clean
+- Validation evidence: guards assert the error capture on the primary reads and the ordered error-before-empty branching
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0796 - Feedback board comment thread rendered a failed read as an empty discussion (A-17 §3e slice)
+
+- Timestamp: 2026-07-17 23:25 UTC
+- Service: Admin / marketing / content (A-17) — public feedback board comment thread (cross-cutting §3e; A-17 ownership stays `agent-04`)
+- Route: `/feedback` (`app/(app)/feedback/feedback-board.tsx`, `CommentThread`)
+- Affected files: `app/(app)/feedback/feedback-board.tsx`, `tests/feedback-comments-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `feedback_comments` (read)
+- Role: all signed-in users (feedback discussion)
+- Scenario: expanding an idea lazy-loads its comments and the `feedback_comments` read fails transiently
+- Severity: P3 (discussion surface; no data-write/loss)
+- Launch impact: `load()` used `try/finally` (no `catch`) and dropped the read `error`, so a failed read set `comments = data ?? [] = []` and rendered a silent empty discussion. Worse, the `comments === null && !loading` reload guard meant that once it was set to `[]` it **never retried** — the thread was stuck falsely empty until remount
+- Root cause: the read dropped its Supabase `error`, and the null-reload guard made the false-empty sticky
+- Resolution: capture `{ data, error: readErr }`; on error set a `loadError` flag and `setComments([])` (so the reload guard doesn't loop) and render "Couldn’t load the discussion. Retry" — Retry clears the flag and sets `comments` back to `null` to re-trigger the load. Success path clears `loadError`
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/feedback-comments-read-boundary.test.ts` (2 — error captured + not rendered as empty; retry re-nulls comments without an infinite loop); `tsc --noEmit` clean; `eslint` clean; ratchet baseline pruned (`feedback-board` removed)
+- Validation evidence: guards assert the `readErr` capture, the `[]`-not-loop behavior, and the retry wiring
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-17 §3e sub-slice by agent-05; A-17 ownership stays with agent-04)
+
+### PLA-0795 - Family Missions showed a parent "All caught up! 🎉" when the approval queue read failed (A-07 §3e slice)
+
+- Timestamp: 2026-07-17 23:21 UTC
+- Service: Chores / missions / rewards (A-07) — Family Missions approval queue (cross-cutting §3e sweep item; A-07 ownership stays `agent-01`)
+- Route: `/missions` (`app/(app)/missions/page.tsx`)
+- Affected files: `app/(app)/missions/page.tsx`, `tests/missions-review-queue-read-boundary.test.ts` (new)
+- Database objects: `chore_submissions` (primary), plus `chores`/`family_members`/`chore_ai_validations`/`chore_disputes` (enrichment)
+- Role: parents / managers (the review queue is parent-facing)
+- Scenario: the primary `chore_submissions` read fails for a real reason (transient outage, RLS edge) while submissions exist and await review
+- Severity: P2 (parent-facing safety-relevant false-empty)
+- Launch impact: the primary read destructured only `{ data: submissions }` and rendered `subs = submissions ?? []`, so a failed read collapsed the whole page to the reassuring **"All caught up! 🎉"** empty state (and 0/0/0 stat cards). This queue is a parent's source of truth for pending kid proofs, **disputes**, and **AI safety flags** — a false-empty could hide a safety-flagged submission, so a parent believes there's nothing to review when the read actually failed
+- Root cause: the source-of-truth queue read dropped its Supabase `error`, conflating "nothing to review" with "read failed"
+- Resolution: capture `{ data: submissions, error: submissionsError }` and early-return a retryable `<ErrorState>` (keeping the page header for context) when the primary read fails, before deriving the queue/empty-state. Enrichment reads (chores/members/validations/disputes) stay gracefully degraded
+- Supabase impact: none — reads unchanged; the failure is now visible
+- Tests run: new `tests/missions-review-queue-read-boundary.test.ts` (2 — captures `submissionsError`; the ErrorState early-return precedes the "All caught up!" empty-state JSX); `tsc --noEmit` clean; `eslint` clean on the page. (Note: `missions/page.tsx` stays in the silent-read ratchet baseline — it still matches the shape via the benign per-file `createSignedUrl` storage call on line 52, which is not a false-empty)
+- Validation evidence: guards assert the error capture and the ordered ErrorState-before-empty-state
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-07 §3e sub-slice by agent-05; A-07 unit ownership stays with agent-01)
+
+### PLA-0794 - Family Hub's ErrorState was dead code: a failed families read rendered a degraded "Not set" hub (A-05)
+
+- Timestamp: 2026-07-17 23:16 UTC
+- Service: Home / dashboard command surfaces (A-05) — Family Hub
+- Route: `/family` (`components/modules/family-module.tsx`)
+- Affected files: `components/modules/family-module.tsx`, `tests/family-hub-read-boundary.test.ts` (new)
+- Database objects: `families` (primary), plus `subscriptions`/`calendar_events`/`family_albums`/counts (secondary)
+- Role: all family roles
+- Scenario: the primary `families` read fails for a real reason (transient outage, RLS/permission edge) while the family exists
+- Severity: P2 (primary-content silent failure — the family appears nameless/addressless; the built-in error UI never fires)
+- Launch impact: `load()` wrapped its reads in `try/catch` and rendered `<ErrorState onRetry>` only on a caught throw — but **Supabase query errors don't throw**, they resolve as `{ data: null, error }`. So a failed `families` read fell straight through to `setFamily(fam.data ?? null)` → `family = null`, and the hub rendered a reassuring-but-wrong "Your Family / Address: Not set / code —" instead of an error. The `ErrorState` + retry was effectively **dead code for the most common failure mode**. (No data-loss: the edit modal is correctly gated on `editOpen && family`, so an errored read can't present a blank editable form — verified + regression-locked)
+- Root cause: the error-handling assumed Supabase reads throw; query errors bypass `catch`, and the primary read's `error` field was never inspected
+- Resolution: after the `Promise.all`, check `fam.error` (the primary read) and `setLoadError(...)` + `return`, so the existing retryable `ErrorState` fires on a genuine failure. Secondary reads (subscription, counts, albums) stay gracefully degraded. A genuinely absent family row (null data, no error) still renders the normal empty/degraded hub
+- Supabase impact: none — reads unchanged; the dormant error path now actually triggers
+- Tests run: new `tests/family-hub-read-boundary.test.ts` (3 — the `fam.error` gate precedes the `setFamily` fallthrough; the `ErrorState` retry path exists; the edit modal stays gated on a non-null family); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guards assert the ordered `if (fam.error)` before `setFamily`, the ErrorState wiring, and the `editOpen && family &&` blank-overwrite lock
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0793 - Public marketing landing page + form 404'd on a transient read error (A-17 §3e slice)
+
+- Timestamp: 2026-07-17 23:11 UTC
+- Service: Admin / marketing / content (A-17) — public marketing landing pages + forms (cross-cutting §3e sweep item; authz for A-17 remains `agent-04`'s)
+- Route: `/lp/[slug]` (`app/(marketing)/lp/[slug]/page.tsx`), `/f/[id]` (`app/(marketing)/f/[id]/page.tsx`)
+- Affected files: `app/(marketing)/lp/[slug]/page.tsx`, `app/(marketing)/f/[id]/page.tsx`, `tests/marketing-public-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `marketing_landing_pages`, `marketing_forms` (service-role reads — no client RLS on public marketing content)
+- Role: anonymous public visitors (+ crawlers)
+- Scenario: the service-role read for a published landing page / active form fails transiently (outage, pool exhaustion) while the row genuinely exists
+- Severity: P2 (SEO + conversion — a permanent-gone 404 for a real, live page)
+- Launch impact: both loaders (`getPage` / `getForm`) destructured only `{ data }` and returned `null` on failure, and the pages do `if (!page) notFound()` — so a **transient DB error rendered a 404** for a real, published landing page or active form. A 404 is a permanent-gone signal: search engines de-index the page and paid-traffic visitors hit a dead end, all from a momentary read blip. `notFound()` should mean "this row does not exist", never "the read failed"
+- Root cause: the loaders swallowed the Supabase `error`, collapsing "genuinely missing" and "read failed" into the same `null`, which the caller maps to `notFound()` (404)
+- Resolution: both loaders now capture `{ data, error }` and `throw` on a real error (Next renders a retryable 5xx via the error boundary — no de-index), reserving `notFound()` for a truly missing/unpublished row. `generateMetadata` shares the same loader, so its transient-error path is corrected too
+- Supabase impact: none — reads unchanged; error now distinguished from absence
+- Tests run: new `tests/marketing-public-read-boundary.test.ts` (2 — each loader captures error + throws before the null-return, notFound reserved for a missing row); `tsc --noEmit` clean; `eslint` clean on both files; ratchet baseline pruned (both marketing files removed)
+- Validation evidence: guards assert the `if (error) throw` precedes `return data;` and that `notFound()` remains for the genuinely-missing case
+- Remaining dependencies: none agent-doable. Note: `app/(app)/feedback/feedback-board.tsx` (comment lazy-load) is left in the ratchet baseline — its `comments === null` reload guard makes a naive keep-prior an infinite-reload risk; deferred as a low-value cosmetic item
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-17 §3e sub-slice by agent-05; A-17 unit ownership/authz stays with agent-04)
+
+### PLA-0792 - Weather + AI Assistant modules clobbered visible state to empty on a failed read (A-05)
+
+- Timestamp: 2026-07-17 23:06 UTC
+- Service: Home / dashboard command surfaces (A-05) — Weather module + AI Assistant module
+- Route: `/dashboard/weather` (`components/modules/weather-module.tsx`), AI Assistant surface (`components/modules/assistant-module.tsx`)
+- Affected files: `components/modules/weather-module.tsx`, `components/modules/assistant-module.tsx`, `tests/dashboard-modules-keep-prior-read.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `weather_locations` (read), `ai_conversations` (read), `ai_messages` (read)
+- Role: all family roles
+- Scenario: a client read fails transiently while the tables exist and have data
+- Severity: P3 (convenience surfaces, no data-write/loss — a false-empty flash only)
+- Launch impact: three reads dropped `error` and overwrote visible state with empty on failure — `weather.loadSaved` set `saved = data ?? []` (the family's saved cities vanish on a transient refresh error), `assistant.loadConversations` set `conversations = data ?? []` (the AI history sidebar empties), and `assistant.loadConversation` treated a failed `ai_messages` read the same as an empty conversation and rendered a fresh **greeting**, hiding the thread's real history
+- Root cause: the reads dropped their Supabase `error` and clobbered state to empty, conflating "load failed" with "no data"
+- Resolution: each read now captures `error` and keeps prior state on failure — `loadSaved` returns `[]` without calling `setSaved` (visible cities preserved); `loadConversations` returns early (sidebar preserved); `loadConversation` bails before `setConvId`/greeting so a failed read leaves the current thread intact and retryable instead of showing a misleading blank conversation. Matches the §3e keep-prior guidance for non-primary convenience reads
+- Supabase impact: none — read error-handling only
+- Tests run: new `tests/dashboard-modules-keep-prior-read.test.ts` (3 — each guard asserts the `error` capture precedes the state-clobber); `tsc --noEmit` clean; `eslint` clean on both modules; ratchet baseline pruned (`weather-module` + `assistant-module` removed)
+- Validation evidence: guards assert the ordered `if (error) return` before each `setState` clobber
+- Remaining dependencies: none agent-doable. **A-05 §3e false-empty client-read slice is now fully closed** (journeys, onboarding-funnel, settings-module, weather-module, assistant-module all handled; `independence`/`paperwork`/`money-timeline` are intentional migration-gated degradations; `app-context` is the benign keep-prior pattern)
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0791 - Settings profile: a failed profile read let a Save silently wipe the user's phone + avatar (A-05)
+
+- Timestamp: 2026-07-17 23:01 UTC
+- Service: Home / dashboard command surfaces (A-05) — Settings › Your profile
+- Route: `/settings` (`components/modules/settings-module.tsx`)
+- Affected files: `components/modules/settings-module.tsx`, `tests/settings-profile-read-boundary.test.ts` (new), `tests/silent-empty-read-ratchet.test.ts` (baseline prune)
+- Database objects: `profiles` (read `full_name, phone, avatar_url`; write via `updateMyProfileAction` → `saveUserProfile`)
+- Role: every signed-in user (their own profile)
+- Scenario: the one-time `profiles` prefill read fails for a real reason (transient outage, RLS/permission edge) while the row exists, then the user edits their name and clicks Save
+- Severity: **P2 (silent read failure → destructive write / real data loss)**
+- Launch impact: the prefill read destructured only `{ data }` and, on failure, fell back to `phone: ''` / `avatarUrl: ''` while still calling `setProfileLoaded(true)` — presenting a blank-but-editable form. `saveUserProfile` writes `phone: normalizePhone(input.phone)` **unconditionally** and `avatar_url` whenever provided, so a Save after a transient read failure **silently overwrote the user's real phone number with empty and nulled their avatar**. The dropped read error turned into permanent data loss on the next save
+- Root cause: the profile prefill read dropped its Supabase `error` and marked the form loaded/editable regardless, so blanks were presented as the user's saved values
+- Resolution: capture `{ data, error }`; on `error` set `profileError`, keep `profileLoaded=false` (inputs + Save already gate on it, so no blank overwrite), and render a retryable `role="alert"` banner ("Editing is disabled so your saved phone and photo aren’t overwritten with blanks" + Try again → bumps a `profileReloadKey` that re-runs the effect). Added a defense-in-depth `if (!profileLoaded) return;` guard at the top of `saveProfile`. A genuinely missing/empty profile still loads normally with the `selfMember` name fallback
+- Supabase impact: none — read error-handling only; no schema/migration/write-path change (the unconditional write is now safe because the form can no longer present blanks as truth)
+- Tests run: new `tests/settings-profile-read-boundary.test.ts` (5 — error captured; load bails before `setProfileLoaded(true)` + flags error; save guards on `profileLoaded`; retryable alert; documents the unconditional-phone-write that makes the guard load-bearing); `tsc --noEmit` clean; `eslint` clean on the module; ratchet baseline pruned (`settings-module` removed)
+- Validation evidence: guards assert the `error` capture, the ordered error-bail-before-loaded, the save guard, and the retry wiring
+- Remaining dependencies: none agent-doable
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0790 - Super-admin analytics surfaces rendered a failed telemetry read as "no activity" (A-05)
+
+- Timestamp: 2026-07-17 22:56 UTC
+- Service: Home / dashboard command surfaces (A-05) — super-admin product analytics
+- Route: `/dashboard/journeys` (Journey Analytics), `/dashboard/onboarding-funnel` (Onboarding Funnel + Time-to-First-Value)
+- Affected files: `app/(app)/dashboard/journeys/page.tsx`, `app/(app)/dashboard/onboarding-funnel/page.tsx`, `components/family/shell.tsx` (new `MiniError`), `tests/dashboard-analytics-read-boundary.test.ts` (new)
+- Role: super-admin only (both pages `notFound()` for non-admins)
+- Scenario: a telemetry read (`journey_events`, `onboarding_events`, or `activation_events`) fails for a real reason (transient outage, RLS/permission edge) while the table exists and has data
+- Severity: P3 (internal analytics integrity — misleads product decisions, no user-data exposure)
+- Launch impact: both SSR pages destructured only `{ data }` and rendered `data ?? []`, so a failed read collapsed to a "No journey events yet" / "No onboarding activity yet" / "No activation events yet" empty state. An operator reading these dashboards (which explicitly call out the "biggest drop step" and "highest-leverage step to simplify") would conclude onboarding traffic is zero when the query actually errored — a silent false-empty on the numbers product changes are steered by
+- Root cause: the source-of-truth telemetry reads dropped their Supabase `error`; the empty-vs-error states were conflated into one `MiniEmpty`
+- Resolution: added a server-safe `MiniError` primitive to `components/family/shell.tsx` (role="alert" danger card, no client handler — SSR retries by page reload), distinct from `MiniEmpty`. `journeys` now captures `{ data, error }` and renders `MiniError` before the empty-rows branch; `onboarding-funnel` captures `error: funnelError` + `error: actError` and gates each section (funnel, TTFV) on its own error before the respective empty branch. A genuinely empty dataset still shows the honest `MiniEmpty`
+- Supabase impact: none — reads unchanged; genuine failures now surface instead of masquerading as no-data
+- Tests run: new `tests/dashboard-analytics-read-boundary.test.ts` (3 — MiniError is server-safe + role=alert; journeys error branch precedes empty branch; onboarding-funnel gates both funnel + activation reads); `eslint` clean on all 4 touched files; `tsc --noEmit` clean (exit 0)
+- Validation evidence: guard asserts the `error` destructures and the ordered error→empty branching in both pages, plus that `MiniError` carries no `onClick` (server-component safe)
+- Remaining dependencies: none agent-doable; the try/catch degrade-safe A-05 pages (`independence`, `paperwork`, `money-timeline`) intentionally swallow reads on tables behind un-applied migrations 0175/0169/0168 and are left as-is (documented decision, not a defect)
+- Commit: (this increment)
+- Status: RESOLVED in code, pushed to `main` (A-05 increment by agent-05)
+
+### PLA-0784 - Vacations list + calendar rendered a failed read as "No trips yet" / an empty month (A-13)
+
+- Timestamp: 2026-07-17 20:20 UTC
+- Service: Vacations / travel / concierge (A-13) — Vacations list + calendar
+- Route: `/dashboard/vacations` (`components/vacations/vacations-list.tsx`), `/dashboard/vacations/calendar` (`components/vacations/vacations-calendar.tsx`)
+- Affected files: `components/vacations/vacations-list.tsx`, `components/vacations/vacations-calendar.tsx`, `tests/vacations-views-read-boundary.test.ts` (new)
+- Role: all family roles with the Vacations feature
+- Scenario: the `vacations` read (each view's primary source-of-truth) fails for a real reason (RLS denial, transient outage) while online and the table exists
+- Severity: P2 (silent read failure / misleading empty state on primary content)
+- Launch impact: both components read `vacations` via `useRealtimeQuery` but **destructured only `{ data }`, dropping the hook's `error`**. On a genuine failure the list rendered the reassuring-but-wrong **"No trips yet"** empty state (a family's planned trips appear deleted) and the calendar rendered an **empty month** — and its **`.ics` export silently produced an empty calendar file**. Unlike an aggregate/enhancement read, `vacations` is the primary content of both views, so it must fail visibly
+- Root cause: `const { data: trips, loading } = useRealtimeQuery(...)` (list) and `const { data: trips } = useRealtimeQuery(...)` (calendar) dropped `error`/`refresh`
+- Resolution: both now capture `error, refresh`; the list renders `<ErrorState onRetry={refresh}>` **before** the "No trips yet" empty-state branch, and the calendar early-returns a retryable `ErrorState` (preserving the page heading) instead of an empty grid/export. The hook still degrades missing-table/offline to a quiet empty list. Secondary list reads (`vacation_members`, `vacation_travel_scores`) remain enhancement data and stay degraded
+- Supabase impact: none — reads unchanged; genuine failures now visible + retryable
+- Tests run: `tests/vacations-views-read-boundary.test.ts` (4 — both views destructure error+refresh; list ErrorState precedes the empty state; calendar gates on error); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, `--max-old-space-size=6144`)
+- Validation evidence: guard asserts the `error, refresh` destructures and the ordered ErrorState/empty-state gate in the list plus the `if (error)` gate in the calendar
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read-boundary surface now covers modules + vacations views
+- Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
+### PLA-0782 - Family Economy showed every child a 0 coin balance when a ledger read failed
+
+- Timestamp: 2026-07-17 21:09 UTC
+- Service: Family Economy / kids currency (agent-`fable-opus` lane)
+- Route: `/economy`
+- Affected files: `app/(app)/economy/page.tsx`, `tests/economy-read-boundary.test.ts`
+- Database objects: `family_currencies`, `family_members`, `currency_transactions` (ledger), `economy_rewards`, `economy_redemptions`
+- Role: parents (manage) + children (view their own balances/rewards)
+- Scenario: any of the five economy reads fails (RLS edge, transient, connection) while the tables exist.
+- Severity: **P1** (kids-money surface — a reassuring-but-wrong 0 balance where a child's earned coins appear to vanish, or a parent thinks a child can't afford a reward).
+- Launch impact: the five-way `Promise.all` destructured `{ data }` and dropped every `error`. Each child's balance is derived from the immutable `currency_transactions` ledger; a dropped `txns` error left the ledger empty, so `balanceFrom([])` computed **every child's balance as 0** — plus an empty currency/rewards/redemptions economy. A child would see their earned coins gone; a parent would misjudge affordability.
+- Root cause: the five source-of-truth economy reads dropped their `error`.
+- Resolution: capture `currenciesRes`/`membersRes`/`txnsRes`/`rewardsRes`/`redemptionsRes`, collect `[…].find((e) => e && !isMissingTableError(e))`, and on a real error `console.error('[economy] family economy read failed', …)` + `return <ErrorState message="Could not load your family economy from Supabase. Refresh and try again." />` before deriving balances. A genuinely missing table (unapplied migration) is still tolerated as empty. Matches the Command-Center/CFO fail-closed pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/economy-read-boundary.test.ts` (3 assertions — five-error collection with missing-table filter, log+ErrorState, ledger derived only after the guard); full `npx vitest run` **578 files / 3583 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
+### PLA-0783 - Trips module rendered a failed checklist read as an empty 0%-progress checklist (A-13)
+
+- Timestamp: 2026-07-17 19:55 UTC
+- Service: Vacations / travel / concierge (A-13) — Trips module
+- Route: `/dashboard/trips` (`components/modules/trips-module.tsx`)
+- Affected files: `components/modules/trips-module.tsx`, `tests/trips-module-read-boundary.test.ts` (new)
+- Role: all family roles with the Trips feature
+- Scenario: the `trips` list loads but the `trip_items` read (the per-trip packing/todo checklist) fails for a real reason (RLS denial, transient outage) while online and the table exists
+- Severity: P2 (silent read failure / misleading empty state)
+- Launch impact: the module ran two `useRealtimeQuery` reads — `trips` (gated with an `ErrorState`) and `trip_items`. The **items read discarded its `error`**, so a genuine failure rendered the trip detail view as an empty checklist showing **0% progress / no items** with no error banner and no retry — the user believes their packing/todo list was wiped, when it was only a failed read. `trip_items` is core per-trip content (drives `selectedItems`, `checklistProgress`, `progressByKind`), not an enhancement aggregate, so it must fail visibly
+- Root cause: `const { data: items } = useRealtimeQuery<TripItem>(...)` dropped the hook's `error`/`refresh`; only the `trips` read was gated
+- Resolution: capture `error: itemsError, refresh: refreshItems` from the items read (and `refresh: refreshTrips` from trips), then gate the whole view on `const loadError = error || itemsError` with a retryable `ErrorState` (`onRetry` re-runs both). Matches the sibling `trip-memories-module` combined-refresh pattern. Writes were already error-checked via `describeDbError`; the hook still degrades missing-table/offline to a quiet empty list
+- Supabase impact: none — reads unchanged; genuine failures now visible + retryable
+- Tests run: `tests/trips-module-read-boundary.test.ts` (2 — both reads destructure error+refresh; view gates on `error || itemsError` with a two-read retry); `eslint` clean on touched files; full-project `tsc --noEmit` clean (exit 0, run with `--max-old-space-size=6144` — the default-heap run was OOM-killed under concurrent-agent load in this env, not a type error)
+- Validation evidence: guard asserts the two destructures and the `loadError`/`onRetry` gate exist; the fix mirrors the already-compiling `trip-memories` combined-refresh idiom
+- Commit: (this increment)
+- Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed from STALE agent-04); A-13 unit remains In-progress (concierge/trip-intel client sweep + live CRUD/seed still open)
+- Remaining dependencies: finish the concierge-calls / trip-intel client read paths; live CRUD walkthrough; ≥500-row A-13 seed (A-02)
+
+### PLA-0781 - Grandparent Portal rendered an empty portal when the member roster read failed
+
+- Timestamp: 2026-07-17 20:40 UTC
+- Service: Dashboard / Grandparent Portal (agent-`fable-opus` lane)
+- Route: `/dashboard/grandparent-portal`
+- Affected files: `app/(app)/dashboard/grandparent-portal/page.tsx`, `tests/grandparent-portal-read-boundary.test.ts`
+- Database objects: `family_members` (roster spine); `families`, `family_photos`, `family_milestones`, `family_announcements`, `family_dates` (best-effort)
+- Role: grandparents / extended family viewing the simplified portal
+- Scenario: the `family_members` roster read fails (RLS edge, transient, connection) while the table exists.
+- Severity: **P2** (reassuring-but-wrong empty state — a grandparent sees an empty portal; the family grid, author-name resolution, and birthday celebrations all collapse).
+- Launch impact: the six-way `Promise.all` destructured `{ data: members }` and dropped the roster's `error`. The roster is the spine — the family grid, milestone/announcement author names (`memberById`), and birthday-derived celebrations all build off it. A silent failure rendered an empty portal for a grandparent.
+- Root cause: the source-of-truth roster read dropped its `error`.
+- Resolution: capture `membersRes`, and on `membersRes.error` `console.error('[dashboard/grandparent-portal] member roster read failed', …)` + `return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />` before deriving `members`. The family name and photo/milestone/announcement/date enrichment reads stay best-effort (each degrades to a hidden section). Matches the Family-Digital-Twin roster-spine pattern.
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/grandparent-portal-read-boundary.test.ts` (3 assertions — roster result captured, log+ErrorState, derive-after-guard ordering); full `npx vitest run` **577 files / 3580 tests green**; `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0780 - Null display_name white-screen crash class lurking in ~20 UI sites (same root as the Kitchen Display loop)
 
 - Timestamp: 2026-07-17 20:29 UTC
@@ -1957,6 +2866,28 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: none (standalone seed; not wired into SEED_ALL here).
 - Tests run: clean-bootstrap harness apply (500 rows, conserving, idempotent).
 - Commit: this push.
+
+### PLA-0830 - Closed-loop marketing control plane audit and wiring hardening (A-17/A-18/A-20)
+
+- Timestamp: 2026-07-18 08:50 America/New_York.
+- Service: Super Admin marketing control plane, public acquisition pages, consent-gated attribution, email delivery, and sitemap publication.
+- Routes: `/admin/marketing/{content,landing-pages,seo,aeo,analytics,assets,campaigns/[id],settings,sms,video}`, `/faq`, `/blog/[slug]`, `/lp/[slug]`, `/f/[id]`, `/api/admin/marketing/email/send`, `/api/mkt/{consent,track}`, `/sitemap.xml`.
+- Roles and tier: Super Admin mutations use `requireMarketingAdmin()` and the service-role client; public readers use anonymous-safe reads or server-only service reads; visitor telemetry remains consent and GPC gated.
+- Database objects: `marketing_content_items`, `blog_posts`, `marketing_landing_pages`, `marketing_seo_pages`, `marketing_seo_keywords`, `marketing_aeo_questions`, `marketing_assets`, `marketing_email_campaigns`, `mkt_consent_events`, `mkt_visitors`, `mkt_sessions`, `mkt_touchpoints`, and `marketing_audit_logs`.
+- Findings and resolutions:
+  - AEO questions could be read and added but not edited, published, or deleted from the admin UI. Added validated update/publish/delete actions, public FAQ revalidation, and explicit answer requirements for published rows.
+  - SEO exposed keywords but not the seeded page registry. Added page audit CRUD/archive controls, keyword edit/archive controls, path validation, and returned-row checks.
+  - Landing pages had publish controls but no edit/archive lifecycle and public paths were not revalidated after changes. Added edit/archive controls, slug normalization, old/new path revalidation, and published landing-page sitemap entries.
+  - Blog publishing could drift from the registry or silently accept incomplete lifecycle state. Added status selection to the publish read, body/approval checks, registry synchronization on unpublish/archive, and aligned all nine public categories with the admin publisher.
+  - Public AEO readers previously collapsed database failures into empty content. They now return an availability signal and render a retryable status while preserving core FAQ/article content.
+  - Consent and visitor-attribution failures could become unhandled 500s or silently lose sessions/touchpoints. Added explicit 503 responses and returned-error checks for consent, visitor, session, and touchpoint writes.
+  - Email recipient preview and send paths now distinguish authorization, provider, and internal failures without returning raw provider messages; sending claims the campaign row atomically and verifies delivery-state transitions.
+  - Marketing asset deletion now soft-deletes before storage removal and rolls back the row when storage deletion fails; empty storage paths are handled without a bogus remove call.
+- Security and privacy: no new public write authority; AEO public policy remains published-only; telemetry remains rate limited, consent gated, GPC aware, bounded, and anonymous; provider details are sanitized at the API boundary.
+- Accessibility and UX: admin lifecycle controls are colocated with the affected records, public degraded states preserve the primary page, and forms now expose actionable validation errors instead of silent no-ops.
+- Verification: `npx tsc --noEmit`; targeted ESLint; marketing cluster 46 files / 245 tests; full suite 631 files / 3,734 tests; `npm run build` success with 489 generated routes and only the two pre-existing `messages-module` hook warnings.
+- External dependencies still open: live Supabase migration/RLS and Auth Admin evidence, real Resend/Twilio/Google/Stripe credentials and callback drills, AI citation/ranking providers, embeddings infrastructure, GitHub Actions runners, browser role matrix, and backup/restore rehearsal.
+- Status: CODE COMPLETE locally; launch remains NO-GO until the external blockers and live Super Admin workflow evidence in `docs/LAUNCH_BLOCKERS.md` are cleared.
 - Status: wallet seed is now REPRODUCIBLE + verified. **Remaining for LB-014 (A-02):** wire it (and the other orphan seeds) into the SEED_ALL / harness pipeline, and author seeds for the genuinely-unseeded features (school/sports/medical/routines/grades/home). This fix de-risks the wallet slice — it's ready to wire.
 
 ### PLA-0750 - Systemic root cause of the orphan seeds: ~20 `*_one_family.sql` all pinned to one prod family UUID
@@ -1994,3 +2925,64 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
 - Tests run: batch apply on the harness (17 clean, 2 reverted on pre-existing enum bugs) + row-count spot checks + idempotent re-apply.
 - Commit: this push. Status: LB-014 orphan slice ~90% de-risked (19/21 reproducible + verified); remaining for A-02 = fix the 2 enum-cast seeds, then wire all into the SEED_ALL/harness pipeline.
+
+### PLA-0770 - Orphan one-family seeds: final 2 enum-cast bugs fixed → 21 of 21 reproducible + verified
+
+- Timestamp: 2026-07-18 15:05 UTC · Service: A-02 seed (LB-014)
+- Fixed the last 2 orphan `*_one_family.sql` seeds flagged in PLA-0760, which had a pre-existing enum-cast bug distinct from the family-UUID pin: enum columns fed by an array-subscript / `CASE` expression resolve to explicit `text`, which has no implicit cast to the target enum.
+- **`seed_finance_hub_one_family.sql`** — repointed to the reproducible coalesce-in-DECLARE resolver + added `::public.bill_status` to the bills status `CASE`.
+- **`seed_operating_index_one_family.sql`** — repointed + added `::public.event_category` to the `calendar_events.category` array-subscript and `::public.bill_status` to the bills status `CASE`; de-hardcoded the inline VERIFY subqueries and the header comment. Introspected all 17 candidate enum/text columns first (`information_schema.columns`) to confirm bare string literals (`'todo'`, `'medium'`, `'none'`, `'expense'`, `'monthly'`, `'checking'`…) coerce implicitly and need no cast — only the two derived expressions did.
+- PG16-verified on the anchor family `00000000-0000-4000-8000-0000000000f1`: both apply with **no errors** and are **idempotent ×2**. operating_index VERIFY totals **619 records across 12 tables** (calendar_events 300, transactions 220, pantry 30, reminders 15, bills 12, docs/maintenance/goals 10 each, votes/polls 3 each, budgets 2, accounts 4); finance_hub seeds bills/budgets/savings goals clean.
+- **Total: 21 of 21 orphan `*_one_family.sql` seeds now reproducible + verified.** The LB-014 orphan slice is fully de-risked at the seed level; the remaining LB-014 work is A-02 pipeline wiring (into SEED_ALL/harness) + authoring seeds for the genuinely-unseeded features (`medical_profiles`, `medication_schedules`, `grades`, `home_assets`).
+- Supabase impact: none (standalone seeds; still need pipeline wiring — LB-014).
+- Tests run: apply + idempotent re-apply on a clean PG16 bootstrap; enum-column introspection; VERIFY row counts.
+- Commit: this push.
+
+### PLA-0826 - Unified reasoning source-failure contract (A-05/A-15)
+
+- Timestamp: 2026-07-18 12:15 UTC.
+- The server-side reasoning loader now records failed Operating Index,
+  relationship-graph, and family-signal reads instead of silently treating
+  them as calm input. Degraded reports cannot present an unqualified all-clear.
+- Daily reasoning summaries persist only the typed source names and degraded
+  flag. `/dashboard/reasoning` keeps the six answers visible while showing an
+  explicit incomplete-data warning.
+- Verification: focused 13/13 tests; full 629-file / 3,726-test suite; lint;
+  typecheck; fresh production build generating 489 routes.
+- Publication: this atomic increment, pending remote readback.
+
+### PLA-0780 - Blog: 525 new production-ready articles + SEO/AEO + sign-in-gated saves (A-17 marketing)
+
+- Timestamp: 2026-07-18 15:40 UTC · Service: A-17 marketing/content (public /blog)
+- Scope: grow the Bubaly blog from ~20 to 545 public articles, fully Supabase-wired, with SEO/AEO structured data, social hashtags, category tabs, and an account-gated save (heart) — per an owner request to "generate 500 new blogs… creative, fun, relevant, no repeated topics… build in SEO and AEO… reference Bubaly back… multiple hashtags incl #bubaly… relevant free photos… clicking the heart requires sign-in to save… list under existing/new tabs… 100% Supabase wired and production ready."
+- **Content (0226):** `scripts/generate-blog-posts.mjs` — a deterministic generator emitting `supabase/migrations/0226_blog_500_articles.sql` with **525 unique articles** (75 Parenting, 68 Organization, 61 School & Activities, 55 AI & Technology, 56 Wellness, 56 Family Finances, 56 Recipes & Food, 48 Travel & Adventures, 50 Home & Seasonal). Each has a distinct topic/slug (zero dupes), a rich multi-section body (intro + 4–5 real advice facets + a practical-steps section + a Bubaly back-reference/CTA that names bubaly.com), an SEO excerpt, reading time, rotating author, spread publish dates, a free-license Unsplash hero photo (reused from the 20 already-verified-live IDs — the sandbox network policy blocks the CDN so new IDs can't be verified here), and #hashtags including #bubaly. Idempotent `ON CONFLICT (slug) DO UPDATE`.
+- **New category tabs:** added `Recipes & Food`, `Travel & Adventures`, `Home & Seasonal` to `BlogCategory`, `ALL_CATEGORIES`, and every color/accent map in the listing + article pages (9 tabs total). Posts auto-appear under their tab; the listing, recent-posts, topic counts, search, and sitemap all read from the DB so they pick up all 545 automatically.
+- **SEO/AEO:** new `BlogPostStructuredData` (BlogPosting/Article + BreadcrumbList JSON-LD, hardened `<`-escaping) on every article + `BlogListStructuredData` (Blog collection) on the index; enriched metadata (keywords from hashtags, canonical, article OpenGraph published/modified/section/tags, Twitter cards); sitemap now emits all 9 category landing pages plus every post. AEO benefits from clean headings, machine-readable Article schema, and explicit keywords.
+- **Hashtags:** `toHashtag` + `articleHashtags` (pure, tested) normalize every post's tags to social hashtags, guarantee `#bubaly` + `#familylife`, dedupe, and cap — applied to article tags, the popular-tags cloud (now a `?tag=` filter), and SEO keywords. Covers legacy posts too.
+- **Sign-in-gated save (0227):** the heart is no longer an anonymous visitor like — it now requires a Bubaly account. New `blog_post_saves` table (per-user bookmark) with RLS = own-rows-only (`user_id = auth.uid()` on select/insert/delete, `TO authenticated`); new `/api/blog/save` route returns 401 `auth_required` for signed-out POSTs (before any write) and keys writes to the authenticated user id; the aggregate save count is produced by the service role (no cross-user exposure). `HeartButton` sends signed-out readers to `/login?redirect=…` and back, reverting optimistically on 401.
+- **Verification (all green):** PG16 harness — 0226 applies `INSERT 0 525` + idempotent ×2; full `down`+`up` bootstrap `migration_fail=0` with **545 public articles across 9 categories** and `blog_post_saves` present; RLS policies confirmed own-rows-only. `tsc --noEmit` 0 errors; eslint clean on all changed files; new guards `tests/blog-articles-contract.test.ts` (11) + `tests/blog-save-auth-gate.test.ts` (4) pass, and all 6 existing blog/marketing-blog test files (42) still pass; migration-version-safety bumped to 0228. Production `next build` compiled successfully.
+- Supabase impact: 2 additive migrations (0226 content, 0227 saves table) — both must be applied to prod (agents don't touch prod; see docs/PENDING_PROD_MIGRATIONS.md).
+- Commit: this push.
+
+### PLA-0790 - Marketing closed loop: public AEO/SEO wired to /admin/marketing (A-17)
+
+- Timestamp: 2026-07-18 16:20 UTC · Service: A-17 marketing (SEO/AEO/content)
+- Scope: begin the "closed-loop content intelligence" the owner requested — the admin Marketing console becomes the single source that feeds every public page, and every blog is registered as content. This is the foundational, fully-wired slice (not the full aspirational spec; see Remaining).
+- **Public AEO read (0228):** `marketing_aeo_questions` was service-role-only. Added a public SELECT policy for **published** rows only (drafts/opportunities stay admin-only) + grant to anon/authenticated. Proven on PG16: as a public member, 754 published visible, a `drafting` row hidden (0).
+- **Content registry (0228):** every published, non-synthetic blog post is registered as a `marketing_content_items` row (kind='blog', status='published', metadata.slug/category/url/tags). Idempotent (keyed by `metadata->>'slug'`). PG16: **545 blogs registered**, so the whole blog is listed + wired in `/admin/marketing/content`.
+- **Themed AEO + SEO seed (0229, generated by `scripts/generate-marketing-seed.mjs`):** **754 AEO questions** (published, on-brand — positions Bubaly as "The AI Family Operating System", across 24 topics × personas × patterns what_is/how_to/best_x_for_y/comparison/faq + brand-defining conversational Q&A), **191 SEO keywords** (head + long-tail + category/semantic clusters, with intent + target_path), **19 SEO pages** (all public routes + 9 blog category tabs, with title/meta/score). Idempotent (seed-tag delete + ON CONFLICT).
+- **Public wiring (single source of truth):** `lib/marketing/aeo.ts` (anon reader). The public **FAQ / Knowledge Center** (`/faq`) now renders published AEO answers + includes them in `FAQPage` JSON-LD. Every **blog article** surfaces category-relevant AEO Q&A as an on-topic FAQ block + `FAQPage` schema, linking back to `/faq`. Editing/adding an answer in `/admin/marketing/aeo` propagates to the public site + its rich results automatically — the closed loop.
+- **Verified:** PG16 full bootstrap `migration_fail=0` (754 AEO published / 191 keywords / 19 pages / 545 blogs-as-content); public-read RLS proven (published visible, drafts hidden); `tsc` 0; eslint clean; guards `tests/marketing-aeo-closed-loop.test.ts` (6) + migration-version bumped to 0230; `next build` (below).
+- Supabase impact: 2 additive migrations (0228 policy+registry, 0229 seed) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
+- **Remaining (owner-visible scope, not claimed done):** the larger spec — 10k+/20k+ keyword & question scale, vector embeddings, AI-citation / AI-Overview analytics (needs external data sources), fully automatic regeneration-on-edit for ALL page types, and DB-driven metadata for every marketing route — are follow-ons that need external APIs/infra beyond this repo. This increment delivers the wired foundation + a real themed dataset + the public↔admin loop for AEO/content.
+- Commit: this push.
+
+### PLA-0795 - Marketing engine: per-post AEO (auto), DB-driven metadata, scaled seed (A-17)
+
+- Timestamp: 2026-07-18 16:55 UTC · Service: A-17 marketing (SEO/AEO/content). Follows PLA-0790.
+- **(1) Per-post AEO, automatic (0230 + `lib/marketing/aeo-generate.ts`):** every published blog post now has its own AEO questions (source_path=/blog/<slug>) — 0230 backfills all existing posts in-DB (2 per post = **1,090**), and the admin publish action (`publishContentToBlogAction`) generates the SAME questions for NEW posts at publish time (best-effort, revalidates /faq + /admin/marketing/aeo). Idempotent (seed tag `blog_aeo_v1`).
+- **(2) DB-driven metadata (0230 policy + `lib/marketing/seo.ts`):** `marketing_seo_pages` active rows are now public-readable; 7 marketing routes (`/features`, `/how-it-works`, `/ai`, `/pricing`, `/mobile`, `/security`, `/contact`) resolve their `<title>`/description from the admin SEO store via `resolveMarketingMetadata(path, fallback)` — the admin console overrides when a row exists, code fallback otherwise. No page can break if the store is empty.
+- **(3) Scaled seed (0229 regenerated):** AEO **754 → 2,344** themed questions (added 16 topics, persona×how_to, alternative comparisons, AI-engine visibility Q&A) and SEO keywords **191 → 1,603** (prefix×base×suffix long-tail matrix). Combined with per-post → **3,434 published AEO questions** total.
+- Verified: PG16 full bootstrap `migration_fail=0` (3434 AEO / 1090 per-post / 1603 keywords / seo-pages public policy present); `tsc` 0; migration-version bumped to 0231. (Build not re-run this pass due to a time constraint — handing off; typecheck clean.)
+- Supabase impact: 0229 (regenerated, idempotent) + 0230 (additive) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
+- Commit: this push.

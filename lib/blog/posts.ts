@@ -7,7 +7,10 @@ export type BlogCategory =
   | 'School & Activities'
   | 'AI & Technology'
   | 'Wellness'
-  | 'Family Finances';
+  | 'Family Finances'
+  | 'Recipes & Food'
+  | 'Travel & Adventures'
+  | 'Home & Seasonal';
 
 export type BlogBlock = { type: 'p' | 'h2'; text: string };
 
@@ -80,6 +83,18 @@ export function normalizeBody(raw: unknown): BlogBlock[] {
     .filter((b): b is BlogBlock => b !== null);
 }
 
+// Hosts whose license we cannot verify as free-for-commercial-use. LoremFlickr
+// proxies mixed-license Flickr photos, so we never render them on the public
+// site — such URLs are dropped to `undefined` so the generated <BlogCover> art
+// takes over (free, unique, on-brand). Free-licensed hosts (Unsplash) + owned
+// uploads (*.supabase.co) pass through untouched.
+const UNVERIFIED_IMAGE_HOSTS = ['loremflickr.com'];
+
+function freeLicensedImage(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h)) ? undefined : url;
+}
+
 function toPost(r: Row): BlogPost {
   return {
     slug: r.slug,
@@ -92,23 +107,65 @@ function toPost(r: Row): BlogPost {
     category: r.category as BlogCategory,
     featured: r.featured,
     accentColor: r.accent_color ?? undefined,
-    heroImageUrl: r.hero_image_url ?? undefined,
+    heroImageUrl: freeLicensedImage(r.hero_image_url),
     heroImageAlt: r.hero_image_alt ?? undefined,
     heroImageCredit: r.hero_image_credit ?? undefined,
     body: normalizeBody(r.body),
   };
 }
 
+/**
+ * Fetch EVERY published `blog_posts` row, paginating past PostgREST's default
+ * 1000-row cap. This matters because synthetic seed rows are filtered out
+ * *client-side* (their slugs, not a column, mark them synthetic) — so a single
+ * capped query can return a 1000-row window dominated by seed rows and silently
+ * omit whole categories of real articles (the cause of "Recipes & Food (0)" in
+ * the tab bar while the section itself listed 56). Paginating guarantees the
+ * count/list see every real article regardless of how many seed rows exist.
+ */
+async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Promise<Pick<Row, K>[]> {
+  const PAGE = 1000;
+  const out: Pick<Row, K>[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await anonClient()
+      .from('blog_posts')
+      .select(columns)
+      .eq('published', true)
+      .order('published_at', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as Pick<Row, K>[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function getAllPosts(): Promise<BlogPost[]> {
   try {
-    const { data } = await anonClient()
-      .from('blog_posts')
-      .select('*')
-      .eq('published', true)
-      .order('published_at', { ascending: false });
-    return publicRows(data).map(toPost);
+    const rows = await fetchAllPublishedRows<keyof Row>('*');
+    return publicRows(rows as Row[]).map(toPost);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Published-article count per category, computed from ALL posts (independent of
+ * any active filter) so every tab can show an accurate count at all times.
+ * Excludes synthetic seed rows, matching what the public pages render.
+ */
+export async function getCategoryCounts(): Promise<Record<string, number>> {
+  try {
+    const rows = await fetchAllPublishedRows<'slug' | 'category'>('slug, category');
+    const counts: Record<string, number> = {};
+    for (const row of publicRows(rows as Row[])) {
+      const c = row.category;
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    return counts;
+  } catch {
+    return {};
   }
 }
 
@@ -221,4 +278,5 @@ export function estimateReadingTime(body: BlogBlock[]): number {
 
 export const ALL_CATEGORIES: BlogCategory[] = [
   'Parenting', 'Organization', 'School & Activities', 'AI & Technology', 'Wellness', 'Family Finances',
+  'Recipes & Food', 'Travel & Adventures', 'Home & Seasonal',
 ];

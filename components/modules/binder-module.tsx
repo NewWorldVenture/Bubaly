@@ -63,7 +63,7 @@ export function BinderModule() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> Household Binder</h3>
-          <p className="text-xs text-muted">Your digital command center â€” Wi-Fi, codes, shutoffs, policies and key info in one place.</p>
+          <p className="text-xs text-muted">Your digital command center — Wi-Fi, codes, shutoffs, policies and key info in one place.</p>
         </div>
         <div className="flex items-center gap-2">
           <AiInsight kind="binder" iconOnly />
@@ -102,10 +102,10 @@ export function BinderModule() {
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit entry' : 'Add entry'}>
           <form onSubmit={save} className="space-y-3">
             <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{BINDER_CATEGORIES.map((c) => <option key={c} value={c}>{binderCategoryLabel(c)}</option>)}</Select>}</Field>
-            <Field label="Label">{(id) => <Input id={id} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Wi-Fi password, Alarm codeâ€¦" />}</Field>
+            <Field label="Label">{(id) => <Input id={id} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Wi-Fi password, Alarm code…" />}</Field>
             <Field label="Value">{(id) => <Input id={id} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />}</Field>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Where, who, howâ€¦" />}</Field>
-            <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })} className="h-4 w-4 accent-[var(--brand)]" /> Sensitive â€” mask by default</label>
+            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Where, who, how…" />}</Field>
+            <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })} className="h-4 w-4 accent-[var(--brand)]" /> Sensitive — mask by default</label>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>

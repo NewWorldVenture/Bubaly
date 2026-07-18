@@ -28,7 +28,7 @@ type Recipe = Tables<'family_recipes'>;
 interface Ingredient { name: string; quantity: string; unit: string; }
 
 /** Scale a recipe quantity by a serving multiplier. Non-numeric values (e.g.
- *  "to taste") and bad data ("NaN") never render as "NaN" â€” numbers scale,
+ *  "to taste") and bad data ("NaN") never render as "NaN" — numbers scale,
  *  real words pass through, junk is dropped. */
 function scaleQuantity(quantity: string | null | undefined, multiplier: number): string {
   if (!quantity) return '';
@@ -39,15 +39,15 @@ function scaleQuantity(quantity: string | null | undefined, multiplier: number):
 interface InstructionStep { step: number; text: string; }
 
 const CATEGORIES = [
-  { id: 'breakfast', label: 'Breakfast', emoji: 'ðŸ¥ž', color: 'text-warning' },
-  { id: 'lunch', label: 'Lunch', emoji: 'ðŸ¥—', color: 'text-success' },
-  { id: 'dinner', label: 'Dinner', emoji: 'ðŸ', color: 'text-accent' },
-  { id: 'snack', label: 'Snack', emoji: 'ðŸŽ', color: 'text-green-400' },
-  { id: 'dessert', label: 'Dessert', emoji: 'ðŸ°', color: 'text-pink-400' },
-  { id: 'drink', label: 'Drink', emoji: 'ðŸ§ƒ', color: 'text-blue-400' },
-  { id: 'side', label: 'Side', emoji: 'ðŸ¥¦', color: 'text-teal-400' },
-  { id: 'appetizer', label: 'Appetizer', emoji: 'ðŸ§†', color: 'text-purple-400' },
-  { id: 'other', label: 'Other', emoji: 'ðŸ½ï¸', color: 'text-muted' },
+  { id: 'breakfast', label: 'Breakfast', emoji: '🥞', color: 'text-warning' },
+  { id: 'lunch', label: 'Lunch', emoji: '🥗', color: 'text-success' },
+  { id: 'dinner', label: 'Dinner', emoji: '🍝', color: 'text-accent' },
+  { id: 'snack', label: 'Snack', emoji: '🍎', color: 'text-green-400' },
+  { id: 'dessert', label: 'Dessert', emoji: '🍰', color: 'text-pink-400' },
+  { id: 'drink', label: 'Drink', emoji: '🧃', color: 'text-blue-400' },
+  { id: 'side', label: 'Side', emoji: '🥦', color: 'text-teal-400' },
+  { id: 'appetizer', label: 'Appetizer', emoji: '🧆', color: 'text-purple-400' },
+  { id: 'other', label: 'Other', emoji: '🍽️', color: 'text-muted' },
 ] as const;
 
 const DIFFICULTIES = [
@@ -157,7 +157,7 @@ export function RecipesModule() {
       last_made_at: new Date().toISOString(),
     }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Marked as made today! ðŸ´');
+    success('Marked as made today! 🍴');
     void refresh();
   }
 
@@ -228,13 +228,13 @@ export function RecipesModule() {
     <div className="module-page">
       <PageHeader
         title="Family Recipes"
-        description="Your family's cookbook â€” organized, searchable, and always at hand."
+        description="Your family's cookbook — organized, searchable, and always at hand."
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search recipesâ€¦"
+                placeholder="Search recipes…"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
@@ -250,10 +250,10 @@ export function RecipesModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Total Recipes', value: stats.total, icon: 'ðŸ“–', color: 'text-brand-text' },
-          { label: 'Favorites', value: stats.favorites, icon: 'â­', color: 'text-warning' },
-          { label: 'Times Cooked', value: stats.timesCooked, icon: 'ðŸ³', color: 'text-accent' },
-          { label: 'Categories', value: [...new Set(recipes.map((r) => r.category))].length, icon: 'ðŸ—‚ï¸', color: 'text-muted' },
+          { label: 'Total Recipes', value: stats.total, icon: '📖', color: 'text-brand-text' },
+          { label: 'Favorites', value: stats.favorites, icon: '⭐', color: 'text-warning' },
+          { label: 'Times Cooked', value: stats.timesCooked, icon: '🍳', color: 'text-accent' },
+          { label: 'Categories', value: [...new Set(recipes.map((r) => r.category))].length, icon: '🗂️', color: 'text-muted' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -271,7 +271,7 @@ export function RecipesModule() {
           {(['all', 'favorites', 'recent'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={cn('tab-item capitalize', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>
-              {t === 'favorites' ? 'â­ Favorites' : t === 'recent' ? 'ðŸ³ Recently Made' : 'All Recipes'}
+              {t === 'favorites' ? '⭐ Favorites' : t === 'recent' ? '🍳 Recently Made' : 'All Recipes'}
             </button>
           ))}
         </div>
@@ -336,7 +336,7 @@ export function RecipesModule() {
                     <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {recipe.servings}</span>
                     <Badge tone={diff.badge as 'neutral'}>{diff.label}</Badge>
                     {recipe.times_made > 0 && (
-                      <span className="ml-auto text-success">{recipe.times_made}Ã— made</span>
+                      <span className="ml-auto text-success">{recipe.times_made}× made</span>
                     )}
                   </div>
                 </div>
@@ -346,7 +346,7 @@ export function RecipesModule() {
         </div>
       )}
 
-      {/* â”€â”€ Recipe Detail Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Recipe Detail Modal ────────────────────────────────── */}
       {viewing && (
         <Modal open onClose={() => { setViewing(null); setServingsOverride(null); }} title="">
           <div className="max-h-[80vh] overflow-y-auto -m-2 p-2">
@@ -404,7 +404,7 @@ export function RecipesModule() {
               <span className="text-sm font-semibold">Servings</span>
               <div className="flex items-center gap-3">
                 <button onClick={() => setServingsOverride((s) => Math.max(1, (s ?? viewing.servings) - 1))}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-elevated transition text-lg font-bold">âˆ’</button>
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-elevated transition text-lg font-bold">−</button>
                 <span className="text-lg font-bold">{servingsOverride ?? viewing.servings}</span>
                 <button onClick={() => setServingsOverride((s) => (s ?? viewing.servings) + 1)}
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-elevated transition text-lg font-bold">+</button>
@@ -414,7 +414,7 @@ export function RecipesModule() {
               </Button>
             </div>
 
-            {/* AI Remix â€” saves a transformed variant to your recipes */}
+            {/* AI Remix — saves a transformed variant to your recipes */}
             <div className="mb-5 rounded-2xl border border-brand/25 bg-brand/5 p-3">
               <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Remix</p>
               <div className="flex flex-wrap gap-2">
@@ -425,11 +425,11 @@ export function RecipesModule() {
                     disabled={aiBusy !== null}
                     className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium transition hover:border-brand/50 hover:bg-elevated disabled:opacity-50"
                   >
-                    {aiBusy === a.id ? 'Workingâ€¦' : a.label}
+                    {aiBusy === a.id ? 'Working…' : a.label}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-muted">Creates a new variant in your recipes. AI amounts/nutrition are estimates â€” not medical advice.</p>
+              <p className="mt-2 text-[11px] text-muted">Creates a new variant in your recipes. AI amounts/nutrition are estimates — not medical advice.</p>
             </div>
 
             {/* Ingredients */}
@@ -520,14 +520,14 @@ export function RecipesModule() {
           <div className="space-y-4">
             <p className="text-sm text-muted">We&apos;ll pick from your saved recipes. Optionally tell us what you have or need.</p>
             <Input value={tonightConstraint} onChange={(e) => setTonightConstraint(e.target.value)}
-              placeholder="e.g. we have chicken & rice Â· quick Â· no dairy" />
+              placeholder="e.g. we have chicken & rice · quick · no dairy" />
             <Button onClick={suggestTonight} loading={tonightBusy} className="w-full">
-              <Sparkles className="h-4 w-4" /> {tonightBusy ? 'Thinkingâ€¦' : 'Suggest dinner'}
+              <Sparkles className="h-4 w-4" /> {tonightBusy ? 'Thinking…' : 'Suggest dinner'}
             </Button>
 
             {tonightPicks && tonightPicks.length === 0 && (
               <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">
-                No matches yet â€” save a few recipes (try Discover) and ask again.
+                No matches yet — save a few recipes (try Discover) and ask again.
               </p>
             )}
             {tonightPicks && tonightPicks.length > 0 && (
@@ -540,7 +540,7 @@ export function RecipesModule() {
                         onClick={() => { if (recipe) { setViewing(recipe); setTonightOpen(false); } }}
                         className="w-full rounded-xl border border-border bg-surface/40 p-3 text-left transition hover:border-brand/40"
                       >
-                        <p className="text-sm font-semibold">{p.name}{p.cuisine ? <span className="ml-1 text-xs font-normal text-muted">Â· {p.cuisine}</span> : null}</p>
+                        <p className="text-sm font-semibold">{p.name}{p.cuisine ? <span className="ml-1 text-xs font-normal text-muted">· {p.cuisine}</span> : null}</p>
                         <p className="mt-0.5 text-xs text-muted">{p.reason}</p>
                       </button>
                     </li>
@@ -617,10 +617,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <Field label="Recipe name" required>
-          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder="Grandma's Spaghetti, Taco Tuesdayâ€¦" autoFocus />}
+          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder="Grandma's Spaghetti, Taco Tuesday…" autoFocus />}
         </Field>
         <Field label="Description">
-          {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder="A brief description of this dishâ€¦" className="min-h-[60px]" />}
+          {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder="A brief description of this dish…" className="min-h-[60px]" />}
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -656,10 +656,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Cuisine">
-            {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder="Italian, Mexican, Americanâ€¦" />}
+            {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder="Italian, Mexican, American…" />}
           </Field>
           <Field label="Photo URL">
-            {(id) => <Input id={id} name="photo_url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://â€¦" />}
+            {(id) => <Input id={id} name="photo_url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 
@@ -694,7 +694,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                   {step.step}
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
-                  placeholder={`Step ${step.step}â€¦`} className="flex-1 min-h-[60px]" />
+                  placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
                 <button type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
@@ -718,10 +718,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Notes">
-            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder="Chef's tips, substitutionsâ€¦" className="min-h-[60px]" />}
+            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder="Chef's tips, substitutions…" className="min-h-[60px]" />}
           </Field>
           <Field label="Source URL">
-            {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://â€¦" />}
+            {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 

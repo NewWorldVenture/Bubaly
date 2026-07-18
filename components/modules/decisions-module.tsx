@@ -1,6 +1,6 @@
 'use client';
 
-// Family Decision Engine â€” score trade-offs, explain the reasoning, let the family
+// Family Decision Engine — score trade-offs, explain the reasoning, let the family
 // decide. Decisions + options are real, family-scoped Supabase rows; the scoring is
 // the pure engine in lib/decisions/engine.ts, run live as you edit and cached on the
 // rows when you save. 100% Supabase + realtime.
@@ -93,7 +93,7 @@ export function DecisionsModule() {
     <div className="space-y-6">
       <PageHeader
         title="Decision Engine"
-        description="Weigh the trade-offs, see the reasoning, then decide together â€” the AI recommends, your family chooses."
+        description="Weigh the trade-offs, see the reasoning, then decide together — the AI recommends, your family chooses."
         action={<Button onClick={() => setAddDecision(true)}><Plus className="size-4" /> New decision</Button>}
       />
 
@@ -139,7 +139,7 @@ export function DecisionsModule() {
                       <span className="rounded-full border border-border px-2 py-0.5">Budget ${(selected.budget_cents / 100).toFixed(0)}</span>
                     )}
                     {typeof selected.max_travel_minutes === 'number' && (
-                      <span className="rounded-full border border-border px-2 py-0.5">Travel â‰¤ {selected.max_travel_minutes}m</span>
+                      <span className="rounded-full border border-border px-2 py-0.5">Travel ≤ {selected.max_travel_minutes}m</span>
                     )}
                   </div>
                 </div>
@@ -154,7 +154,7 @@ export function DecisionsModule() {
                       <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
                         <Sparkles className="size-4 shrink-0 text-emerald-300" />
                         <span>
-                          Recommended: <strong>{result.recommendation.label}</strong> â€” {result.recommendation.rationale}
+                          Recommended: <strong>{result.recommendation.label}</strong> — {result.recommendation.rationale}
                         </span>
                       </div>
                     )}
@@ -232,7 +232,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <h3 className="mb-1 text-base font-semibold">Decide the hard ones together</h3>
       <p className="mx-auto mb-4 max-w-md text-sm text-muted">
         Which vacation fits the budget and calendar? Is another activity worth the load? Add the
-        options and their trade-offs â€” the engine scores them, explains why, and you choose.
+        options and their trade-offs — the engine scores them, explains why, and you choose.
       </p>
       <Button onClick={onAdd}><Plus className="size-4" /> New decision</Button>
     </div>
@@ -267,14 +267,14 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
     <Modal open onClose={onClose} title="New decision">
       <form onSubmit={submit} className="space-y-3">
         <Field label="Question">{(id) => <Input id={id} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Which vacation this summer?" autoFocus />}</Field>
-        <Field label="Detail (optional)">{(id) => <Input id={id} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Late July, everyone freeâ€¦" />}</Field>
+        <Field label="Detail (optional)">{(id) => <Input id={id} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Late July, everyone free…" />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Budget cap ($, optional)">{(id) => <Input id={id} type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />}</Field>
           <Field label="Max travel (min, optional)">{(id) => <Input id={id} type="number" min="0" value={maxTravel} onChange={(e) => setMaxTravel(e.target.value)} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Creatingâ€¦' : 'Create'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create'}</Button>
         </div>
       </form>
     </Modal>
@@ -316,12 +316,12 @@ function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onErro
           <Field label="Cost ($)">{(id) => <Input id={id} type="number" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />}</Field>
           <Field label="Effort (min)">{(id) => <Input id={id} type="number" min="0" value={time} onChange={(e) => setTime(e.target.value)} />}</Field>
           <Field label="Travel (min)">{(id) => <Input id={id} type="number" min="0" value={travel} onChange={(e) => setTravel(e.target.value)} />}</Field>
-          <Field label="Family load (0â€“100)">{(id) => <Input id={id} type="number" min="0" max="100" value={load} onChange={(e) => setLoad(e.target.value)} />}</Field>
-          <Field label="Benefit (0â€“100)">{(id) => <Input id={id} type="number" min="0" max="100" value={benefit} onChange={(e) => setBenefit(e.target.value)} />}</Field>
+          <Field label="Family load (0–100)">{(id) => <Input id={id} type="number" min="0" max="100" value={load} onChange={(e) => setLoad(e.target.value)} />}</Field>
+          <Field label="Benefit (0–100)">{(id) => <Input id={id} type="number" min="0" max="100" value={benefit} onChange={(e) => setBenefit(e.target.value)} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Addingâ€¦' : 'Add'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Adding…' : 'Add'}</Button>
         </div>
       </form>
     </Modal>

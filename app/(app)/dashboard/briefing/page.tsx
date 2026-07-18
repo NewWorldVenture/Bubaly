@@ -38,10 +38,16 @@ export default async function BriefingPage() {
     : null;
 
   // R2: the morning briefing now reasons over Knowledge Graph relationships
-  // (hub / ripple / coverage), via the shared loader. Best-effort — a missing
-  // graph simply renders nothing.
-  const reasoning = await loadFamilyContext(supabase, ctx.active.familyId).catch(() => null);
-  const insights = reasoning ? reasoningInsights(reasoning) : [];
+  // (hub / ripple / coverage), via the shared loader. A failed read must remain
+  // visible because the relationship section is derived from source-of-truth data.
+  let reasoning: Awaited<ReturnType<typeof loadFamilyContext>>;
+  try {
+    reasoning = await loadFamilyContext(supabase, ctx.active.familyId);
+  } catch (error) {
+    console.error('[dashboard/briefing] reasoning context read failed', error);
+    return <ErrorState message="Could not load relationship guidance for your daily briefing from Supabase. Refresh and try again." />;
+  }
+  const insights = reasoningInsights(reasoning);
 
   return (
     <>

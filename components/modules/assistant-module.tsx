@@ -162,17 +162,24 @@ export function AssistantModule() {
   const loadConversations = useCallback(async () => {
     if (!family?.id) return;
     const supabase = createClient();
-    const { data } = await supabase.from('ai_conversations')
+    const { data, error } = await supabase.from('ai_conversations')
       .select('id, title, updated_at').eq('family_id', family.id)
       .order('updated_at', { ascending: false }).limit(25);
+    // Keep the prior conversation history on a transient read failure instead of
+    // clobbering the sidebar to an empty "no conversations" list.
+    if (error) return;
     setConversations(data ?? []);
   }, [family?.id]);
 
   const loadConversation = useCallback(async (id: string) => {
     const supabase = createClient();
-    const { data } = await supabase.from('ai_messages')
+    const { data, error } = await supabase.from('ai_messages')
       .select('role, content, tool_results').eq('conversation_id', id)
       .order('created_at', { ascending: true }).limit(200);
+    // A failed message read must not masquerade as an empty conversation (a fresh
+    // greeting) — that hides real history. Leave the current view intact so the
+    // user can retry rather than switching into a misleading blank thread.
+    if (error) return;
     setConvId(id);
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
     if (!data || data.length === 0) { setMessages(greeting()); return; }

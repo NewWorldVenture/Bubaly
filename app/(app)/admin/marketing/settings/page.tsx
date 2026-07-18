@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { saveSetting } from '../actions';
+import { isTwilioConfigured } from '@/lib/guardian/twilio';
 
 export const metadata: Metadata = { title: 'Marketing · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 function providerStatus() {
   return [
     { name: 'Email (Resend)', ready: !!process.env.RESEND_API_KEY, env: 'RESEND_API_KEY' },
-    { name: 'SMS (Twilio)', ready: !!process.env.TWILIO_AUTH_TOKEN, env: 'TWILIO_AUTH_TOKEN' },
+    { name: 'SMS (Twilio)', ready: isTwilioConfigured(), env: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_PHONE_NUMBER' },
     { name: 'AI (OpenAI)', ready: !!process.env.OPENAI_API_KEY, env: 'OPENAI_API_KEY' },
     { name: 'Payments (Stripe)', ready: !!process.env.STRIPE_SECRET_KEY, env: 'STRIPE_SECRET_KEY' },
     { name: 'Search Console', ready: !!process.env.GOOGLE_SEARCH_CONSOLE_KEY, env: 'GOOGLE_SEARCH_CONSOLE_KEY' },

@@ -4,6 +4,7 @@ import { Handshake, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 import { whoseTurn, statusLine, type Party, type NegotiationStatus } from '@/lib/marketplace/negotiation';
 import { cn } from '@/lib/utils/cn';
 
@@ -25,11 +26,23 @@ export default async function NegotiationsInboxPage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
 
-  const { data: negRows } = await sb
+  const { data: negRows, error: negError } = await sb
     .from('marketplace_negotiations')
     .select('id, listing_id, family_id, buyer_member_id, buyer_family_id, status, current_amount_cents, last_actor, agreed_amount_cents, updated_at')
     .order('updated_at', { ascending: false })
     .limit(100);
+
+  // The offer inbox is money-relevant: a dropped read error would render "No offers
+  // going yet" and a user with live negotiations would think they have none. Surface
+  // a retryable error instead of a false-empty inbox.
+  if (negError) {
+    return (
+      <div className="module-page">
+        <PageHeader title="Offers" description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
+        <ErrorState message="Couldn’t load your offers. Refresh and try again." />
+      </div>
+    );
+  }
 
   const rows = (negRows ?? []) as Row[];
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];

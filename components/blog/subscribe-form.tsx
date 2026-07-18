@@ -7,7 +7,7 @@
 // it works anywhere in the public marketing tree.
 import { useState } from 'react';
 import { CheckCircle2, Loader2, Mail } from 'lucide-react';
-import { getAnonymousId } from '@/lib/marketing/visitor';
+import { getAnonymousId, trackConversion } from '@/lib/marketing/visitor';
 import { cn } from '@/lib/utils/cn';
 
 type Props = { source: string; variant?: 'card' | 'inline'; className?: string };
@@ -32,6 +32,7 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; already?: boolean; error?: string };
       if (res.ok && data.ok) {
         setState('done');
+        void trackConversion();
         setMessage(data.already ? 'You’re already on the list — welcome back!' : 'You’re in! New articles will land in your inbox.');
         setEmail('');
       } else {

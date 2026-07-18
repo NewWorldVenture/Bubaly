@@ -71,7 +71,7 @@ export function ConnectionsModule() {
         <Network className="h-4 w-4 text-brand-text" />
         {connected > 0
           ? <span><span className="font-semibold text-fg">{connected}</span> {connected === 1 ? 'service' : 'services'} connected across {grouped.length} categories.</span>
-          : <span>Nothing connected yet â€” link a supported calendar to get started.</span>}
+          : <span>Nothing connected yet — link a supported calendar to get started.</span>}
       </div>
 
       <div className="space-y-6">

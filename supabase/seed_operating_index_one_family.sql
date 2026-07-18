@@ -4,7 +4,10 @@
 -- is populated so all 7 dimensions render with real signals (not calm-by-
 -- omission) and the composite lands in a realistic "stretched/steady" band.
 --
--- TARGET: The Kramer Family (92298eb2-…). IDEMPOTENT: rows are tagged
+-- TARGET: resolved reproducibly at runtime (v_email's family → else the first
+-- family with a non-manager member → else any family), so this runs against
+-- SEED_ALL / the PG16 harness / a fresh env (previously pinned one prod family
+-- UUID and FK-failed everywhere else). IDEMPOTENT: rows are tagged
 -- (calendar '[seed:foi]' in description, transactions '[seed:foi]' in notes,
 -- everything else a 'FOI · ' name/title prefix; budgets by category+period) and
 -- deleted before re-insert (this family only). Safe to re-run.
@@ -26,7 +29,7 @@
 
 do $$
 declare
-  v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid   uuid;
   v_members uuid[];
@@ -60,7 +63,7 @@ begin
     '[seed:foi]',
     -- needs-location categories with NULL location = "info missing"
     case when g % 3 = 0 then null else 'Place ' || (g % 20) end,
-    (array['appointment','school','sports','general','medication','other','appointment','school','maintenance'])[1 + (g % 9)],
+    (array['appointment','school','sports','general','medication','other','appointment','school','maintenance'])[1 + (g % 9)]::public.event_category,
     now() + make_interval(days => (g % 7), hours => 2 + (g % 10)),
     now() + make_interval(days => (g % 7), hours => 3 + (g % 10)),
     false, 'none',
@@ -132,7 +135,7 @@ begin
     40 + (g * 13 % 200),
     (current_date + make_interval(days => (g % 14)))::date,
     true, 'monthly',
-    case when g % 5 = 0 then 'overdue' else 'upcoming' end,
+    (case when g % 5 = 0 then 'overdue' else 'upcoming' end)::public.bill_status,
     'Utilities',
     (g % 3 = 0), v_uid
   from generate_series(1, 12) g;
@@ -148,15 +151,15 @@ begin
 end $$;
 
 -- ── Verify: row counts per FOI input (should total ≈613) ────────────────────
-select 'calendar_events'   as tbl, count(*) from public.calendar_events   where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and description like '%[seed:foi]%'
-union all select 'transactions',       count(*) from public.transactions       where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and notes like '%[seed:foi]%'
-union all select 'budgets',            count(*) from public.budgets            where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and period='monthly' and category in ('Groceries','Dining')
-union all select 'financial_accounts', count(*) from public.financial_accounts where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and name like 'FOI · %'
-union all select 'pantry_items',       count(*) from public.pantry_items       where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and name like 'FOI · %'
-union all select 'documents',          count(*) from public.documents          where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'maintenance_tasks',  count(*) from public.maintenance_tasks  where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'family_reminders',   count(*) from public.family_reminders   where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'goals',              count(*) from public.goals              where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'bills',              count(*) from public.bills              where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and name like 'FOI · %'
-union all select 'meal_votes',         count(*) from public.meal_votes         where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'family_polls',       count(*) from public.family_polls       where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and question like 'FOI · %';
+select 'calendar_events'   as tbl, count(*) from public.calendar_events   where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and description like '%[seed:foi]%'
+union all select 'transactions',       count(*) from public.transactions       where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and notes like '%[seed:foi]%'
+union all select 'budgets',            count(*) from public.budgets            where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and period='monthly' and category in ('Groceries','Dining')
+union all select 'financial_accounts', count(*) from public.financial_accounts where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and name like 'FOI · %'
+union all select 'pantry_items',       count(*) from public.pantry_items       where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and name like 'FOI · %'
+union all select 'documents',          count(*) from public.documents          where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and title like 'FOI · %'
+union all select 'maintenance_tasks',  count(*) from public.maintenance_tasks  where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and title like 'FOI · %'
+union all select 'family_reminders',   count(*) from public.family_reminders   where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and title like 'FOI · %'
+union all select 'goals',              count(*) from public.goals              where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and title like 'FOI · %'
+union all select 'bills',              count(*) from public.bills              where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and name like 'FOI · %'
+union all select 'meal_votes',         count(*) from public.meal_votes         where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and title like 'FOI · %'
+union all select 'family_polls',       count(*) from public.family_polls       where family_id=(select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1) and question like 'FOI · %';

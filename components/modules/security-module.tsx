@@ -24,7 +24,13 @@ export function SecurityModule() {
 
   const { data: events, loading, error, refresh } = useRealtimeQuery<Event>({
     table: 'home_security_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('home_security_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
+    // Bound the read: home_security_events auto-accumulates over time, but the views
+    // are recent-focused (7-day count, 14-day activity strip, recent event list).
+    // Load a rolling 365-day window (hard-capped at 1000 rows) instead of the full
+    // history so the client payload stays bounded as events pile up.
+    fetcher: (sb) => sb.from('home_security_events').select('*').eq('family_id', familyId)
+      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('occurred_at', { ascending: false }).limit(1000),
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
@@ -92,7 +98,7 @@ export function SecurityModule() {
         {stats.allClear ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-amber-500" />}
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{stats.allClear ? 'All clear' : `${stats.open} open alert${stats.open === 1 ? '' : 's'}`}</p>
-          <p className="text-xs text-muted">{stats.openCritical} critical Â· {stats.openWarning} warning Â· {stats.total} total logged</p>
+          <p className="text-xs text-muted">{stats.openCritical} critical · {stats.openWarning} warning · {stats.total} total logged</p>
         </div>
         {/* 14-day activity strip */}
         <div className="hidden items-end gap-0.5 sm:flex" aria-hidden>
@@ -107,10 +113,10 @@ export function SecurityModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Open', value: stats.open, icon: 'ðŸš¨', color: stats.open ? 'text-amber-400' : 'text-success' },
-          { label: 'Critical', value: stats.openCritical, icon: 'ðŸ”´', color: stats.openCritical ? 'text-danger' : 'text-muted' },
-          { label: 'This week', value: weekCount, icon: 'ðŸ—“ï¸', color: 'text-brand-text' },
-          { label: 'Resolved', value: stats.total - stats.open, icon: 'âœ…', color: 'text-success' },
+          { label: 'Open', value: stats.open, icon: '🚨', color: stats.open ? 'text-amber-400' : 'text-success' },
+          { label: 'Critical', value: stats.openCritical, icon: '🔴', color: stats.openCritical ? 'text-danger' : 'text-muted' },
+          { label: 'This week', value: weekCount, icon: '🗓️', color: 'text-brand-text' },
+          { label: 'Resolved', value: stats.total - stats.open, icon: '✅', color: 'text-success' },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -142,9 +148,9 @@ export function SecurityModule() {
               <div key={ev.id} className={`flex items-start gap-3 rounded-xl border bg-surface/40 p-3 ${ev.resolved ? 'border-border opacity-60' : meta.tone === 'danger' ? 'border-danger/40' : meta.tone === 'warning' ? 'border-amber-500/40' : 'border-border'}`}>
                 <span className={`mt-0.5 rounded px-1.5 py-0.5 text-[10px] ${meta.tone === 'danger' ? 'bg-danger/15 text-danger' : meta.tone === 'warning' ? 'bg-amber-500/15 text-amber-500' : 'bg-border/40 text-muted'}`}>{meta.label}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{ev.title} <span className="text-xs font-normal text-muted">Â· {ev.kind}</span></p>
+                  <p className="text-sm font-medium">{ev.title} <span className="text-xs font-normal text-muted">· {ev.kind}</span></p>
                   {ev.detail && <p className="text-xs text-muted">{ev.detail}</p>}
-                  <p className="mt-0.5 text-[11px] text-muted">{fmtDate(ev.occurred_at)}{ev.resolved ? ' Â· resolved' : ''}</p>
+                  <p className="mt-0.5 text-[11px] text-muted">{fmtDate(ev.occurred_at)}{ev.resolved ? ' · resolved' : ''}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button onClick={() => toggleResolved(ev)} className="text-muted hover:text-fg" title={ev.resolved ? 'Reopen' : 'Resolve'}>{ev.resolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>

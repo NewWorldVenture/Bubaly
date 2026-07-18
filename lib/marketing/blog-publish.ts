@@ -6,6 +6,7 @@ import type { BlogBlock, BlogCategory } from '@/lib/blog/posts';
 
 export const BLOG_CATEGORIES: BlogCategory[] = [
   'Parenting', 'Organization', 'School & Activities', 'AI & Technology', 'Wellness', 'Family Finances',
+  'Recipes & Food', 'Travel & Adventures', 'Home & Seasonal',
 ];
 
 /** Coerce arbitrary input to a valid blog category, defaulting to Organization. */

@@ -10,7 +10,7 @@ import {
 } from '@/lib/appstore/catalog';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = { title: 'App Store Â· Bubaly' };
+export const metadata: Metadata = { title: 'App Store · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function AppStorePage({ searchParams }: { searchParams: Promise<{ cat?: string; q?: string }> }) {
@@ -49,7 +49,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
         {cat !== 'all' && <input type="hidden" name="cat" value={cat} />}
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input name="q" defaultValue={q} placeholder="Search apps, capabilitiesâ€¦" inputMode="search"
+          <input name="q" defaultValue={q} placeholder="Search apps, capabilities…" inputMode="search"
             className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand" />
         </div>
       </form>
@@ -89,7 +89,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
       {/* Catalog grid */}
       <section>
         <h2 className="mb-3 text-sm font-semibold text-fg">
-          {cat === 'all' ? 'Browse all apps' : categoryLabel(cat)}{q ? ` Â· â€œ${q}â€` : ''} <span className="text-muted">({visible.length})</span>
+          {cat === 'all' ? 'Browse all apps' : categoryLabel(cat)}{q ? ` · “${q}”` : ''} <span className="text-muted">({visible.length})</span>
         </h2>
         {visible.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">No apps match.</div>
@@ -107,13 +107,13 @@ function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 p-4">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-2xl">{app.emoji ?? 'âœ¨'}</span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-2xl">{app.emoji ?? '✨'}</span>
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-bold text-fg">
             <span className="truncate">{app.name}</span>
             {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label="Official" />}
           </p>
-          <p className="truncate text-[11px] text-muted">{app.publisher} Â· {categoryLabel(app.category)}</p>
+          <p className="truncate text-[11px] text-muted">{app.publisher} · {categoryLabel(app.category)}</p>
         </div>
       </div>
       {app.tagline && <p className="mt-2 line-clamp-2 text-xs text-muted">{app.tagline}</p>}

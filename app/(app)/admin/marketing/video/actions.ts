@@ -14,7 +14,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = s(formData, 'id');
   const title = s(formData, 'title');
-  if (!title) return;
+  if (!title) throw new Error('Video title is required.');
 
   // Source is EITHER an uploaded video asset (Asset Library) OR an external URL.
   const assetId = s(formData, 'asset_id');
@@ -32,12 +32,12 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
       .is('deleted_at', null)
       .maybeSingle();
     if (assetError) marketingActionFailure('load the marketing video asset', assetError);
-    if (!asset) return; // asset gone — no-op
+    if (!asset) throw new Error('The selected video asset no longer exists.');
     provider = 'upload';
     storage_path = asset.storage_path;
   } else {
     const parsed = parseVideoUrl(s(formData, 'url'));
-    if (!parsed) return; // need a valid YouTube/Vimeo URL or an uploaded asset
+    if (!parsed) throw new Error('Enter a valid YouTube or Vimeo URL, or choose an uploaded video asset.');
     provider = parsed.provider;
     video_id = parsed.videoId;
     url = s(formData, 'url');
@@ -58,7 +58,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   };
 
   if (id) {
-    const { data, error } = await supabase.from('marketing_videos').update(row).eq('id', id).select('id').maybeSingle();
+    const { data, error } = await supabase.from('marketing_videos').update(row).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
     if (error || !data) marketingActionFailure('update the marketing video', error ?? new Error('Marketing video not found.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_video', resourceId: id });
   } else {
@@ -71,7 +71,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
 
 export async function toggleVideoPublishAction(id: string, publish: boolean): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { data, error } = await supabase.from('marketing_videos').update({ status: publish ? 'published' : 'draft' }).eq('id', id).select('id').maybeSingle();
+  const { data, error } = await supabase.from('marketing_videos').update({ status: publish ? 'published' : 'draft' }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('publish the marketing video', error ?? new Error('Marketing video not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_video', resourceId: id, metadata: { status: publish ? 'published' : 'draft' } });
   revalidatePath('/admin/marketing/video');

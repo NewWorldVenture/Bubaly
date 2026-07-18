@@ -36,8 +36,8 @@ function matchSummary(m: AudienceMatch): string {
   if (m.paths?.length) parts.push(`path: ${m.paths.join('/')}`);
   if (m.countries?.length) parts.push(`country: ${m.countries.join('/')}`);
   if (typeof m.returning === 'boolean') parts.push(m.returning ? 'returning' : 'new visitor');
-  if (m.minSessions) parts.push(`â‰¥${m.minSessions} sessions`);
-  return parts.length ? parts.join(' Â· ') : 'Everyone (default)';
+  if (m.minSessions) parts.push(`≥${m.minSessions} sessions`);
+  return parts.length ? parts.join(' · ') : 'Everyone (default)';
 }
 
 export default async function PersonalizationPage() {
@@ -125,7 +125,7 @@ export default async function PersonalizationPage() {
                       </p>
                       <p className="mt-1 text-xs text-muted">{matchSummary(m)}</p>
                       {(v.headline || v.cta_label) && (
-                        <p className="mt-1 truncate text-xs text-fg/80">â†’ {v.headline ?? ''}{v.cta_label ? ` [${v.cta_label}]` : ''}</p>
+                        <p className="mt-1 truncate text-xs text-fg/80">→ {v.headline ?? ''}{v.cta_label ? ` [${v.cta_label}]` : ''}</p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -135,7 +135,7 @@ export default async function PersonalizationPage() {
                         </button>
                       </form>
                       <form action={deleteRuleAction.bind(null, r.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">âœ•</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
                       </form>
                     </div>
                   </div>

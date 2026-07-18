@@ -180,13 +180,13 @@ export function TripCrudSection<T extends Row>({
                       if (f.type === 'textarea') return <Textarea id={id} value={val} onChange={(e) => set(e.target.value)} rows={2} placeholder={f.placeholder} />;
                       if (f.type === 'select') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
-                          {!f.required && <option value="">â€”</option>}
+                          {!f.required && <option value="">—</option>}
                           {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </Select>
                       );
                       if (f.type === 'member') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
-                          <option value="">â€” Select â€”</option>
+                          <option value="">— Select —</option>
                           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                         </Select>
                       );

@@ -32,10 +32,14 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
 
-  const { data: store } = await sb
+  const { data: store, error: storeError } = await sb
     .from('marketplace_stores')
     .select('id, member_id, name, tagline, description, emoji, is_active')
     .eq('id', id).eq('family_id', familyId).eq('is_active', true).maybeSingle();
+  // Distinguish a transient read failure from a genuinely missing store: throwing
+  // renders a retryable 5xx, whereas notFound() would 404 a real storefront on a
+  // DB blip (a permanent-gone signal). Reserve notFound() for a truly absent store.
+  if (storeError) throw new Error(`Failed to load storefront "${id}": ${storeError.message}`);
   if (!store) notFound();
 
   const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);

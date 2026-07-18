@@ -4,7 +4,7 @@ import { Activity, CheckCircle2, Timer, TrendingDown, Rocket, Zap, CalendarCheck
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
-import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
+import { SectionCard, MiniEmpty, MiniError, StatTile } from '@/components/family/shell';
 import {
   summarizeOnboardingFunnel, formatRate, formatDuration, ONBOARDING_STEPS,
   type OnboardingEventLike,
@@ -20,7 +20,7 @@ export default async function OnboardingFunnelPage() {
   if (!(await isSuperAdmin())) notFound();
 
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error: funnelError } = await supabase
     .from('onboarding_events')
     .select('session_id, step, phase, duration_ms, created_at')
     .order('created_at', { ascending: false })
@@ -31,7 +31,7 @@ export default async function OnboardingFunnelPage() {
     ONBOARDING_STEPS.find((s) => s.key === key)?.label ?? key ?? '—';
 
   // TTFV / activation — the value half of the funnel (T10).
-  const { data: actData } = await supabase
+  const { data: actData, error: actError } = await supabase
     .from('activation_events')
     .select('session_id, milestone, session_index, ms_since_signup, created_at')
     .order('created_at', { ascending: false })
@@ -53,7 +53,9 @@ export default async function OnboardingFunnelPage() {
       </div>
 
       <SectionCard title="Step-by-step funnel">
-        {funnel.startedSessions === 0 ? (
+        {funnelError ? (
+          <MiniError text="Couldn’t load onboarding telemetry. Refresh to try again." />
+        ) : funnel.startedSessions === 0 ? (
           <MiniEmpty icon={Activity} text="No onboarding activity yet." />
         ) : (
           <ul className="space-y-3">
@@ -97,7 +99,9 @@ export default async function OnboardingFunnelPage() {
       </div>
 
       <SectionCard title="Time to First Value">
-        {activation.cohorts === 0 ? (
+        {actError ? (
+          <MiniError text="Couldn’t load activation telemetry. Refresh to try again." />
+        ) : activation.cohorts === 0 ? (
           <MiniEmpty icon={Rocket} text="No activation events yet — value milestones fire once a family views an outcome, briefing, or imports a calendar." />
         ) : (
           <div className="space-y-4">

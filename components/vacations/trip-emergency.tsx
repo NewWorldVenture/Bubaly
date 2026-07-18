@@ -86,9 +86,9 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
               return (
                 <li key={m.id}>
                   <span className="font-medium">{who}</span>
-                  {m.blood_type ? ` Â· ${m.blood_type}` : ''}
-                  {m.allergies ? ` Â· Allergies: ${m.allergies}` : ''}
-                  {m.medications ? ` Â· Meds: ${m.medications}` : ''}
+                  {m.blood_type ? ` · ${m.blood_type}` : ''}
+                  {m.allergies ? ` · Allergies: ${m.allergies}` : ''}
+                  {m.medications ? ` · Meds: ${m.medications}` : ''}
                 </li>
               );
             })}
@@ -108,8 +108,8 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
         fields={contactFields} emptyText="No emergency contacts" addLabel="Add contact"
         renderRow={(c) => (
           <div>
-            <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">Â· {c.category}</span> : null}</p>
-            <p className="mt-0.5 text-xs text-muted">{[c.relationship, c.phone, c.email, c.address].filter(Boolean).join(' Â· ')}</p>
+            <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">· {c.category}</span> : null}</p>
+            <p className="mt-0.5 text-xs text-muted">{[c.relationship, c.phone, c.email, c.address].filter(Boolean).join(' · ')}</p>
           </div>
         )}
       />
@@ -120,8 +120,8 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
           const who = m.member_id ? members.get(m.member_id)?.display_name : 'Traveler';
           return (
             <div>
-              <p className="font-semibold">{who}{m.blood_type ? <span className="ml-1 text-xs font-normal text-muted">Â· {m.blood_type}</span> : null}</p>
-              <p className="mt-0.5 text-xs text-muted">{[m.allergies && `Allergies: ${m.allergies}`, m.conditions && `Conditions: ${m.conditions}`, m.medications && `Meds: ${m.medications}`, m.insurance_provider].filter(Boolean).join(' Â· ')}</p>
+              <p className="font-semibold">{who}{m.blood_type ? <span className="ml-1 text-xs font-normal text-muted">· {m.blood_type}</span> : null}</p>
+              <p className="mt-0.5 text-xs text-muted">{[m.allergies && `Allergies: ${m.allergies}`, m.conditions && `Conditions: ${m.conditions}`, m.medications && `Meds: ${m.medications}`, m.insurance_provider].filter(Boolean).join(' · ')}</p>
             </div>
           );
         }}

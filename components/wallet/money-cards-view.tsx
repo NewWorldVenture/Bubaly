@@ -1,8 +1,8 @@
 'use client';
 
-// Wallet â†’ Cards. Frictionless card management for kids â€” virtual + physical.
-// Three modes: (A) provider not configured â†’ explicit unavailable state, (B) setup
-// needed â†’ guided 3-step onboarding wizard, (C) live â†’ manage per-child cards
+// Wallet → Cards. Frictionless card management for kids — virtual + physical.
+// Three modes: (A) provider not configured → explicit unavailable state, (B) setup
+// needed → guided 3-step onboarding wizard, (C) live → manage per-child cards
 // with instant freeze, spend controls, and physical-card ordering.
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -105,7 +105,7 @@ export function MoneyCardsView({
     router.refresh();
   }
 
-  // â”€â”€ Mode A: card provider is not configured â†’ explicit unavailable state â”€â”€
+  // ── Mode A: card provider is not configured → explicit unavailable state ──
   if (!capabilities.connectOnboarding && !capabilities.issuing) {
     return (
       <div>
@@ -122,7 +122,7 @@ export function MoneyCardsView({
     );
   }
 
-  // â”€â”€ Mode B: available but not set up â†’ guided 3-step wizard â”€â”€
+  // ── Mode B: available but not set up → guided 3-step wizard ──
   if (!accountReady) {
     return (
       <div>
@@ -146,12 +146,12 @@ export function MoneyCardsView({
               <p className="mt-1 text-sm text-muted">
                 {onboardingStarted
                   ? "You've started setup. Complete the quick identity verification to unlock cards for your kids."
-                  : 'Every purchase is checked against their Spend balance in real time â€” they can never overspend. A quick identity verification is required by law.'}
+                  : 'Every purchase is checked against their Spend balance in real time — they can never overspend. A quick identity verification is required by law.'}
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {canManage ? (
                   <Button onClick={startSetup} loading={busy === 'setup'} size="lg">
-                    {onboardingStarted ? 'Continue setup' : 'Get started â€” 5 mins'}
+                    {onboardingStarted ? 'Continue setup' : 'Get started — 5 mins'}
                   </Button>
                 ) : (
                   <p className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm text-muted">Ask a parent to set this up.</p>
@@ -164,7 +164,7 @@ export function MoneyCardsView({
         {/* Feature preview */}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            { icon: ShieldCheck, label: 'Real-time spend gate', desc: 'Declines if balance is insufficient â€” instantly.' },
+            { icon: ShieldCheck, label: 'Real-time spend gate', desc: 'Declines if balance is insufficient — instantly.' },
             { icon: Snowflake, label: 'Instant freeze', desc: 'Freeze any card from your phone in one tap.' },
             { icon: SlidersHorizontal, label: 'Per-card controls', desc: 'Set daily limits and block categories like gaming.' },
           ].map((f) => (
@@ -179,18 +179,18 @@ export function MoneyCardsView({
     );
   }
 
-  // â”€â”€ Mode C: account ready â†’ manage cards â”€â”€
+  // ── Mode C: account ready → manage cards ──
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title="Cards" description="Kid-safe spending cards â€” each purchase checks the Spend balance in real time." />
+      <PageHeader title="Cards" description="Kid-safe spending cards — each purchase checks the Spend balance in real time." />
 
       {/* Setup success banner */}
       {showSetupSuccess && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
           <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-400" />
           <p className="flex-1 text-sm font-medium text-emerald-300">Account verified! Issue virtual cards for your kids below.</p>
-          <button type="button" onClick={() => setShowSetupSuccess(false)} className="text-muted hover:text-fg">âœ•</button>
+          <button type="button" onClick={() => setShowSetupSuccess(false)} className="text-muted hover:text-fg">✕</button>
         </div>
       )}
 
@@ -252,7 +252,7 @@ export function MoneyCardsView({
 
                 {/* Cards list */}
                 {childCards.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-muted">No card yet â€” use the buttons above to issue one.</div>
+                  <div className="px-4 py-3 text-sm text-muted">No card yet — use the buttons above to issue one.</div>
                 ) : (
                   <div className="divide-y divide-border/30">
                     {childCards.map((card) => (
@@ -294,7 +294,7 @@ export function MoneyCardsView({
   );
 }
 
-// â”€â”€â”€ Setup Steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Setup Steps ──────────────────────────────────────────────────────────────
 
 function SetupSteps({ current }: { current: number }) {
   const steps = [
@@ -322,7 +322,7 @@ function SetupSteps({ current }: { current: number }) {
   );
 }
 
-// â”€â”€â”€ Card Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Card Row ─────────────────────────────────────────────────────────────────
 
 function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggleControls, onSaved }: {
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
@@ -336,20 +336,20 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
           'flex h-10 w-16 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white',
           card.isFrozen ? 'bg-muted/50' : 'bg-gradient-to-br from-brand to-violet-600',
         )}>
-          {card.last4 ? `â€¢â€¢${card.last4}` : card.type === 'physical' ? 'PHYS' : 'VIRT'}
+          {card.last4 ? `••${card.last4}` : card.type === 'physical' ? 'PHYS' : 'VIRT'}
         </div>
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
             {card.brand ?? (card.type === 'physical' ? 'Physical' : 'Virtual')} card
-            {card.last4 && <span className="font-normal text-muted"> Â·Â·Â·Â· {card.last4}</span>}
+            {card.last4 && <span className="font-normal text-muted"> ···· {card.last4}</span>}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted">
             {card.isFrozen
               ? <span className="flex items-center gap-1 text-sky-400"><Snowflake className="h-3 w-3" /> Frozen</span>
               : <span className="flex items-center gap-1 text-emerald-400"><ShieldCheck className="h-3 w-3" /> Active</span>}
-            {card.spendLimitCents != null && <span>Â· {formatCents(card.spendLimitCents)} {windowShort(card.spendWindow)}</span>}
-            {card.blockedCategories.length > 0 && <span>Â· {card.blockedCategories.length} blocked</span>}
+            {card.spendLimitCents != null && <span>· {formatCents(card.spendLimitCents)} {windowShort(card.spendWindow)}</span>}
+            {card.blockedCategories.length > 0 && <span>· {card.blockedCategories.length} blocked</span>}
             {card.type === 'physical' && <span className="flex items-center gap-0.5"><Package className="h-3 w-3" /> Physical</span>}
           </p>
         </div>
@@ -379,7 +379,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   );
 }
 
-// â”€â”€â”€ Physical Card Order Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Physical Card Order Modal ────────────────────────────────────────────────
 
 function PhysicalCardModal({ child, onClose, onIssued }: {
   child: CardChild; onClose: () => void; onIssued: () => void;
@@ -404,13 +404,13 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
   }
 
   return (
-    <Modal open title={`Order physical card â€” ${child.name}`} onClose={onClose}>
+    <Modal open title={`Order physical card — ${child.name}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
           <Package className="h-5 w-5 flex-shrink-0 text-brand-text" />
           <div>
             <p className="text-sm font-semibold">Physical Visa Debit Card</p>
-            <p className="text-xs text-muted">Shipped in 5â€“7 business days. Works everywhere Visa is accepted.</p>
+            <p className="text-xs text-muted">Shipped in 5–7 business days. Works everywhere Visa is accepted.</p>
           </div>
         </div>
 
@@ -419,12 +419,12 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
             <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" />
             <div>
               <p className="text-sm font-semibold">Real-time balance gate</p>
-              <p className="text-xs text-muted">Every swipe checks {child.name}&apos;s Spend bucket. Declines instantly if insufficient â€” no overdraft possible.</p>
+              <p className="text-xs text-muted">Every swipe checks {child.name}&apos;s Spend bucket. Declines instantly if insufficient — no overdraft possible.</p>
             </div>
           </div>
         </div>
 
-        <Field label="Daily spend limit (optional â€” leave blank for no limit)">
+        <Field label="Daily spend limit (optional — leave blank for no limit)">
           {(id) => (
             <div className="flex items-center gap-1.5">
               <span className="text-muted">$</span>
@@ -449,7 +449,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
   );
 }
 
-// â”€â”€â”€ Card Controls Editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Card Controls Editor ─────────────────────────────────────────────────────
 
 function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
   const { success, error: toastError } = useToast();

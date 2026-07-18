@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 const HOUR = 3_600_000;
 
-/** Count-only query â†’ number (0 on any error, so a missing table never breaks the page). */
+/** Count-only query → number (0 on any error, so a missing table never breaks the page). */
 type CountResult = { value: number; error: unknown | null };
 
 async function count(q: PromiseLike<{ count: number | null; error: unknown }>): Promise<CountResult> {
@@ -76,10 +76,16 @@ export default async function AgentsPage() {
     return <ReadFailure />;
   }
 
-  // Knowledge graph â†’ relationship-level reasoning for the Chief of Staff, via the
-  // ONE shared reasoning engine (R1 context + R2 insights) â€” the same one Calm folds
+  // Knowledge graph → relationship-level reasoning for the Chief of Staff, via the
+  // ONE shared reasoning engine (R1 context + R2 insights) — the same one Calm folds
   // in. Best-effort: a missing graph yields no insights, never an error.
-  const reasoning = await loadFamilyContext(supabase, familyId, now).catch(() => null);
+  let reasoning;
+  try {
+    reasoning = await loadFamilyContext(supabase, familyId, now);
+  } catch (error) {
+    console.error('[dashboard-agents] reasoning context read failed', error);
+    return <ReadFailure />;
+  }
   const graphItems: AgentItem[] = reasoning
     ? reasoningInsights(reasoning).map((i) => ({ title: i.title, detail: i.detail, href: i.href, severity: i.severity }))
     : [];
@@ -89,7 +95,7 @@ export default async function AgentsPage() {
   const unassignedEvents = events.filter((e) => !e.assignee_id).length;
   const upcomingAppointments = events.filter((e) => e.category === 'appointment').length;
 
-  // Overlapping timed events (same window) â†’ conflicts.
+  // Overlapping timed events (same window) → conflicts.
   const timed = events.filter((e) => !e.all_day);
   let conflicts = 0;
   for (let i = 0; i < timed.length; i++) {

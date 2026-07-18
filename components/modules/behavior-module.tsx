@@ -34,7 +34,13 @@ export function BehaviorModule() {
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'behavior_logs', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }),
+    // Bound the read: behavior_logs grows unbounded over a family's lifetime, but
+    // every view here is recent-focused (6-week trend, streaks, recent list). Load
+    // a rolling 365-day window (hard-capped at 1000 rows) instead of the full
+    // history, so the client payload stays bounded as data accumulates.
+    fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId)
+      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('occurred_at', { ascending: false }).limit(1000),
   });
 
   const [memberFilter, setMemberFilter] = useState('all');
@@ -172,7 +178,7 @@ export function BehaviorModule() {
                   ))}
                 </div>
                 {s.topCategories.length > 0 && (
-                  <p className="mt-3 flex items-center gap-1 text-xs text-muted"><TrendingUp className="h-3 w-3" /> {s.topCategories.map((c) => `${c.category} (${c.count})`).join(' Â· ')}</p>
+                  <p className="mt-3 flex items-center gap-1 text-xs text-muted"><TrendingUp className="h-3 w-3" /> {s.topCategories.map((c) => `${c.category} (${c.count})`).join(' · ')}</p>
                 )}
               </div>
             );
@@ -196,8 +202,8 @@ export function BehaviorModule() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm">
                   <span className="font-medium capitalize">{l.category}</span>
-                  {m ? ` Â· ${m.display_name}` : ''}
-                  {l.points ? <span className={l.points > 0 ? 'text-success' : 'text-danger'}> Â· {l.points > 0 ? '+' : ''}{l.points}</span> : null}
+                  {m ? ` · ${m.display_name}` : ''}
+                  {l.points ? <span className={l.points > 0 ? 'text-success' : 'text-danger'}> · {l.points > 0 ? '+' : ''}{l.points}</span> : null}
                 </p>
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
@@ -214,7 +220,7 @@ export function BehaviorModule() {
             <Field label="Child">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">â€” Select â€”</option>
+                  <option value="">— Select —</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}

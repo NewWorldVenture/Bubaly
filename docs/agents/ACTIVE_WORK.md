@@ -1,0 +1,24 @@
+# ACTIVE_WORK
+
+What each agent is doing right now. Bridges to `docs/audit/COORDINATION.md §3`.
+Update at each checkpoint (≤15 min while active).
+
+| Agent | Since (UTC) | Active work | Files in flight | Next |
+|-------|-------------|-------------|-----------------|------|
+| `CLAUDE-QA-01` (agent-02) | 2026-07-18 11:15 | Recovery system bootstrap + client-boundary class sweeps; integration gate warm | `docs/agents/*` (new), progress lane | Extend silent read/write sweep into `components/{marketplace,wallet}/` leaf widgets; re-gate on churn |
+| `codex` | 2026-07-18 11:20 | Server-read fail-closed sweep + audit ledgers; four reasoning consumers validated locally | `app/(app)/dashboard/{decisions,outcomes,playbook,prep-plans}/page.tsx`, matching boundary tests, audit ledgers | Run full gate, integrate docs, then rebase/publish the next atomic increment |
+| `codex` | 2026-07-18 12:15 | Unified reasoning engine source-failure contract + audit ledgers; 629-file gate and fresh 489-route build passed | `lib/reasoning/{engine,engine-server}.ts`, reasoning page, boundary tests, audit ledgers | Rebase and publish this validated atomic increment, then continue the A-15/A-05 sweep |
+| `codex` | 2026-07-18 12:50 | Closed-loop Super Admin **marketing audit**: AEO/SEO/content/landing lifecycle, public degraded states, attribution, email, assets, sitemap. **→ see `docs/MARKETING_PLATFORM_COORDINATION.md` for the single authoritative marketing handoff (non-overlapping with this board).** | marketing admin/public/channel files plus audit and coordination records | Rebase, publish one validated marketing increment, verify remote readback, retain NO-GO for external gates |
+| `agent-05` | 2026-07-18 14:58 | **Marketing image bar CLOSED (A-17 support, MKT-4/LB-016/PLA-0831)**: replaced 500-article LoremFlickr hotlinks (mixed-license + 9-pool visual dupes) with bespoke generated `components/blog/blog-cover.tsx` (per-title seed → free/unique/no-dup, inline SVG, theme-aware); `freeLicensedImage()` strips loremflickr at the `lib/blog/posts.ts` chokepoint (all 5 consumers incl. og:image/JSON-LD); dropped host from `next.config.mjs`. Guard `tests/blog-cover-free-images.test.ts` (4). tsc+eslint+build green. Commit `56bb8e89`. Also authored `docs/MARKETING_PLATFORM_COORDINATION.md §6` (wiring re-verified GOOD; image gate honestly amended then resolved). Earlier today: Calendar A-06 (PLA-0823, `6018db1f`), A-05 §23 a11y (PLA-0822). | `components/blog/blog-cover.tsx`, `lib/blog/posts.ts`, `app/(marketing)/blog/**` (done) | Resume A-05 §23 a11y (focus-order/live-regions) unless directed |
+| **cross-lane notes → owners** | 2026-07-18 11:31 | (A-10/agent-03) `shopping-module.tsx` L189 icon-only edit `<Pencil/>` no `aria-label`. (A-11/agent-03) `documents-module.tsx` L609 upload dropzone is a bare `<div onClick>` — same keyboard gap (WCAG 2.1.1) as the photos one I just fixed. Both flagged, NOT edited. | — | A-10/A-11 owner to add `aria-label` + keyboard support |
+| `codex` | 2026-07-18 11:20 | Server-read fail-closed sweep + audit ledgers; four reasoning consumers validated locally | `app/(app)/dashboard/{decisions,outcomes,playbook,prep-plans}/page.tsx`, matching boundary tests, audit ledgers | Run full gate, integrate docs, then rebase/publish the next atomic increment |
+| `agent-05` | 2026-07-18 10:53 | A-05 read-performance sweep **COMPLETE** (§25): growth-log tables (behavior_logs, care_log, home_security_events, experience_audits → rolling 365d/1000 — PLA-0813) + calendar over-fetch consumers (next-actions, briefing → date-window push-down — PLA-0814). SSR pages (command-center, conflicts, journeys, migrate) verified already bounded. Commits `83066d99`→`04a1fe91`. Full suite **3687 green**. | `components/modules/{behavior,care,security,experience-scorecard,next-actions,briefing}-module.tsx` (done) | Next A-05 unit: dashboard action/empty-state/mobile matrix, or wiring-matrix evidence for remaining A-05 features |
+| agent-01/03/04 | stale >18h | IN_REVIEW; may resume | see registry | reclaimable per §0 |
+
+## QA-01 done this session (all on main, verified)
+- `next build` GREEN + tsc/vitest re-gate after concurrent landings.
+- §3b null-string SSR crash class: swept clean (74 modules).
+- JSON.parse/localStorage class: swept clean.
+- Client silent-write class: 6 fixes (notes×2, pets, autopilot, voting, routines)
+  + 4 guard-test files / 11 assertions. Commits: `2923b476`, `7f8ceedb`,
+  `cc82bf2d`, `a34c833d`, `3a5263f8`.

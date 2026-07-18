@@ -40,6 +40,32 @@ export function formatLikeCount(n: number): string {
   return `${(Math.floor(n / 100_000) / 10).toFixed(1).replace(/\.0$/, '')}m`;
 }
 
+/**
+ * Normalize a stored tag into a social-ready hashtag: strip spaces/punctuation,
+ * lowercase, and prefix with `#`. `'family finances'` → `'#familyfinances'`,
+ * `'#bubaly'` → `'#bubaly'`.
+ */
+export function toHashtag(raw: string): string {
+  const core = String(raw).replace(/^#+/, '').replace(/[^a-z0-9]+/gi, '').toLowerCase();
+  return core ? `#${core}` : '';
+}
+
+/**
+ * Display hashtags for an article: normalize every tag to a hashtag, always
+ * include #bubaly (brand/social tag) and #familylife, dedupe, and cap the list
+ * so the UI stays tidy. Used for every post — legacy rows included — so the
+ * whole blog is socially taggable and consistent.
+ */
+export function articleHashtags(tags: readonly string[] | null | undefined, max = 8): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of ['#bubaly', '#familylife', ...(tags ?? [])]) {
+    const h = toHashtag(t);
+    if (h && h.length > 1 && !seen.has(h)) { seen.add(h); out.push(h); }
+  }
+  return out.slice(0, max);
+}
+
 /** Allowed subscription sources (drives attribution, keeps the column tidy). */
 export function normalizeSource(raw: unknown): string {
   const allowed = new Set(['blog', 'blog-sidebar', 'blog-footer', 'article']);

@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Download } from 'lucide-react'
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/states';
 import { VACATION_KINDS, lookup } from '@/lib/vacations/meta';
 import { buildICS, type IcsEvent } from '@/lib/vacations/ics';
 import type { Tables } from '@/lib/database.types';
@@ -22,7 +23,7 @@ function inRange(day: string, start: string | null, end: string | null): boolean
 
 export function VacationsCalendar() {
   const { familyId } = useApp();
-  const { data: trips } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
+  const { data: trips, error, refresh } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -50,6 +51,18 @@ export function VacationsCalendar() {
     const a = document.createElement('a');
     a.href = url; a.download = 'bubaly-vacations.ics'; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // A genuine vacations read failure must surface + be retryable, not render as
+  // an empty calendar (and a silently-empty .ics export). Missing-table/offline
+  // are still degraded to an empty list by the hook.
+  if (error) {
+    return (
+      <div className="space-y-5">
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> Vacation Calendar</h1>
+        <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
+      </div>
+    );
   }
 
   return (

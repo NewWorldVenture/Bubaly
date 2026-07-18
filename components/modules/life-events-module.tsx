@@ -1,6 +1,6 @@
 'use client';
 
-// Life & Milestones (T9) â€” two halves that deepen the felt moat:
+// Life & Milestones (T9) — two halves that deepen the felt moat:
 //  1. "What Bubaly has learned": the family's accumulated preferences, routines
 //     and traditions (family_facts), shown back to them and fully editable.
 //  2. Life-event playbooks: one-tap templates (New Baby, Moving, School Start,
@@ -83,7 +83,7 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success('Playbook started â€” your checklist is ready');
+    success('Playbook started — your checklist is ready');
     setStartTemplate(null);
   }
 
@@ -112,17 +112,17 @@ export function LifeEventsModule() {
     <div className="space-y-8">
       <PageHeader
         title="Life & Milestones"
-        description="What Bubaly has learned about your family â€” and one-tap playbooks for the big moments."
+        description="What Bubaly has learned about your family — and one-tap playbooks for the big moments."
       />
 
-      {/* â”€â”€ What Bubaly has learned â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── What Bubaly has learned ─────────────────────────────────────────── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> What Bubaly has learned</h2>
           <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {learned.length === 0 ? (
-          <EmptyState icon={Sparkles} title="Bubaly is still getting to know you" description="Preferences, routines and traditions you save here show up across the app â€” add the first thing your family always does." />
+          <EmptyState icon={Sparkles} title="Bubaly is still getting to know you" description="Preferences, routines and traditions you save here show up across the app — add the first thing your family always does." />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {learned.map((f) => (
@@ -146,7 +146,7 @@ export function LifeEventsModule() {
         )}
       </section>
 
-      {/* â”€â”€ Life-event playbooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Life-event playbooks ────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Start a life-event playbook</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -168,7 +168,7 @@ export function LifeEventsModule() {
         </div>
       </section>
 
-      {/* â”€â”€ Active plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Active plans ────────────────────────────────────────────────────── */}
       {activePlans.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Your playbooks</h2>
@@ -185,7 +185,7 @@ export function LifeEventsModule() {
                       <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4.5 w-4.5" /></span>
                       <div>
                         <p className="font-semibold">{p.title}{p.status === 'completed' && <span className="ml-2 text-xs text-emerald-400">complete</span>}</p>
-                        <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} Â· {done}/{pItems.length} done</p>
+                        <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} · {done}/{pItems.length} done</p>
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-xs">
@@ -306,7 +306,7 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
         <Field label="Notes (optional)">{(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : editing ? 'Save' : 'Add'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Add'}</Button>
         </div>
       </form>
     </Modal>

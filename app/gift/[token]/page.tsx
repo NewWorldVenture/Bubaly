@@ -10,11 +10,28 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   const { token } = await params;
   const supabase = createServiceClient();
 
-  const { data: link } = await supabase
+  const { data: link, error: linkError } = await supabase
     .from('gift_links')
     .select('id, is_active, occasion, message, suggested_cents, child_wallet_id, family_id')
     .eq('token', token)
     .maybeSingle();
+
+  // Distinguish a genuinely-missing/expired link (data null, no error → show the
+  // "no longer active" message) from a transient READ FAILURE (error set). On a
+  // real error the token may be perfectly valid, so showing "no longer active"
+  // would wrongly turn away a gift-giver mid-payment; render a retryable message
+  // instead.
+  if (linkError) {
+    console.error('[gift/token] gift link read failed', linkError);
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
+        <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
+          We couldn&apos;t load this gift link right now. Please refresh and try again in a moment.
+        </p>
+      </div>
+    );
+  }
 
   const active = !!link && link.is_active;
   let childName = 'a child';

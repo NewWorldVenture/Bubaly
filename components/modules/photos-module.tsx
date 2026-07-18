@@ -74,7 +74,7 @@ export function PhotosModule() {
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // â”€â”€ Upload handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
     const media = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
@@ -131,7 +131,7 @@ export function PhotosModule() {
     setUploadOpen(false);
   }
 
-  // â”€â”€ Drag & drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Drag & drop ───────────────────────────────────────────
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
@@ -150,14 +150,20 @@ export function PhotosModule() {
 
   async function toggleFavorite(photo: Photo) {
     const supabase = createClient();
-    await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    const { error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    if (error) toastError(describeDbError(error));
     void refreshPhotos();
   }
 
   async function deletePhoto(photo: Photo) {
     const supabase = createClient();
+    // Delete the DB row (the source of truth) FIRST and surface any failure —
+    // dropping this error showed a false "Photo deleted" while the photo remained.
+    // Only remove the storage object after the row is gone, so a failed delete can
+    // never orphan a library row that points at an already-removed image.
+    const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
+    if (error) { toastError(describeDbError(error)); return; }
     await supabase.storage.from('family-media').remove([photo.storage_path]);
-    await supabase.from('family_photos').delete().eq('id', photo.id);
     success('Photo deleted');
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);
@@ -165,7 +171,8 @@ export function PhotosModule() {
 
   async function updateCaption(photo: Photo, caption: string) {
     const supabase = createClient();
-    await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    const { error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    if (error) toastError(describeDbError(error));
     void refreshPhotos();
     setEditPhoto(null);
   }
@@ -174,7 +181,7 @@ export function PhotosModule() {
   const error = albumsError || photosError;
   const refresh = () => { void refreshAlbums(); void refreshPhotos(); };
 
-  // â”€â”€ Album stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Album stats ───────────────────────────────────────────
   const albumStats = albums.map((a) => ({
     ...a,
     count: allPhotos.filter((p) => p.album_id === a.id).length,
@@ -196,7 +203,7 @@ export function PhotosModule() {
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search photosâ€¦"
+                placeholder="Search photos…"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
             <Button variant="outline" size="sm" onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
@@ -327,10 +334,12 @@ export function PhotosModule() {
                       {photo.caption && <p className="truncate text-[11px] text-white">{photo.caption}</p>}
                       <div className="ml-auto flex gap-1.5">
                         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
+                          aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           {photo.is_favorite ? <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" /> : <Heart className="h-3.5 w-3.5" />}
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); setEditPhoto(photo); }}
+                          aria-label="Edit photo details"
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -365,7 +374,8 @@ export function PhotosModule() {
                     <p className="text-xs text-muted">{fmtRelative(photo.created_at)}</p>
                   </div>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}>
+                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
+                    aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}>
                     {photo.is_favorite ? <Heart className="h-4 w-4 fill-red-400 text-red-400" /> : <Heart className="h-4 w-4 text-muted" />}
                   </button>
                 </div>
@@ -375,19 +385,21 @@ export function PhotosModule() {
         </div>
       )}
 
-      {/* â”€â”€ Lightbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
           onClick={() => setLightboxIdx(null)}>
           {/* Nav */}
           {lightboxIdx > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
+              aria-label="Previous photo"
               className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
           {lightboxIdx < photos.length - 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) + 1); }}
+              aria-label="Next photo"
               className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronRight className="h-6 w-6" />
             </button>
@@ -418,10 +430,12 @@ export function PhotosModule() {
                   <Download className="h-4 w-4" />
                 </a>
                 <button onClick={() => toggleFavorite(photos[lightboxIdx])}
+                  aria-label={photos[lightboxIdx].is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
                 <button onClick={() => { if (confirm('Delete this photo?')) deletePhoto(photos[lightboxIdx]); }}
+                  aria-label="Delete photo"
                   className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -431,6 +445,7 @@ export function PhotosModule() {
 
           {/* Close */}
           <button onClick={() => setLightboxIdx(null)}
+            aria-label="Close"
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
             <X className="h-5 w-5" />
           </button>
@@ -488,7 +503,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title="New Album">
       <form onSubmit={create} className="space-y-4">
         <Field label="Album name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthdayâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthday…" autoFocus />}
         </Field>
         <Field label="Category">
           {(id) => (
@@ -541,9 +556,14 @@ function UploadModal({ onClose, onUpload, progress }: {
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           onClick={() => { if (!busy) fileRef.current?.click(); }}
+          onKeyDown={(e) => { if (!busy && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
+          role="button"
+          tabIndex={busy ? -1 : 0}
+          aria-label="Upload photos or videos"
           aria-disabled={busy}
           className={cn(
             'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
+            'focus:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40',
             busy ? 'cursor-not-allowed border-border opacity-60' : 'cursor-pointer',
             dragging ? 'border-brand bg-brand/10' : !busy && 'border-border hover:border-brand/50 hover:bg-brand/5',
           )}>
@@ -570,7 +590,7 @@ function UploadModal({ onClose, onUpload, progress }: {
           </div>
         )}
 
-        {/* Live upload progress â€” honest per-file bar so multi-file uploads aren't a blind wait. */}
+        {/* Live upload progress — honest per-file bar so multi-file uploads aren't a blind wait. */}
         {busy && progress && (
           <div aria-live="polite">
             <div className="h-1.5 overflow-hidden rounded-full bg-border"
@@ -590,7 +610,7 @@ function UploadModal({ onClose, onUpload, progress }: {
             onUpload(dt.files);
           }}>
             {busy && progress
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}â€¦</>
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
               : <><Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
           </Button>
         </div>
@@ -607,7 +627,7 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
         <Field label="Caption">
-          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a captionâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a caption…" autoFocus />}
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

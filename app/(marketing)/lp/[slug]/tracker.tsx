@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { trackConversion } from '@/lib/marketing/visitor';
 
 /**
  * Fires a one-time view beacon on mount, and a conversion beacon when any
@@ -28,7 +29,10 @@ export function LandingTracker({ slug }: { slug: string }) {
 
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-lp-cta]')) send('conversion');
+      if (target?.closest('[data-lp-cta]')) {
+        send('conversion');
+        void trackConversion();
+      }
     };
     document.addEventListener('click', onClick);
     return () => document.removeEventListener('click', onClick);

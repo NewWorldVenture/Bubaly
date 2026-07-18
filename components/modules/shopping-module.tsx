@@ -26,14 +26,14 @@ type GroceryList = Tables<'grocery_lists'>;
 type GroceryItem = Tables<'grocery_items'>;
 
 const STORE_PRESETS = [
-  { name: 'Grocery', icon: 'ðŸ›’', color: '#7c5dfa', store: null },
-  { name: 'Costco', icon: 'ðŸª', color: '#e63c30', store: 'costco' },
-  { name: 'Walmart', icon: 'ðŸŸ¡', color: '#0071dc', store: 'walmart' },
-  { name: 'Target', icon: 'ðŸŽ¯', color: '#cc0000', store: 'target' },
-  { name: 'Whole Foods', icon: 'ðŸŒ¿', color: '#00674b', store: 'whole_foods' },
-  { name: 'Amazon Fresh', icon: 'ðŸ“¦', color: '#ff9900', store: 'amazon_fresh' },
-  { name: 'Trader Joe\'s', icon: 'ðŸŒº', color: '#d4001a', store: 'trader_joes' },
-  { name: 'Custom', icon: 'ðŸ“', color: '#6b7280', store: null },
+  { name: 'Grocery', icon: '🛒', color: '#7c5dfa', store: null },
+  { name: 'Costco', icon: '🏪', color: '#e63c30', store: 'costco' },
+  { name: 'Walmart', icon: '🟡', color: '#0071dc', store: 'walmart' },
+  { name: 'Target', icon: '🎯', color: '#cc0000', store: 'target' },
+  { name: 'Whole Foods', icon: '🌿', color: '#00674b', store: 'whole_foods' },
+  { name: 'Amazon Fresh', icon: '📦', color: '#ff9900', store: 'amazon_fresh' },
+  { name: 'Trader Joe\'s', icon: '🌺', color: '#d4001a', store: 'trader_joes' },
+  { name: 'Custom', icon: '📝', color: '#6b7280', store: null },
 ] as const;
 
 const CATEGORIES = ['Produce', 'Dairy & Eggs', 'Meat & Seafood', 'Pantry', 'Beverages', 'Frozen', 'Household', 'Personal Care', 'Baby', 'Pet', 'Other'];
@@ -161,7 +161,7 @@ export function ShoppingModule() {
 
   return (
     <div className="module-with-sidebar">
-      {/* â”€â”€ List sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── List sidebar ─────────────────────────────────────── */}
       <div className="flex w-full flex-col lg:w-56 xl:w-64 flex-shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">My Lists</h2>
@@ -180,7 +180,7 @@ export function ShoppingModule() {
                   'group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition',
                   isActive ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated/40 text-muted',
                 )}>
-                <span className="text-lg">{(list as Record<string, unknown>).list_icon as string ?? 'ðŸ›’'}</span>
+                <span className="text-lg">{(list as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <div className="flex-1 min-w-0">
                   <p className={cn('truncate text-sm font-medium', isActive && 'text-brand-text font-bold')}>{list.name}</p>
                   <p className="text-[10px]">{activeListId === list.id ? `${totalCount} items` : ''}</p>
@@ -201,7 +201,7 @@ export function ShoppingModule() {
         </div>
       </div>
 
-      {/* â”€â”€ Main shopping list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Main shopping list ───────────────────────────────── */}
       <div className="module-main">
         {!activeList ? (
           <EmptyState icon={ShoppingBag} title="No lists yet"
@@ -212,7 +212,7 @@ export function ShoppingModule() {
             {/* List header */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{(activeList as Record<string, unknown>).list_icon as string ?? 'ðŸ›’'}</span>
+                <span className="text-2xl">{(activeList as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
               <div className="ml-auto flex items-center gap-2">
@@ -224,7 +224,7 @@ export function ShoppingModule() {
                 )}
                 <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
                   <Search className="h-3.5 w-3.5 text-muted" />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Searchâ€¦"
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
                   {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>
@@ -305,7 +305,7 @@ export function ShoppingModule() {
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
-                placeholder="+ Add itemâ€¦"
+                placeholder="+ Add item…"
                 className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
               {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
@@ -338,7 +338,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
-  const [icon, setIcon] = useState('ðŸ›’');
+  const [icon, setIcon] = useState('🛒');
   const [preset, setPreset] = useState<typeof STORE_PRESETS[number]>(STORE_PRESETS[0]);
 
   function selectPreset(p: typeof STORE_PRESETS[number]) {
@@ -353,7 +353,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     const trimmed = name.trim();
     if (!trimmed) { toastError('Give your list a name'); return; }
     if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
-    if (!familyId) { toastError('No active family â€” reload and try again.'); return; }
+    if (!familyId) { toastError('No active family — reload and try again.'); return; }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -387,12 +387,12 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
           </div>
         </div>
         <Field label="List name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Grocery List, Costco Runâ€¦" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Grocery List, Costco Run…" autoFocus />}
         </Field>
         <Field label="Icon">
           {() => (
             <div className="flex flex-wrap gap-2">
-              {['ðŸ›’', 'ðŸª', 'ðŸŽ¯', 'ðŸ“¦', 'ðŸŒ¿', 'ðŸŒº', 'ðŸ ', 'ðŸ•', 'ðŸ’Š', 'ðŸ¾'].map((e) => (
+              {['🛒', '🏪', '🎯', '📦', '🌿', '🌺', '🏠', '🍕', '💊', '🐾'].map((e) => (
                 <button key={e} type="button" onClick={() => setIcon(e)}
                   className={cn('rounded-xl p-2 text-xl hover:bg-elevated transition', icon === e && 'bg-brand/15 ring-2 ring-brand/40')}>
                   {e}
@@ -416,7 +416,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(list.name);
-  const [icon, setIcon] = useState((list as Record<string, unknown>).list_icon as string ?? 'ðŸ›’');
+  const [icon, setIcon] = useState((list as Record<string, unknown>).list_icon as string ?? '🛒');
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -446,7 +446,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
         <Field label="Icon">
           {() => (
             <div className="flex flex-wrap gap-2">
-              {['ðŸ›’', 'ðŸª', 'ðŸŽ¯', 'ðŸ“¦', 'ðŸŒ¿', 'ðŸŒº', 'ðŸ ', 'ðŸ•', 'ðŸ’Š', 'ðŸ¾'].map((e) => (
+              {['🛒', '🏪', '🎯', '📦', '🌿', '🌺', '🏠', '🍕', '💊', '🐾'].map((e) => (
                 <button key={e} type="button" onClick={() => setIcon(e)}
                   className={cn('rounded-xl p-2 text-xl hover:bg-elevated transition', icon === e && 'bg-brand/15 ring-2 ring-brand/40')}>
                   {e}

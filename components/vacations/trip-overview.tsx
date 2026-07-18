@@ -117,7 +117,8 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   async function dismissReco(id: string) {
-    await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
+    const { error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
+    if (error) toastError(error.message);
   }
 
   if (loading) return <LoadingBlock />;
@@ -132,8 +133,8 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
         <div className="flex flex-wrap items-center gap-4">
           <ReadinessRing score={readiness.score} />
           <div className="flex-1">
-            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> Vacation Readiness Â· {lvlLabel}</h2>
-            <p className="text-sm text-muted">{countdownLabel(trip?.start_date)} Â· {members.length} traveler{members.length === 1 ? '' : 's'}</p>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> Vacation Readiness · {lvlLabel}</h2>
+            <p className="text-sm text-muted">{countdownLabel(trip?.start_date)} · {members.length} traveler{members.length === 1 ? '' : 's'}</p>
           </div>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -166,11 +167,11 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
           <Button size="sm" variant="secondary" onClick={refreshRecos} loading={refreshing}><RefreshCw className="h-4 w-4" /> Refresh</Button>
         </div>
         {openRecos.length === 0 ? (
-          <p className="mt-3 flex items-center gap-2 text-sm text-muted"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> No open recommendations â€” tap Refresh to scan this trip.</p>
+          <p className="mt-3 flex items-center gap-2 text-sm text-muted"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> No open recommendations — tap Refresh to scan this trip.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {openRecos.slice(0, 8).map((r) => {
-              const meta = RECO_META[r.kind] ?? { label: r.kind, emoji: 'â€¢' };
+              const meta = RECO_META[r.kind] ?? { label: r.kind, emoji: '•' };
               const tone = r.severity >= 3 ? 'border-rose-500/30' : r.severity === 2 ? 'border-amber-500/30' : 'border-border';
               return (
                 <li key={r.id} className={`flex items-start justify-between gap-3 rounded-xl border ${tone} bg-elevated/30 p-3`}>
@@ -193,10 +194,10 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
         </Link>
         <Link href={`/dashboard/vacations/${vacationId}/weather`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
           <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> Weather</h3>
-          {weather.length === 0 ? <p className="mt-2 text-sm text-muted">No forecast yet â€” fetch one on the Weather tab.</p> : (
+          {weather.length === 0 ? <p className="mt-2 text-sm text-muted">No forecast yet — fetch one on the Weather tab.</p> : (
             <ul className="mt-2 space-y-1 text-sm">
-              {weatherAdvice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">â€¢ {a.text}</li>)}
-              {weatherAdvice.length === 0 && <li className="text-muted">Looks pleasant â€” no alerts.</li>}
+              {weatherAdvice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}
+              {weatherAdvice.length === 0 && <li className="text-muted">Looks pleasant — no alerts.</li>}
             </ul>
           )}
         </Link>

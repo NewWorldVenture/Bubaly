@@ -15,10 +15,15 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: assignment } = await supabase
+  // Distinguish a transient read failure from a genuinely missing assignment/chore:
+  // throwing renders a retryable 5xx, whereas notFound() would tell a kid the chore
+  // "doesn't exist" on a DB blip — a dead end for a chore they're trying to finish.
+  const { data: assignment, error: assignmentError } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (assignmentError) throw new Error(`Failed to load chore assignment "${assignmentId}": ${assignmentError.message}`);
   if (!assignment) notFound();
-  const { data: chore } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
+  const { data: chore, error: choreError } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
+  if (choreError) throw new Error(`Failed to load chore "${assignment.chore_id}": ${choreError.message}`);
   if (!chore) notFound();
 
   const proofKind = (chore.proof_required as string) ?? 'none';

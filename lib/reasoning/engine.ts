@@ -34,10 +34,14 @@ export interface ReasoningAnswer {
   items: ReasoningItem[];
 }
 
+export type ReasoningReadSource = 'operating_index' | 'relationship_graph' | 'family_signals';
+
 export interface ReasoningReport {
   answers: ReasoningAnswer[];
   allClear: boolean;
   generatedAt: string;
+  /** Live sources that failed while assembling this report. */
+  readErrors: ReasoningReadSource[];
 }
 
 /** A hard signal (family_signals / R10) reduced to what the engine needs. */
@@ -160,6 +164,7 @@ export function answerFamilyQuestions(input: ReasoningEngineInput, now: Date = n
     answers,
     allClear: answers.every((a) => a.status === 'clear'),
     generatedAt: now.toISOString(),
+    readErrors: [],
   };
 }
 
@@ -167,6 +172,8 @@ export function answerFamilyQuestions(input: ReasoningEngineInput, now: Date = n
 export function reasoningSummary(report: ReasoningReport): Record<string, unknown> {
   return {
     allClear: report.allClear,
+    degraded: report.readErrors.length > 0,
+    readErrors: report.readErrors,
     answers: report.answers.map((a) => ({ id: a.id, status: a.status, headline: a.headline, count: a.items.length })),
   };
 }

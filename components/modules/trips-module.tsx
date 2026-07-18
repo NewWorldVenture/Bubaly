@@ -64,11 +64,15 @@ export function TripsModule() {
   const [itemForm, setItemForm] = useState<{ kind: TripItemKind; label: string; details: string; assignee_id: string }>({ kind: 'packing', label: '', details: '', assignee_id: '' });
   const [savingItem, setSavingItem] = useState(false);
 
-  const { data: trips, loading, error } = useRealtimeQuery<Trip>({
+  const { data: trips, loading, error, refresh: refreshTrips } = useRealtimeQuery<Trip>({
     table: 'trips', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('trips').select('*').eq('family_id', familyId).order('start_date', { nullsFirst: false }),
   });
-  const { data: items } = useRealtimeQuery<TripItem>({
+  // The trip checklist is core content (packing/todo shown per trip). A genuine
+  // trip_items read failure must surface + be retryable — not silently render as
+  // an empty 0%-progress checklist. (Missing-table/offline are degraded to empty
+  // by the hook, same as the trips read above.)
+  const { data: items, error: itemsError, refresh: refreshItems } = useRealtimeQuery<TripItem>({
     table: 'trip_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('trip_items').select('*').eq('family_id', familyId).order('sort_order'),
   });
@@ -171,7 +175,8 @@ export function TripsModule() {
   };
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load trips'} />;
+  const loadError = error || itemsError;
+  if (loadError) return <ErrorState message={typeof loadError === 'string' ? loadError : 'Failed to load trips'} onRetry={() => { refreshTrips(); refreshItems(); }} />;
 
   // ── Trip detail view ──────────────────────────────────────
   if (selected) {

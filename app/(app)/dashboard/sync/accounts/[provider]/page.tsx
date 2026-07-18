@@ -35,8 +35,8 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
     steps: [
       'Click Connect Google to grant Calendar + Tasks access (offline, two-way).',
       'Your primary Google calendar and default Tasks list sync both directions.',
-      'Use â€œSync nowâ€ to run a sync; conflicts surface for manual review.',
-      'Notes: Google Keep has no public API â€” notes stay internal or export to a Google Doc.',
+      'Use “Sync now” to run a sync; conflicts surface for manual review.',
+      'Notes: Google Keep has no public API — notes stay internal or export to a Google Doc.',
     ],
   },
   microsoft: {
@@ -46,7 +46,7 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
     steps: [
       'Click Connect Microsoft to grant Outlook Calendar + Microsoft To Do access (offline, two-way).',
       'Your default Outlook calendar and To Do list sync both directions, with delta queries.',
-      'Use â€œSync nowâ€ to run a sync; a scheduled background sync also runs every few hours.',
+      'Use “Sync now” to run a sync; a scheduled background sync also runs every few hours.',
       'Notes: OneNote sync stays internal for now.',
     ],
   },
@@ -54,10 +54,10 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
     authKind: 'CalDAV (app-specific password)',
     docsHref: 'https://support.apple.com/en-us/HT204397',
     steps: [
-      'Create an app-specific password at appleid.apple.com â†’ Sign-In and Security.',
+      'Create an app-specific password at appleid.apple.com → Sign-In and Security.',
       'Enter it here to enable CalDAV sync for Apple Calendar.',
       'You can also publish a public ICS feed that Apple Calendar subscribes to.',
-      'Apple Notes has no public API â€” notes stay internal to bubaly.',
+      'Apple Notes has no public API — notes stay internal to bubaly.',
     ],
   },
   amazon: {
@@ -73,9 +73,9 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
 };
 
 const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> = {
-  'connected=1': { tone: 'success', text: 'Account connected. Run â€œSync nowâ€ to pull and push your data.' },
+  'connected=1': { tone: 'success', text: 'Account connected. Run “Sync now” to pull and push your data.' },
   'disconnected=1': { tone: 'success', text: 'Account disconnected and access revoked.' },
-  'error=not_configured': { tone: 'danger', text: 'This providerâ€™s OAuth is not configured on the server (missing client credentials).' },
+  'error=not_configured': { tone: 'danger', text: 'This provider’s OAuth is not configured on the server (missing client credentials).' },
   'error=no_encryption_key': { tone: 'danger', text: 'SYNC_TOKEN_KEY is not set, so tokens cannot be stored securely. Connection blocked.' },
   'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
   'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
@@ -136,7 +136,7 @@ export default async function SyncProviderPage({
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
           <p className="mt-1 text-sm text-muted">Auth: {setup.authKind}</p>
         </div>
-        {account ? <Badge tone="success">Connected Â· {account.sync_status}</Badge> : <Badge tone="neutral">Not connected</Badge>}
+        {account ? <Badge tone="success">Connected · {account.sync_status}</Badge> : <Badge tone="neutral">Not connected</Badge>}
       </div>
 
       {banner && (
@@ -153,8 +153,8 @@ export default async function SyncProviderPage({
           )}
           {provider === 'google' ? <GoogleControls /> : <ProviderControls provider={provider} />}
           <p className="mt-3 text-xs text-muted">
-            A background sync also runs automatically every few hours â€” â€œSync nowâ€ is only for when
-            you canâ€™t wait.
+            A background sync also runs automatically every few hours — “Sync now” is only for when
+            you can’t wait.
           </p>
         </Card>
       )}
@@ -200,7 +200,7 @@ export default async function SyncProviderPage({
           <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-500">
             {PROVIDER_LABELS[provider]} sync is fully built but waiting on server credentials
             {provider === 'google' ? ' (GOOGLE_SYNC_CLIENT_ID / SECRET)' : provider === 'microsoft' ? ' (MICROSOFT_SYNC_CLIENT_ID / SECRET)' : ''}.
-            Once an admin adds them, Connect appears here â€” no code changes needed.
+            Once an admin adds them, Connect appears here — no code changes needed.
           </div>
         )}
         <div className="mt-4 flex flex-wrap gap-2">

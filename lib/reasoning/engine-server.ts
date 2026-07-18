@@ -12,7 +12,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import {
   answerFamilyQuestions, reasoningSummary,
-  type ReasoningReport, type ReasoningSignal, type ReasoningNextAction,
+  type ReasoningReport, type ReasoningSignal, type ReasoningNextAction, type ReasoningReadSource,
 } from '@/lib/reasoning/engine';
 
 type DB = SupabaseClient<Database>;
@@ -22,15 +22,25 @@ const SIGNAL_HREF = '/dashboard/family-signals';
 
 /** Assemble the six-question reasoning report from the family's live data. */
 export async function loadReasoningReport(sb: DB, familyId: string, now: Date = new Date()): Promise<ReasoningReport> {
+  const readErrors: ReasoningReadSource[] = [];
+
   // FOI (orchestrator + ranked suggestions) — the richest single source.
-  const foi = await loadOperatingIndex(sb, familyId, now).catch(() => null);
+  const foi = await loadOperatingIndex(sb, familyId, now).catch((err) => {
+    console.error('[reasoning-engine] operating_index read failed', { familyId, err });
+    readErrors.push('operating_index');
+    return null;
+  });
   const orchestrator = foi?.orchestrator ?? null;
   const nextActions: ReasoningNextAction[] = (foi?.index.suggestions ?? []).map((s) => ({
     title: s.title, detail: s.detail, href: s.href, priority: IMPACT_PRIORITY[s.impact] ?? 40,
   }));
 
   // Graph reasoning insights (R2) — hubs / ripple / coverage.
-  const ctx = await loadFamilyContext(sb, familyId).catch(() => null);
+  const ctx = await loadFamilyContext(sb, familyId).catch((err) => {
+    console.error('[reasoning-engine] relationship_graph read failed', { familyId, err });
+    readErrors.push('relationship_graph');
+    return null;
+  });
   const insights = ctx ? reasoningInsights(ctx) : [];
 
   // Hard signals (R10) — the harder-to-copy behavioral patterns.
@@ -43,14 +53,23 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
     // read error — a PostgREST failure returns { data: null, error } without
     // throwing, so a broken family_signals table would otherwise silently make
     // every reasoning surface report "all clear" on this dimension forever.
-    if (error) console.error('[reasoning-engine] family_signals read failed', { familyId, error });
+    if (error) {
+      console.error('[reasoning-engine] family_signals read failed', { familyId, error });
+      readErrors.push('family_signals');
+    }
     signals = (data ?? []).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score, href: SIGNAL_HREF }));
   } catch (err) {
     console.error('[reasoning-engine] family_signals read threw', { familyId, err });
+    readErrors.push('family_signals');
     signals = [];
   }
 
-  return answerFamilyQuestions({ orchestrator, insights, signals, nextActions }, now);
+  const report = answerFamilyQuestions({ orchestrator, insights, signals, nextActions }, now);
+  return {
+    ...report,
+    allClear: report.allClear && readErrors.length === 0,
+    readErrors,
+  };
 }
 
 /** Load the report and persist today's snapshot (idempotent per family/day). */

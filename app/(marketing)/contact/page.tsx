@@ -1,12 +1,15 @@
 import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { Mail, MessageCircle, Shield } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { ContactForm } from '@/components/marketing/contact-form';
 
-export const metadata: Metadata = {
-  title: 'Contact',
-  description: 'Get in touch with the Bubaly team. We’d love to hear from your family.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/contact', {
+    title: 'Contact',
+    description: 'Get in touch with the Bubaly team. We’d love to hear from your family.',
+  });
+}
 
 export default function ContactPage() {
   return (

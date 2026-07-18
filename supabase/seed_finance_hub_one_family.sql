@@ -7,14 +7,14 @@
 -- Seeds ~20 bills (varied due dates / status / autopay / recurring), 8 budgets,
 -- and 6 savings goals for ONE family. Requires migration 0116_bills_autopay.sql.
 --
--- TARGET FAMILY: 92298eb2-1a9e-4bdc-9361-677b6c01b499 (newworldventurellc@gmail.com).
+-- TARGET FAMILY: resolved reproducibly at runtime.
 -- IDEMPOTENT: seeded bills replaced by name; budgets/savings created if missing.
 -- RUN: npm run db:seed:finance   VERIFY: /dashboard/bills, /budgets, /savings.
 -- ============================================================================
 
 do $$
 declare
-  v_fam uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
+  v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email text := 'newworldventurellc@gmail.com';
   v_uid uuid; i int;
   bnames text[] := ARRAY['Electric','Water','Internet','Cell Phone','Car Insurance','Mortgage','Netflix','Spotify','Gym','Trash Pickup','Home Insurance','Student Loan','Credit Card','Daycare','Natural Gas','Car Payment','Life Insurance','HOA Dues','Streaming Bundle','Water Softener'];
@@ -39,7 +39,7 @@ begin
     values (v_fam, bnames[i], round((15 + (i * 37 % 400) + (i%9)*0.99)::numeric,2),
       (now() + ((bcatn * 4 - 6) * interval '1 day'))::date,     -- some overdue, some soon, some upcoming
       (i % 4 <> 0), case when i % 4 <> 0 then 'monthly' else null end,
-      case when i % 6 = 0 then 'paid' else 'upcoming' end,
+      (case when i % 6 = 0 then 'paid' else 'upcoming' end)::public.bill_status,
       bcats[i], (i % 3 = 0), v_uid);
   end loop;
 

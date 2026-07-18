@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { Trophy, CalendarClock, Users, MapPin, Flag } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family Sports' };
@@ -18,12 +20,30 @@ export default async function FamilySportsPage() {
   const now = new Date().toISOString();
   const in14 = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  const [{ data: members }, { data: teams }, { data: games }, { data: events }] = await Promise.all([
+  const [membersRes, teamsRes, gamesRes, eventsRes] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('teams').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('game_results').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(6),
     supabase.from('sports_events').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).order('starts_at').limit(8),
   ]);
+
+  // Teams, game results, and sports events are source-of-truth: a dropped error
+  // would render "No teams added yet" / "No game results logged" / "No practices
+  // or games scheduled" and a 0-0-0 record for a family that actually has them —
+  // a reassuring-but-wrong picture (a parent misses tomorrow's game). Fail closed
+  // on a real read error; a genuinely missing table (unapplied migration) is
+  // still tolerated as empty.
+  const sportsError = [membersRes.error, teamsRes.error, gamesRes.error, eventsRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (sportsError) {
+    console.error('[dashboard/family-sports] sports read failed', sportsError);
+    return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const teams = teamsRes.data;
+  const games = gamesRes.data;
+  const events = eventsRes.data;
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const teamById = new Map((teams ?? []).map((t) => [t.id, t.team_name]));

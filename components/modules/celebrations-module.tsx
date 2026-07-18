@@ -111,7 +111,7 @@ export function CelebrationsModule() {
               <li key={c.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${soon ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40'}`}>
                 <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${KIND_TINT[c.kind]}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">Â· turning {c.turning}</span> : null}</p>
+                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">· turning {c.turning}</span> : null}</p>
                   <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}

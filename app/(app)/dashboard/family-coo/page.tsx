@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { CheckSquare, ShoppingCart, CalendarDays, Repeat, Wrench, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
+import { ErrorState } from '@/components/ui/states';
 import { fmtRelative, firstName } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family COO' };
@@ -21,7 +23,7 @@ export default async function FamilyCooPage() {
   const now = new Date().toISOString();
   const in7 = new Date(Date.now() + 7 * 86400000).toISOString();
 
-  const [{ data: members }, { data: openChores }, { data: events }, { data: grocery }, { data: routines }, { data: maint }] = await Promise.all([
+  const [membersRes, openChoresRes, eventsRes, groceryRes, routinesRes, maintRes] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, due_at, status, member_id, chore_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(8),
     supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in7).order('starts_at').limit(6),
@@ -29,6 +31,26 @@ export default async function FamilyCooPage() {
     supabase.from('family_routines').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at'),
     supabase.from('maintenance_tasks').select('id, title, due_at, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(5),
   ]);
+
+  // Open tasks, this week's events, the shopping list, routines, and
+  // maintenance are source-of-truth for "run the household". A dropped error
+  // would render "No open tasks — nicely done." (family thinks chores are done),
+  // "Nothing scheduled this week", and an empty list — a reassuring-but-wrong
+  // operations picture. Fail closed on a real read error; a genuinely missing
+  // table (unapplied migration) is still tolerated as empty.
+  const cooError = [membersRes.error, openChoresRes.error, eventsRes.error, groceryRes.error, routinesRes.error, maintRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (cooError) {
+    console.error('[dashboard/family-coo] household read failed', cooError);
+    return <ErrorState message="Could not load your household from Supabase. Refresh and try again." />;
+  }
+
+  const members = membersRes.data;
+  const openChores = openChoresRes.data;
+  const events = eventsRes.data;
+  const grocery = groceryRes.data;
+  const routines = routinesRes.data;
+  const maint = maintRes.data;
 
   const choreIds = [...new Set((openChores ?? []).map((c) => c.chore_id))];
   const { data: chores } = choreIds.length

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { landingCta, bodyParagraphs } from '@/lib/marketing/landing';
+import { landingCta, bodyParagraphs, normalizeSlug } from '@/lib/marketing/landing';
 import { LandingTracker } from './tracker';
 
 export const dynamic = 'force-dynamic';
@@ -11,14 +11,21 @@ export const dynamic = 'force-dynamic';
 // Marketing landing pages have no client RLS policies, so we read them with the
 // service-role client. Only published, non-deleted pages are servable.
 async function getPage(slug: string) {
+  const normalizedSlug = normalizeSlug(slug);
+  if (!normalizedSlug) return null;
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('marketing_landing_pages')
     .select('*')
-    .eq('slug', slug.toLowerCase())
+    .eq('slug', normalizedSlug)
     .eq('published', true)
     .is('deleted_at', null)
     .maybeSingle();
+  // Distinguish "genuinely not found" (→ 404) from a transient read failure. If we
+  // swallow the error and return null, a real published page 404s on a DB blip —
+  // a permanent-gone signal that de-indexes the page. Throw so it renders a
+  // retryable 5xx instead, and reserve notFound() for a truly missing slug.
+  if (error) throw new Error(`Failed to load landing page "${slug}": ${error.message}`);
   return data;
 }
 
@@ -29,6 +36,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: page.headline || page.title,
     description: page.subhead || undefined,
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/lp/${page.slug}` },
+    openGraph: {
+      type: 'website',
+      title: page.headline || page.title,
+      description: page.subhead || undefined,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/lp/${page.slug}`,
+    },
   };
 }
 

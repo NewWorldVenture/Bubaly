@@ -17,7 +17,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return;
-  if (file.size > MAX_BYTES) return;
+  if (file.size > MAX_BYTES) throw new Error('Asset exceeds the 50 MB upload limit.');
 
   // Explicit kind wins; otherwise infer from the file's MIME type.
   const explicit = s(formData, 'kind');
@@ -59,13 +59,13 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 export async function updateAssetAction(formData: FormData): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = s(formData, 'id');
-  if (!id) return;
+  if (!id) throw new Error('Marketing asset id is required.');
   const name = s(formData, 'name');
   const { data, error } = await supabase.from('marketing_assets').update({
     ...(name ? { name } : {}),
     alt_text: s(formData, 'alt_text'),
     tags: parseTags(s(formData, 'tags')),
-  }).eq('id', id).select('id').maybeSingle();
+  }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('update the marketing asset', error ?? new Error('Marketing asset not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_asset', resourceId: id });
   revalidatePath('/admin/marketing/assets');
@@ -78,13 +78,20 @@ export async function deleteAssetAction(id: string, storagePath: string): Promis
   const { data: asset, error: readError } = await supabase
     .from('marketing_assets').select('id, storage_path').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError || !asset) marketingActionFailure('find the marketing asset', readError ?? new Error('Marketing asset not found.'));
-  if (asset.storage_path || storagePath) {
-    const { error: removeError } = await supabase.storage.from(BUCKET).remove([asset.storage_path ?? storagePath]);
-    if (removeError) marketingActionFailure('remove the marketing asset file', removeError);
+  const deletedAt = new Date().toISOString();
+  const { data, error } = await supabase.from('marketing_assets').update({ deleted_at: deletedAt })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the marketing asset', error ?? new Error('Marketing asset was already deleted.'));
+  const storageFile = asset.storage_path ?? storagePath;
+  const { error: removeError } = storageFile
+    ? await supabase.storage.from(BUCKET).remove([storageFile])
+    : { error: null };
+  if (removeError) {
+    const { error: restoreError } = await supabase.from('marketing_assets').update({ deleted_at: null })
+      .eq('id', id).eq('deleted_at', deletedAt).select('id').maybeSingle();
+    if (restoreError) console.error('[marketing asset] delete rollback failed', restoreError);
+    marketingActionFailure('remove the marketing asset file', removeError);
   }
-  const { data, error } = await supabase.from('marketing_assets').update({ deleted_at: new Date().toISOString() })
-    .eq('id', id).select('id').maybeSingle();
-  if (error || !data) marketingActionFailure('delete the marketing asset', error ?? new Error('Marketing asset not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_asset', resourceId: id });
   revalidatePath('/admin/marketing/assets');
 }

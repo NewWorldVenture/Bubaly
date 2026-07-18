@@ -303,6 +303,15 @@ body::before {
   .ai-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgb(var(--brand) / 0.55); }
   .ai-send:not(:disabled):active { transform: translateY(0) scale(0.97); }
 
+  /* Chat/action surface used on the /ai page demo — a frosted panel that reads
+     as "inside the app", distinct from the flatter in-page .glass-card. */
+  .ai-panel {
+    background-color: rgb(var(--surface) / 0.72);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 30px 80px rgb(var(--brand) / 0.14), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+
   /* Popular-request card — subtle lift + brand wash on hover, both themes. */
   .ai-suggest-card {
     border-radius: var(--radius-xl);

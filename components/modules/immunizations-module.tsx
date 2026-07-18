@@ -103,7 +103,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
           <ul className="space-y-1 text-sm">
             {due.slice(0, 4).map((s) => {
               const d = daysUntilDue(s)!;
-              return <li key={s.id} className="flex items-center gap-2"><span className="font-medium">{s.vaccine}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} Â· {fmtDate(s.next_due_date!)}</span></li>;
+              return <li key={s.id} className="flex items-center gap-2"><span className="font-medium">{s.vaccine}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} · {fmtDate(s.next_due_date!)}</span></li>;
             })}
           </ul>
         </div>
@@ -114,7 +114,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       ) : error ? (
         <ErrorState message="Could not load immunization records. Refresh and try again." onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Syringe} title="No immunizations recorded" description="Track vaccines and next-due dates â€” handy for school, camp, and travel forms." />
+        <EmptyState icon={Syringe} title="No immunizations recorded" description="Track vaccines and next-due dates — handy for school, camp, and travel forms." />
       ) : (
         <ul className="space-y-2">
           {scoped.map((s) => {
@@ -123,16 +123,16 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
             return (
               <li key={s.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevated text-lg">ðŸ’‰</span>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevated text-lg">💉</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-semibold">{s.vaccine}{s.dose_label ? <span className="ml-1 text-xs font-normal text-muted">Â· {s.dose_label}</span> : null}</p>
+                      <p className="truncate font-semibold">{s.vaccine}{s.dose_label ? <span className="ml-1 text-xs font-normal text-muted">· {s.dose_label}</span> : null}</p>
                       {status !== 'none' && <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[status]}`}>{status === 'overdue' ? 'Overdue' : status === 'due_soon' ? 'Due soon' : 'Upcoming dose'}</span>}
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
-                      {s.date_given ? `Given ${fmtDate(s.date_given)}` : 'Date not set'}{s.next_due_date ? ` Â· Next ${fmtDate(s.next_due_date)}` : ''}{who ? ` Â· ${who.display_name}` : ''}{s.provider_name ? ` Â· ${s.provider_name}` : ''}
+                      {s.date_given ? `Given ${fmtDate(s.date_given)}` : 'Date not set'}{s.next_due_date ? ` · Next ${fmtDate(s.next_due_date)}` : ''}{who ? ` · ${who.display_name}` : ''}{s.provider_name ? ` · ${s.provider_name}` : ''}
                     </p>
-                    {(s.lot_number || s.notes) && <p className="mt-1 text-sm text-muted">{[s.lot_number ? `Lot ${s.lot_number}` : '', s.notes].filter(Boolean).join(' Â· ')}</p>}
+                    {(s.lot_number || s.notes) && <p className="mt-1 text-sm text-muted">{[s.lot_number ? `Lot ${s.lot_number}` : '', s.notes].filter(Boolean).join(' · ')}</p>}
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
                   <div className="flex shrink-0 gap-1">
@@ -157,7 +157,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
               )}</Field>
               <Field label="Family member">{(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">â€” Select â€”</option>
+                  <option value="">— Select —</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}</Field>

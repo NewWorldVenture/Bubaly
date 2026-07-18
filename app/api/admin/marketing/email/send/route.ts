@@ -11,12 +11,20 @@ export async function GET(req: NextRequest) {
     const { supabase } = await requireMarketingAdmin();
     const id = req.nextUrl.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-    const { data: c } = await supabase.from('marketing_email_campaigns').select('segment_id').eq('id', id).maybeSingle();
+    const { data: c, error: campaignError } = await supabase.from('marketing_email_campaigns')
+      .select('segment_id').eq('id', id).is('deleted_at', null).maybeSingle();
+    if (campaignError) {
+      console.error('[admin-marketing-email] recipient preview read failed', campaignError);
+      return NextResponse.json({ error: 'Could not load campaign recipients.' }, { status: 500 });
+    }
     if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const recipients = await resolveRecipients(supabase, c);
     return NextResponse.json({ recipients: recipients.length });
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    const forbidden = message.includes('sign in') || message.includes('permission');
+    if (!forbidden) console.error('[admin-marketing-email] recipient preview failed', err);
+    return NextResponse.json({ error: forbidden ? 'Forbidden' : 'Could not load campaign recipients.' }, { status: forbidden ? 403 : 502 });
   }
 }
 
@@ -33,7 +41,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ sent });
   } catch (err) {
     console.error('Marketing email send failed:', err);
-    const forbidden = err instanceof Error && err.message.includes('Forbidden');
-    return NextResponse.json({ error: forbidden ? 'Forbidden' : 'Could not send campaign.' }, { status: forbidden ? 403 : 400 });
+    const message = err instanceof Error ? err.message : '';
+    const forbidden = message.includes('sign in') || message.includes('permission') || message.includes('Forbidden');
+    const providerFailure = message.includes('Provider') || message.includes('provider') || message.includes('delivery state');
+    return NextResponse.json({
+      error: forbidden ? 'Forbidden' : providerFailure ? 'The email provider rejected the campaign.' : 'Could not send campaign.',
+    }, { status: forbidden ? 403 : providerFailure ? 502 : 400 });
   }
 }

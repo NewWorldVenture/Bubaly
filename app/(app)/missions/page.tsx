@@ -4,7 +4,7 @@ import { ClipboardCheck, Sparkles, AlertTriangle, Trophy, Plus } from 'lucide-re
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewCard, type ReviewItem } from './review-card';
 
 export const metadata: Metadata = { title: 'Family Missions' };
@@ -18,13 +18,33 @@ export default async function MissionsPage() {
   const supabase = await createServer();
 
   // Submissions awaiting a human decision + lookups.
-  const { data: submissions } = await supabase
+  const { data: submissions, error: submissionsError } = await supabase
     .from('chore_submissions')
     .select('*')
     .eq('family_id', familyId)
     .in('status', REVIEW_STATUSES)
     .order('created_at', { ascending: false })
     .limit(60);
+
+  // The approval queue is a parent's source of truth for pending kid proofs,
+  // disputes and AI SAFETY FLAGS. A dropped read error here would render the
+  // reassuring "All caught up! 🎉" empty state — a parent could miss a
+  // safety-flagged submission because the page falsely says there's nothing to
+  // review. Surface a retryable error instead of a false-empty queue.
+  if (submissionsError) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Trophy className="h-5 w-5 text-brand-text" />
+          <div>
+            <h1 className="text-lg font-bold">Family Missions</h1>
+            <p className="text-xs text-muted">Review proof, approve rewards, and keep chores fair.</p>
+          </div>
+        </div>
+        <ErrorState message="Couldn’t load the approval queue. Refresh and try again." />
+      </div>
+    );
+  }
 
   const subs = submissions ?? [];
   const choreIds = [...new Set(subs.map((s) => s.chore_id).filter(Boolean))] as string[];

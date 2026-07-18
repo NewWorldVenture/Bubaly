@@ -5,8 +5,10 @@ import { getSocialAccess } from '@/lib/social/access';
 import { updateSettingsAction, grantAccessAction } from '@/app/(app)/dashboard/social/actions';
 import { SOCIAL_ROLES, SOCIAL_ROLE_LABELS, defaultSocialRoleForMember } from '@/lib/social/roles';
 import { PLATFORMS, PROVIDERS } from '@/lib/social/capabilities';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Settings · Social' };
 export const dynamic = 'force-dynamic';
@@ -16,12 +18,28 @@ export default async function SocialSettingsPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: settings }, { data: members }, { data: perms }, access] = await Promise.all([
+  const [settingsRes, membersRes, permsRes, access] = await Promise.all([
     supabase.from('social_settings').select('*').eq('family_id', familyId).maybeSingle(),
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('social_access_permissions').select('user_id, social_role').eq('family_id', familyId),
     getSocialAccess(familyId),
   ]);
+
+  // Fail closed: a dropped social_settings error would render the form with
+  // DEFAULT values (UTC / friendly / no platforms), and saving would silently
+  // OVERWRITE the family's real settings with those defaults — a data-loss trap.
+  // A dropped members/perms error would likewise hide access config. A genuinely
+  // missing table (unapplied migration) is still tolerated as empty.
+  const socialError = [settingsRes.error, membersRes.error, permsRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (socialError) {
+    console.error('[dashboard/social/settings] social settings read failed', socialError);
+    return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />;
+  }
+
+  const settings = settingsRes.data;
+  const members = membersRes.data;
+  const perms = permsRes.data;
 
   const permByUser = new Map((perms ?? []).map((p) => [p.user_id, p.social_role]));
   const canManage = access?.can('manage_settings') ?? false;

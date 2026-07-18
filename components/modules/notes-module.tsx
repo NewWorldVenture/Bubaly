@@ -124,18 +124,20 @@ export function NotesModule() {
 
   async function togglePin(note: Note) {
     const supabase = createClient();
-    await supabase.from('notes').update({ is_pinned: !note.is_pinned }).eq('id', note.id);
+    const { error } = await supabase.from('notes').update({ is_pinned: !note.is_pinned }).eq('id', note.id);
+    if (error) return toastError(describeDbError(error));
     void refresh();
     if (viewing?.id === note.id) setViewing({ ...note, is_pinned: !note.is_pinned });
   }
 
   async function duplicate(note: Note) {
     const supabase = createClient();
-    await supabase.from('notes').insert({
+    const { error } = await supabase.from('notes').insert({
       family_id: familyId, created_by: userId,
       title: note.title ? `Copy of ${note.title}` : null,
       body: note.body,
     });
+    if (error) return toastError(describeDbError(error));
     success('Note duplicated');
     void refresh();
   }
