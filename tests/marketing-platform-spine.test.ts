@@ -16,6 +16,7 @@ const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
 const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
 const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
 const landingRoute = readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
+const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -79,6 +80,8 @@ describe('marketing platform spine contract', () => {
     expect(verifier).toContain('marketing_embeddings');
     expect(verifier).toContain('marketing_assets?select=content_hash,license,source_url,attribution');
     expect(verifier).toContain('process.exit(1)');
+    expect(ciWorkflow).toContain('npm run marketing:verify:remote');
+    expect(ciWorkflow).toContain('npm run marketing:verify:assets:remote');
   });
 
   it('ships strict remote asset provenance and a safe legacy backfill', () => {

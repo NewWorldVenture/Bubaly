@@ -31,6 +31,9 @@ jobs:
       - name: Migration filename audit
         run: npm run db:audit:migrations
 
+      - name: Marketing asset audit
+        run: npm run marketing:audit:assets
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -97,6 +100,12 @@ jobs:
 
       - name: Verify isolated schema capabilities
         run: npm run db:audit:schema
+
+      - name: Verify marketing platform schema
+        run: npm run marketing:verify:remote
+
+      - name: Verify marketing asset provenance
+        run: npm run marketing:verify:assets:remote
 
       - name: Run E2E smoke tests
         run: npm run test:e2e
