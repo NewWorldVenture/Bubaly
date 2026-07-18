@@ -25,6 +25,7 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | `67acb018` |
 | M-007 | 11/8 | Overlay/shell audit — shared Modal (bottom-sheet/dvh/safe-area/focus-trap) + app-shell (pb-24, safe-bottom nav) verified excellent; ratcheted | `0c00ff0b` |
 | M-009 | 2/23 | Playwright mobile device matrix stood up (iphone-se/iphone/pixel/ipad × mobile+overflow+public specs; 225 tests); WebKit→Chromium fix for sandbox/CI | `2bcc974e` |
+| M-010 | 16 | PWA update prompt — RegisterSW detects a new SW + shows a mobile-safe "new version → Reload" banner; SW/manifest verified | (this commit) |
 | M-012 | 11 | Hand-rolled full-screen overlays now lock background scroll on mobile (shared `useLockBodyScroll` hook applied to camera, command bar, exit-intent, paywall, app-lock, account-closed) | `57142f32` |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7) alongside the

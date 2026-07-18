@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~27% (early)
+## Overall completion: ~29% (early)
 
 Weighting (per the mission brief):
 
@@ -225,6 +225,21 @@ Weighting (per the mission brief):
   `PHYSICAL_DEVICE_TEST_PLAN` — to be authored).
 - **Evidence:** `--list` shows all 4 mobile projects × mobile/overflow/public specs;
   eslint 0 on config + spec.
+
+### M-010 — PWA update UX: no visible "new version" prompt (Phase 16)
+- **Problem:** `RegisterSW` registered the SW but had **no update handling** — the
+  mission requires a visible, reliable mechanism so users aren't stuck on stale
+  code. (The SW already `skipWaiting()`s + never caches auth/API, and `/offline`
+  + the manifest are complete.)
+- **Fix:** `RegisterSW` now watches `updatefound` → `installed` (with an existing
+  controller) and `controllerchange`, and renders a **mobile-safe** dismissible
+  banner — *"A new version of Bubaly is available"* + **Reload** — fixed at the
+  bottom, above the tab bar (`z-60`), clearing the home indicator
+  (`env(safe-area-inset-bottom)`). Also polls `reg.update()` hourly so a long-lived
+  tab isn't left stale. Mounted already in 4 layouts (marketing/family/capture/app).
+- **Test:** `tests/mobile-pwa-update.test.ts` (5) — update detection + reload +
+  safe-area banner; SW never-cache-auth + manifest installable.
+- **Evidence:** guard green; `tsc` + `eslint` clean.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
