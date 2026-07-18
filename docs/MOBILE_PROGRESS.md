@@ -379,6 +379,32 @@ Weighting (per the mission brief):
   surface — additive safe-area padding needs no pixel measurement, unlike the M-016/17
   calc.)
 
+### M-019 — Blog Share bar icons were 32px — below the 44px touch target (Phase 6) — _parallel bot (public blog/marketing surface)_
+- **Severity:** P2 (mobile). **Phase:** 6 (navigation & touch targets).
+- **Problem:** the article Share bar (`app/(marketing)/blog/[slug]/share-buttons.tsx`)
+  renders 8 icon-only share targets (X, Facebook, LinkedIn, WhatsApp, Reddit,
+  Pinterest, Telegram + email) as a `flex flex-wrap gap-2` row of **`h-8 w-8` (32px)**
+  squares, plus a Copy-link button at `px-3 py-1.5 text-xs` (~28px tall). 32px is
+  below the 44px minimum tap target (WCAG 2.5.5 / Apple HIG 44pt / Material 48dp), so
+  on a phone the tightly-packed icons are easy to mis-tap. Not a false positive: the
+  boxes are a fixed 32px with no `sm:`/`coarse:` size bump and no larger padded hit
+  area — the tappable element itself is 32px.
+- **Fix:** grow every share target to a **≥44px square on coarse-pointer (touch)**
+  devices — `coarse:min-h-11 coarse:min-w-11` on the 8 icon buttons, `coarse:min-h-11`
+  on the Copy-link button. `min-*` overrides the fixed `h-8 w-8` when larger, so the
+  dense 32px desktop-with-a-mouse row is untouched. Added the missing
+  `.coarse\:min-w-11 { min-width: 2.75rem }` utility (square-target companion to the
+  existing `coarse:min-h-11`) to `app/globals.css`.
+- **Files:** `app/(marketing)/blog/[slug]/share-buttons.tsx`, `app/globals.css`.
+- **Test:** `tests/mobile-share-touch-target.test.ts` (3) — asserts the utility
+  exists, every `h-8 w-8` share target carries the coarse escape, and the Copy button
+  is ≥44px tall on touch; forbids a regression to a bare 32px target.
+- **Evidence:** guard green (3/3); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** file-disjoint from agent-05 (modules + app-shell) and agent-02
+  (hand-rolled overlays + non-module app chrome) — this is the public blog/marketing
+  surface. The `coarse:min-w-11` utility is additive and shared-safe.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

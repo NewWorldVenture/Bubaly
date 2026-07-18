@@ -76,7 +76,9 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
       <button
         onClick={copyLink}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition',
+          // ≥44px tall on touch (coarse pointer) per WCAG 2.5.5 / Apple HIG;
+          // stays compact on desktop with a mouse.
+          'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition coarse:min-h-11',
           copied
             ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
             : 'border-white/10 bg-white/[0.04] text-white/60 hover:text-white',
@@ -95,7 +97,9 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
           aria-label={name}
           title={name}
           className={cn(
-            'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 transition',
+            // 32px on desktop; grows to a ≥44px square hit target on touch so
+            // adjacent share icons aren't mis-tapped on a phone (WCAG 2.5.5).
+            'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 transition coarse:min-h-11 coarse:min-w-11',
             hover,
           )}
         >
@@ -107,7 +111,7 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
         href={`mailto:?subject=${t}&body=${t}%20${u}`}
         aria-label="Share by email"
         title="Share by email"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 transition hover:border-white/40 hover:text-white"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 transition coarse:min-h-11 coarse:min-w-11 hover:border-white/40 hover:text-white"
       >
         <Mail className="h-3.5 w-3.5" />
       </a>
