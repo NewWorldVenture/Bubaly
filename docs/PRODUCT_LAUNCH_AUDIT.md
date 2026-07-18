@@ -102,6 +102,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0803 - behavior_logs had zero seed coverage → Behavior Tracking renders empty in a fresh env (A-05 / LB-014)
+
+- Timestamp: 2026-07-18 09:47 UTC
+- Service: Home / dashboard command surfaces (A-05) — Behavior Tracking (LB-014 systemic seed-gap class)
+- Route: `/dashboard/behavior` (`components/modules/behavior-module.tsx`)
+- Affected files: `supabase/seed_behavior_logs.sql` (new, standalone), `tests/seed-behavior-logs-contract.test.ts` (new), `docs/LAUNCH_BLOCKERS.md` (LB-014 note)
+- Database objects: `behavior_logs` (migration 0073; `behavior_kind` enum)
+- Role: all family roles (per-child observations)
+- Scenario: a fresh/demo family opens Behavior Tracking
+- Severity: P2 (systemic seed gap — a core A-05 feature renders empty: no balance score, trends, streaks, or AI tips)
+- Launch impact: while auditing A-05 table wiring I found `behavior_logs` is genuinely wired (family_id NOT NULL, RLS `FOR ALL` family-scoped, indexes) but has **ZERO seed coverage anywhere** — not in `SEED_ALL`, not in any `seed_*.sql` (unlike its sibling `care_log`, which is seeded). So `/dashboard/behavior` shows an empty tracker for every demo family — the same LB-014 class agent-01 fixed for school/sports/grades/routines
+- Root cause: the table was added (0073) without a corresponding seed block; missed by the SEED_ALL author
+- Resolution: authored `supabase/seed_behavior_logs.sql` (standalone, NOT wired into SEED_ALL — avoids colliding with the A-02/seed owner mid-edit; ready to wire). Idempotent per-family (`delete … where note like '[seed]%'` then insert); ~30 observations per child across all 3 kinds (positive/concern/neutral) and 10 categories over ~90 days; points signed by kind; attributes `logged_by` to a parent; guards `to_regclass('public.behavior_logs')`; only seeds `child`/`teen` members; never touches `auth.users`
+- Supabase impact: additive seed only; no schema/migration/RLS change
+- Tests run: **PG16-verified on an isolated throwaway DB** (migration 0073 applied verbatim; a family with parent+child+teen and a childless family): total **60** rows (2 kids × 30), childless family **0** rows (no error), **3** distinct kinds, **10** distinct categories, positive→points>0 (20), concern→points<0 (20); re-run **×2 stayed 60** (idempotent). Real DB with many kid-bearing families exceeds the ≥500-row DoD. New contract guard `tests/seed-behavior-logs-contract.test.ts` (6) green; `tsc`/suite unaffected
+- Validation evidence: isolated-DB row counts above; contract guard asserts idempotency, per-child scoping, all kinds/categories, parent attribution, and no auth.users mutation
+- Remaining dependencies: wire `seed_behavior_logs.sql` into the SEED_ALL pipeline (A-02/seed owner — human/Codex-owned to avoid collision)
+- Commit: (this increment)
+- Status: RESOLVED (seed authored + PG16-verified + guarded), pushed to `main` (A-05 by agent-05); wiring into SEED_ALL deferred to A-02
+
 ### PLA-0802 - VERIFICATION (no defect): 3 A-05 feature tables are genuinely wired to Supabase (A-05)
 
 - Timestamp: 2026-07-18 00:02 UTC
