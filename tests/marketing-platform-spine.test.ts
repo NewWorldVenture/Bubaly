@@ -24,6 +24,7 @@ const imageBackfill = readFileSync('scripts/backfill-marketing-image-provenance.
 const blogGenerator = readFileSync('scripts/generate-blog-posts.mjs', 'utf8');
 const coverageBackfill = readFileSync('scripts/backfill-marketing-coverage.mjs', 'utf8');
 const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.mjs', 'utf8');
+const platformAdmin = readFileSync('app/(app)/admin/marketing/platform/page.tsx', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -182,5 +183,15 @@ describe('marketing platform spine contract', () => {
     expect(landingActions).toContain('syncLegacyLandingToPlatform');
     expect(landingActions).toContain('archiveLegacyLandingOnPlatform');
     expect(landingRoute).toContain("MarketingPageView type=\"landing\"");
+  });
+
+  it('makes the admin operations view truthful about queue and provider health', () => {
+    expect(platformAdmin).toContain("select('id', { count: 'exact', head: true })");
+    expect(platformAdmin).toContain("eq('status', 'running').lt('locked_at', staleWorkerCutoff)");
+    expect(platformAdmin).toContain("select('job_type, target_path, completed_at')");
+    expect(platformAdmin).toContain("marketing_provider_observations");
+    expect(platformAdmin).toContain('Provider status is live from Supabase');
+    expect(platformAdmin).toContain('Unconfigured sources never appear as measured traffic');
+    expect(platformAdmin).toContain('Last successful job:');
   });
 });

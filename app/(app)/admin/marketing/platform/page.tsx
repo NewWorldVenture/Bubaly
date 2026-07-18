@@ -16,6 +16,9 @@ const areaCls = 'w-full rounded-lg border border-border bg-surface/60 px-3 py-2 
 
 export default async function MarketingPlatformPage() {
   const supabase = createServiceClient();
+  const providerNames = ['google_search_console', 'bing_webmaster', 'ai_citation'] as const;
+  const jobStatuses = ['queued', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled'] as const;
+  const staleWorkerCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const [pagesResult, templatesResult, rulesResult, jobsResult, syncResult] = await Promise.all([
     supabase.from('marketing_pages').select('*').is('deleted_at', null).order('updated_at', { ascending: false }).limit(40),
     supabase.from('marketing_content_templates').select('*').neq('status', 'archived').order('page_type').order('name'),
@@ -23,15 +26,44 @@ export default async function MarketingPlatformPage() {
     supabase.from('marketing_generation_jobs').select('*').order('created_at', { ascending: false }).limit(30),
     supabase.from('marketing_provider_syncs').select('*').order('provider'),
   ]);
+  const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats] = await Promise.all([
+    Promise.all(jobStatuses.map(async (status) => ({
+      status,
+      result: await supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status),
+    }))),
+    supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', 'running').lt('locked_at', staleWorkerCutoff),
+    supabase.from('marketing_generation_jobs').select('job_type, target_path, completed_at').eq('status', 'succeeded').order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+    Promise.all(providerNames.map(async (provider) => {
+      const [countResult, latestResult] = await Promise.all([
+        supabase.from('marketing_provider_observations').select('id', { count: 'exact', head: true }).eq('provider', provider),
+        supabase.from('marketing_provider_observations').select('observed_for, source_status').eq('provider', provider).order('observed_for', { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      return { provider, countResult, latestResult };
+    })),
+  ]);
   const error = pagesResult.error ?? templatesResult.error ?? rulesResult.error ?? jobsResult.error ?? syncResult.error;
-  if (error) return <ErrorState message="Could not load the marketing platform control center. Refresh and try again." />;
+  const observationError = observationStats.find(({ countResult, latestResult }) => countResult.error ?? latestResult.error);
+  const operationsError = jobCountResults.find(({ result }) => result.error)?.result.error
+    ?? staleJobsResult.error
+    ?? latestSuccessResult.error
+    ?? observationError?.countResult.error
+    ?? observationError?.latestResult.error;
+  if (error || operationsError) return <ErrorState message="Could not load the marketing platform control center. Refresh and try again." />;
   const pages = pagesResult.data ?? [];
   const templates = templatesResult.data ?? [];
   const rules = rulesResult.data ?? [];
   const jobs = jobsResult.data ?? [];
   const syncs = syncResult.data ?? [];
-  const queued = jobs.filter((job) => job.status === 'queued' || job.status === 'running').length;
-  const failed = jobs.filter((job) => job.status === 'failed' || job.status === 'dead_letter').length;
+  const jobCounts = Object.fromEntries(jobCountResults.map(({ status, result }) => [status, result.count ?? 0])) as Record<(typeof jobStatuses)[number], number>;
+  const activeJobs = jobCounts.queued + jobCounts.running;
+  const failed = jobCounts.failed + jobCounts.dead_letter;
+  const staleJobs = staleJobsResult.count ?? 0;
+  const latestSuccess = latestSuccessResult.data;
+  const observationByProvider = new Map(observationStats.map(({ provider, countResult, latestResult }) => [provider, {
+    count: countResult.count ?? 0,
+    latest: latestResult.data?.observed_for ?? null,
+    latestStatus: latestResult.data?.source_status ?? null,
+  }]));
   const published = pages.filter((page) => page.status === 'published').length;
 
   return (
@@ -49,7 +81,7 @@ export default async function MarketingPlatformPage() {
         <Metric icon={FileText} label="Pages" value={pages.length} />
         <Metric icon={Sparkles} label="Published" value={published} />
         <Metric icon={Layers3} label="Templates" value={templates.length} />
-        <Metric icon={Activity} label="Jobs active" value={queued} />
+        <Metric icon={Activity} label="Jobs active" value={activeJobs} />
         <Metric icon={RefreshCw} label="Jobs needing review" value={failed} />
       </div>
 
@@ -76,7 +108,15 @@ export default async function MarketingPlatformPage() {
 
           <Card>
             <div className="mb-3 flex items-center gap-2"><Bot className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">Provider sync health</h3></div>
-            <div className="space-y-2">{syncs.map((sync) => <div key={sync.provider} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"><span className="capitalize">{sync.provider.replaceAll('_', ' ')}</span><Badge tone={sync.status === 'connected' ? 'success' : sync.status === 'error' ? 'danger' : 'neutral'}>{sync.status.replaceAll('_', ' ')}</Badge></div>)}</div>
+            <p className="mb-3 text-xs text-muted">Provider status is live from Supabase. Unconfigured sources never appear as measured traffic.</p>
+            <div className="space-y-2">{syncs.map((sync) => {
+              const observation = observationByProvider.get(sync.provider as typeof providerNames[number]);
+              return <div key={sync.provider} className="rounded-lg border border-border px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-3"><span className="capitalize">{sync.provider.replaceAll('_', ' ')}</span><Badge tone={sync.status === 'connected' ? 'success' : sync.status === 'error' || sync.status === 'degraded' ? 'danger' : 'neutral'}>{sync.status.replaceAll('_', ' ')}</Badge></div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted"><span>{observation?.count.toLocaleString() ?? '0'} observations</span><span>Latest: {observation?.latest ?? 'none'}</span>{sync.last_completed_at ? <span>Synced: {formatTimestamp(sync.last_completed_at)}</span> : null}</div>
+                {sync.last_error ? <p className="mt-1 text-xs text-danger">{sync.last_error}</p> : null}
+              </div>;
+            })}</div>
           </Card>
         </div>
       </div>
@@ -87,13 +127,22 @@ export default async function MarketingPlatformPage() {
         <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Brand rules</h3><p className="text-xs text-muted">Facts and constraints every generated page receives.</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <div key={rule.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{rule.name}</span><Badge tone={rule.active ? 'success' : 'neutral'}>{rule.rule_key}</Badge></div><p className="mt-1 text-xs text-muted">{rule.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder="Brand voice" className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder="Write the rule in plain language" className={areaCls} /><input name="examples" placeholder="Approved examples or facts" className={inputCls} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">Save brand rule</button></form></Card>
       </div>
 
-      <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Generation queue</h3><p className="text-xs text-muted">Claimed by the five-minute worker with retry and dead-letter visibility.</p></div><Badge tone={failed ? 'danger' : 'success'}>{failed ? `${failed} attention` : 'Healthy'}</Badge></div>{jobs.length === 0 ? <p className="text-sm text-muted">No jobs have been created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-border text-xs text-muted"><tr><th className="px-2 py-2">Type</th><th className="px-2 py-2">Target</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Attempts</th><th className="px-2 py-2">Action</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-b border-border/60"><td className="px-2 py-2 font-medium">{job.job_type.replaceAll('_', ' ')}</td><td className="px-2 py-2 text-muted">{job.target_path ?? job.target_id ?? 'system'}</td><td className="px-2 py-2"><Badge tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'dead_letter' ? 'danger' : 'neutral'}>{job.status}</Badge></td><td className="px-2 py-2 text-muted">{job.attempts}/{job.max_attempts}</td><td className="px-2 py-2">{job.status === 'failed' || job.status === 'dead_letter' ? <form action={retryMarketingJob}><input type="hidden" name="id" value={job.id} /><button className="text-xs font-semibold text-brand-text hover:underline">Retry</button></form> : <span className="text-xs text-muted">{job.completed_at ? 'Complete' : 'Waiting'}</span>}</td></tr>)}</tbody></table></div>}</Card>
+      <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Generation queue</h3><p className="text-xs text-muted">Claimed by the five-minute worker with exact queue counts and stale-lock detection.</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>
+        <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-6">{jobStatuses.map((status) => <div key={status} className="rounded-lg border border-border px-2 py-2"><span className="block capitalize text-muted">{status.replace('_', ' ')}</span><span className="mt-1 block text-lg font-bold tabular-nums">{jobCounts[status].toLocaleString()}</span></div>)}</div>
+        {staleJobs ? <p className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{staleJobs} running job{staleJobs === 1 ? '' : 's'} has a lock older than 15 minutes. The next claim cycle will recover it.</p> : null}
+        <p className="mb-3 text-xs text-muted">Last successful job: {latestSuccess?.completed_at ? `${latestSuccess.job_type.replaceAll('_', ' ')} · ${formatTimestamp(latestSuccess.completed_at)}${latestSuccess.target_path ? ` · ${latestSuccess.target_path}` : ''}` : 'none recorded'}</p>
+        {jobs.length === 0 ? <p className="text-sm text-muted">No jobs have been created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-border text-xs text-muted"><tr><th className="px-2 py-2">Type</th><th className="px-2 py-2">Target</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Attempts</th><th className="px-2 py-2">Action</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-b border-border/60"><td className="px-2 py-2 font-medium">{job.job_type.replaceAll('_', ' ')}</td><td className="px-2 py-2 text-muted">{job.target_path ?? job.target_id ?? 'system'}</td><td className="px-2 py-2"><Badge tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'dead_letter' ? 'danger' : 'neutral'}>{job.status}</Badge></td><td className="px-2 py-2 text-muted">{job.attempts}/{job.max_attempts}</td><td className="px-2 py-2">{job.status === 'failed' || job.status === 'dead_letter' ? <form action={retryMarketingJob}><input type="hidden" name="id" value={job.id} /><button className="text-xs font-semibold text-brand-text hover:underline">Retry</button></form> : <span className="text-xs text-muted">{job.completed_at ? 'Complete' : 'Waiting'}</span>}</td></tr>)}</tbody></table></div>}
+      </Card>
     </div>
   );
 }
 
 function Metric({ icon: Icon, label, value }: { icon: typeof FileText; label: string; value: number }) {
   return <Card className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span><span><span className="block text-lg font-bold tabular-nums">{value.toLocaleString()}</span><span className="block text-[11px] text-muted">{label}</span></span></Card>;
+}
+
+function formatTimestamp(value: string): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function PageEditor({ page }: { page: Awaited<ReturnType<typeof createServiceClient>> extends never ? never : DatabasePage }) {
