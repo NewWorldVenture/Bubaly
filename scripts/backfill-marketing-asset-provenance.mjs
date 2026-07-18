@@ -29,6 +29,8 @@ if (assetError) {
   process.exit(1);
 }
 
+const assetByStoragePath = new Map((assets ?? []).map((asset) => [asset.storage_path, asset]));
+
 const assetUpdates = [];
 const unresolvedAssets = [];
 for (const asset of assets ?? []) {
@@ -48,7 +50,7 @@ for (const asset of assets ?? []) {
 
 const { data: videos, error: videoError } = await supabase
   .from('marketing_videos')
-  .select('id,title,provider,video_id,url,storage_path,source_hash,license')
+  .select('id,title,provider,video_id,url,storage_path,source_hash,license,source_url,attribution')
   .is('deleted_at', null)
   .order('created_at', { ascending: true });
 if (videoError) {
@@ -57,8 +59,12 @@ if (videoError) {
 }
 
 const videoUpdates = (videos ?? [])
-  .filter((video) => !video.source_hash)
-  .map((video) => ({ id: video.id, hash: hashVideoSource(video), title: video.title }));
+  .map((video) => {
+    const asset = video.provider === 'upload' ? assetByStoragePath.get(video.storage_path) : null;
+    const hash = asset?.content_hash ?? hashVideoSource(video);
+    return { id: video.id, hash, title: video.title, currentHash: video.source_hash };
+  })
+  .filter((video) => !video.currentHash || video.currentHash !== video.hash);
 
 const duplicateGroups = new Map();
 for (const row of [...assetUpdates, ...videoUpdates]) {

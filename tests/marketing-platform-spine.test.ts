@@ -112,6 +112,8 @@ describe('marketing platform spine contract', () => {
     expect(provenanceBackfill).toContain("process.argv.includes('--apply')");
     expect(provenanceBackfill).toContain('Dry run only');
     expect(provenanceBackfill).toContain("from('marketing-assets')");
+    expect(provenanceBackfill).toContain('assetByStoragePath');
+    expect(provenanceBackfill).toContain('asset?.content_hash ?? hashVideoSource(video)');
   });
 
   it('does not enqueue regeneration for archived canonical pages', () => {
