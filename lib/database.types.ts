@@ -1196,9 +1196,9 @@ export interface Database {
       >;
       // ── Blog engagement: anonymous ♥ per visitor + email subscribers (0201) ──
       blog_post_likes: T<
-        { id: string; post_id: string; visitor_id: string; created_at: string },
-        { id?: string; post_id: string; visitor_id: string; created_at?: string },
-        Partial<{ post_id: string; visitor_id: string }>
+        { id: string; post_id: string; visitor_id: string; user_id: string | null; created_at: string },
+        { id?: string; post_id: string; visitor_id: string; user_id?: string | null; created_at?: string },
+        Partial<{ post_id: string; visitor_id: string; user_id: string | null }>
       >;
       blog_subscribers: T<
         { id: string; email: string; status: string; source: string; visitor_id: string | null; unsubscribe_token: string; created_at: string; updated_at: string; unsubscribed_at: string | null },

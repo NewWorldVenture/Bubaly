@@ -1,16 +1,23 @@
 'use client';
 
-// The blog ♥ — an anonymous, one-per-visitor like keyed by the durable
-// bubaly_vid id (no account needed on a public marketing page). Optimistic:
-// the heart fills and the count bumps instantly; the server response
-// reconciles. Wired to /api/blog/like (Supabase blog_post_likes underneath).
+// The blog ♥ — save an article to your account. Saving REQUIRES sign-in: a
+// signed-out visitor who taps the heart is sent to /login?redirect=<article>
+// so they return here afterward. Signed-in likes are one-per-account (keyed to
+// the user id server-side) and optimistic: the heart fills and the count bumps
+// instantly, then the server response reconciles. Wired to /api/blog/like
+// (Supabase blog_post_likes underneath, service-role writes, session-gated).
 import { useCallback, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Heart } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import { getAnonymousId } from '@/lib/marketing/visitor';
 import { formatLikeCount } from '@/lib/blog/engagement';
 import { cn } from '@/lib/utils/cn';
 
 export function HeartButton({ slug, className }: { slug: string; className?: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [liked, setLiked] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,20 +25,31 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
 
   useEffect(() => {
     let cancelled = false;
-    const visitorId = getAnonymousId();
-    fetch(`/api/blog/like?slug=${encodeURIComponent(slug)}&visitorId=${encodeURIComponent(visitorId)}`)
+    fetch(`/api/blog/like?slug=${encodeURIComponent(slug)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { liked?: boolean; count?: number } | null) => {
+      .then((d: { liked?: boolean; count?: number; signedIn?: boolean } | null) => {
         if (cancelled || !d) return;
         setLiked(!!d.liked);
         setCount(typeof d.count === 'number' ? d.count : 0);
+        setSignedIn(!!d.signedIn);
       })
       .catch(() => { /* leave the button usable with no count */ });
     return () => { cancelled = true; };
   }, [slug]);
 
+  const goSignIn = useCallback(() => {
+    const dest = pathname || `/blog/${slug}`;
+    router.push(`/login?redirect=${encodeURIComponent(dest)}`);
+  }, [router, pathname, slug]);
+
   const toggle = useCallback(async () => {
     if (busy) return;
+    // Gate: must be signed in to save. If we already know they're signed out,
+    // send them straight to sign in.
+    if (signedIn === false) {
+      goSignIn();
+      return;
+    }
     setBusy(true);
     const wasLiked = liked;
     const prevCount = count ?? 0;
@@ -45,10 +63,19 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug, visitorId: getAnonymousId() }),
       });
+      if (res.status === 401) {
+        // Session missing/expired — revert and send them to sign in.
+        setLiked(wasLiked);
+        setCount(prevCount);
+        setSignedIn(false);
+        goSignIn();
+        return;
+      }
       if (res.ok) {
-        const d = (await res.json()) as { liked?: boolean; count?: number };
+        const d = (await res.json()) as { liked?: boolean; count?: number; signedIn?: boolean };
         setLiked(!!d.liked);
         setCount(typeof d.count === 'number' ? d.count : prevCount);
+        setSignedIn(true);
       } else {
         setLiked(wasLiked);
         setCount(prevCount);
@@ -59,14 +86,21 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
     } finally {
       setBusy(false);
     }
-  }, [busy, liked, count, slug]);
+  }, [busy, signedIn, liked, count, slug, goSignIn]);
+
+  const label = signedIn === false
+    ? 'Sign in to save this article'
+    : liked
+      ? 'Remove your like from this article'
+      : 'Save this article';
 
   return (
     <button
       type="button"
       onClick={toggle}
       aria-pressed={liked}
-      aria-label={liked ? 'Remove your like from this article' : 'Like this article'}
+      aria-label={label}
+      title={label}
       className={cn(
         'group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
         liked

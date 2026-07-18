@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -7,15 +7,30 @@ import { normalizeSlug, normalizeVisitorId } from '@/lib/blog/engagement';
 
 export const runtime = 'nodejs';
 
-// Public blog ♥ endpoint. Anonymous but not unbounded: keyed by the durable
-// bubaly_vid visitor id with one like per (post, visitor) enforced by a DB
-// unique constraint, service-role writes only (no client table access), and
-// IP rate limiting. GET returns { liked, count }; POST toggles and returns
-// the new state.
+// Blog ♥ endpoint. Saving a like now REQUIRES a signed-in account: POST rejects
+// unauthenticated callers with 401 { error: 'auth_required' } so the client can
+// send them to sign in. A like is keyed to the caller's user id (one per
+// post+user, enforced by a DB unique index), written service-role only (no
+// client table access), and IP rate limited. GET is public: it returns the
+// total { count }, whether the current signed-in user has liked ({ liked }),
+// and whether there's a session at all ({ signedIn }). Legacy anonymous rows
+// (visitor-keyed, user_id NULL) still count toward the public total.
 
 const MAX_BODY_BYTES = 2_048;
 
-async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
+async function currentUserId(): Promise<string | null> {
+  try {
+    const supabase = await createServer();
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadPostId(supabase: ServiceClient, slug: string): Promise<string | null> {
   const { data } = await supabase
     .from('blog_posts')
     .select('id')
@@ -25,11 +40,11 @@ async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug
   return data?.id ?? null;
 }
 
-async function likeState(supabase: ReturnType<typeof createServiceClient>, postId: string, visitorId: string | null) {
+async function likeState(supabase: ServiceClient, postId: string, userId: string | null) {
   const [{ count }, liked] = await Promise.all([
     supabase.from('blog_post_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId),
-    visitorId
-      ? supabase.from('blog_post_likes').select('id').eq('post_id', postId).eq('visitor_id', visitorId).maybeSingle()
+    userId
+      ? supabase.from('blog_post_likes').select('id').eq('post_id', postId).eq('user_id', userId).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
   return { count: count ?? 0, liked: !!(liked as { data: unknown }).data };
@@ -38,14 +53,17 @@ async function likeState(supabase: ReturnType<typeof createServiceClient>, postI
 export async function GET(req: NextRequest) {
   const slug = normalizeSlug(req.nextUrl.searchParams.get('slug'));
   if (!slug) return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
-  const visitorId = normalizeVisitorId(req.nextUrl.searchParams.get('visitorId'));
 
   const supabase = createServiceClient();
   const postId = await loadPostId(supabase, slug);
   if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const state = await likeState(supabase, postId, visitorId);
-  return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } });
+  const userId = await currentUserId();
+  const state = await likeState(supabase, postId, userId);
+  return NextResponse.json(
+    { ...state, signedIn: !!userId },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -59,6 +77,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Saving a like requires an account — this is the sign-in gate.
+  const userId = await currentUserId();
+  if (!userId) {
+    return NextResponse.json(
+      { error: 'auth_required', message: 'Sign in to save this article.' },
+      { status: 401 },
+    );
+  }
+
   const parsed = await readBoundedRequestJson(req, MAX_BODY_BYTES);
   if (!parsed.ok) {
     return NextResponse.json(
@@ -66,27 +93,32 @@ export async function POST(req: NextRequest) {
       { status: parsed.reason === 'too_large' ? 413 : 400 },
     );
   }
-  const body = (parsed.value && typeof parsed.value === 'object' ? parsed.value : {}) as { slug?: unknown; visitorId?: unknown };
+  const body = (parsed.value && typeof parsed.value === 'object' ? parsed.value : {}) as {
+    slug?: unknown;
+    visitorId?: unknown;
+  };
 
   const slug = normalizeSlug(body.slug);
+  if (!slug) return NextResponse.json({ error: 'slug required' }, { status: 400 });
+  // visitor id is optional context (analytics/legacy); identity is the session.
   const visitorId = normalizeVisitorId(body.visitorId);
-  if (!slug || !visitorId) return NextResponse.json({ error: 'slug and visitorId required' }, { status: 400 });
 
   const postId = await loadPostId(supabase, slug);
   if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Toggle: insert wins the ♥; a unique-violation means it existed → remove it.
+  // Toggle: insert wins the ♥; a unique-violation on (post_id, user_id) means it
+  // already existed → remove it (unlike).
   const { error: insertError } = await supabase
     .from('blog_post_likes')
-    .insert({ post_id: postId, visitor_id: visitorId });
+    .insert({ post_id: postId, user_id: userId, visitor_id: visitorId ?? `user:${userId}` });
   if (insertError) {
     if (insertError.code === '23505') {
-      await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
+      await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('user_id', userId);
     } else {
       return NextResponse.json({ error: 'Could not record the like' }, { status: 500 });
     }
   }
 
-  const state = await likeState(supabase, postId, visitorId);
-  return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } });
+  const state = await likeState(supabase, postId, userId);
+  return NextResponse.json({ ...state, signedIn: true }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from
 import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleGraph } from '@/lib/blog/structured-data';
+import { articleHashtags, articleKeywords, BUBALY_URL } from '@/lib/blog/social';
 import { HeartButton } from '@/components/blog/heart-button';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
@@ -55,7 +56,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: post.title,
     description: post.excerpt,
-    keywords: post.tags,
+    keywords: articleKeywords(post),
     authors: [{ name: post.author }],
     category: post.category,
     alternates: { canonical: `/blog/${post.slug}` },
@@ -90,6 +91,7 @@ export default async function BlogPostPage({ params }: Params) {
   ]);
 
   const headings = extractHeadings(post.body);
+  const hashtags = articleHashtags(post);
 
   return (
     <>
@@ -171,6 +173,13 @@ export default async function BlogPostPage({ params }: Params) {
               </div>
             )}
 
+            {/* Social hashtags (always include #bubaly) */}
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium text-violet-300/80">
+              {hashtags.map((h) => (
+                <span key={h}>{h}</span>
+              ))}
+            </div>
+
             {/* Share */}
             <div className="mt-6 flex items-center gap-3 border-b border-white/8 pb-6">
               <span className="text-xs font-semibold text-white/40">SHARE</span>
@@ -225,6 +234,26 @@ export default async function BlogPostPage({ params }: Params) {
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* About Bubaly — brand reference + backlink */}
+            <div className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-violet-300/70">About Bubaly</p>
+              <p className="mt-2 text-sm leading-6 text-white/70">
+                <a href={BUBALY_URL} className="font-bold text-violet-200 underline-offset-2 hover:underline" rel="noopener">
+                  Bubaly
+                </a>{' '}
+                is the all-in-one operating system for family life — calendars, chores, meals, money, and
+                more, organized in one place so your household runs itself. This article is part of the
+                Bubaly blog, where we share practical, real-world advice for modern families.
+              </p>
+              <a
+                href={BUBALY_URL}
+                rel="noopener"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-violet-500/20 px-4 py-2 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/30"
+              >
+                Visit Bubaly.com <ArrowRight className="h-3.5 w-3.5" />
+              </a>
             </div>
 
             {/* Share bottom */}
