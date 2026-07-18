@@ -232,6 +232,13 @@ Weighting (per the mission brief):
   to reflect it. The new `mobile.spec` gets its first real execution in CI (the
   sandbox `next start` cycle was too flaky to run it green locally); a red there is
   the gate catching a real device-viewport issue.
+- **⚠️ CI runner blocker (LB-015):** verified the mobile matrix is now wired into
+  the CI `e2e` job (job renamed, deploys), BUT no CI evidence is available — the
+  latest runs (incl. this commit `e04c2f34`) fail in **3s with `runner_id: 0`**
+  (no runner assigned; provisioning failure, not a test failure). This is the
+  known GitHub Actions runner/billing/org-policy blocker (LB-015), owned by the
+  org — not a code issue. Mobile matrix evidence therefore comes from local runs
+  until runners are restored, at which point every PR is auto-gated.
 
 ### M-010 — PWA update UX: no visible "new version" prompt (Phase 16)
 - **Problem:** `RegisterSW` registered the SW but had **no update handling** — the
