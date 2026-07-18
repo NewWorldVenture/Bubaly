@@ -12,8 +12,8 @@ type Observation = {
   provider: Provider;
   engine: string;
   observed_for: string;
-  page_path: string | null;
-  query: string | null;
+  page_path: string;
+  query: string;
   clicks?: number;
   impressions?: number;
   ctr?: number | null;
@@ -78,8 +78,8 @@ async function syncGoogle(db: Db): Promise<number> {
     const data = await readBoundedResponseJson<{ rows?: { keys?: string[]; clicks?: number; impressions?: number; ctr?: number; position?: number }[] }>(response, 4 * 1024 * 1024);
     const rows: Observation[] = (data.rows ?? []).map((row) => ({
       provider: 'google_search_console', engine: 'google', observed_for: isoDate(end),
-      page_path: row.keys?.[0]?.startsWith('http') ? new URL(row.keys[0]).pathname : row.keys?.[0] ?? null,
-      query: row.keys?.[1] ?? null, clicks: row.clicks ?? 0, impressions: row.impressions ?? 0,
+      page_path: row.keys?.[0]?.startsWith('http') ? new URL(row.keys[0]).pathname : row.keys?.[0] ?? '',
+      query: row.keys?.[1] ?? '', clicks: row.clicks ?? 0, impressions: row.impressions ?? 0,
       ctr: row.ctr ?? null, average_position: row.position ?? null, payload: row as unknown as Json, source_status: 'observed',
     }));
     const count = await writeObservations(db, rows);
@@ -104,7 +104,7 @@ async function syncBing(db: Db): Promise<number> {
     if (!response.ok) throw new Error(`Bing Webmaster returned ${response.status}.`);
     const data = await readBoundedResponseJson<{ d?: unknown[] }>(response, 4 * 1024 * 1024);
     const rows: Observation[] = (data.d ?? []).map((row) => ({
-      provider: 'bing_webmaster', engine: 'bing', observed_for: isoDate(), page_path: null, query: null,
+      provider: 'bing_webmaster', engine: 'bing', observed_for: isoDate(), page_path: '', query: '',
       payload: row as Json, source_status: 'observed',
     }));
     const count = await writeObservations(db, rows);
@@ -132,8 +132,8 @@ async function syncAiCitations(db: Db): Promise<number> {
     const rows: Observation[] = sourceRows.map((row) => ({
       provider: 'ai_citation', engine: typeof row.engine === 'string' && row.engine.trim() ? row.engine : 'unknown',
       observed_for: typeof row.observed_for === 'string' ? row.observed_for : isoDate(),
-      page_path: typeof row.page_path === 'string' ? row.page_path : null,
-      query: typeof row.query === 'string' ? row.query : null,
+      page_path: typeof row.page_path === 'string' ? row.page_path : '',
+      query: typeof row.query === 'string' ? row.query : '',
       citations: Number(row.citations ?? 0) || 0, cited: typeof row.cited === 'boolean' ? row.cited : null,
       payload: row as Json, source_status: 'observed',
     }));

@@ -153,8 +153,8 @@ create table if not exists public.marketing_provider_observations (
   provider text not null check (provider in ('google_search_console','bing_webmaster','ai_citation','manual')),
   engine text not null default 'unknown',
   observed_for date not null,
-  page_path text,
-  query text,
+  page_path text not null default '',
+  query text not null default '',
   clicks integer not null default 0,
   impressions integer not null default 0,
   ctr numeric(8,5),
@@ -175,6 +175,12 @@ create index if not exists idx_mkt_provider_obs_page on public.marketing_provide
 update public.marketing_provider_observations set engine = 'unknown' where engine is null;
 alter table public.marketing_provider_observations alter column engine set default 'unknown';
 alter table public.marketing_provider_observations alter column engine set not null;
+update public.marketing_provider_observations set page_path = '' where page_path is null;
+update public.marketing_provider_observations set query = '' where query is null;
+alter table public.marketing_provider_observations alter column page_path set default '';
+alter table public.marketing_provider_observations alter column page_path set not null;
+alter table public.marketing_provider_observations alter column query set default '';
+alter table public.marketing_provider_observations alter column query set not null;
 
 create table if not exists public.marketing_provider_syncs (
   provider text primary key check (provider in ('google_search_console','bing_webmaster','ai_citation')),
@@ -212,6 +218,21 @@ alter table public.marketing_embeddings enable row level security;
 alter table public.marketing_provider_observations enable row level security;
 alter table public.marketing_provider_syncs enable row level security;
 
+-- Policy names are stable so a manually retried or partially-applied run is
+-- safe. Dropping only these migration-owned policies preserves unrelated rules.
+drop policy if exists marketing_pages_admin_all on public.marketing_pages;
+drop policy if exists marketing_pages_public_read on public.marketing_pages;
+drop policy if exists marketing_page_relationships_admin_all on public.marketing_page_relationships;
+drop policy if exists marketing_page_relationships_public_read on public.marketing_page_relationships;
+drop policy if exists marketing_page_versions_admin_all on public.marketing_page_versions;
+drop policy if exists marketing_page_versions_admin_read on public.marketing_page_versions;
+drop policy if exists marketing_templates_admin_all on public.marketing_content_templates;
+drop policy if exists marketing_brand_rules_admin_all on public.marketing_brand_rules;
+drop policy if exists marketing_generation_jobs_admin_all on public.marketing_generation_jobs;
+drop policy if exists marketing_embeddings_admin_all on public.marketing_embeddings;
+drop policy if exists marketing_provider_observations_admin_all on public.marketing_provider_observations;
+drop policy if exists marketing_provider_syncs_admin_all on public.marketing_provider_syncs;
+
 create policy marketing_pages_admin_all on public.marketing_pages for all to authenticated
   using (public.is_super_admin()) with check (public.is_super_admin());
 create policy marketing_pages_public_read on public.marketing_pages for select to anon, authenticated
@@ -222,8 +243,8 @@ create policy marketing_page_relationships_public_read on public.marketing_page_
   using (exists (select 1 from public.marketing_pages p where p.id = from_page_id and p.status = 'published' and p.deleted_at is null)
      and exists (select 1 from public.marketing_pages p where p.id = to_page_id and p.status = 'published' and p.deleted_at is null));
 
-create policy marketing_page_versions_admin_all on public.marketing_page_versions for all to authenticated
-  using (public.is_super_admin()) with check (public.is_super_admin());
+create policy marketing_page_versions_admin_read on public.marketing_page_versions for select to authenticated
+  using (public.is_super_admin());
 create policy marketing_templates_admin_all on public.marketing_content_templates for all to authenticated
   using (public.is_super_admin()) with check (public.is_super_admin());
 create policy marketing_brand_rules_admin_all on public.marketing_brand_rules for all to authenticated
@@ -240,8 +261,9 @@ create policy marketing_provider_syncs_admin_all on public.marketing_provider_sy
 -- RLS is authorization, not table privilege. Keep the public surface narrow and
 -- grant the worker/admin roles only what their policies and RPC require.
 grant select on public.marketing_pages, public.marketing_page_relationships to anon, authenticated;
-grant select, insert, update, delete on public.marketing_page_versions,
-  public.marketing_content_templates, public.marketing_brand_rules,
+grant select on public.marketing_page_versions to authenticated;
+grant select, insert, update, delete on public.marketing_content_templates,
+  public.marketing_brand_rules,
   public.marketing_generation_jobs, public.marketing_embeddings,
   public.marketing_provider_observations, public.marketing_provider_syncs to authenticated;
 grant all on public.marketing_pages, public.marketing_page_versions,

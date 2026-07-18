@@ -5,6 +5,7 @@ const migration = readFileSync('supabase/migrations/0231_marketing_platform_spin
 const platform = readFileSync('lib/marketing/platform.ts', 'utf8');
 const worker = readFileSync('app/api/cron/marketing/route.ts', 'utf8');
 const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf8');
+const providerSync = readFileSync('lib/marketing/provider-sync.ts', 'utf8');
 const featureRoute = readFileSync('app/(marketing)/features/[slug]/page.tsx', 'utf8');
 const customRoute = readFileSync('app/(marketing)/p/[slug]/page.tsx', 'utf8');
 const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
@@ -28,6 +29,8 @@ describe('marketing platform spine contract', () => {
     expect(migration).toContain('create extension if not exists vector with schema extensions');
     expect(migration).toContain('unique(page_id, version)');
     expect(migration).toContain('idempotency_key text not null unique');
+    expect(migration).toContain('page_path text not null default \'\'');
+    expect(migration).toContain('query text not null default \'\'');
   });
 
   it('keeps public reads published-only and grants the queue to service_role', () => {
@@ -35,6 +38,8 @@ describe('marketing platform spine contract', () => {
     expect(migration).toContain('grant select on public.marketing_pages, public.marketing_page_relationships to anon, authenticated');
     expect(migration).toContain('grant execute on function public.claim_marketing_generation_jobs(integer) to service_role');
     expect(migration).toContain('has_table_privilege(\'anon\', \'public.marketing_pages\', \'SELECT\')');
+    expect(migration).toContain('create policy marketing_page_versions_admin_read on public.marketing_page_versions for select');
+    expect(migration).toContain('grant select on public.marketing_page_versions to authenticated');
   });
 
   it('enqueues automatic regeneration and chains AEO plus embedding work', () => {
@@ -53,6 +58,9 @@ describe('marketing platform spine contract', () => {
     expect(providers).toContain('hasCronAuthorization(req)');
     expect(worker).toContain('processMarketingGenerationJobs');
     expect(providers).toContain('syncMarketingProviders');
+    expect(providerSync).toContain("page_path: ''");
+    expect(providerSync).toContain("query: ''");
+    expect(providerSync).toContain("onConflict: 'provider,engine,observed_for,page_path,query'");
   });
 
   it('exposes every platform page type through a public route family', () => {
@@ -87,6 +95,7 @@ describe('marketing platform spine contract', () => {
     expect(migrationSource).toContain('new.deleted_at is null and new.version is distinct from old.version');
     expect(migrationSource).toContain("locked_at < now() - interval '15 minutes'");
     expect(migrationSource).toContain('engine text not null default \'unknown\'');
+    expect(migrationSource).toContain('drop policy if exists marketing_pages_admin_all');
     expect(migrationSource).toContain('uq_mkt_default_template_per_type');
   });
 

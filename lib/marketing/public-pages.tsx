@@ -26,7 +26,14 @@ export async function getPublishedMarketingPage(type: MarketingPageType, slug: s
   const path = buildPublicPath(type, normalized);
   const supabase = await createServer();
   const { data, error } = await supabase.from('marketing_pages').select('id, page_type, slug, path, title, summary, body, content, seo, aeo, published_at').eq('path', path).eq('status', 'published').is('deleted_at', null).maybeSingle();
-  if (error) throw new Error(`Could not load marketing page: ${error.message}`);
+  // A deploy can precede the human-owned migration apply. Treat only the
+  // explicit missing-relation signal as an unavailable page family; all other
+  // database failures must still surface as errors instead of becoming 404s.
+  if (error) {
+    const message = String(error.message ?? '');
+    if (error.code === 'PGRST205' || /marketing_pages.*schema cache/i.test(message)) return null;
+    throw new Error(`Could not load marketing page: ${message}`);
+  }
   return data as PublicPage | null;
 }
 

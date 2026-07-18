@@ -10,6 +10,7 @@ import fs from 'node:fs';
 
 const lp = fs.readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
 const form = fs.readFileSync('app/(marketing)/f/[id]/page.tsx', 'utf8');
+const renderer = fs.readFileSync('lib/marketing/public-pages.tsx', 'utf8');
 
 describe('public marketing loaders throw on read error (never 404 a live page)', () => {
   it('landing-page loader captures error and throws before returning null', () => {
@@ -26,5 +27,11 @@ describe('public marketing loaders throw on read error (never 404 a live page)',
     expect(form).toContain('if (error) throw new Error(');
     expect(form.indexOf('if (error) throw')).toBeLessThan(form.indexOf('return data;'));
     expect(form).toContain('if (!form) notFound();');
+  });
+
+  it('treats only an unapplied marketing platform migration as an unavailable page family', () => {
+    expect(renderer).toContain("error.code === 'PGRST205'");
+    expect(renderer).toContain('/marketing_pages.*schema cache/i');
+    expect(renderer).toContain('throw new Error(`Could not load marketing page: ${message}`)');
   });
 });
