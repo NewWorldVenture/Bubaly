@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~23% (early)
+## Overall completion: ~27% (early)
 
 Weighting (per the mission brief):
 
@@ -204,6 +204,27 @@ Weighting (per the mission brief):
   bakes in, and M-012 closes that gap. File-disjoint from M-005/M-006/M-007 so it
   ran concurrently without collision. (Renumbered from a transient M-011 to avoid
   clashing with agent-05's M-011 chat-panel item.)
+
+### M-009 — Playwright mobile device matrix (Phase 2/23): stood up + browser-fixed
+- **Delivered:** `playwright.config.ts` gains 4 emulated mobile projects —
+  `iphone-se` (iPhone SE), `iphone` (iPhone 14 Pro), `pixel` (Pixel 7), `ipad`
+  (iPad gen 7) — each running the viewport-relevant specs. New
+  `tests/e2e/mobile.spec.ts` asserts per-device: viewport-meta `viewport-fit=cover`,
+  no horizontal overflow, and **no focusable input < 16px** (runtime iOS-zoom guard,
+  reading computed `font-size`). `--list` → **225 tests / 5 projects**.
+- **Real finding (sandbox):** the iPhone/iPad device descriptors default to
+  **WebKit**, which isn't installed here (Chromium-only, and `playwright install` is
+  disallowed) — the first run failed to launch WebKit. Fixed by pinning
+  `browserName: 'chromium'` on those projects (real mobile viewport/DPR/UA/touch,
+  Chromium engine) so the matrix runs in this sandbox **and** CI; a `PW_WEBKIT=1`
+  env switch restores native-engine runs where WebKit is available.
+- **Honest status:** config + spec **enumerate + type-check + lint clean**; a full
+  green *execution* is a CI concern — the sandbox's build+`next start` cycle was
+  flaky here (server-start aborts), so the run itself is deferred to CI (see M-009 remaining in TODO).
+  This is emulated coverage, explicitly **not** physical-device (see
+  `PHYSICAL_DEVICE_TEST_PLAN` — to be authored).
+- **Evidence:** `--list` shows all 4 mobile projects × mobile/overflow/public specs;
+  eslint 0 on config + spec.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

@@ -19,6 +19,27 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Mobile device matrix (emulated — real viewport/DPR/UA/touch). Runs the
+    // viewport-relevant specs (mobile invariants + horizontal-overflow + public
+    // route loads) under small-phone, modern-phone, Android, and tablet profiles.
+    // We pin `browserName: 'chromium'` so the matrix runs in Chromium-only
+    // environments (this sandbox + CI) instead of requiring the WebKit binary; the
+    // device descriptor still supplies the real mobile viewport/DPR/UA/touch.
+    // Chromium-emulated ≠ real iOS Safari — physical/WebKit checks stay in
+    // PHYSICAL_DEVICE_TEST_PLAN. (Set PW_WEBKIT=1 in an env with WebKit installed
+    // to run the iPhone/iPad projects on their native engine.)
+    ...(process.env.PW_WEBKIT === '1'
+      ? [
+          { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'] } },
+          { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'] } },
+          { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'] } },
+        ]
+      : [
+          { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'], browserName: 'chromium' as const } },
+          { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'], browserName: 'chromium' as const } },
+          { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'], browserName: 'chromium' as const } },
+        ]),
+    { name: 'pixel', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['Pixel 7'] } },
   ],
   // The npm script builds first, then Playwright owns this single server
   // process. A flat lifecycle lets the runner reliably stop Next on Windows.

@@ -24,7 +24,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | `d678557f` |
 | M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | `67acb018` |
 | M-007 | 11/8 | Overlay/shell audit — shared Modal (bottom-sheet/dvh/safe-area/focus-trap) + app-shell (pb-24, safe-bottom nav) verified excellent; ratcheted | `0c00ff0b` |
-| M-012 | 11 | Hand-rolled full-screen overlays now lock background scroll on mobile (shared `useLockBodyScroll` hook applied to camera, command bar, exit-intent, paywall, app-lock, account-closed) | (this commit) |
+| M-009 | 2/23 | Playwright mobile device matrix stood up (iphone-se/iphone/pixel/ipad × mobile+overflow+public specs; 225 tests); WebKit→Chromium fix for sandbox/CI | `2bcc974e` |
+| M-012 | 11 | Hand-rolled full-screen overlays now lock background scroll on mobile (shared `useLockBodyScroll` hook applied to camera, command bar, exit-intent, paywall, app-lock, account-closed) | `57142f32` |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7) alongside the
 prior mobile guards.
@@ -117,11 +118,18 @@ matrix) for evidence.
 iPad portrait/landscape: check dashboard grids + `lg:grid-cols-[1fr_340px]` sidebars
 render well; avoid narrow centered phone columns on tablets. Mostly a review pass.
 
-### M-009 (P1 infra) — Playwright mobile-viewport E2E matrix (Phase 2/23)
-Stand up device profiles (iPhone SE 320, iPhone 390, Pixel 412, iPad 768/1024) ×
-portrait/landscape × light/dark, driving the critical journeys (auth, onboarding,
-create/edit record, upload, nav). This unlocks evidence for Phases 3/13/17/19.
-Check `playwright.config.*` for existing setup before adding.
+### 🟡 M-009 (P1 infra) — Playwright mobile matrix (Phase 2/23) — MATRIX UP; journeys remain
+- ✅ **Device matrix stood up (agent-05):** `playwright.config.ts` now has 4 emulated
+  mobile projects — `iphone-se` (iPhone SE), `iphone` (iPhone 14 Pro), `pixel`
+  (Pixel 7), `ipad` (iPad gen 7) — running the viewport-relevant specs
+  (`mobile|overflow|public`). New `tests/e2e/mobile.spec.ts` asserts per-device:
+  viewport-meta `viewport-fit=cover`, no horizontal overflow, and **no focusable
+  input < 16px** (runtime iOS-zoom guard). `--list` → 225 tests / 5 projects.
+- 🔜 **Remaining:** (a) authed critical journeys (login → create/edit record →
+  upload → nav) need CI Supabase creds — extend `PUBLIC_ROUTES` → authed once
+  available (see `authenticated.spec.ts`); (b) landscape + dark-mode variants;
+  (c) wire the mobile projects into CI (M-012). Running the full matrix needs a
+  `next build` + server (~5 min) — kicked once for evidence.
 
 ### M-010 (P2) — PWA update UX + offline states (Phases 16/17)
 `app/manifest.ts` + `public/sw.js` exist. Verify: a visible "new version available"
