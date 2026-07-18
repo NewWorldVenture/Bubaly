@@ -41,6 +41,7 @@ describe('marketing platform spine contract', () => {
     expect(migration).toContain('has_table_privilege(\'anon\', \'public.marketing_pages\', \'SELECT\')');
     expect(migration).toContain('create policy marketing_page_versions_admin_read on public.marketing_page_versions for select');
     expect(migration).toContain('grant select on public.marketing_page_versions to authenticated');
+    expect(migration).toContain('revoke insert, update, delete on public.marketing_page_versions from authenticated');
   });
 
   it('enqueues automatic regeneration and chains AEO plus embedding work', () => {

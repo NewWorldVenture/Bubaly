@@ -262,6 +262,7 @@ create policy marketing_provider_syncs_admin_all on public.marketing_provider_sy
 -- grant the worker/admin roles only what their policies and RPC require.
 grant select on public.marketing_pages, public.marketing_page_relationships to anon, authenticated;
 grant select on public.marketing_page_versions to authenticated;
+revoke insert, update, delete on public.marketing_page_versions from authenticated;
 grant select, insert, update, delete on public.marketing_content_templates,
   public.marketing_brand_rules,
   public.marketing_generation_jobs, public.marketing_embeddings,
