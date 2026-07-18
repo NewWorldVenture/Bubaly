@@ -268,4 +268,21 @@ one-time backfill (run `deriveArticleAeoQuestions` over every seeded post; the
 delete-by-seed keeps it idempotent) would complete per-post AEO coverage. Left for
 the AEO-lifecycle owner (codex) since it is squarely their active build.
 
-_§6 last updated: 2026-07-18 15:34 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
+### 6h. Prod deploy status — migration `0226` confirmed applied (product owner)
+**Confirmed by the product owner (2026-07-18): migration `0226_blog_500_articles.sql`
+was pushed manually to the production Supabase database.** Implications:
+- The **500 blog posts are LIVE in prod** — `/blog` and every `/blog/{slug}` render
+  real content there (not empty).
+- The **per-post AEO backfill gap (§6g) is real in production**: those live posts
+  have category-level FAQs but no post-specific derived AEO rows until the backfill
+  runs. This raises the backfill's priority for codex's AEO-lifecycle work.
+- **Still to apply to prod for the image bar:** `0231_blog_drop_loremflickr_covers.sql`
+  (nulls the stored loremflickr URLs). Public rendering is **already safe** without
+  it — `lib/blog/posts.ts` strips loremflickr on read and serves the generated
+  `<BlogCover>` — but until `0231` is applied the prod DB still *stores* those
+  unverified-license URLs. Apply `0231` to fully close LB-016 at the data layer.
+- **SEO/AEO admin data:** confirm `0229_seed_marketing_aeo_seo.sql` (AEO/SEO seed)
+  is also applied, else the SEO/AEO admin pages render empty in prod (they are
+  wired + fail-closed, just unseeded) — tracked under LB-002.
+
+_§6 last updated: 2026-07-18 15:36 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
