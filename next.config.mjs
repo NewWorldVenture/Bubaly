@@ -9,9 +9,11 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
       // Blog hero photos — free-license Unsplash CDN images (0195/0196).
       { protocol: 'https', hostname: 'images.unsplash.com' },
-      // Blog hero photos — free Creative-Commons LoremFlickr images, one unique
-      // photo per article via a per-post `lock` (0226). Keyworded per category.
-      { protocol: 'https', hostname: 'loremflickr.com' },
+      // NOTE: loremflickr.com was removed — its images are mixed-license (not
+      // verified free) and drawn from too few pools (visual duplicates). Blog
+      // posts without a free-licensed hero now render a bespoke generated
+      // <BlogCover> (see components/blog/blog-cover.tsx); loremflickr URLs are
+      // stripped at the data layer (lib/blog/posts.ts) so none reach next/image.
     ],
   },
   async redirects() {

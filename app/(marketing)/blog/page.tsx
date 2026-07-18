@@ -8,6 +8,7 @@ import { BlogListStructuredData } from '@/components/marketing/structured-data';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { BlogHeroArt } from '@/components/blog/blog-hero-art';
+import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 
@@ -68,10 +69,10 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Hero photo with a graceful gradient fallback for image-less posts. */
+/** Hero photo, or a bespoke generated cover (unique per title) for image-less posts. */
 function PostImage({ post, sizes, className, priority }: { post: BlogPost; sizes: string; className?: string; priority?: boolean }) {
   if (!post.heroImageUrl) {
-    return <div className={cn('bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]', className)} />;
+    return <BlogCover title={post.title} category={post.category} seed={post.slug} className={cn('h-full w-full object-cover', className)} />;
   }
   return (
     <div className={cn('relative overflow-hidden', className)}>

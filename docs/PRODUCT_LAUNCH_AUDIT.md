@@ -6,6 +6,30 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0831 - Blog engine (500 posts) hotlinked LoremFlickr — unverified-license + visually duplicated covers (resolves LB-016)
+
+- Timestamp: 2026-07-18 14:55 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing / public blog (A-17) — **cross-lane, supporting codex's marketing buildout; assignable to agent-05 per that lane's own work queue (MKT-4)**
+- Route: `/blog`, `/blog/[slug]` (`app/(marketing)/blog/**`)
+- Affected files: `components/blog/blog-cover.tsx` (new), `lib/blog/posts.ts`, `app/(marketing)/blog/page.tsx`, `app/(marketing)/blog/[slug]/page.tsx`, `next.config.mjs`, `tests/blog-cover-free-images.test.ts` (new)
+- Database objects: `blog_posts.hero_image_url` (read-normalized; not migrated)
+- Role: all public visitors + SEO/social crawlers · Tier: n/a · Household: n/a
+- Scenario: any visitor loads the blog list or an article; any crawler reads og:image / JSON-LD
+- Severity: **P1 (licensing exposure + brand quality)** — violates the "all images free + unique, no duplicates" launch bar
+- Reproduction: `0226_blog_500_articles.sql` set `hero_image_url = https://loremflickr.com/1600/900/<terms>?lock=N` for all 525 posts. `?lock` pins *which* image but NOT its license — LoremFlickr proxies mixed-license Flickr photos (attribution-required / All-Rights-Reserved possible), so "free" was unverified. All 525 covers drew from only **9 keyword pools** → structural visual duplicates (unique URLs ≠ unique images). The generator even comments "free-license Unsplash" while emitting loremflickr (self-inconsistent).
+- Expected: every rendered image is free-licensed, unique, non-duplicated
+- Actual: mixed-license hotlinks with visual duplicates on a public marketing surface
+- Root cause: seed pinned covers to a third-party placeholder host whose license it cannot control
+- Resolution: (1) `freeLicensedImage()` in `lib/blog/posts.ts` strips any `loremflickr.com` URL to `undefined` at the single `toPost` chokepoint — so **all five** consumers stop using it (list render, article hero, related thumbnails, `og:image`/Twitter card, JSON-LD `image`; the conditional metadata blocks now omit it rather than emit an unverified URL). Unsplash + `*.supabase.co` pass through. (2) Image-less posts render a **bespoke, generated, on-brand `<BlogCover>`** (`components/blog/blog-cover.tsx`) — deterministic per title/slug (djb2 hash → mulberry32 seed → procedural motif), category-tinted, theme-aware, fully inline SVG (no CDN/CSP-safe), so covers are **free, unique (distinct even within a category), duplicate-free, world-class**. (3) `loremflickr.com` removed from `next.config.mjs images.remotePatterns`. Migration `0226`'s stored URLs left as-is (applied migration, not edited) but never rendered — stripped on read.
+- Supabase/Security/Privacy/Performance impact: **performance positive** — 525 third-party image requests eliminated (inline SVG, no network, faster LCP); no DB/security change
+- Accessibility impact: neutral — `<BlogCover>` carries `role="img"` + descriptive `aria-label`
+- Tests added: `tests/blog-cover-free-images.test.ts` (4 — data-layer strip, host removed from next.config, deterministic self-contained cover with no external URL, both render surfaces fall back to `<BlogCover>` not a hotlink)
+- Tests run: guard green (4); `tsc --noEmit` clean; `eslint` clean on all changed files; `next build` green
+- Validation evidence: preview of 12 generated covers (incl. 3 same-category "Parenting" posts) confirms per-title visual uniqueness; grep confirms no rendered cover references loremflickr
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: optional future migration to null the dead `0226` loremflickr URLs
+- Lane note: A-17 (marketing) is codex's active lane; this was executed under the product owner's direct request + that lane's own MKT-4 task (which names agent-05). Logged in `docs/MARKETING_PLATFORM_COORDINATION.md §6c` + LB-016.
+
 ### PLA-0823 - Calendar mini-calendar highlighted the week's Monday, not today; no way to compare members side by side
 
 - Timestamp: 2026-07-18 14:35 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)

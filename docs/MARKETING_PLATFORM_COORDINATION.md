@@ -106,7 +106,7 @@ production analytics/consent wiring smoke.
 | MKT-1 | engine | Build out marketing engine (automation/CRM/campaigns) | Codex | IN PROGRESS |
 | MKT-2 | public | Image integrity audit (free/unique/no-dup) | QA-01 | ✅ DONE (§3) |
 | MKT-3 | public | Public marketing site prod-readiness verify | QA-01 | ✅ (§4); re-gate on churn |
-| MKT-4 | content | Curate 500 art-directed licensed hero images (replace LoremFlickr) | Codex/agent-05 | DEFERRED (quality, not correctness) |
+| MKT-4 | content | Replace 500 LoremFlickr hero hotlinks (mixed-license + dupes) | agent-05 | ✅ **DONE** — bespoke generated `<BlogCover>` + data-layer strip + config removal (§6c/§6e; commit pending) |
 | MKT-5 | shared | Live email/form/analytics smokes | owner | BLOCKED (credentials) |
 
 **For the Codex bot:** the public site + image integrity + build/type gates are
@@ -161,25 +161,34 @@ grep -oE 'loremflickr\.com/1600/900/[a-z,]+' supabase/migrations/0226_blog_500_a
   | sed -E 's|.*/900/||' | sort | uniq -c   # → 9 keyword pools across 525 posts
 ```
 
-### 6c. Recommended fix (MKT-IMG — the top marketing launch item)
-Replace LoremFlickr with **bespoke, generated, on-brand SVG cover art**, keyed
-deterministically off each post's category + title — the same approach already
-shipped in `components/blog/blog-hero-art.tsx`. This yields covers that are **free
-(owned, zero external license), guaranteed unique (per-title seed), duplicate-free,
-theme-aware, and world-class** — with **no external host** (drop `loremflickr.com`
-from `next.config.mjs remotePatterns`). Alternative: pin one distinct licensed asset
-per post in the `marketing_assets` Supabase bucket. Either way, **do not ship
-loremflickr to production.** _(Unclaimed — `agent-05` can execute this on request;
-flagged here so codex/QA-01 aren't surprised by a cross-lane edit to the blog seed +
-rendering.)_
+### 6c. ✅ FIX SHIPPED (MKT-IMG / MKT-4) — bespoke generated covers
+LoremFlickr is **replaced** by **bespoke, generated, on-brand SVG cover art**
+(`components/blog/blog-cover.tsx`), keyed deterministically off each post's
+title/slug + category. Covers are **free (owned, zero external license),
+guaranteed unique (per-title seed → distinct motif even within one category),
+duplicate-free, theme-aware, self-contained (no CDN, CSP-safe, no image
+request), and world-class.** Real free-licensed / uploaded photos still win when
+present. Changes:
+- `lib/blog/posts.ts` — `freeLicensedImage()` strips any `loremflickr.com` URL to
+  `undefined` at the single data-layer chokepoint (`toPost`), so **all five**
+  consumers stop using it: list render, article hero, related thumbs, `og:image`
+  / Twitter card, and JSON-LD `image` (the conditional blocks now omit it rather
+  than emit an unverified-license URL). Unsplash + `*.supabase.co` pass through.
+- `app/(marketing)/blog/page.tsx` + `[slug]/page.tsx` — image-less posts now
+  render `<BlogCover>` (list card, article hero, related thumbnail).
+- `next.config.mjs` — `loremflickr.com` removed from `images.remotePatterns`
+  (nothing renders it anymore; a stray URL can no longer reach `next/image`).
+- Guard: `tests/blog-cover-free-images.test.ts` (4). `tsc` + `eslint` + `next build`
+  green. Note: migration `0226`'s stored URLs are left as-is (applied migration,
+  not edited) but are **never rendered** — dead data, stripped on read. A future
+  cleanup can null them in a new migration.
 
-### 6d. Gate corrections to §4
-- Row "Image integrity (free/unique/no-dup)" → **🔴 NOT SATISFIED** pending §6c
-  (was ✅). This is the one hard image blocker.
+### 6d. Gate corrections to §4 — now RESOLVED
+- Row "Image integrity (free/unique/no-dup)" → **✅ SATISFIED** via §6c
+  (the loremflickr blocker is fixed; LB-016 → Resolved).
 - Unsplash seed hotlinks elsewhere (`0202_blog_articles.sql`, `lib/display/imagery.ts`,
   marketplace seeds) are genuinely **free** (Unsplash license) and effectively
   unique (the 3 repeated ids are the marketplace seed counted twice via
-  `SEED_ALL.sql`, not two listings sharing a photo) — acceptable as fallbacks; a
-  bespoke-SVG pass would still raise polish.
+  `SEED_ALL.sql`, not two listings sharing a photo) — acceptable as fallbacks.
 
-_§6 last updated: 2026-07-18 14:40 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
+_§6 last updated: 2026-07-18 14:55 UTC · `agent-05` (CLAUDE-FRONTEND-01)._

@@ -83,6 +83,18 @@ export function normalizeBody(raw: unknown): BlogBlock[] {
     .filter((b): b is BlogBlock => b !== null);
 }
 
+// Hosts whose license we cannot verify as free-for-commercial-use. LoremFlickr
+// proxies mixed-license Flickr photos, so we never render them on the public
+// site — such URLs are dropped to `undefined` so the generated <BlogCover> art
+// takes over (free, unique, on-brand). Free-licensed hosts (Unsplash) + owned
+// uploads (*.supabase.co) pass through untouched.
+const UNVERIFIED_IMAGE_HOSTS = ['loremflickr.com'];
+
+function freeLicensedImage(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h)) ? undefined : url;
+}
+
 function toPost(r: Row): BlogPost {
   return {
     slug: r.slug,
@@ -95,7 +107,7 @@ function toPost(r: Row): BlogPost {
     category: r.category as BlogCategory,
     featured: r.featured,
     accentColor: r.accent_color ?? undefined,
-    heroImageUrl: r.hero_image_url ?? undefined,
+    heroImageUrl: freeLicensedImage(r.hero_image_url),
     heroImageAlt: r.hero_image_alt ?? undefined,
     heroImageCredit: r.hero_image_credit ?? undefined,
     body: normalizeBody(r.body),
