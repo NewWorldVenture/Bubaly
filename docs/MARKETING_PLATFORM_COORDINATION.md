@@ -133,13 +133,16 @@ it, don't duplicate it.)
   `docs/PENDING_PROD_MIGRATIONS.md` for owner apply. **Until applied, the live
   `/blog` shows only the original 20** (tabs read live data).
 
-**Open item in THIS workstream (tracked):** **unique hero images**. Today the
-180 new articles reuse a pool of ~20 production-verified Unsplash photos (~10×
-each). The quality bar (§0.4) requires **unique, no-duplicate** images. Fix in
-progress: curate a verified pool of ~200 unique free Unsplash photo IDs (each
-`curl`-checked HTTP 200 — see §5) and reassign one distinct image per article
-via a follow-up idempotent migration. Owned by `agent-03`; do not reassign blog
-images from another workstream.
+**Unique hero images — DONE** (`0242_blog_unique_hero_images.sql`). Every one of
+the 200 published articles now has a **distinct** free-license Unsplash CDN
+photo (213-image verified pool; each URL curl-checked HTTP 200 — no broken
+images) with honest category-based alt text. PG16-verified: 200 published, 200
+distinct `hero_image_url`, **0 duplicates**, 0 null/broken, all on the
+allowlisted `images.unsplash.com` host, idempotent. Owned by `agent-03`; do not
+reassign blog images from another workstream. (Image *content* relevance is
+best-effort — IDs were theme-selected and load-verified; for guaranteed
+per-article topical matching, an Unsplash API key would enable programmatic
+search-and-match.)
 
 **Toward the 500-new target:** 180/500 shipped; continuing in vetted,
 non-duplicate-topic batches. Each batch is committed to PR #323 as it validates.
