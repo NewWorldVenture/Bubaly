@@ -38,6 +38,14 @@ export default async function SeoPage() {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SEO</h1>
+          <p className="mt-1 text-sm text-muted">Track search intent, keywords, and the audit status of every indexable marketing page.</p>
+        </div>
+        <Link href="/admin/marketing/aeo" className="text-sm font-medium text-brand-text hover:underline">AEO →</Link>
+      </div>
+
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
         SEO here uses <strong className="text-fg">first-party data only</strong>. Rankings, search volume, and backlinks are never invented — connect Google Search Console for those. AI keyword ideas are clearly labeled as suggestions.
       </div>

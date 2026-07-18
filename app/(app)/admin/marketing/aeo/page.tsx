@@ -32,6 +32,14 @@ export default async function AeoPage() {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing AEO</h1>
+          <p className="mt-1 text-sm text-muted">Answer Engine Optimization — track the questions customers ask AI engines and publish clear, structured answers.</p>
+        </div>
+        <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text hover:underline">SEO →</Link>
+      </div>
+
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
         Answer Engine Optimization prepares your content for ChatGPT, Perplexity, Google AI Overviews, and voice assistants.
         Track the questions customers ask and publish clear, structured answers. We never claim AI-engine rankings without real tracking data.

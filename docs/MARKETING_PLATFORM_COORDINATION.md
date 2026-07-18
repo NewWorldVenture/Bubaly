@@ -192,4 +192,28 @@ present. Changes:
   unique (the 3 repeated ids are the marketplace seed counted twice via
   `SEED_ALL.sql`, not two listings sharing a photo) — acceptable as fallbacks.
 
-_§6 last updated: 2026-07-18 14:55 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
+### 6e. SEO + AEO admin pages — verified 100% wired + polished (direct user request)
+Super Admin → Marketing **SEO** (`/admin/marketing/seo`) and **AEO**
+(`/admin/marketing/aeo`) audited end-to-end:
+- **Navigation correct:** the subnav (`marketing-subnav.tsx`) links both to the
+  right routes (→ `https://www.bubaly.com/admin/marketing/{seo,aeo}`); added the
+  missing **AEO quick-link** to the marketing dashboard (SEO already had one).
+- **Read path wired:** both pages read via `createServiceClient()` —
+  `marketing_seo_keywords` + `marketing_seo_pages` (SEO), `marketing_aeo_questions`
+  (AEO) — and **fail closed** (`AdminSeoReadError` / `AdminAeoReadError`) instead
+  of rendering a false-empty page.
+- **Write path wired:** all mutations (`addKeyword`, `updateSeoKeyword`,
+  `archiveSeoKeyword`, `saveSeoPage`, `archiveSeoPage`, `addAeoQuestion`,
+  `updateAeoQuestion`, `deleteAeoQuestion`) insert/update/delete/upsert the real
+  tables, each gated by `requireMarketingAdmin()` + audit-logged.
+- **Polish/responsiveness:** added proper page `<h1>` headers + cross-links; the
+  subnav already wraps chips (mobile-friendly, no h-scroll); tables use
+  `overflow-x-auto`.
+- **Seed present:** migration `0229` seeds ~2,344 AEO questions, ~1,603 SEO
+  keywords, 19 SEO pages — so once applied the pages are richly populated.
+- Guard `tests/marketing-seo-aeo-wiring.test.ts` (6). tsc/eslint/build green.
+- **Deploy dependency (not code):** if these render empty in prod, migrations
+  `0013` (tables) + `0229` (seed) must be applied to the production DB — tracked
+  under LB-002 (remote migration ledger, human/ops-owned).
+
+_§6 last updated: 2026-07-18 15:20 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
