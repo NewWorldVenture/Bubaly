@@ -17,7 +17,7 @@ describe('Supabase migration filename safety', () => {
   });
 
   it('points new migrations at the next unused version', () => {
-    expect(audit.nextVersion).toBe('0233');
+    expect(audit.nextVersion).toBe('0234');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
