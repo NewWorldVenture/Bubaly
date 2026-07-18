@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
 import { deriveArticleAeoQuestions } from '@/lib/marketing/aeo-generate';
+import { archiveLegacyBlogOnPlatform, syncLegacyBlogToPlatform, syncLegacyBlogVisibility } from '@/lib/marketing/legacy-bridge';
 import type { Json } from '@/lib/database.types';
 
 function s(fd: FormData, k: string): string | null {
@@ -86,6 +87,19 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
     .upsert({ ...payload, body: payload.body as unknown as Json }, { onConflict: 'slug' }).select('slug').single();
   if (error || !post) marketingActionFailure('publish the blog post', error ?? new Error('The blog post row was not returned.'));
 
+  await syncLegacyBlogToPlatform(supabase, {
+    id: item.id,
+    slug: payload.slug,
+    title: payload.title,
+    excerpt: payload.excerpt,
+    body: item.body,
+    category: payload.category,
+    tags: payload.tags,
+    blocks: payload.body as unknown as Json,
+    publishedAt: payload.published_at,
+    actorId,
+  });
+
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
   const blog = blogMetadata(meta);
   const { data: updated, error: updateError } = await supabase.from('marketing_content_items').update({
@@ -131,6 +145,7 @@ export async function unpublishBlogPostAction(slug: string): Promise<void> {
   const { data, error } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug)
     .select('slug').maybeSingle();
   if (error || !data) marketingActionFailure('unpublish the blog post', error ?? new Error('Blog post not found.'));
+  await syncLegacyBlogVisibility(supabase, slug, actorId, false);
 
   // Keep the admin pipeline honest when a public post is pulled down. The
   // registry migration stores source slugs at metadata.slug, while the admin
@@ -183,6 +198,7 @@ export async function archiveContentAction(formData: FormData): Promise<void> {
     if (slug) {
       const { error: unpublishError } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug);
       if (unpublishError) marketingActionFailure('unpublish the archived blog post', unpublishError);
+      await archiveLegacyBlogOnPlatform(supabase, slug, actorId);
       revalidatePath(`/blog/${slug}`);
     }
   }

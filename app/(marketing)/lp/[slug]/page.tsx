@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { landingCta, bodyParagraphs, normalizeSlug } from '@/lib/marketing/landing';
 import { LandingTracker } from './tracker';
+import { getPublishedMarketingPage, MarketingPageView, marketingPageMetadata } from '@/lib/marketing/public-pages';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,10 +30,22 @@ async function getPage(slug: string) {
   return data;
 }
 
+async function getPlatformPage(slug: string) {
+  try {
+    return await getPublishedMarketingPage('landing', slug);
+  } catch (error) {
+    if (/marketing_pages|schema cache|relation .* does not exist/i.test(String(error))) return null;
+    throw error;
+  }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const page = await getPage(slug);
-  if (!page) return { title: 'Not found', robots: { index: false } };
+  if (!page) {
+    const platformPage = await getPlatformPage(slug);
+    return platformPage ? marketingPageMetadata('landing', slug) : { title: 'Not found', robots: { index: false } };
+  }
   return {
     title: page.headline || page.title,
     description: page.subhead || undefined,
@@ -49,7 +62,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function LandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const page = await getPage(slug);
-  if (!page) notFound();
+  if (!page) {
+    const platformPage = await getPlatformPage(slug);
+    if (!platformPage) notFound();
+    return <MarketingPageView type="landing" slug={slug} />;
+  }
 
   const cta = landingCta(page.metadata);
   const paragraphs = bodyParagraphs(page.body);

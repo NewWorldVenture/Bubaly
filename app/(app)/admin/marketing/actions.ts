@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
+import { archiveLegacyLandingOnPlatform, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
+import type { Json } from '@/lib/database.types';
 
 function str(v: FormDataEntryValue | null): string {
   return (v == null ? '' : String(v)).trim();
@@ -485,6 +487,18 @@ export async function createLandingPage(formData: FormData) {
     metadata,
   }).select('id').single();
   if (error || !data) marketingActionFailure('create the landing page', error ?? new Error('No landing page was created'));
+  await syncLegacyLandingToPlatform(supabase, {
+    id: data.id,
+    slug,
+    title,
+    headline: str(formData.get('headline')) || null,
+    subhead: str(formData.get('subhead')) || null,
+    body: str(formData.get('body')) || null,
+    metadata: metadata as unknown as Json,
+    published: false,
+    publishedAt: null,
+    actorId,
+  });
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_landing_page', resourceId: data?.id ?? null, metadata: { slug } });
   revalidatePath('/admin/marketing/landing-pages');
 }
@@ -499,6 +513,22 @@ export async function setLandingPublished(formData: FormData) {
     .update({ published: publish, status: publish ? 'published' : 'draft' })
     .eq('id', id).is('deleted_at', null).select('id, slug').maybeSingle();
   if (error || !data) marketingActionFailure('update the landing page', error ?? new Error('Landing page not found'));
+  const { data: landing, error: landingError } = await supabase.from('marketing_landing_pages')
+    .select('id, slug, title, headline, subhead, body, metadata, published')
+    .eq('id', id).is('deleted_at', null).maybeSingle();
+  if (landingError) marketingActionFailure('load the landing page for synchronization', landingError);
+  if (landing) await syncLegacyLandingToPlatform(supabase, {
+    id: landing.id,
+    slug: landing.slug,
+    title: landing.title,
+    headline: landing.headline,
+    subhead: landing.subhead,
+    body: landing.body,
+    metadata: (landing.metadata ?? {}) as unknown as Json,
+    published: landing.published,
+    publishedAt: landing.published ? new Date().toISOString() : null,
+    actorId,
+  });
   await logMarketingAudit(supabase, { actorId, actorEmail, action: publish ? 'publish' : 'unpublish', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
   revalidatePath(`/lp/${data.slug}`);
@@ -532,6 +562,22 @@ export async function updateLandingPage(formData: FormData) {
     metadata,
   }).eq('id', id).is('deleted_at', null).select('id, slug').maybeSingle();
   if (error || !data) marketingActionFailure('update the landing page', error ?? new Error('Landing page not found.'));
+  const { data: landing, error: landingError } = await supabase.from('marketing_landing_pages')
+    .select('id, slug, title, headline, subhead, body, metadata, published')
+    .eq('id', id).is('deleted_at', null).maybeSingle();
+  if (landingError) marketingActionFailure('load the landing page for synchronization', landingError);
+  if (landing) await syncLegacyLandingToPlatform(supabase, {
+    id: landing.id,
+    slug: landing.slug,
+    title: landing.title,
+    headline: landing.headline,
+    subhead: landing.subhead,
+    body: landing.body,
+    metadata: (landing.metadata ?? {}) as unknown as Json,
+    published: landing.published,
+    publishedAt: landing.published ? new Date().toISOString() : null,
+    actorId,
+  });
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_landing_page', resourceId: id, metadata: { slug } });
   revalidatePath('/admin/marketing/landing-pages');
   revalidatePath(`/lp/${existing.slug}`);
@@ -550,6 +596,7 @@ export async function archiveLandingPage(formData: FormData) {
   const { data, error } = await supabase.from('marketing_landing_pages').update(archiveValues as never)
     .eq('id', id).is('deleted_at', null).select('id, slug').maybeSingle();
   if (error || !data) marketingActionFailure('archive the landing page', error ?? new Error('Landing page not found.'));
+  await archiveLegacyLandingOnPlatform(supabase, data.slug, actorId);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
   revalidatePath(`/lp/${data.slug}`);

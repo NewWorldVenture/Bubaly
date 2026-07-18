@@ -285,7 +285,7 @@ create trigger trg_enqueue_marketing_page_generation_insert after insert on publ
 for each row execute function public.enqueue_marketing_page_generation();
 drop trigger if exists trg_enqueue_marketing_page_generation_update on public.marketing_pages;
 create trigger trg_enqueue_marketing_page_generation_update after update on public.marketing_pages
-for each row when (new.updated_by is not null and new.version is distinct from old.version)
+for each row when (new.updated_by is not null and new.deleted_at is null and new.version is distinct from old.version)
 execute function public.enqueue_marketing_page_generation();
 
 create or replace function public.claim_marketing_generation_jobs(p_limit integer default 10)

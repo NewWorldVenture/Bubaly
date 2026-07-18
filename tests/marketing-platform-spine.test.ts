@@ -7,6 +7,12 @@ const worker = readFileSync('app/api/cron/marketing/route.ts', 'utf8');
 const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf8');
 const featureRoute = readFileSync('app/(marketing)/features/[slug]/page.tsx', 'utf8');
 const customRoute = readFileSync('app/(marketing)/p/[slug]/page.tsx', 'utf8');
+const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
+const migrationSource = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
+const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
+const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
+const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
+const landingRoute = readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -56,5 +62,28 @@ describe('marketing platform spine contract', () => {
     }
     expect(featureRoute).toContain("marketingPageMetadata('feature'");
     expect(customRoute).toContain("marketingPageMetadata('custom'");
+  });
+
+  it('ships a remote schema gate for the production Supabase project', () => {
+    expect(verifier).toContain('marketing_pages');
+    expect(verifier).toContain('marketing_embeddings');
+    expect(verifier).toContain('marketing_assets?select=content_hash,license,source_url,attribution');
+    expect(verifier).toContain('process.exit(1)');
+  });
+
+  it('does not enqueue regeneration for archived canonical pages', () => {
+    expect(migrationSource).toContain('new.deleted_at is null and new.version is distinct from old.version');
+  });
+
+  it('provides a missing-schema-safe legacy blog bridge', () => {
+    expect(legacyBridge).toContain("page_type: 'blog'");
+    expect(legacyBridge).toContain("onConflict: 'path'");
+    expect(legacyBridge).toContain('migration 0231 is not applied');
+    expect(legacyBridge).toContain('archiveLegacyBlogOnPlatform');
+    expect(contentActions).toContain('syncLegacyBlogToPlatform');
+    expect(contentActions).toContain('syncLegacyBlogVisibility');
+    expect(landingActions).toContain('syncLegacyLandingToPlatform');
+    expect(landingActions).toContain('archiveLegacyLandingOnPlatform');
+    expect(landingRoute).toContain("MarketingPageView type=\"landing\"");
   });
 });
