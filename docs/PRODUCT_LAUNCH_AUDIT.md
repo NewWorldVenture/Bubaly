@@ -6,6 +6,42 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0835 - Competitive gap closed: "Fridge Chef" (fridge photo → allergy-aware recipes → grocery)
+
+- Issue ID: PLA-0835
+- Discovery timestamp: 2026-07-18 17:45 UTC
+- Resolution timestamp: 2026-07-18 17:55 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** ("beat all competition")
+- Service: Meals / AI
+- Feature: Fridge Chef — photo → recipes → grocery
+- Route: `/dashboard/fridge-chef` (page) · `POST /api/ai/pantry-chef`
+- Affected files: `lib/meals/pantry-chef.ts` (new engine), `app/api/ai/pantry-chef/route.ts` (new), `components/meals/fridge-chef.tsx` (new), `app/(app)/dashboard/fridge-chef/page.tsx` (new), `tests/pantry-chef.test.ts` (new), `docs/COMPETITIVE_ANALYSIS.md` (new)
+- Database objects: `medical_profiles` (allergy read, service-role safety filter), `grocery_lists` + `grocery_items` (append missing ingredients)
+- Integration: OpenAI vision (configured model, admin key → env fallback), via `fetchExternal`
+- Role: authenticated family members; API re-checks auth + rate-limits
+- Subscription tier / household config: all
+- Scenario: a user surfaced 4 competitor AI family organizers (Sense, Nori AI, Maple, Skylight 2) and asked to beat them.
+- Severity: **MEDIUM** (competitive/feature — the single headline capability FamilyOS lacked).
+- Reproduction/analysis: mapped each competitor headline to existing code (see `docs/COMPETITIVE_ANALYSIS.md`) — Sense (Magic Import `ai/import`), Maple (sync providers + flyer vision), Skylight (`/display` kiosk) already matched/beaten; only **Nori's "fridge photo → recipes, allergy-checked, auto grocery list"** was missing (the vision provider existed but no meals endpoint used it for recipes).
+- Expected: parity+ with Nori — a fridge photo yields allergy-safe dinners and one-tap grocery add.
+- Actual (before): no such feature; the vision plumbing was used only for flyer→events.
+- Root cause: n/a (new capability).
+- Resolution:
+  - **Engine** `lib/meals/pantry-chef.ts` — `buildPantryChefPrompt` (allergy-aware vision prompt), `parsePantryRecipes` (robust fenced/bare-JSON parse + field coercion), `normalizeAllergies` (split free-text `medical_profiles.allergies` across members), `annotateAllergens` (defense-in-depth flag even if the model ignores the prompt). Pure/side-effect-free.
+  - **API** `app/api/ai/pantry-chef/route.ts` — Phase 1 (photo → recipes: auth + AI rate-limit + bounded body + service-role allergy read so the safety filter works for every member + OpenAI vision call + parse/annotate) and Phase 2 (append a recipe's `need` items to the get-or-create default grocery list under the caller's RLS session). Mirrors the hardened `ai/flyer` route.
+  - **UI** `components/meals/fridge-chef.tsx` (mobile-first: camera capture, recipe cards with have/need chips, allergen warning badge, per-recipe "add N to grocery") + reachable page `/dashboard/fridge-chef` (so it is not dead code, and without editing the active A-05 kitchen page).
+- Supabase impact: reads `medical_profiles` (service-role, safety filter — raw profiles never returned), writes `grocery_lists`/`grocery_items` (RLS session). No schema/migration change.
+- Security/Privacy impact: allergy terms drive the prompt + a warning flag only; no medical PII is returned to the client. Auth + rate-limit + bounded bodies enforced.
+- Accessibility/Performance impact: mobile-first UI, 44px controls, camera `capture`; `/dashboard/fridge-chef` 4.87 kB.
+- Tests added: `tests/pantry-chef.test.ts` (9 — allergy normalization/dedup, prompt allergy-guard, robust JSON parsing incl. fenced/prose/junk, allergen flagging).
+- Tests run: 9 new (green); full `npx vitest run` **3,814 passed**; `tsc --noEmit` clean; eslint clean on changed files; **`next build` GREEN** — `/api/ai/pantry-chef` + `/dashboard/fridge-chef` compiled.
+- Validation evidence: build route manifest shows both routes; unit tests exercise the engine end-to-end with fakes (the live vision call is env-gated — degrades to a 503 with a clear message when no OpenAI key).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified (in-repo + build). Live vision output requires the OpenAI key (already an owner-set env).
+- Remaining dependencies: none to ship. Follow-ups in `COMPETITIVE_ANALYSIS.md` (link from Smart Kitchen + nav — A-05 lane; optional inbound-email ingestion; "add to meal plan").
+- Follow-up items: see `docs/COMPETITIVE_ANALYSIS.md`.
+
 ### PLA-0834 - Marketing: added FAQ to global nav + reorganized the FAQ page into mobile-first tabbed sections
 
 - Issue ID: PLA-0834
