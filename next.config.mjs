@@ -9,11 +9,18 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
       // Blog hero photos — free-license Unsplash CDN images (0195/0196).
       { protocol: 'https', hostname: 'images.unsplash.com' },
+      // Blog hero photos (0231) — each article's UNIQUE, free, subject-matched
+      // photo. Sourced via the keyless Openverse API (Flickr CC, commercial-use)
+      // with a Lorem Picsum (CC0) fallback so no article is ever image-less or
+      // shares a photo. Every URL was HTTP-200 load-verified at generation time.
+      { protocol: 'https', hostname: 'live.staticflickr.com' },
+      { protocol: 'https', hostname: 'upload.wikimedia.org' },
+      { protocol: 'https', hostname: 'picsum.photos' },
+      { protocol: 'https', hostname: 'fastly.picsum.photos' },
       // NOTE: loremflickr.com was removed — its images are mixed-license (not
-      // verified free) and drawn from too few pools (visual duplicates). Blog
-      // posts without a free-licensed hero now render a bespoke generated
-      // <BlogCover> (see components/blog/blog-cover.tsx); loremflickr URLs are
-      // stripped at the data layer (lib/blog/posts.ts) so none reach next/image.
+      // verified free) and drawn from too few pools (visual duplicates). It stays
+      // stripped at the data layer (lib/blog/posts.ts); the generated <BlogCover>
+      // remains the fallback for any post that still has no hero photo.
     ],
   },
   async redirects() {

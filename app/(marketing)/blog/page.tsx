@@ -139,26 +139,26 @@ export default async function BlogPage({ searchParams }: Props) {
       )}
 
       {/* Hero */}
-      <Container className="pb-0 pt-16 lg:pt-20">
+      <Container className="pb-0 pt-8 lg:pt-10">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
-            <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
+            <h1 className="text-4xl font-black leading-[1.06] sm:text-5xl">
               Tips, stories &amp; insights<br />
               <GradientText>for modern families.</GradientText>
             </h1>
-            <p className="mt-5 text-lg leading-8 text-white/60">
+            <p className="mt-3 text-base leading-7 text-white/60">
               Practical advice, real stories, and smart tips to help you stay organized and enjoy more time together.
             </p>
             <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, category: p.category }))} />
           </div>
           <div className="hidden lg:flex lg:justify-end">
-            <BlogHeroArt className="h-auto w-full max-w-[440px]" />
+            <BlogHeroArt className="h-auto w-full max-w-[360px]" />
           </div>
         </div>
 
         {/* Category tabs */}
-        <div className="mt-10 flex flex-wrap gap-2 border-b border-white/8 pb-0">
+        <div className="mt-6 flex flex-wrap gap-2 border-b border-white/8 pb-0">
           <Link
             href="/blog"
             className={cn(
