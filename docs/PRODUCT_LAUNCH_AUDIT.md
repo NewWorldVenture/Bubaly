@@ -6,6 +6,42 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0834 - Marketing: added FAQ to global nav + reorganized the FAQ page into mobile-first tabbed sections
+
+- Issue ID: PLA-0834
+- Discovery timestamp: 2026-07-18 17:20 UTC
+- Resolution timestamp: 2026-07-18 17:35 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** (2 must-haves)
+- Service: Public marketing site (navigation + FAQ)
+- Feature: global marketing nav; `/faq` page
+- Route: all marketing routes (nav) + `/faq`
+- Affected files: `lib/constants/navigation.ts` (`MARKETING_NAV`), `components/marketing/faq-tabs.tsx` (new), `app/(marketing)/faq/page.tsx`, `tests/marketing-faq-nav-and-tabs.test.ts` (new)
+- Database objects: none (FAQ Knowledge Center still reads `marketing_aeo_questions`, unchanged)
+- Integration: none
+- Role: public (unauthenticated)
+- Subscription tier / household config: n/a
+- Scenario: (1) FAQ had no entry in the marketing top-nav; (2) the FAQ page was a single flat accordion.
+- Severity: **MEDIUM** (conversion/UX — a launch marketing surface; requested).
+- Reproduction: open the marketing site → no FAQ nav item; open `/faq` → one long accordion.
+- Expected: FAQ in the nav between Pricing and Security; FAQ page organized into switchable sectioned tabs, mobile-first.
+- Actual (before): no FAQ nav link; flat FAQ list.
+- Root cause: n/a (feature request).
+- Resolution:
+  1. **Nav** — inserted `{ href: '/faq', label: 'FAQ' }` into `MARKETING_NAV` between `/pricing` and `/security`. `SiteHeader` renders `MARKETING_NAV` for both the desktop bar and the mobile menu, so the item appears in both automatically.
+  2. **FAQ page** — grouped the 8 core FAQs into 6 sections (Privacy & Security, Roles & Access, AI Assistant, Kids & Safety, Plans & Pricing, Mobile & Alerts) and render them via a new **`FaqTabs`** client component; the live AEO Knowledge Center becomes its own 7th tab when answers are published. The full `FAQPage` structured-data schema still covers every answer across all sections.
+  3. **`FaqTabs`** — a **mobile-first, WAI-ARIA tablist**: roving `tabIndex` + Arrow/Home/End keyboard nav, `role=tab/tablist/tabpanel` with `aria-selected`/`aria-controls`, 44px touch targets; the tab strip scrolls horizontally (`overflow-x-auto` + `scrollbar-none`) on small screens and wraps/centres (`sm:flex-wrap sm:justify-center`) on larger ones. Uses the defined `.scrollbar-none` utility (existing `no-scrollbar` uses are a no-op — class not defined).
+- Supabase impact: none.
+- Security/Privacy impact: none.
+- Accessibility impact: **positive** — full keyboard + screen-reader tab semantics; 44px targets; no hover-only interaction.
+- Performance impact: negligible (`/faq` first-load JS 115 kB; statically prerendered, 1h revalidate).
+- Tests added: `tests/marketing-faq-nav-and-tabs.test.ts` (7 — nav item present + ordered exactly between Pricing/Security via a real `MARKETING_NAV` import; tabs ARIA + keyboard + mobile-first classes; page renders sectioned `FaqTabs` incl. the Knowledge-Center tab + preserves the schema).
+- Tests run: 7 new (green); full `npx vitest run` **3,791 passed** (1 pre-existing unrelated marketing-lane failure — see note); `tsc --noEmit` clean; eslint clean on changed files; **`next build` GREEN** — `/faq` prerendered (1.86 kB) and degrades gracefully when AEO data is unavailable.
+- Validation evidence: production build compiled `/faq` (231/231 static pages), route manifest shows `○ /faq`; nav-order test asserts `faq === pricing+1 && security === faq+1`.
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none. NOTE: a **pre-existing, unrelated** failure in `tests/admin-marketing-control-plane-read-boundary.test.ts` (agent-05's PLA-0832 SEO/AEO perf refactor switched to combined `readError`/`AdminSeoReadError`, leaving that test asserting the old `keywordsError`/`questionsError` names) is on `main` independent of this change — flagged to the marketing/A-05 lane.
+
 ### PLA-0833 - SEO Page Registry polluted with ~100+ inert "Seed data" junk rows (debug-tool artifacts)
 
 - Issue ID: PLA-0833
