@@ -20,6 +20,7 @@
     "db:audit:auth": "node scripts/audit-supabase-auth.mjs",
     "marketing:audit:assets": "node scripts/audit-marketing-assets.mjs",
     "marketing:backfill:provenance": "node scripts/backfill-marketing-asset-provenance.mjs",
+    "marketing:backfill:pages": "node scripts/backfill-marketing-pages.mjs",
     "marketing:verify:assets:remote": "node scripts/verify-marketing-assets-remote.mjs",
     "marketing:verify:public:remote": "node scripts/verify-marketing-public-access.mjs",
     "marketing:verify:remote": "node scripts/verify-marketing-platform.mjs",

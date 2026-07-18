@@ -39,6 +39,15 @@ production-ready until the remote checks below pass.
    npm.cmd run marketing:backfill:provenance -- --apply
    ```
 
+5. Backfill the canonical page registry from the existing Supabase blog,
+   landing-page, and SEO stores. The operation is additive and skips paths that
+   are already canonical:
+
+   ```powershell
+   npm.cmd run marketing:backfill:pages
+   npm.cmd run marketing:backfill:pages -- --apply
+   ```
+
 For repeatable production releases, configure the GitHub `production`
 environment with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`. The `Supabase production
@@ -54,6 +63,7 @@ Run the local gates against the release commit:
 npm.cmd run typecheck
 npm.cmd test -- --reporter=dot
 npm.cmd run marketing:audit:assets
+npm.cmd run marketing:backfill:pages
 npm.cmd run marketing:verify:remote
 npm.cmd run marketing:verify:public:remote
 npm.cmd run marketing:verify:assets:remote
@@ -62,7 +72,8 @@ npm.cmd run marketing:verify:assets:remote
 `marketing:verify:remote` must report these as available: the nine platform
 tables (`marketing_pages`, versions, templates, brand rules, generation jobs,
 relationships, embeddings, provider observations, and provider syncs) plus
-the provenance columns on `marketing_assets` and `marketing_videos`.
+the provenance columns on `marketing_assets` and `marketing_videos`, plus a
+non-empty canonical page registry.
 `marketing:verify:public:remote` additionally proves anonymous clients can read
 published pages only, cannot read drafts or deleted pages, and cannot read the
 admin-only marketing tables.

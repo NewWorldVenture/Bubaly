@@ -14,7 +14,7 @@ if (!url || !serviceKey || !anonKey) {
 const request = async (key, resource) => {
   try {
     const response = await fetch(`${url}/rest/v1/${resource}`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: 'count=exact' },
     });
     let body = null;
     try {
@@ -22,7 +22,9 @@ const request = async (key, resource) => {
     } catch {
       body = null;
     }
-    return { response, body };
+    const contentRange = response.headers.get('content-range') || '';
+    const totalMatch = /\/(\d+|\*)$/.exec(contentRange);
+    return { response, body, total: totalMatch && totalMatch[1] !== '*' ? Number(totalMatch[1]) : null };
   } catch (error) {
     return { response: null, body: null, error };
   }
@@ -35,24 +37,24 @@ const fail = (message) => {
 
 const servicePages = await request(
   serviceKey,
-  'marketing_pages?select=path,status,deleted_at&order=created_at.asc&limit=5000',
+  'marketing_pages?select=path,status,deleted_at&order=created_at.asc&limit=1',
 );
 if (!servicePages.response?.ok || !Array.isArray(servicePages.body)) {
   fail(`service-role marketing_pages probe failed (HTTP ${servicePages.response?.status || 'network'}).`);
 } else {
-  console.log(`OK      service-role page inventory (${servicePages.body.length} rows visible).`);
+  console.log(`OK      service-role page inventory (${servicePages.total ?? servicePages.body.length} rows visible).`);
 }
 
 const publicPublished = await request(
   anonKey,
-  'marketing_pages?select=path,status,deleted_at&status=eq.published&deleted_at=is.null&limit=1000',
+  'marketing_pages?select=path,status,deleted_at&status=eq.published&deleted_at=is.null&limit=1',
 );
 if (!publicPublished.response?.ok || !Array.isArray(publicPublished.body)) {
   fail(`anonymous published-page probe failed (HTTP ${publicPublished.response?.status || 'network'}).`);
 } else if (publicPublished.body.some((page) => page.status !== 'published' || page.deleted_at !== null)) {
   fail('anonymous published-page probe returned a draft, non-published, or deleted row.');
 } else {
-  console.log(`OK      anonymous published-only read (${publicPublished.body.length} rows).`);
+  console.log(`OK      anonymous published-only read (${publicPublished.total ?? publicPublished.body.length} rows).`);
 }
 
 const publicDrafts = await request(

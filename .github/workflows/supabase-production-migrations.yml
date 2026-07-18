@@ -11,6 +11,7 @@ on:
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
+      - 'scripts/backfill-marketing-pages.mjs'
       - 'scripts/verify-marketing-platform.mjs'
       - 'scripts/verify-marketing-public-access.mjs'
       - 'scripts/verify-marketing-assets-remote.mjs'
@@ -80,6 +81,9 @@ jobs:
 
       - name: Backfill and enforce media provenance
         run: npm run marketing:backfill:provenance -- --apply
+
+      - name: Backfill canonical marketing pages
+        run: npm run marketing:backfill:pages -- --apply
 
       - name: Verify platform schema
         run: npm run marketing:verify:remote

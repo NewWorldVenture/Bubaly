@@ -34,6 +34,25 @@ const results = await Promise.all(checks.map(async ([name, migration, resource =
   }
 }));
 
+try {
+  const response = await fetch(`${url}/rest/v1/marketing_pages?select=id&limit=1`, { headers });
+  const body = response.ok ? await response.json() : null;
+  results.push({
+    name: 'marketing_pages.content',
+    migration: '0231_marketing_platform_spine.sql + marketing:backfill:pages',
+    status: response.status,
+    ok: response.ok && Array.isArray(body) && body.length > 0,
+  });
+} catch (error) {
+  results.push({
+    name: 'marketing_pages.content',
+    migration: '0231_marketing_platform_spine.sql + marketing:backfill:pages',
+    status: 0,
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
 for (const result of results) {
   if (result.ok) console.log(`OK      ${result.name}`);
   else console.error(`MISSING ${result.name} (${result.migration}, HTTP ${result.status || 'network'})`);
