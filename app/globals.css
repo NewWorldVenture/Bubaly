@@ -127,15 +127,19 @@ body {
   overscroll-behavior: none;
 }
 
-/* Prevent iOS Safari from auto-zooming (and visually shifting the page off to
-   the right) when a form control with a <16px font is focused. Any focusable
-   input/textarea/select must render at ≥16px on small screens. Tailwind's
-   `text-sm` controls still look small on desktop where this rule doesn't apply. */
-@media (max-width: 640px) {
-  input:not([type='checkbox']):not([type='radio']),
+/* Prevent iOS/iPadOS Safari from auto-zooming (and visually shifting the page off
+   to the right) when a form control with a <16px font is focused. Any focusable
+   input/textarea/select must render at ≥16px on touch devices.
+   `!important` is REQUIRED: Tailwind's `text-sm`/`text-xs` utilities are class
+   selectors and otherwise beat this bare element selector, re-introducing the
+   zoom on the many inputs styled with `text-sm`. Scoped to phones (narrow) AND
+   tablets/touch (coarse pointer) so iPad Safari is covered too; desktop with a
+   mouse keeps its intended density. Non-text controls are excluded. */
+@media (max-width: 640px), (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 

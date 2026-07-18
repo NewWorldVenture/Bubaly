@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~4% (mission just started)
+## Overall completion: ~7% (early)
 
 Weighting (per the mission brief):
 
@@ -61,6 +61,26 @@ Weighting (per the mission brief):
   `dvh`, forbids a regression to bare mobile `100vh`/`min-h-screen`.
 - **Evidence:** guard green; `tsc` clean; `eslint` 0 errors. Full app grep confirms
   no non-desktop `100vh`/`min-h-screen` remains.
+
+### M-002 — iOS/iPadOS zoom-on-focus: mobile inputs rendered < 16px
+- **Severity:** High (mobile, app-wide). **Phase:** 7 (forms & keyboard).
+- **Problem:** iOS/iPadOS Safari zooms the whole page (and shifts it right) when a
+  focused input's font is < 16px. `components/ui/input.tsx` used
+  `text-sm sm:text-base` (**14px on mobile**, 16px desktop — backwards), and ~184
+  files style inputs with `text-sm`/`text-xs`. A global `@media (max-width:640px)`
+  rule *tried* to force 16px but had **no `!important`**, so Tailwind's `text-sm`
+  utility (class selector) out-specified the bare `input` element selector and the
+  zoom stayed live. It also missed iPads (> 640px).
+- **Fix:** the global rule now uses `font-size: 16px !important` and is scoped to
+  `@media (max-width: 640px), (pointer: coarse)` — covering phones **and** touch
+  tablets, while mouse-desktop keeps its density. One CSS change fixes every input
+  app-wide (no need to touch 184 files). Verified the auth email/password fields
+  (`type` + `autocomplete`), OTP (`inputMode=numeric` + `one-time-code`), and phone
+  (`type=tel`) inputs already carry correct mobile-keyboard semantics.
+- **Files:** `app/globals.css`.
+- **Test:** `tests/mobile-forms.test.ts` (6) — asserts the `!important` + coarse
+  scope and the auth/OTP/phone keyboard attributes.
+- **Evidence:** guard green (8 mobile tests total); `tsc`/`eslint` clean.
 
 ## Next steps (autonomous, in order)
 1. Complete Phase 1 route inventory → `MOBILE_AUDIT.md` (every route × role × data
