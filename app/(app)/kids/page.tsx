@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { CheckCircle2, Star, CalendarDays, Trophy, PartyPopper } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import { Avatar } from '@/components/ui/avatar';
+import { ErrorState } from '@/components/ui/states';
 import { fmtTime, firstName } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'My Bubaly' };
@@ -18,11 +20,27 @@ export default async function KidsPage() {
   const end = new Date(start.getTime() + 86400000);
 
   // Only the child's own tasks + shared family events. No finance/health.
-  const [{ data: myTasks }, { data: done }, { data: events }] = await Promise.all([
+  const [myTasksRes, doneRes, eventsRes] = await Promise.all([
     supabase.from('chore_assignments').select('id, chore_id, status, due_at').eq('family_id', familyId).eq('member_id', me.id).in('status', ['todo', 'in_progress']).order('due_at').limit(10),
     supabase.from('chore_assignments').select('points_awarded').eq('family_id', familyId).eq('member_id', me.id).in('status', ['done', 'approved']),
     supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(6),
   ]);
+
+  // A dropped error would tell the child "All done! 🎉 No jobs left today." and
+  // "0 points earned" when they actually have chores and points — a
+  // reassuring-but-wrong, motivation-affecting lie. Fail closed on a real read
+  // error; a genuinely missing table (unapplied migration) is still tolerated as
+  // empty. The dependent chore-title lookup stays best-effort.
+  const kidsError = [myTasksRes.error, doneRes.error, eventsRes.error]
+    .find((e) => e && !isMissingTableError(e));
+  if (kidsError) {
+    console.error('[kids] kids dashboard read failed', kidsError);
+    return <ErrorState message="We couldn't load your day right now. Try again in a moment!" />;
+  }
+
+  const myTasks = myTasksRes.data;
+  const done = doneRes.data;
+  const events = eventsRes.data;
 
   const choreIds = [...new Set((myTasks ?? []).map((t) => t.chore_id))];
   const { data: chores } = choreIds.length
