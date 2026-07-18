@@ -30,7 +30,6 @@ export const KNOWN_DUPLICATE_MIGRATIONS = Object.freeze({
   '0137': ['0137_ai_call_guardian.sql', '0137_child_login_throttle.sql'],
   '0138': ['0138_demo_sessions.sql', '0138_onboarding_imports.sql'],
   '0142': ['0142_family_signals.sql', '0142_poll_facilitation.sql'],
-  '0231': ['0231_blog_drop_loremflickr_covers.sql', '0231_blog_hero_photos.sql'],
 });
 
 export function readMigrationInventory(directory = DEFAULT_MIGRATIONS_DIR) {

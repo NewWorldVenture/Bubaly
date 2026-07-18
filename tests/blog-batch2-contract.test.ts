@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..');
 const b1 = readFileSync(join(ROOT, 'supabase/migrations/0226_blog_500_articles.sql'), 'utf8');
-const b2 = readFileSync(join(ROOT, 'supabase/migrations/0232_blog_500_more_articles.sql'), 'utf8');
+const b2 = readFileSync(join(ROOT, 'supabase/migrations/0234_blog_500_more_articles.sql'), 'utf8');
 
 const rows = (sql: string) => sql.split('\n').filter((l) => /^\('[a-z0-9-]+',/.test(l));
 const slugs = (sql: string) => rows(sql).map((r) => r.match(/^\('([a-z0-9-]+)'/)![1]);

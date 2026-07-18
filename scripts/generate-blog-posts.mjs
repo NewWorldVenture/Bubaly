@@ -461,7 +461,7 @@ function bodyJson(body) {
   return "$json$" + JSON.stringify(body) + "$json$::jsonb";
 }
 
-const MIG_NO = BATCH === 2 ? '0231' : '0226';
+const MIG_NO = BATCH === 2 ? '0234' : '0226';
 const lines = [];
 lines.push(`-- ============================================================================`);
 lines.push(`-- Migration ${MIG_NO}: Bubaly blog — ${posts.length} ${BATCH === 2 ? 'MORE ' : ''}fully-written articles${BATCH === 2 ? ' (batch 2)' : ''}`);
