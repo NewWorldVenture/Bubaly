@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~33% (early)
+## Overall completion: ~34% (early)
 
 Weighting (per the mission brief):
 
@@ -337,9 +337,27 @@ Weighting (per the mission brief):
   restore; the Playwright measurement is the shipping evidence.
 - **Evidence:** guard green; eslint 0 (2 pre-existing warnings); `next build` exit 0;
   Chromium fixture: bug reproduced + fix cleared on all 4 profiles.
-- **Follow-up:** the **concierge** panel (inline `calc(100dvh - 140px)`, different
-  wrappers) has the same class of bug — left OPEN in TODO pending its own in-browser
-  verification (its nesting wasn't in this fixture, so it isn't verified yet).
+- **Follow-up:** the **concierge** panel (same bug, different wrappers) — fixed in
+  M-017.
+
+### M-017 — Concierge chat panel sat behind the mobile bottom nav (Phase 8) — Chromium-verified
+- **Severity:** P2 (mobile). **Phase:** 8. **Fully closes M-011** (with M-016).
+- **Problem:** the concierge chat view used an inline `style={{ height:
+  'calc(100dvh - 140px)' }}` — like messages it subtracts the top chrome but not the
+  fixed bottom nav (`4rem + safe-bottom`), so its composer sat behind the nav.
+- **Verification:** extended the M-016 approach — a faithful fixture that also models
+  the concierge `.module-main` (`flex flex-col`, no padding) + `.module-page`
+  (`space-y-5`, no first-child offset) wrappers — and drove it in real Chromium
+  across iPhone-390 / Pixel-412 / SE-375 portrait + iPhone landscape. Bug reproduced
+  on all four; `-4rem-var(--safe-bottom)` cleared the nav on all four.
+- **Fix:** replaced the inline style with Tailwind
+  `h-[calc(100dvh-140px-4rem-var(--safe-bottom))] lg:h-[calc(100dvh-140px)]` (so the
+  `lg:` desktop restore is expressible).
+- **Files:** `components/modules/concierge-module.tsx`.
+- **Test:** `tests/mobile-concierge-panel-height.test.ts` (3) — locks the formula,
+  the `lg:` restore, and the removal of the old inline calc.
+- **Evidence:** guard green; eslint 0; `next build` exit 0; Chromium fixture
+  bug-reproduced + fix-cleared on all 4 profiles.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

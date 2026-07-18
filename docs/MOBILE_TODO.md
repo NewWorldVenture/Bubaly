@@ -30,13 +30,15 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-013 | 6 | Dialog a11y semantics (`role="dialog"`+`aria-modal`+labelled heading, ESC on dismissible) added to 4 hand-rolled overlays (exit-intent, app-lock, guardian rules-editor + contact-editor) so mobile VoiceOver/TalkBack announce them | `cd945c1d` |
 | M-014 | 8 | Landscape safe-area: the edge-to-edge full-screen **camera** now pads left/right insets too (`--safe-left`/`--safe-right`), so the top-bar + shutter controls clear the side notch when a phone is held in landscape | `d13f0c88` |
 | M-015 | 7 | Mobile keyboards for the guardian **contact editor** (non-module, missed by M-006): phone→`type=tel`+`inputMode=tel`, email→`type=email`+`inputMode=email`+`autoCapitalize=none`, name→`autoComplete=name` | `b2948d10` |
-| M-016 | 8 | **Messages** chat panel now subtracts the mobile bottom-nav footprint (`-4rem-var(--safe-bottom)`, `lg:` restores desktop) so the composer clears the fixed nav — **Chromium-verified** (Playwright fixture, iPhone/Pixel/SE + landscape). Resolves the messages half of M-011 | (this commit) |
+| M-016 | 8 | **Messages** chat panel now subtracts the mobile bottom-nav footprint (`-4rem-var(--safe-bottom)`, `lg:` restores desktop) so the composer clears the fixed nav — **Chromium-verified** (Playwright fixture, iPhone/Pixel/SE + landscape). Resolves the messages half of M-011 | `0226fa50` |
+| M-017 | 8 | **Concierge** chat panel same fix (inline `calc(100dvh-140px)` → `h-[calc(100dvh-140px-4rem-var(--safe-bottom))] lg:h-[…140px]`) — **Chromium-verified** with the `.module-main/.module-page` wrappers modelled. **Fully closes M-011** | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),
 `tests/mobile-landscape-safe-area.test.ts` (2),
-`tests/mobile-contact-input-keyboard.test.ts` (2), and
-`tests/mobile-chat-panel-height.test.ts` (2) alongside the prior mobile guards.
+`tests/mobile-contact-input-keyboard.test.ts` (2),
+`tests/mobile-chat-panel-height.test.ts` (2), and
+`tests/mobile-concierge-panel-height.test.ts` (3) alongside the prior mobile guards.
 
 > **Parallel-bot note:** M-012 was done concurrently with agent-05's M-006/M-007.
 > It is **file-disjoint** and **complementary** to M-007: agent-05's M-007 audited
@@ -111,21 +113,17 @@ for the fixed mobile bottom tab bar, which itself uses `safe-bottom`; FABs use
 primitive (Modal) — the ad-hoc `fixed inset-0` panels (front-desk/inbox/messages)
 already carry `pt-[var(--safe-top)]` + internal `overflow-y-auto`.
 
-### 🟡 M-011 (P2) — full-height chat panels vs the mobile bottom nav — MESSAGES DONE, concierge remains
-- ✅ **Messages (M-016):** `messages-module.tsx` panel now
-  `h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))] lg:h-[calc(100dvh-var(--topbar-height)-1rem)]`.
-  **Verified in real Chromium** (Playwright, a faithful fixture of the app-shell
-  chrome — sticky top bar, `main pt-4 pb-24`, fixed `4rem+safe-bottom` nav) across
-  iPhone/Pixel/SE portrait + landscape: the bug reproduced on every profile and the
-  new formula cleared the nav on every profile. Note: a flat `-5rem` guess did **not**
-  clear it on a taller-home-indicator phone — the calc must subtract the real
-  `var(--safe-bottom)`, not a constant. Guard `tests/mobile-chat-panel-height.test.ts`.
-- 🔜 **Concierge remains:** `concierge-module.tsx:154` uses an inline
-  `style={{ height: 'calc(100dvh - 140px)' }}` (a different, flat base) nested inside
-  `.module-main > .module-page` (wrappers whose padding differs from the messages
-  path). Same class of bug — apply `- 4rem - var(--safe-bottom)` on mobile with an
-  `lg:` restore — but **verify the concierge nesting in-browser** the same way before
-  shipping (its wrappers weren't in the messages fixture, so it isn't verified yet).
+### ✅ M-011 (P2) — DONE — full-height chat panels vs the mobile bottom nav
+**Fully resolved** — both chat panels now clear the fixed mobile bottom tab bar, each
+**verified in real Chromium** (Playwright, faithful fixtures of the app-shell chrome +
+each panel's wrappers, across iPhone/Pixel/SE portrait + landscape; bug reproduced on
+all, fix cleared on all):
+- ✅ **Messages (M-016):** `h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))] lg:h-[calc(100dvh-var(--topbar-height)-1rem)]`. Guard `tests/mobile-chat-panel-height.test.ts`.
+- ✅ **Concierge (M-017):** inline `calc(100dvh - 140px)` → `h-[calc(100dvh-140px-4rem-var(--safe-bottom))] lg:h-[calc(100dvh-140px)]`, modelling the `.module-main/.module-page` wrappers in the fixture. Guard `tests/mobile-concierge-panel-height.test.ts`.
+
+Key lesson (locked in both guards): the calc must subtract the **real**
+`var(--safe-bottom)`, not a flat constant — a `-5rem` guess left the composer behind
+the nav on a taller-home-indicator phone.
 
 ### M-008 (P2) — Tablet layouts don't waste space (Phase 9)
 iPad portrait/landscape: check dashboard grids + `lg:grid-cols-[1fr_340px]` sidebars
