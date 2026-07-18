@@ -102,6 +102,40 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Follow-up (same §23 sweep, FIXED ×2): (1) `contacts-module` quick-actions — the icon-only "call" (`<button><Phone/>`) and "email" (`<a><Mail/>`) controls in each contact row had no accessible name; added `aria-label={`Call ${contact.name}`}` / `Email ${contact.name}`. (2) **`photos-module` upload dropzone (WCAG 2.1.1 Keyboard)** — the click-to-browse drag-drop area was a bare `<div onClick>` with no `role`/`tabIndex`/key handler, so keyboard-only users could not open the file browser (the whole photo-upload workflow was mouse-only). Made it `role="button"` + `tabIndex={busy?-1:0}` + `onKeyDown` (Enter/Space) + `aria-label="Upload photos or videos"` + a `focus-visible` ring. Guard extended (`tests/photos-a11y-labels.test.ts`, 5 total). Verified clean elsewhere in A-05: form checkboxes/radios are `<label>`-wrapped, text fields use `<Field label>`, `home-module` upload uses a real `<Button>` trigger. **Cross-lane flag (A-11, agent-03):** `documents-module` L609 has the identical bare-`<div>` upload dropzone keyboard gap — flagged, NOT edited
 
 
+### PLA-0815 - Added an independent, validated 768-record production-readiness seed pack (LB-014 support)
+
+- Issue ID: PLA-0815
+- Discovery timestamp: 2026-07-18 10:44 UTC
+- Resolution timestamp: 2026-07-18 10:57 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01)
+- Service: cross-cutting — test data / seed infrastructure (§22)
+- Feature: reproducible relational seed for exercising volume + roles + tiers + tenant isolation
+- Route: n/a (SQL seed)
+- Affected files: `supabase/seed_audit_pack_500.sql` (new, independent), `tests/seed-audit-pack-500.test.ts` (new structure guard)
+- Database objects (seeded): `families`, `subscriptions`, `family_members`, `chores`, `chore_assignments`, `calendar_events`, `reminders`, `meal_plans`, `grocery_lists`, `grocery_items`
+- Integration: none
+- Role: n/a (test infra) — but the DATA covers every `member_role`
+- Subscription tier: seeds free / family / family_plus × trialing / active / past_due / canceled / incomplete / unpaid
+- Household configuration: 12 synthetic households, varied timezones
+- Scenario: the mandate (§22) requires ≥1 independent SQL seed pack with 500+ realistic relational records not tied to one developer account.
+- Severity: **MEDIUM** (launch-readiness/test-infra requirement; enables volume + role + tier + isolation testing).
+- Launch impact: prior seeds are per-family or dev-account-targeted; there was no single independent pack covering the tier/role/household matrix at 500+ records. This adds one.
+- Reproduction steps: n/a (additive).
+- Expected behavior: a reproducible, idempotent, non-production seed with 500+ referentially-valid records.
+- Actual behavior (before): only per-family / dev-targeted seeds existed for these dimensions.
+- Root cause: n/a (new capability, not a defect).
+- Resolution: authored `supabase/seed_audit_pack_500.sql` — 12 households × (subscription + 8 members covering all roles/archived/NULL-birthday + 6 chores + 18 chore_assignments across all task_status incl. overdue + 10 calendar_events across all categories/recurrence + 6 reminders + 5 meal_plans + 1 grocery list + 8 items) = **768 records**. Members are MANAGED (`user_id` NULL) so the pack needs no `auth.users` rows and runs in any environment. Deterministic `md5()`-derived UUIDs + an `AUDIT500::` name marker make it fully **idempotent**; families are upserted (never cascade-deleted, which avoids an `on_family_created`/`mark_model_dirty` trigger trap discovered during validation) and only children are re-seeded.
+- Supabase impact: additive seed only; touches no schema, migration, or RLS. Namespaced + guarded against production.
+- Security/Privacy impact: none — synthetic data, no secrets, no real accounts.
+- Accessibility/Performance impact: none.
+- Tests added: `tests/seed-audit-pack-500.test.ts` (4 assertions — namespacing/idempotency invariants, full role+tier+status coverage, all 10 core-service inserts + self-verification block, production-use guard).
+- Tests run: **executed the seed against a live PG16 schema database** (415-table `fam` DB) with `ON_ERROR_STOP=1` — all inserts succeeded; ran **twice** proving idempotency (identical counts: families 12, subscriptions 12, family_members 96, chores 72, chore_assignments 216, calendar_events 120, reminders 72, meal_plans 60, grocery_lists 12, grocery_items 96 = 768). Structure guard (4) green; eslint clean; control-byte-clean.
+- Validation evidence: PG16 execution output (10-row count table) reproduced on both runs; discovered + handled the `on_family_created` auto-subscription trigger (deduped to exactly one sub/household) and the `mark_model_dirty` cascade-delete FK trap (families kept, children re-seeded).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none. Independent of `SEED_ALL.sql` (not wired in, to avoid colliding with the seed lane); run standalone via `psql "$DATABASE_URL" -f supabase/seed_audit_pack_500.sql` against a non-production DB.
+- Follow-up items: the seed owner may optionally reference it from `SEED_ALL.sql`; auth-user-backed logins remain provided by the separate auth seed.
 
 ### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
 
