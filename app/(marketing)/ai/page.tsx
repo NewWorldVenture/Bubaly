@@ -3,7 +3,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, UtensilsCrossed, ShoppingCart, CheckSquare, Bell, PiggyBank,
   FileText, ShieldCheck, Newspaper, Zap, Lock, SlidersHorizontal, ArrowRight,
-  Sun, Sunset, Moon, Check, Cpu,
+  Sun, Sunset, Moon, Cpu,
 } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
@@ -65,8 +65,6 @@ const DAY = [
     body: '“Grocery run needed for Thursday’s tacos, Jack’s library book is due, and the vacation fund just hit 68%. Want me to reorder the essentials?”',
   },
 ];
-
-const MODELS = ['Claude', 'GPT', 'Gemini', 'Local / private'];
 
 export default function AIPage() {
   return (
@@ -190,41 +188,6 @@ export default function AIPage() {
               <p className="mt-4 text-sm leading-6 text-muted">{d.body}</p>
             </div>
           ))}
-        </div>
-      </Section>
-
-      {/* ── Model-agnostic band ──────────────────────────────────────────── */}
-      <Section className="pt-0">
-        <div className="glass-card relative overflow-hidden p-8 sm:p-12">
-          <div className="ai-hero-glow pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-          <div className="relative grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-            <div>
-              <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
-                Model-agnostic by design
-              </span>
-              <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-                Runs on the best model for the job — and switches without you noticing
-              </h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-                Bubaly sits behind a provider abstraction, so it can run on Claude, GPT, Gemini, or a
-                local model — and move to whatever is safest, fastest, or most capable as the field
-                evolves. Your family’s experience never changes; it only gets better.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3 lg:justify-end">
-              {MODELS.map((m) => (
-                <span
-                  key={m}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-border bg-surface/70 px-4 py-3 text-sm font-semibold shadow-sm"
-                >
-                  <Cpu className="h-4 w-4 text-brand-text" /> {m}
-                </span>
-              ))}
-              <span className="inline-flex items-center gap-2 rounded-2xl border border-brand/30 bg-brand/10 px-4 py-3 text-sm font-semibold text-brand-text shadow-sm">
-                <Check className="h-4 w-4" /> Your data stays yours
-              </span>
-            </div>
-          </div>
         </div>
       </Section>
 
