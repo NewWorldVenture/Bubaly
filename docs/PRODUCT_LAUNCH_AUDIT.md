@@ -2986,3 +2986,13 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Verified: PG16 full bootstrap `migration_fail=0` (3434 AEO / 1090 per-post / 1603 keywords / seo-pages public policy present); `tsc` 0; migration-version bumped to 0231. (Build not re-run this pass due to a time constraint — handing off; typecheck clean.)
 - Supabase impact: 0229 (regenerated, idempotent) + 0230 (additive) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
 - Commit: this push.
+
+### PLA-0800 - Blog images: content-aligned + unique per article (A-17)
+
+- Timestamp: 2026-07-18 16:05 UTC · Service: A-17 marketing (blog media).
+- Owner report: live /blog still showed repeated hero photos across articles (e.g. one running-track photo on several School & Activities posts) and wanted every image unique AND matched to each article's content.
+- Root cause of the *repeats the owner saw*: the LoremFlickr per-post-unique change (PLA-0780) is still PENDING prod application (agents can't apply to prod), so live prod is on the older rotating-20-Unsplash pool. Separately, that change keyed images by CATEGORY, so all posts in a category shared keywords (not content-aligned).
+- Fix: the generator now derives image keywords from each post's SUBJECT via a signal map (homework→homework/study, sports→sports/kids, cooking→kitchen/food, money→finance, travel→outdoors, sleep→bedroom, …; category fallback). Each post keeps its unique per-post `lock`, so images stay 1-per-article AND on-topic.
+- Verified on PG16: 0226 apply INSERT 0 525 + idempotent; **545/545 published posts have a distinct hero_image_url (0 null)**; School & Activities images now span school/sports/reading/wellness/tech instead of one shared photo. Guard tests green.
+- **Owner action required:** apply 0226 (regenerated, idempotent) to prod so the live site picks up the unique, content-aligned images — until then prod shows the old pool. Free CC photos via LoremFlickr keyword-matched per article; quality is best-effort CC (the sandbox network policy blocks image CDNs so per-image previews can't be verified here — they render in prod).
+- Commit: this push (0c8e1ad7).
