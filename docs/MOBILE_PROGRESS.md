@@ -513,6 +513,28 @@ Weighting (per the mission brief):
   messaging — is app-level fetch error handling already covered by module error
   states.
 
+### M-024 — Blog engagement CTAs (Save + Subscribe) fell short of 44px on touch (Phase 6) — _parallel bot (blog feature components)_
+- **Severity:** P3 (mobile polish, but core CTAs). **Phase:** 6 (touch targets).
+- **Problem:** the blog's two **primary engagement controls** were under the 44px
+  minimum tap target on touch. The **Save (♥)** button (`components/blog/heart-button.tsx`)
+  was `px-4 py-2 text-sm` ≈ **36px** tall and appears twice per article (meta row +
+  bottom CTA) — it's the whole point of the sign-in-gated save feature. The **Subscribe**
+  card button (`components/blog/subscribe-form.tsx`) was `py-2.5` ≈ **40px**. Both are
+  real interactive `<button>`s with a fixed sub-44px height. (Not false positives; the
+  Subscribe *inline* variant at `py-3` was already ~44px and the email *input* height is
+  covered by the M-002 ≥16px font rule, so those were left alone.)
+- **Fix:** `coarse:min-h-11` on both buttons — ≥44px tall on coarse-pointer (touch),
+  compact on desktop-with-a-mouse. Reuses the M-019 utility; no new CSS.
+- **Files:** `components/blog/heart-button.tsx`, `components/blog/subscribe-form.tsx`.
+- **Test:** `tests/mobile-blog-engagement-touch-target.test.ts` (2) — locks the coarse
+  escape on the Save + Subscribe buttons; forbids a regression.
+- **Evidence:** guard green (2/2); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** blog feature components I authored this session — file-disjoint
+  from agent-05 (modules/app-shell), agent-02 (overlays), and agent-fable-opus (PWA/SW).
+  This completes the touch-target sweep of the public blog/marketing surface
+  (M-019 share bar, M-021 header, M-022 launcher, M-024 engagement CTAs).
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

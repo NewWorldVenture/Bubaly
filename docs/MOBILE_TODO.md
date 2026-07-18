@@ -36,7 +36,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-019 | 6 | Blog article **Share bar**: 8 icon share targets (32px `h-8 w-8`) + Copy-link (~28px) grow to a ≥44px square on touch (`coarse:min-h-11 coarse:min-w-11`); added `coarse:min-w-11` utility. Public blog/marketing surface (parallel bot) | `66c842b6` |
 | M-020 | perf | Gallery/feed grid thumbnails (photos, memories, social-feed) get `loading="lazy" decoding="async"` so a phone stops eager-loading every below-the-fold image on open (mobile data + first-paint). Lightbox active image + upload blob previews deliberately left eager | (agent-05) |
 | M-021 | 6 | Marketing **site-header** control cluster (ThemeToggle 32px, menu button 40px, Log in / Get Started pills 32px) grows to ≥44px on touch (`coarse:min-h-11`/`-w-11`). Public marketing surface (parallel bot) | `ff874c48` |
-| M-022 | 8/6 | In-app **Blog launcher** modal: panel `h-[88vh]` → `h-[88dvh]` (fits the visible mobile viewport so the header/Close clear the URL bar) + Close / Open-in-new-tab controls (icon-only on mobile) grow to ≥44px on touch. Blog feature component (parallel bot) | (this commit) |
+| M-022 | 8/6 | In-app **Blog launcher** modal: panel `h-[88vh]` → `h-[88dvh]` (fits the visible mobile viewport so the header/Close clear the URL bar) + Close / Open-in-new-tab controls (icon-only on mobile) grow to ≥44px on touch. Blog feature component (parallel bot) | `5bbeb24c` |
+| M-024 | 6 | Blog **engagement CTAs**: Save (♥) pill (~36px) + Subscribe card button (~40px) grow to ≥44px tall on touch (`coarse:min-h-11`). Completes the blog/marketing touch-target sweep. Blog feature components (parallel bot) | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),

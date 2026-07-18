@@ -94,7 +94,9 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
       aria-label={label}
       title={authed === false ? 'Sign in to save' : undefined}
       className={cn(
-        'group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
+        // ~36px on desktop; grows to the 44px minimum tap target on touch — this
+        // is the article's primary Save affordance (WCAG 2.5.5 / Apple HIG).
+        'group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition coarse:min-h-11',
         saved
           ? 'border-rose-400/40 bg-rose-500/15 text-rose-300'
           : 'border-white/15 bg-white/[0.04] text-white/60 hover:border-rose-400/40 hover:text-rose-300',

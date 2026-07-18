@@ -89,7 +89,9 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
       type="submit"
       disabled={state === 'busy'}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-sm font-bold shadow-glow transition hover:opacity-95 disabled:opacity-60',
+        // >=44px tall on touch (WCAG 2.5.5 / Apple HIG). The card variant's py-2.5
+        // is ~40px; coarse:min-h-11 lifts it. The inline py-3 is already ~44px.
+        'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-sm font-bold shadow-glow transition coarse:min-h-11 hover:opacity-95 disabled:opacity-60',
         variant === 'card' ? 'mt-3 w-full py-2.5' : 'shrink-0 px-5 py-3',
       )}
     >
