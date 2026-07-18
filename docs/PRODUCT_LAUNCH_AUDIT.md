@@ -25,6 +25,26 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Status: Resolved in code and pushed to `main` (A-13 increment by agent-02, reclaimed unit); A-13 client read + write boundary surface now covers modules, vacations views, and trip detail tabs
 - Remaining dependencies: live CRUD walkthrough; ≥500-row A-13 seed (A-02)
 
+### PLA-0802 - VERIFICATION (no defect): 3 A-05 feature tables are genuinely wired to Supabase (A-05)
+
+- Timestamp: 2026-07-18 00:02 UTC
+- Service: Home / dashboard command surfaces (A-05) — Independence, Paperwork Inbox, Financial Copilot
+- Route: `/dashboard/independence`, `/dashboard/paperwork`, `/dashboard/money-timeline`
+- Affected files: none (verification only); evidence recorded in `docs/SUPABASE_WIRING_MATRIX.md`
+- Database objects: `independence_milestones` (mig 0175), `paperwork_items` (mig 0169), `money_timeline_insights` (mig 0168)
+- Role: all family roles (collaborative)
+- Scenario: static audit of whether these three A-05 features are genuinely wired to Supabase (schema, RLS, indexes, seed) vs. mock/placeholder/dead UI
+- Severity: n/a (positive verification — no defect found)
+- Launch impact: none — confirms real wiring. Each table has: `family_id uuid NOT NULL REFERENCES families(id) ON DELETE CASCADE`; **full CRUD RLS** (select/insert/update/delete) every policy scoped via `public.is_family_member(family_id)` (collaborative-by-design — appropriate, no sensitive/safety write so no §3a role-gate needed); `(family_id, …)` covering indexes; dedupe UNIQUE constraints (`(family_id,member_id,domain,title)`, `(family_id,dedupe_key)`); and idempotent `SEED_ALL` coverage (independence targets **500** rows, delete+insert, gated on `to_regclass` table existence). The pages' "degrades safely before migration N" comments are historical defensive guards — the migrations exist in-repo
+- Root cause: n/a
+- Resolution: n/a — verified correct. Read-boundaries for these same pages were hardened separately (PLA-0790/0794/0797)
+- Supabase impact: none
+- Tests run: static schema/RLS/index/seed inspection of migrations 0168/0169/0175 + SEED_ALL; `tsc`/suite unaffected (no code change)
+- Validation evidence: policy grep shows 4 family-scoped policies per table; SEED_ALL blocks present with 500-row target + idempotent guards; recorded in the wiring matrix Home/dashboard row
+- Remaining dependencies: live authenticated cross-family RLS proof on the PG16 harness + confirming 0168/0169/0175 are applied in prod (owner/live)
+- Commit: (this increment)
+- Status: VERIFIED (no defect) — evidence pushed to `main` (A-05 by agent-05)
+
 ### PLA-0801 - Photos: delete showed a false "Photo deleted" + could orphan a row pointing at a removed image (A-05)
 
 - Timestamp: 2026-07-17 23:50 UTC
