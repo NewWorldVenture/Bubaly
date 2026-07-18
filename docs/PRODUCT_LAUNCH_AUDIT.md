@@ -30,6 +30,97 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
 - Status: Verified · Remaining dependencies: none
 - Follow-up (same over-fetch class, FIXED): `briefing-module` loaded the full `calendar_events` history to render only TODAY's events (`rawEvents` is used solely for the today filter + KitchenMode; weekly/tomorrow data comes from a separate briefing source). Bounded to a small window around today (`.gte(now-1d).lte(now+2d).limit(200)`); guard extended (6 total). `todo_items`/`opportunities` in next-actions are bounded-by-nature (open-only / small collections), left as-is. **A-05 calendar-consumer over-fetch sweep now covers next-actions + briefing; command-center/conflicts SSR pages were already date-range-bounded (verified).**
+### PLA-0818 - Concierge hid shared reasoning failures as an empty relationship panel
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: Dashboard intelligence / AI Concierge relationship insights.
+- Route: `/dashboard/concierge`.
+- Affected files: `app/(app)/dashboard/concierge/page.tsx`, `tests/concierge-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member; existing Concierge-enabled tiers; any active household including an empty graph.
+- Scenario: the shared graph, snapshot, or Operating Index read rejects while the primary Concierge module can still render.
+- Severity / launch impact: P1; the page could present missing relationship insights as a healthy empty result during a Supabase failure.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/concierge`, and observe the old `.catch(() => null)` path render no error.
+- Expected / actual: preserve the primary Concierge and show a retryable relationship-read failure; previously the rejection became `null` with no user signal.
+- Root cause: silent fallback discarded a shared source-of-truth read error.
+- Resolution: catch and log the failure, render a visible `ErrorState`, and preserve `ConciergeModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; text error is keyboard/screen-reader visible; no extra query.
+- Tests added / run: `tests/concierge-read-boundary.test.ts`; focused test, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `f9e4cea3`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0819 - Daily Briefing hid shared reasoning failures as an empty relationship section
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CLAUDE-BRIEFING-01` with integration review by `CODEX-01`.
+- Service / feature: Dashboard intelligence / Daily Briefing relationship guidance.
+- Route: `/dashboard/briefing`.
+- Affected files: `app/(app)/dashboard/briefing/page.tsx`, `tests/briefing-reasoning-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member with the existing Briefing feature; existing feature-gated tiers; any active household.
+- Scenario: shared graph or snapshot reasoning rejects while the persisted Operating Index recap is readable.
+- Severity / launch impact: P1; an omitted relationship section could be mistaken for a healthy lack of guidance.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/briefing`, and observe the old null fallback omit the relationship panel.
+- Expected / actual: return a retryable failure before relationship guidance; previously the promise became `null` and no error rendered.
+- Root cause: silent `.catch(() => null)` converted a source-of-truth read failure into an empty optional result.
+- Resolution: catch, log, and return the existing `ErrorState` before rendering partial guidance.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope and text error behavior remain.
+- Tests added / run: `tests/briefing-reasoning-read-boundary.test.ts`; 2 focused tests, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `b901b00e`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0820 - Knowledge Graph hid shared reasoning failures behind a partial graph summary
+
+- Discovery timestamp: 2026-07-18 10:30 UTC; resolution timestamp: 2026-07-18 10:30 UTC.
+- Agent ID: `CLAUDE-GRAPH-01` with integration review by `CODEX-01`.
+- Service / feature: Dashboard intelligence / Knowledge Graph summary.
+- Route: `/dashboard/graph`.
+- Affected files: `app/(app)/dashboard/graph/page.tsx`, `tests/graph-read-boundary.test.ts`.
+- Database objects: family-scoped `graph_entities`, `graph_edges`, and Operating Index source reads through `loadFamilyContext`; no schema change.
+- Integration: Supabase shared reasoning loader; no third-party provider.
+- Role / tier / household: authenticated family member with graph access; existing graph-enabled tiers; any active household including an empty graph.
+- Scenario: shared graph or snapshot reads reject while the GraphModule can still render its own state.
+- Severity / launch impact: P1; the graph could appear healthy while its current relationship summary was unavailable.
+- Reproduction: reject `loadFamilyContext`, open `/dashboard/graph`, and observe the old null fallback omit the summary.
+- Expected / actual: preserve the graph and show a retry action; previously the rejection became `null` with no signal.
+- Root cause: silent `.catch(() => null)` discarded the shared read error.
+- Resolution: catch and log the failure, render a visible alert with a keyboard-navigable retry link, and preserve `GraphModule`.
+- Supabase / security / privacy / accessibility / performance impact: no schema, RLS, authorization, privacy, or query changes; existing family scope remains; alert/link are accessible; no polling added.
+- Tests added / run: `tests/graph-read-boundary.test.ts`; 1 focused test, 619-file/3,690-test single-worker suite, lint, typecheck, and fresh 250-route build passed.
+- Validation evidence: build passed with only known webpack-cache and Supabase Edge-runtime warnings.
+- Source commit: `0f4f5540`; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified in source; awaiting publication readback. Remaining dependencies: live RLS, deployed retry behavior, and open P0/P1 launch blockers.
+- Follow-up: finish remaining reasoning consumers and route/role/device workflow coverage.
+
+### PLA-0821 - Windows verification emitted dead Unix shell-command warnings
+
+- Discovery timestamp: 2026-07-18 10:50 UTC; resolution timestamp: 2026-07-18 10:50 UTC.
+- Agent ID: `CODEX-01`.
+- Service / feature: QA and cross-platform verification gates.
+- Route: test harness only; no user-facing route changed.
+- Affected files: `tests/display-name-firstname.test.ts`, `tests/no-mojibake-source.test.ts`.
+- Database objects: none.
+- Integration: local Vitest verification on Windows; no Supabase or third-party provider impact.
+- Role / tier / household: all engineering roles and all application tiers because the gate validates shipped source.
+- Scenario: the full suite executed Unix-only `grep` pipelines with `|| true`; Windows logged command-not-found warnings while the tests appeared green.
+- Severity / launch impact: P2; verification output was noisy and could hide a dead regression guard on the supported development platform.
+- Reproduction: run the constrained full Vitest suite on Windows and observe `grep`/`true` command-not-found output from the two source-scan tests.
+- Expected / actual: source scans should execute and report findings on Windows; the old shell commands were unavailable and their fallback masked the failure.
+- Root cause: platform-specific shell utilities in Node-based regression tests.
+- Resolution: replace both shell pipelines with recursive Node filesystem scans while preserving the existing assertions and exclusions.
+- Supabase / security / privacy / accessibility / performance impact: no application, schema, authorization, privacy, accessibility, or runtime performance change.
+- Tests added / run: four focused suites, 17 tests; constrained single-worker suite, 619 files / 3,690 tests; lint, typecheck, and fresh 250-route build.
+- Validation evidence: all gates passed without the prior shell-command warnings; known webpack-cache and Supabase Edge-runtime build warnings remain.
+- Source commit: working-tree repair; integration commit: this additive publication commit, verified by remote readback.
+- Status: Verified locally; awaiting publication readback. Remaining dependencies: open launch blockers in `docs/LAUNCH_BLOCKERS.md`.
+- Follow-up: keep future source-scan tests platform-neutral and continue the route/role/live-service audit.
 
 ### PLA-0813 - Behavior Tracking loaded a family's entire behavior_logs history (unbounded client read)
 

@@ -1,13 +1,12 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-18 06:05 America/New_York
+Audit snapshot: 2026-07-18 07:13 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 512 Vitest files and 3,272 tests pass in the latest constrained-worker full local gate.
-- Typecheck and lint pass. The latest fresh-directory production build compiled successfully but its page-generation worker exited with code 1; this increment is not build-verified.
-- The prior verified build generated 250 static routes and emitted the existing Supabase Edge-runtime compatibility warning.
+- 619 Vitest files and 3,690 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
+- Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 250 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.
 - The independent production-readiness seed invariant passes for 600 realistic records.
@@ -33,6 +32,13 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   a retryable state before showing scores or relationship insights.
 - Family Assistant now preserves shared reasoning-context failures and renders its retryable state before showing
   partial relationship guidance.
+- Concierge now logs and visibly reports shared reasoning failures while preserving the primary Concierge module.
+- Daily Briefing now preserves shared reasoning-context failures and renders a retryable page state before showing
+  relationship guidance.
+- Knowledge Graph now preserves shared reasoning-context failures and renders a retry link before showing its graph
+  summary.
+- Windows test guards now use Node filesystem traversal instead of Unix-only shell commands, removing dead command
+  warnings from the full verification output.
 - Calm now preserves inbox and shared reasoning-context failures and renders its retryable state before showing
   partial household guidance.
 - Wallet allowance, cron recovery, and goal funding persistence boundaries have focused regression coverage;

@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory()
+      ? sourceFiles(path)
+      : /\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('no-mojibake-source.test.ts')
+        ? [path]
+        : [];
+  });
+}
+
+const mojibakeSequences = [
+  'Ã¢â‚¬',
+  'Ã‚Â·',
+  'Ã°Å¸',
+  'Ã¢â‚¬â„¢',
+  'Ã¢â‚¬Å“',
+];
 
 // PLA-0812: user-facing source strings across ~79 admin/marketing/marketplace/
 // module files carried classic UTF-8->cp1252 double-encoding mojibake (e.g.
@@ -10,17 +30,13 @@ describe('no mojibake in source strings (regression guard)', () => {
   it('has zero classic mojibake sequences in app/, lib/, components/', () => {
     // Match the unambiguous double-encoding lead sequences. Scoped to shipped
     // source (.ts/.tsx), excluding this guard file itself.
-    let out = '';
-    try {
-      out = execSync(
-        "grep -rInP '\\xc3\\xa2\\xe2\\x82\\xac|\\xc3\\x82\\xc2\\xb7|\\xc3\\xb0\\xc5\\xb8|\\xc3\\xa2\\xe2\\x82\\xac\\xe2\\x84\\xa2|\\xc3\\xa2\\xe2\\x82\\xac\\xc5\\x93' " +
-          "app lib components --include='*.ts' --include='*.tsx' " +
-          "| grep -v 'no-mojibake-source.test.ts' || true",
-        { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 },
-      ).trim();
-    } catch {
-      out = '';
-    }
+    const out = sourceFiles('app')
+      .concat(sourceFiles('lib'), sourceFiles('components'))
+      .flatMap((path) => {
+        const contents = readFileSync(path, 'utf8');
+        return mojibakeSequences.some((sequence) => contents.includes(sequence)) ? [path] : [];
+      })
+      .join('\n');
     expect(out, `mojibake reintroduced:\n${out.split('\n').slice(0, 20).join('\n')}`).toBe('');
   });
 });

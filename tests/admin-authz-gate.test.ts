@@ -18,7 +18,7 @@ function walk(dir: string): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...walk(p));
-    else if (/(^|\/)(actions|[a-z-]+-actions)\.ts$/.test(p)) out.push(p);
+    else if (/(^|[\\/])(actions|[a-z-]+-actions)\.ts$/.test(p)) out.push(p);
   }
   return out;
 }

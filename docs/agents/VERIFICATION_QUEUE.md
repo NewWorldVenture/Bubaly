@@ -7,6 +7,7 @@ that still need integration retest belong here.
 
 | Item | Agent | Commit | What remains to verify |
 |------|-------|--------|------------------------|
+| Concierge + Briefing + Graph reasoning read boundaries + Windows test guards | `CODEX-01` | pending publication | integrated main readback after one additive fast-forward commit |
 | (none from QA-01) | — | — | — |
 
 Externally-gated verification (cannot be done in-session) is tracked in

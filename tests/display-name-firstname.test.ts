@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { firstName } from '@/lib/utils/format';
+
+function findFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? findFiles(path) : path.endsWith('.tsx') ? [path] : [];
+  });
+}
 
 // PLA-0780: family_members.display_name is NULLABLE in the DB but typed as
 // `string`, so a raw `member.display_name.split(' ')[0]` throws during render
@@ -26,15 +34,10 @@ describe('no raw display_name.split in UI source (crash guard)', () => {
   it('has zero unguarded display_name.split() sites in app/ or components/ .tsx', () => {
     // API .ts routes already guard with `if (m?.display_name)`, so scope the
     // guard to rendered UI (.tsx) where a null throw white-screens the page.
-    let out = '';
-    try {
-      out = execSync(
-        "grep -rn 'display_name\\.split' app components --include='*.tsx' || true",
-        { encoding: 'utf8' },
-      ).trim();
-    } catch {
-      out = '';
-    }
+    const out = findFiles('app')
+      .concat(findFiles('components'))
+      .filter((path) => readFileSync(path, 'utf8').includes('display_name.split'))
+      .join('\n');
     expect(out, `raw display_name.split() found — use firstName():\n${out}`).toBe('');
   });
 });
