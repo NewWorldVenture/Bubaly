@@ -270,6 +270,27 @@ Weighting (per the mission brief):
   the other bot works; complements agent-05's M-007 (safe-area/focus-trap on the
   shared `Modal`) by giving the hand-rolled overlays their missing dialog semantics.
 
+### M-014 — Landscape safe-area: edge-to-edge camera didn't clear the side notch (Phase 8)
+- **Severity:** P2 (mobile, landscape). **Phase:** 8 (safe areas & viewport).
+- **Problem:** `--safe-left` / `--safe-right` are defined but were barely used
+  app-wide (top/bottom only). The full-screen **camera** (`fixed inset-0 bg-black`,
+  a HIGH-risk capture surface, often used in landscape) padded the top/bottom safe
+  areas but not left/right — so on a notched phone in **landscape** the side notch /
+  rounded corners overlap its edge-pinned controls (close/switch in the top bar and
+  the shutter row).
+- **Fix:** added `pl-[var(--safe-left)] pr-[var(--safe-right)]` to the camera shell
+  so all four insets are respected. Purely additive — portrait / non-notched devices
+  report 0 for these insets, so no visual change there. The centered gate overlays
+  (paywall / account-closed / app-lock use `max-w-*` centered content) are already
+  clear of side notches, so they were deliberately **not** touched (not offenders).
+- **Files:** `components/ui/camera-capture.tsx`.
+- **Test:** `tests/mobile-landscape-safe-area.test.ts` (2) — locks all four safe-area
+  insets onto the camera shell.
+- **Evidence:** guard green; eslint 0; `next build` exit 0. (className-only change, no
+  TS surface.)
+- **Parallel note:** continues my hand-rolled-overlay surface (M-012/M-013),
+  disjoint from the module + app-shell files the other bot works.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

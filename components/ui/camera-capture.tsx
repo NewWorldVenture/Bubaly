@@ -107,7 +107,7 @@ export function CameraCapture({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)]" role="dialog" aria-modal="true" aria-label="Take a photo">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]" role="dialog" aria-modal="true" aria-label="Take a photo">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 text-white">
         <button type="button" onClick={handleClose} aria-label="Close camera" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20">
