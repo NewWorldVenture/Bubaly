@@ -73,6 +73,9 @@ describe('marketing platform spine contract', () => {
 
   it('does not enqueue regeneration for archived canonical pages', () => {
     expect(migrationSource).toContain('new.deleted_at is null and new.version is distinct from old.version');
+    expect(migrationSource).toContain("locked_at < now() - interval '15 minutes'");
+    expect(migrationSource).toContain('engine text not null default \'unknown\'');
+    expect(migrationSource).toContain('uq_mkt_default_template_per_type');
   });
 
   it('provides a missing-schema-safe legacy blog bridge', () => {

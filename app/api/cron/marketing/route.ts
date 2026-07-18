@@ -4,6 +4,7 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { processMarketingGenerationJobs } from '@/lib/marketing/platform';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 /** Durable marketing worker. Vercel invokes this frequently; the database RPC
  * claims rows with SKIP LOCKED so concurrent invocations do not duplicate work. */

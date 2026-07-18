@@ -1608,9 +1608,9 @@ export interface Database {
         Partial<{ chunk_index: number; content_hash: string; content: string; embedding: Json | null; provider: string; model: string; dimensions: number; status: string; metadata: Json }>
       >;
       marketing_provider_observations: T<
-        { id: string; provider: string; engine: string | null; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string } & Stamps,
-        { id?: string; provider: string; engine?: string | null; observed_for: string; page_path?: string | null; query?: string | null; clicks?: number; impressions?: number; ctr?: number | null; average_position?: number | null; citations?: number; cited?: boolean | null; payload?: Json; source_status?: string },
-        Partial<{ provider: string; engine: string | null; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string }>
+        { id: string; provider: string; engine: string; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string } & Stamps,
+        { id?: string; provider: string; engine?: string; observed_for: string; page_path?: string | null; query?: string | null; clicks?: number; impressions?: number; ctr?: number | null; average_position?: number | null; citations?: number; cited?: boolean | null; payload?: Json; source_status?: string },
+        Partial<{ provider: string; engine: string; observed_for: string; page_path: string | null; query: string | null; clicks: number; impressions: number; ctr: number | null; average_position: number | null; citations: number; cited: boolean | null; payload: Json; source_status: string }>
       >;
       marketing_provider_syncs: T<
         { provider: string; status: string; last_started_at: string | null; last_completed_at: string | null; last_error: string | null; rows_imported: number; metadata: Json; updated_at: string },

@@ -90,6 +90,12 @@ export async function saveMarketingTemplate(formData: FormData): Promise<void> {
     defaults: { cta_label: optional(formData, 'cta_label'), section_count: Number(value(formData, 'section_count') || 3) },
     schema: { fields: ['title', 'summary', 'body', 'seo', 'aeo'] }, status: 'active', is_default: formData.get('is_default') === 'on', updated_by: actorId,
   };
+  if (payload.is_default) {
+    const { error: clearDefaultError } = await supabase.from('marketing_content_templates')
+      .update({ is_default: false, updated_by: actorId })
+      .eq('page_type', pageType).eq('status', 'active');
+    if (clearDefaultError) marketingActionFailure('prepare the default marketing template', clearDefaultError);
+  }
   const query = id
     ? supabase.from('marketing_content_templates').update(payload).eq('id', id).select('id').maybeSingle()
     : supabase.from('marketing_content_templates').insert({ ...payload, created_by: actorId }).select('id').maybeSingle();

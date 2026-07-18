@@ -73,6 +73,8 @@ create table if not exists public.marketing_content_templates (
   updated_at timestamptz not null default now()
 );
 create index if not exists idx_mkt_templates_type_status on public.marketing_content_templates(page_type, status, is_default desc);
+create unique index if not exists uq_mkt_default_template_per_type
+  on public.marketing_content_templates(page_type) where is_default and status = 'active';
 
 create table if not exists public.marketing_brand_rules (
   id uuid primary key default gen_random_uuid(),
@@ -149,7 +151,7 @@ create index if not exists idx_mkt_embeddings_source on public.marketing_embeddi
 create table if not exists public.marketing_provider_observations (
   id uuid primary key default gen_random_uuid(),
   provider text not null check (provider in ('google_search_console','bing_webmaster','ai_citation','manual')),
-  engine text,
+  engine text not null default 'unknown',
   observed_for date not null,
   page_path text,
   query text,
@@ -167,6 +169,12 @@ create table if not exists public.marketing_provider_observations (
 );
 create index if not exists idx_mkt_provider_obs_date on public.marketing_provider_observations(provider, observed_for desc);
 create index if not exists idx_mkt_provider_obs_page on public.marketing_provider_observations(page_path, observed_for desc);
+
+-- Make the unique observation key deterministic even when an upstream provider
+-- does not identify a search engine.
+update public.marketing_provider_observations set engine = 'unknown' where engine is null;
+alter table public.marketing_provider_observations alter column engine set default 'unknown';
+alter table public.marketing_provider_observations alter column engine set not null;
 
 create table if not exists public.marketing_provider_syncs (
   provider text primary key check (provider in ('google_search_console','bing_webmaster','ai_citation')),
@@ -292,6 +300,15 @@ create or replace function public.claim_marketing_generation_jobs(p_limit intege
 returns setof public.marketing_generation_jobs
 language plpgsql security definer set search_path = public as $$
 begin
+  update public.marketing_generation_jobs
+  set status = case when attempts >= max_attempts then 'dead_letter' else 'queued' end,
+      locked_at = null,
+      run_after = now(),
+      error = coalesce(error, 'Recovered after a stale worker lock.')
+  where status = 'running'
+    and locked_at is not null
+    and locked_at < now() - interval '15 minutes';
+
   return query
   with candidates as (
     select id

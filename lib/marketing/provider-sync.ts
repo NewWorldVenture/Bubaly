@@ -10,7 +10,7 @@ type Provider = 'google_search_console' | 'bing_webmaster' | 'ai_citation';
 
 type Observation = {
   provider: Provider;
-  engine: string | null;
+  engine: string;
   observed_for: string;
   page_path: string | null;
   query: string | null;
@@ -130,7 +130,7 @@ async function syncAiCitations(db: Db): Promise<number> {
     const data = await readBoundedResponseJson<{ rows?: Record<string, unknown>[] } | Record<string, unknown>[]>(response, 4 * 1024 * 1024);
     const sourceRows = Array.isArray(data) ? data : data.rows ?? [];
     const rows: Observation[] = sourceRows.map((row) => ({
-      provider: 'ai_citation', engine: typeof row.engine === 'string' ? row.engine : null,
+      provider: 'ai_citation', engine: typeof row.engine === 'string' && row.engine.trim() ? row.engine : 'unknown',
       observed_for: typeof row.observed_for === 'string' ? row.observed_for : isoDate(),
       page_path: typeof row.page_path === 'string' ? row.page_path : null,
       query: typeof row.query === 'string' ? row.query : null,
