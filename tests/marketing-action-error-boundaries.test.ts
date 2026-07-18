@@ -24,7 +24,7 @@ describe('privileged marketing action error boundaries', () => {
     });
 
     // Includes the import plus each guarded failure branch.
-    expect(counts).toEqual([43, 6, 4]);
+    expect(counts).toEqual([45, 6, 4]);
     expect(readFileSync('lib/marketing/admin.ts', 'utf8')).toContain('describeActionError');
   });
 });

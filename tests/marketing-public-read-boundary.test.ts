@@ -18,7 +18,7 @@ describe('public marketing loaders throw on read error (never 404 a live page)',
     // The throw must precede the return (so a real error never yields null → 404).
     expect(lp.indexOf('if (error) throw')).toBeLessThan(lp.indexOf('return data;'));
     // notFound() is still reserved for a genuinely missing page.
-    expect(lp).toContain('if (!page) notFound();');
+    expect(lp).toMatch(/if \(!(?:page|platformPage)\) notFound\(\);/);
   });
 
   it('public-form loader captures error and throws before returning null', () => {
