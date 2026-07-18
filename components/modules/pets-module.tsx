@@ -338,12 +338,14 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
+  const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
-    await createClient().from('pet_care_records').delete().eq('id', id);
+    const { error } = await createClient().from('pet_care_records').delete().eq('id', id);
+    if (error) toastError(describeDbError(error));
   }
 
   return (
