@@ -15,7 +15,7 @@ const FAQS: FAQ[] = [
   { q: 'Does the AI assistant actually do things, or just chat?', a: 'It takes real action. When you ask it to add an event, create chores, set a reminder, plan meals, or build a grocery list, it creates those records in your family’s database — scoped securely to your household.' },
   { q: 'Can children use it safely?', a: 'Yes. Children get a simple view of their assigned chores and items, with large tap targets and no access to billing, settings, or other members’ private data.' },
   { q: 'Is there a mobile app?', a: 'Bubaly is an installable Progressive Web App today, and ships native iOS and Android companion apps built with Expo that share the same data and design.' },
-  { q: 'What does it cost?', a: 'There’s a free Starter plan and a 14-day trial of paid plans — no credit card required to begin. See the Pricing page for details.' },
+  { q: 'What does it cost?', a: 'There’s a free Starter plan and a 5-day trial of paid plans — no credit card required to begin. See the Pricing page for details.' },
   { q: 'Can I invite a babysitter or grandparent?', a: 'Absolutely. Invite them as a Caregiver (sees only assigned areas) or Guest (limited shared events). You control exactly what they can see.' },
   { q: 'How do notifications work?', a: 'Bubaly sends timely push and email reminders for due chores, medications, calendar and school/sports events, home maintenance, and expiring documents — based on each member’s preferences.' },
 ];

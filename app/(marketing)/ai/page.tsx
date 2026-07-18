@@ -95,7 +95,7 @@ export default function AIPage() {
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link href="/signup">
               <Button size="lg">
-                Start free — 14 days <ArrowRight className="h-5 w-5" />
+                Start free — 5 days <ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
             <Link
@@ -193,7 +193,7 @@ export default function AIPage() {
 
       <CTASection
         title="Meet the assistant that actually does things"
-        subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 14 days, no credit card."
+        subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
       />
     </>
   );
