@@ -202,7 +202,7 @@ export function PhotosModule() {
             <AiInsight kind="photos" iconOnly />
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)}
+              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search photos…"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>

@@ -233,7 +233,7 @@ export function RecipesModule() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)}
+              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search recipes…"
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}

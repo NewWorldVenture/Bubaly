@@ -172,7 +172,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${meta.title.toLowerCase()}`} className="pl-9" aria-label="Search files" />
+          <Input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${meta.title.toLowerCase()}`} className="pl-9" aria-label="Search files" />
         </div>
         <div className="relative">
           <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>Sort <ChevronDown className="h-3.5 w-3.5" /></Button>

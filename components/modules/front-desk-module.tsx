@@ -260,7 +260,7 @@ export function FrontDeskModule() {
           <div className="mt-4 space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
+              <input value={search} inputMode="search" enterKeyHint="search" onChange={e => setSearch(e.target.value)}
                 placeholder="Search calls, numbers, summaries…"
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (

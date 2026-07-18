@@ -83,17 +83,16 @@ touch via `sm:opacity-0 sm:group-hover:opacity-100`.
   bare `opacity-0 group-hover:opacity-100` on a `<button>`/`<a>` without a
   `focus-visible`/touch-visible escape hatch.
 
-### 🟡 M-006 (P2) — Field-level mobile keyboard audit (Phase 7) — MONEY DONE, search remains
+### ✅ M-006 (P2) — DONE (agent-05) — Field-level mobile keyboard audit (Phase 7)
 - ✅ **Money/decimal keypad (agent-05):** all 29 `type="number"` inputs with a
   decimal step (`0.01`/`0.1`/`any`) or `0.00` placeholder across 19 modules now
   carry `inputMode="decimal"` so iOS surfaces the decimal point (cents). Guard
   `tests/mobile-numeric-inputmode.test.ts`. `type="number"` already yields a numeric
   keypad, so integer count/year inputs were intentionally left (no defect).
-- 🔜 **Remaining (minor polish):** search inputs → add `inputMode="search"` (keep
-  `type="text"` to avoid a duplicate native clear-× next to existing custom clears)
-  on the ~10 modules with a Search box (files-hub, knowledge-base, weather, meals,
-  photos, social-feed, front-desk, inbox, documents, shopping). Low value — the
-  search enter-key hint only; do it as a quick pass if picked.
+- ✅ **Search keyboard:** `inputMode="search"` + `enterKeyHint="search"` added to
+  the 10 search boxes (files-hub, knowledge-base, weather, photos, social-feed,
+  front-desk, inbox, shopping, marketplace, recipes). Guard
+  `tests/mobile-search-inputmode.test.ts`.
 
 ### ✅ M-007 (P2) — DONE (agent-05) — Overlay/drawer safe-area + keyboard (Phase 11/8)
 **Audited; system is excellent, ratcheted.** The shared `components/ui/modal.tsx`

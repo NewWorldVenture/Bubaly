@@ -159,7 +159,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search feed"
+                <input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder="Search feed"
                   className="h-9 w-36 rounded-lg border border-border bg-bg pl-8 pr-2 text-sm focus-ring sm:w-44" />
               </div>
               <Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add Source</Button>

@@ -250,7 +250,7 @@ export function MarketplaceModule({
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search listings…" className="pl-9" />
+          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder="Search listings…" className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>All</FilterChip>

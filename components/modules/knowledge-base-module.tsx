@@ -129,7 +129,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search facts…" className="pl-9" />
+          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder="Search facts…" className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Chip active={memberFilter === 'all'} onClick={() => setMemberFilter('all')}>Everyone</Chip>

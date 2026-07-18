@@ -225,7 +225,7 @@ export function ShoppingModule() {
                 )}
                 <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
                   <Search className="h-3.5 w-3.5 text-muted" />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
+                  <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
                   {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>

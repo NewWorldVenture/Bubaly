@@ -211,7 +211,7 @@ export function WeatherModule() {
           <form onSubmit={runSearch} className="flex gap-2">
             <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-border bg-surface/60 px-3">
               <Search className="h-4 w-4 text-muted" />
-              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search for a city…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder="Search for a city…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </div>
             <Button type="submit" loading={searching}>Search</Button>
             <button type="button" onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
