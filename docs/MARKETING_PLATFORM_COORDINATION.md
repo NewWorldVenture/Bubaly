@@ -402,3 +402,13 @@ the claimed `running` status, and an inability to persist a failure escalates th
 cron response instead of silently leaving a job stranded. Published as `cb679fd4`;
 653 test files / 3,847 tests, sequential typecheck, production build (1,281
 routes), dependency audit, and all four remote marketing gates passed.
+
+### Runtime readiness checkpoint — 2026-07-18
+
+The production control center and `marketing:verify:runtime:remote` now expose
+the actual execution state of the generation and embedding loop. The current
+remote readback is 1,809 published pages, 2,059 pending generation jobs, 0 ready
+vector chunks, and three unconfigured external analytics providers. Reporting
+mode is intentionally non-fatal and truthful; `--strict` is available as the
+final readiness gate after owner-side runtime credentials and worker execution
+are supplied. Published as `1106e4cf`; schema and SEO/AEO coverage gates passed.
