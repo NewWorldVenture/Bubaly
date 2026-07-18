@@ -27,7 +27,10 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: guard green (3); `tsc --noEmit` clean; `eslint` clean on the module
 - Validation evidence: static scan pre-fix flagged 8 icon-only buttons; post-fix the heuristic guard finds 0
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
-- Status: Verified · Remaining dependencies: none · Follow-up: extend the icon-only-button a11y sweep to other interaction-heavy A-05 modules (viewers/toolbars) as an ongoing §23 pass
+- Status: Verified · Remaining dependencies: none
+- Follow-up (same class, FIXED): `contacts-module` quick-actions — the icon-only "call" (`<button><Phone/>`) and "email" (`<a><Mail/>`) controls in each contact row had no accessible name; added `aria-label={`Call ${contact.name}`}` / `Email ${contact.name}` so AT users know *which* contact they're calling/emailing. Guard extended (`tests/photos-a11y-labels.test.ts`, 4 total). Broader A-05 scan: `notes` AI-Assist button already has visible text (not a gap); the icon-only-button a11y sweep across interaction-heavy A-05 modules continues
+
+
 
 ### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
 

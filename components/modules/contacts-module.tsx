@@ -219,12 +219,14 @@ export function ContactsModule() {
                     <div className="flex items-center gap-1.5">
                       {contact.phone && (
                         <button onClick={(e) => { e.stopPropagation(); callPhone(contact.phone!); }}
+                          aria-label={`Call ${contact.name}`}
                           className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-success sm:flex">
                           <Phone className="h-4 w-4" />
                         </button>
                       )}
                       {contact.email && (
                         <a href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()}
+                          aria-label={`Email ${contact.name}`}
                           className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text sm:flex">
                           <Mail className="h-4 w-4" />
                         </a>

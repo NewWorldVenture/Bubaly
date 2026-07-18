@@ -9,6 +9,14 @@ import fs from 'node:fs';
 // aria-label. This guard locks the labels in.
 
 const src = fs.readFileSync('components/modules/photos-module.tsx', 'utf8');
+const contacts = fs.readFileSync('components/modules/contacts-module.tsx', 'utf8');
+
+describe('contacts module icon-only controls have accessible names (A-05 a11y)', () => {
+  it('call/email quick-actions are labeled with the contact name', () => {
+    expect(contacts).toContain('aria-label={`Call ${contact.name}`}');
+    expect(contacts).toContain('aria-label={`Email ${contact.name}`}');
+  });
+});
 
 describe('photos module icon-only controls have accessible names (A-05 a11y)', () => {
   it('lightbox navigation + close are labeled', () => {
