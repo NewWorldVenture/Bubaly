@@ -46,7 +46,12 @@ export function ExperienceScorecardModule() {
 
   const { data, loading, error, refresh } = useRealtimeQuery<Row>({
     table: 'experience_audits', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('experience_audits').select('*').eq('family_id', familyId).order('audited_on', { ascending: false }),
+    // Bound the read: experience_audits accumulates as surfaces are re-audited, but
+    // the scorecard only needs recent audits (latest per dimension + "since last
+    // audit" trend). Load a rolling 365-day window (hard-capped at 1000 rows).
+    fetcher: (sb) => sb.from('experience_audits').select('*').eq('family_id', familyId)
+      .gte('audited_on', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+      .order('audited_on', { ascending: false }).limit(1000),
   });
 
   const card = useMemo(() => {

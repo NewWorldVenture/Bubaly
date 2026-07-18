@@ -12,6 +12,7 @@ import fs from 'node:fs';
 const src = fs.readFileSync('components/modules/behavior-module.tsx', 'utf8');
 const care = fs.readFileSync('components/modules/care-module.tsx', 'utf8');
 const security = fs.readFileSync('components/modules/security-module.tsx', 'utf8');
+const scorecard = fs.readFileSync('components/modules/experience-scorecard-module.tsx', 'utf8');
 
 describe('A-05 growth-table module reads are bounded (perf)', () => {
   it('behavior_logs: rolling window AND a hard row cap', () => {
@@ -32,6 +33,13 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
   it('home_security_events: rolling window AND a hard row cap', () => {
     const fetcher = security.slice(security.indexOf("table: 'home_security_events'"), security.indexOf('const [form'));
     expect(fetcher).toContain(".gte('occurred_at'");
+    expect(fetcher).toMatch(/\.limit\(1000\)/);
+    expect(fetcher).toContain('Date.now()');
+  });
+
+  it('experience_audits: rolling window AND a hard row cap', () => {
+    const fetcher = scorecard.slice(scorecard.indexOf("table: 'experience_audits'"), scorecard.indexOf("table: 'experience_audits'") + 800);
+    expect(fetcher).toContain(".gte('audited_on'");
     expect(fetcher).toMatch(/\.limit\(1000\)/);
     expect(fetcher).toContain('Date.now()');
   });
