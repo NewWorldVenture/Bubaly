@@ -22,7 +22,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-003 | 4 | Horizontal-overflow sweep — found compliant; ratcheted (tables stay scroll-wrapped) | `1e5d5cd5` |
 | M-004 | 6 | Labeled 4 icon-only buttons; inbox archive made touch-visible + bigger target | `ded0e179` |
 | M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | `d678557f` |
-| M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | (this commit) |
+| M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | `67acb018` |
+| M-007 | 11/8 | Overlay/shell audit — shared Modal (bottom-sheet/dvh/safe-area/focus-trap) + app-shell (pb-24, safe-bottom nav) verified excellent; ratcheted | (this commit) |
 
 Guard tests: `tests/mobile-viewport-height.test.ts`, `tests/mobile-forms.test.ts`,
 `tests/mobile-no-horizontal-overflow.test.ts`, `tests/mobile-touch-a11y.test.ts`
@@ -83,11 +84,26 @@ touch via `sm:opacity-0 sm:group-hover:opacity-100`.
   photos, social-feed, front-desk, inbox, documents, shopping). Low value — the
   search enter-key hint only; do it as a quick pass if picked.
 
-### M-007 (P2) — Overlay/drawer safe-area + keyboard behavior (Phase 11)
-`components/ui/modal.tsx` already uses safe-area insets. Verify each modal/drawer:
-fits `dvh`, scrolls internally, close reachable, background scroll locked, focus
-trapped + restored. Convert oversized desktop popovers to bottom sheets where they
-overflow a phone.
+### ✅ M-007 (P2) — DONE (agent-05) — Overlay/drawer safe-area + keyboard (Phase 11/8)
+**Audited; system is excellent, ratcheted.** The shared `components/ui/modal.tsx`
+is a proper mobile **bottom sheet**: `items-end sm:items-center`, `rounded-t-3xl`,
+`max-h-[85dvh]`, `pb-[max(1rem,env(safe-area-inset-bottom))]`, focus trap + restore,
+ESC, body scroll-lock, `aria-modal`. The app-shell reserves `<main pb-24 lg:pb-8>`
+for the fixed mobile bottom tab bar, which itself uses `safe-bottom`; FABs use
+`bottom-[calc(...+var(--safe-bottom))]`. Guard
+`tests/mobile-overlay-safe-area.test.ts` (6) locks these in. Only 1 shared overlay
+primitive (Modal) — the ad-hoc `fixed inset-0` panels (front-desk/inbox/messages)
+already carry `pt-[var(--safe-top)]` + internal `overflow-y-auto`.
+
+### 🔬 M-011 (P2, NEEDS BROWSER VERIFY) — full-height chat panels vs the mobile bottom nav
+`components/modules/messages-module.tsx:544` (and concierge) size the panel
+`h-[calc(100dvh-var(--topbar-height)-1rem)]` — this subtracts the **top** bar but
+**not** the fixed mobile bottom tab bar (`app-shell` reserves `pb-24`≈6rem there).
+On a phone the composer may therefore sit behind/under the bottom nav. The fix is
+layout-nesting-dependent (subtract the bottom-nav height on mobile only, `lg:`
+restores desktop) and must be **verified in a real mobile viewport** (Playwright
+/ device) before shipping — do NOT change the calc blind. Depends on M-009 (device
+matrix) for evidence.
 
 ### M-008 (P2) — Tablet layouts don't waste space (Phase 9)
 iPad portrait/landscape: check dashboard grids + `lg:grid-cols-[1fr_340px]` sidebars

@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~19% (early)
+## Overall completion: ~22% (early)
 
 Weighting (per the mission brief):
 
@@ -144,6 +144,20 @@ Weighting (per the mission brief):
   (`type=number` already gives a numeric keypad).
 - **Test:** `tests/mobile-numeric-inputmode.test.ts` (2). **19 mobile guard tests** total.
 - **Evidence:** grep → 29/29 decimal inputs now have `inputMode`, 0 missing; tsc + eslint clean.
+
+### M-007 — Overlay + shell mobile system: audited excellent, ratcheted (Phase 11/8)
+- **Finding:** the shared `modal.tsx` is a world-class mobile **bottom sheet**
+  (`items-end sm:items-center`, `rounded-t-3xl`, `max-h-[85dvh]`,
+  `env(safe-area-inset-bottom)` action row, focus trap + restore, ESC, body
+  scroll-lock, `aria-modal`). The app-shell reserves `<main pb-24 lg:pb-8>` for the
+  fixed mobile bottom tab bar, which uses `safe-bottom`; FABs are safe-area-aware.
+- **Action:** ratcheted these properties (guard) rather than change working code.
+- **Flagged M-011 (needs browser verify):** the full-height chat panels
+  (`messages`/`concierge`, `h-[calc(100dvh-topbar-1rem)]`) don't subtract the mobile
+  bottom-nav height, so the composer may sit behind the tab bar on a phone. The fix
+  is layout-nesting-dependent — deferred to real-viewport verification (M-009), not
+  changed blind.
+- **Test:** `tests/mobile-overlay-safe-area.test.ts` (6). **25 mobile guard tests** total.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
