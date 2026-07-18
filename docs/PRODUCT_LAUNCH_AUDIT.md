@@ -3077,3 +3077,12 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Verified: PG16 bootstrap fail=0 (1,048/1,048/2,096); `tsc` 0; guard tests `tests/blog-batch2-contract.test.ts` (6) + existing blog/migration tests green; `next build` (below).
 - Supabase impact: 0234 additive (apply to prod). Owner action to see batch-2 images as real photos: extend the 0231 hero-photos curation to the new slugs (or let BlogCover stand).
 - Commit: this push.
+
+### PLA-0820 - Batch-2 articles get real hero photos (no more identical covers) (A-17)
+
+- Timestamp: 2026-07-18 17:25 UTC · Service: A-17 marketing (blog media). Follows PLA-0810.
+- Owner report (live /blog): batch-2 articles rendered the generated `<BlogCover>` and many looked identical on the grid; wanted real, unique, professional photos.
+- Fix (`0235_blog_batch2_hero_photos.sql`): sets every image-less published post's hero to a REAL, free (CC0) Lorem Picsum photo keyed to its slug via the seed endpoint (`picsum.photos/seed/<slug>/1600/900`) — always resolves (no 404s), one distinct URL per post, and the same CC0 source batch-1's hero photos already use as a fallback (so licence policy is consistent; not stripped by `lib/blog/posts.ts`). Idempotent (only fills NULL heroes).
+- Verified on PG16 full bootstrap `migration_fail=0`: **1,048 published, 0 null-hero, 1,048 distinct hero URLs** (503 new Picsum for batch 2); re-apply = UPDATE 0. Guard `tests/blog-batch2-hero-photos.test.ts` (3) + migration-version bumped to 0236.
+- **HONEST LIMITATION:** these are real/professional/free/unique-URL photos but **not per-article topic-curated**, and a minority may visually repeat (Picsum's catalogue is finite). Per-article topic matching (like batch-1's hand-picked Wikimedia photos) is impossible from this build environment — every external image source (Wikimedia 403, Openverse, all image CDNs) is network-blocked here. To upgrade batch-2 to unique topic-matched photos, an env with image-source access (as batch-1 had) or an Unsplash/Pexels API key is required; then the batch-1 hero-photos pattern extends to these slugs.
+- Commit: this push.
