@@ -1,6 +1,6 @@
 # SESSION_RECOVERY — read this first to resume the audit cold
 
-_Last updated: 2026-07-18 11:30 UTC by `CODEX-01` (board handle `codex`)._
+_Last updated: 2026-07-18 20:15 UTC by `CLAUDE-QA-01` (board handle `agent-02`)._
 
 ## Repository
 - `NewWorldVenture/FamilyOS`
@@ -9,10 +9,15 @@ _Last updated: 2026-07-18 11:30 UTC by `CODEX-01` (board handle `codex`)._
   `docs/audit/COORDINATION.md §0`; each push is rebased on latest `main` first).
 - This Claude worker's designated dev branch: `claude/resolve-pr-conflicts-nwmf2h`
   (fast-forwards to `main`; not a long-lived fork).
-- **Latest verified `main` commit at last update: `fba93554`** ("audit: surface
-  dashboard reasoning read failures", codex). A local next increment covers
-  Decisions, Outcomes, Playbook, and Prep Plans and is fully gated locally but
-  not yet integrated.
+- **Latest verified `main` commit: `cebf6c2a`** (2026-07-18 20:15). Full
+  integration gate GREEN at this commit: `tsc --noEmit` exit 0; `vitest run`
+  **654 files / 3,876 tests pass**. No uncommitted work outstanding.
+- Recent QA-01/agent-02 increments (all on main, verified, logged PLA-0838..0844):
+  blog category-count pagination + unique free hero photos (migration `0232`) +
+  hero spacing; client silent-write class swept (6 fixes/5 modules); reasoning
+  read-boundary test realign (unblocked shared suite); profile-nudge guard;
+  admin OpenAI status PR #322 merged (+ #321/#323 closed); `0231→0232` migration
+  collision fixed. Blog Favorite verified already sign-in-gated + session-persistent.
 
 ## Current audit state (canonical — do NOT inflate)
 - **Weighted completion: 10.0%** (`docs/AUDIT_PROGRESS.md`, owned by codex).
