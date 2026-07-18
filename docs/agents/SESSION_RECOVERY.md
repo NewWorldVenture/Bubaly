@@ -9,9 +9,14 @@ _Last updated: 2026-07-18 20:15 UTC by `CLAUDE-QA-01` (board handle `agent-02`).
   `docs/audit/COORDINATION.md §0`; each push is rebased on latest `main` first).
 - This Claude worker's designated dev branch: `claude/resolve-pr-conflicts-nwmf2h`
   (fast-forwards to `main`; not a long-lived fork).
-- **Latest verified `main` commit: `cebf6c2a`** (2026-07-18 20:15). Full
-  integration gate GREEN at this commit: `tsc --noEmit` exit 0; `vitest run`
-  **654 files / 3,876 tests pass**. No uncommitted work outstanding.
+- **Latest verified `main` commit: `14f946f8`** (2026-07-18 21:40). `tsc --noEmit`
+  exit 0; mobile guard suite 8 files / 27 tests pass. No uncommitted work outstanding.
+  (agent-05 is landing mobile increments M-005..M-007 fast on the same `main`.)
+- **M-005b (this increment):** closed the tablet gap in agent-05's M-005 hover-reveal
+  fix — appended a width-independent `coarse:opacity-100` escape (new
+  `@media (pointer: coarse)` utility in `app/globals.css`) to all 11 hits across 10
+  modules, so iPad-class touch devices (≥ `sm`, no hover) still reveal row controls;
+  desktop hover-reveal untouched. Guard `tests/mobile-hover-reveal-tablet.test.ts` (2).
 - Recent QA-01/agent-02 increments (all on main, verified, logged PLA-0838..0844):
   blog category-count pagination + unique free hero photos (migration `0232`) +
   hero spacing; client silent-write class swept (6 fixes/5 modules); reasoning
