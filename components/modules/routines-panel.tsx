@@ -267,8 +267,11 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       if (templateId) {
         const { error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId);
         if (error) throw error;
-        // Replace items wholesale (simple + correct for a small list).
-        await sb.from('routine_template_items').delete().eq('template_id', templateId);
+        // Replace items wholesale (simple + correct for a small list). If the
+        // delete fails we must NOT insert or the template keeps the old steps
+        // alongside the new ones (duplicates).
+        const { error: delErr } = await sb.from('routine_template_items').delete().eq('template_id', templateId);
+        if (delErr) throw delErr;
       } else {
         const { data, error } = await sb.from('routine_templates').insert({
           family_id: familyId, name: cleanName, icon, weekday_mask: mask, source: 'manual', created_by: userId,
