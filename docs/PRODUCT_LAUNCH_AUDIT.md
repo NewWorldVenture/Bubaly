@@ -6,6 +6,74 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0844 - Blog category tabs showed wrong counts ("Recipes & Food (0)" while the section listed 56)
+
+- Timestamp: 2026-07-18 16:05 UTC · Agent: `CLAUDE-QA-01` (agent-02) — **cross-lane, direct user request** (A-17 marketing/blog)
+- Service: Marketing / public blog (A-17) · Route: `/blog` (`app/(marketing)/blog/page.tsx`)
+- Affected files: `lib/blog/posts.ts`, `tests/blog-category-counts-pagination.test.ts` (new)
+- Severity: **P2 (correctness/UX)** — user report + screenshot: tabs read `Recipes & Food (0)`, `Travel (0)`, `Home & Seasonal (0)` while those sections listed dozens
+- Root cause: `getCategoryCounts()`/`getAllPosts()` fetched published rows then filtered synthetic seed rows **client-side** (marker is in the slug, not a column). PostgREST caps a query at 1000 rows, so when seed rows fill the first 1000, whole categories fall outside the window and count 0.
+- Resolution: added `fetchAllPublishedRows()` — paginates via `.range()` until a short page, so counts/list see every real article regardless of seed-row volume. (agent-05 later added `CARD_COLUMNS` projection + grid pagination on top; both integrate.)
+- Tests added: `tests/blog-category-counts-pagination.test.ts` (3); `tsc`/`eslint` clean
+- Commit: `fee9fab2` · Status: Verified · Remaining: prod deploy (code fix)
+
+### PLA-0843 - Every blog article now has a UNIQUE, free, subject-matched, load-verified hero photo (migration 0232)
+
+- Timestamp: 2026-07-18 16:05 UTC · Agent: `CLAUDE-QA-01` (agent-02) — **cross-lane, direct user request** ("every article a unique FREE image related to the subject; override any rule")
+- Service: Marketing / public blog (A-17) · Route: `/blog`, `/blog/[slug]`
+- Affected files: `supabase/migrations/0232_blog_hero_photos.sql` (new), `next.config.mjs`, `tests/blog-hero-photos-unique.test.ts` (new)
+- Database objects: `blog_posts.hero_image_url/alt/credit` (per-slug UPDATE)
+- Severity: **P2 (brand quality / launch bar)** — user saw two articles sharing the identical kitchen photo (LoremFlickr per-tag pools collide)
+- Resolution: `0232` assigns all **525** published articles a **unique, HTTP-200 load-verified** hero photo — **subject-matched Creative-Commons via the keyless Wikimedia Commons search (~301)** + **Lorem Picsum CC0 (~224)** in non-overlapping per-category bands → **zero duplicate URLs, zero image-less posts**. Quality-filtered the CC set. Added `live.staticflickr.com`/`upload.wikimedia.org`/`picsum.photos` to `next.config` remotePatterns.
+- Tests added: `tests/blog-hero-photos-unique.test.ts` (4 — full coverage, no-dup URLs, allow-listed hosts, 500+ rows); migration line-integrity verified (525 UPDATEs, balanced quotes)
+- Commit: `fee9fab2` (renumbered to 0232 in `c9a01aa4`) · Status: Verified · Remaining: **migration `0232` applied to DB** to render (dev/preview auto; prod owner step). Honest limitation: keyless free sourcing ≈57% subject-matched, rest clean professional Picsum; a paid Unsplash/Pexels key lets the pipeline regenerate at higher fidelity.
+
+### PLA-0842 - Blog hero-photos migration collided with an existing 0231 (duplicate version → migration-safety RED)
+
+- Timestamp: 2026-07-18 16:30 UTC · Agent: `CLAUDE-QA-01` (agent-02)
+- Service: Build/migrations governance (A-01/A-02) · Affected files: `supabase/migrations/0232_blog_hero_photos.sql` (renamed from 0231), `tests/migration-version-safety.test.ts`, `tests/blog-hero-photos-unique.test.ts`
+- Severity: **P2 (build/test gate)** — two `0231_*` files failed `migration-version-safety`, which gates every agent's suite
+- Root cause: I introduced `0231_blog_hero_photos.sql` while `0231_blog_drop_loremflickr_covers.sql` already existed
+- Resolution: renumbered **mine → `0232`** (drop-loremflickr keeps `0231`, applies first); updated stale `nextVersion` → `0233`; repointed the guard. Migration history linear.
+- Tests run: migration-safety + hero + save-gate green (11) · Commit: `c9a01aa4` · Status: Verified
+
+### PLA-0841 - Reasoning graph read-boundary test left RED on main after codex flipped the loader to fail-closed
+
+- Timestamp: 2026-07-18 11:35 UTC · Agent: `CLAUDE-QA-01` (agent-02)
+- Service: A-15/A-05 reasoning · Affected files: `tests/reasoning-context-read-boundary.test.ts` (test-only)
+- Severity: **P1 (shared CI/DoD gate)** — the whole vitest suite was RED on `main`
+- Root cause: codex's `1ee6813b` changed `loadFamilyGraph` to **fail-closed (throw)** but left the PLA-0406 test asserting degrade-to-empty
+- Resolution: realigned the **test only** to codex's fail-closed contract (rejects + logs `[reasoning] graph read failed`); verified every caller catches the throw. codex impl untouched.
+- Tests run: full suite GREEN — 615 files / 3,681 tests · Commit: `0998ae35` · Status: Verified
+
+### PLA-0840 - Client silent-WRITE-failure class swept — 6 false-success/data-integrity bugs across 5 unowned modules
+
+- Timestamp: 2026-07-18 11:15 UTC · Agent: `CLAUDE-QA-01` (agent-02)
+- Service: cross-cutting client write boundary · Affected files: `components/modules/{notes,pets,autopilot,voting,routines-panel}.tsx` + 4 `tests/*-write-boundary.test.ts` (new)
+- Severity: **P2** — one class of false-success data loss / integrity
+- Fixes (each a browser write that dropped `{ error }` before success/optimistic UI): notes `duplicate()`/`togglePin()` (false-success/optimistic); pets `deleteRecord()` (no feedback); autopilot `resolve()` ("Bubaly handled it" while the reminder insert failed); voting single-choice clear-delete → **double vote**; routines wholesale-replace → **duplicated steps**
+- Resolution: each captures + surfaces the error before success/dependent write, matching sibling guards
+- Tests added: 4 files (11 assertions); `tsc`/`eslint` clean
+- Commits: `2923b476`,`7f8ceedb`,`cc82bf2d`,`a34c833d` · Status: Verified
+- Also swept clean (no bug): §3b null-string SSR-crash across 74 shared modules; `JSON.parse`/`localStorage` class (all `try/catch`)
+
+### PLA-0839 - Progressive-profile nudge writes could throw an unhandled rejection
+
+- Timestamp: 2026-07-18 11:00 UTC · Agent: `CLAUDE-QA-01` (agent-02) — A-17 public site
+- Affected files: `components/marketing/profile-nudge.tsx`
+- Severity: **P3** — `save()`/`skip()` awaited server actions in `startTransition` with no error handling; a failed action rejected unhandled
+- Resolution: wrapped both in `try/catch` (best-effort, matching the component's guarded read); server actions untouched
+- Commit: `3577b28e` · Status: Verified
+
+### PLA-0838 - Admin Settings surfaces the live OpenAI integration status (PR #322 merged)
+
+- Timestamp: 2026-07-18 15:57 UTC · Agent: `CLAUDE-QA-01` (agent-02) — merged an open PR into `main`
+- Service: Admin (A-17) · Route: `/admin/settings` · Affected files: `app/(app)/admin/settings/page.tsx`, `tests/admin-settings-openai-status.test.ts`
+- Severity: **P3** — the OpenAI row was a bare `!!process.env.OPENAI_API_KEY` check
+- Resolution: resolves live config via `getAIConfigView(supabase)`; shows resolved model + key source; degrades to env signal on read failure; no secret rendered. Merged PR #322 (conflict resolved keeping the OpenAI rows).
+- Tests run: `tests/admin-settings-openai-status.test.ts` green (3) · Commit: `683e3352` (merge) · Status: Verified
+- Housekeeping: also closed obsolete PRs **#321** (superseded display fix) and **#323** (SEO batch colliding on migrations 0226–0231 with the live 525-article blog)
+
 ### PLA-0837 - Fridge Chef made discoverable from the Smart Kitchen quick actions
 
 - Issue ID: PLA-0837

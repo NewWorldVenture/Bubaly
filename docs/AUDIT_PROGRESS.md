@@ -14,7 +14,14 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: closed-loop Super Admin marketing audit and wiring hardening validated with 631 test files and 3,734 tests;
+Latest increment: closed-loop Super Admin marketing audit and wiring hardening validated with 631 test files and 3,734 tests.
+Additional Claude-bot increments now logged (PLA-0838..0844, `CLAUDE-QA-01`/agent-02): public-blog accurate category tab
+counts (pagination past the 1000-row cap) + a unique, free, load-verified per-article hero photo for all 525 articles
+(migration 0232); a client silent-WRITE-failure class swept (6 false-success/data-integrity fixes across 5 unowned modules,
+plus §3b null-string SSR-crash and JSON.parse/localStorage classes swept clean); the reasoning graph read-boundary test
+realigned to codex's fail-closed loader (unblocked the shared suite RED→GREEN); a progressive-profile unhandled-rejection
+guard; the live-OpenAI admin-settings PR (#322) merged (obsolete PRs #321/#323 closed); and a migration-version collision
+(0231×2) resolved by renumbering to 0232. These are verified quality/correctness fixes, not audit-unit completions —
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
 
