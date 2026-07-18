@@ -94,7 +94,7 @@ export function AutopilotModule() {
     // it up via dueFamilyReminderNotices, same as the Front Desk's call reminders.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      await supabase.from('family_reminders').insert({
+      const { error: remErr } = await supabase.from('family_reminders').insert({
         family_id: familyId,
         created_by: userId,
         title: payload.title ?? s.title,
@@ -106,6 +106,9 @@ export function AutopilotModule() {
         status: 'pending',
         ai_suggested: true,
       });
+      // Don't claim "Bubaly handled it" / mark the suggestion executed if the
+      // reminder the user approved never actually got written.
+      if (remErr) return toastError(describeDbError(remErr));
       status = 'executed';
     }
     const { error: upErr } = await supabase.from('autopilot_suggestions')

@@ -126,11 +126,15 @@ export function VotingModule() {
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
     if (mine.has(optionId)) {
-      await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
+      const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
+      if (unErr) toastError(describeDbError(unErr));
       return;
     }
     if (poll.kind === 'single' && mine.size > 0) {
-      await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
+      // Clear the prior selection first; if this fails, do NOT insert or the
+      // single-choice poll ends up with two votes for this member.
+      const { error: clearErr } = await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
+      if (clearErr) return toastError(describeDbError(clearErr));
     }
     const { error } = await supabase.from('family_poll_votes').insert({ family_id: familyId, poll_id: poll.id, option_id: optionId, member_id: meId });
     if (error) toastError(describeDbError(error));
