@@ -1200,6 +1200,11 @@ export interface Database {
         { id?: string; post_id: string; visitor_id: string; created_at?: string },
         Partial<{ post_id: string; visitor_id: string }>
       >;
+      blog_post_saves: T<
+        { id: string; post_id: string; user_id: string; created_at: string },
+        { id?: string; post_id: string; user_id: string; created_at?: string },
+        Partial<{ post_id: string; user_id: string }>
+      >;
       blog_subscribers: T<
         { id: string; email: string; status: string; source: string; visitor_id: string | null; unsubscribe_token: string; created_at: string; updated_at: string; unsubscribed_at: string | null },
         { id?: string; email: string; status?: string; source?: string; visitor_id?: string | null; unsubscribe_token?: string; unsubscribed_at?: string | null },

@@ -7,7 +7,10 @@ export type BlogCategory =
   | 'School & Activities'
   | 'AI & Technology'
   | 'Wellness'
-  | 'Family Finances';
+  | 'Family Finances'
+  | 'Recipes & Food'
+  | 'Travel & Adventures'
+  | 'Home & Seasonal';
 
 export type BlogBlock = { type: 'p' | 'h2'; text: string };
 
@@ -221,4 +224,5 @@ export function estimateReadingTime(body: BlogBlock[]): number {
 
 export const ALL_CATEGORIES: BlogCategory[] = [
   'Parenting', 'Organization', 'School & Activities', 'AI & Technology', 'Wellness', 'Family Finances',
+  'Recipes & Food', 'Travel & Adventures', 'Home & Seasonal',
 ];

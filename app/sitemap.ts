@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts } from '@/lib/blog/posts';
+import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -45,5 +45,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticEntries, ...postEntries];
+  // Blog category tabs — crawlable landing pages for each topic.
+  const categoryEntries: MetadataRoute.Sitemap = ALL_CATEGORIES.map((c) => ({
+    url: `${SITE_URL}/blog?category=${encodeURIComponent(c)}`,
+    lastModified: now,
+    changeFrequency: 'weekly',
+    priority: 0.5,
+  }));
+
+  return [...staticEntries, ...categoryEntries, ...postEntries];
 }
