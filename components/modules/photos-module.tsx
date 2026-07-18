@@ -556,9 +556,14 @@ function UploadModal({ onClose, onUpload, progress }: {
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           onClick={() => { if (!busy) fileRef.current?.click(); }}
+          onKeyDown={(e) => { if (!busy && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
+          role="button"
+          tabIndex={busy ? -1 : 0}
+          aria-label="Upload photos or videos"
           aria-disabled={busy}
           className={cn(
             'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
+            'focus:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40',
             busy ? 'cursor-not-allowed border-border opacity-60' : 'cursor-pointer',
             dragging ? 'border-brand bg-brand/10' : !busy && 'border-border hover:border-brand/50 hover:bg-brand/5',
           )}>

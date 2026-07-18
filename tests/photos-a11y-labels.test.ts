@@ -32,6 +32,16 @@ describe('photos module icon-only controls have accessible names (A-05 a11y)', (
     expect(src).toContain(`? 'Remove from favorites' : 'Add to favorites'`);
   });
 
+  it('upload dropzone is keyboard-operable (role/tabindex/keydown + name)', () => {
+    // The click-to-browse dropzone must be reachable + activatable by keyboard
+    // (WCAG 2.1.1) and expose a name (WCAG 4.1.2), not just an onClick div.
+    const drop = src.slice(src.indexOf('onDrop={handleDrop}'), src.indexOf('onDrop={handleDrop}') + 500);
+    expect(drop).toContain('role="button"');
+    expect(drop).toMatch(/tabIndex=\{busy \? -1 : 0\}/);
+    expect(drop).toContain('onKeyDown=');
+    expect(drop).toContain(`aria-label="Upload photos or videos"`);
+  });
+
   it('no icon-only <button> is left without an accessible name', () => {
     // Every <button ...> that renders only an icon component must carry aria-label.
     // Heuristic: buttons whose 4-line block contains a JSX icon and no visible text
