@@ -26,6 +26,7 @@ const coverageBackfill = readFileSync('scripts/backfill-marketing-coverage.mjs',
 const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.mjs', 'utf8');
 const platformAdmin = readFileSync('app/(app)/admin/marketing/platform/page.tsx', 'utf8');
 const runtimeVerifier = readFileSync('scripts/verify-marketing-runtime-remote.mjs', 'utf8');
+const marketingSettings = readFileSync('app/(app)/admin/marketing/settings/page.tsx', 'utf8');
 
 describe('marketing platform spine contract', () => {
   it('defines the durable page, version, queue, vector, and provider tables', () => {
@@ -180,6 +181,9 @@ describe('marketing platform spine contract', () => {
     expect(runtimeVerifier).toContain('marketing_provider_syncs');
     expect(runtimeVerifier).toContain("const strict = process.argv.includes('--strict');");
     expect(runtimeVerifier).toContain('truthful warnings');
+    expect(runtimeVerifier).toContain('app_settings?select=value&key=eq.ai_provider');
+    expect(marketingSettings).toContain('getAIConfigView');
+    expect(marketingSettings).toContain('ai.openaiKeySet');
     expect(productionMigrationWorkflow).toContain('marketing:verify:runtime:remote');
   });
 

@@ -412,3 +412,20 @@ vector chunks, and three unconfigured external analytics providers. Reporting
 mode is intentionally non-fatal and truthful; `--strict` is available as the
 final readiness gate after owner-side runtime credentials and worker execution
 are supplied. Published as `1106e4cf`; schema and SEO/AEO coverage gates passed.
+
+### Stored AI configuration alignment checkpoint - 2026-07-18
+
+The Super Admin marketing settings page now reads the stored `app_settings`
+`ai_provider` configuration through the same `getAIConfigView` contract used by
+the worker. This prevents the console from reporting OpenAI as disconnected
+when the production key is intentionally stored in Supabase rather than the
+web process environment. The remote runtime verifier checks the same setting
+without printing the secret.
+
+Verified locally: 653 Vitest files / 3,848 tests, typecheck, production build
+(1,281 routes), and the remote runtime readback. Current production truth is
+1,809 published pages, 2,059 pending generation jobs, 0 ready vector chunks,
+embedding provider configured, and `ai_citation`, `bing_webmaster`, and
+`google_search_console` still `not_configured`. Do not mark the platform runtime
+ready until the queue is processed and `marketing:verify:runtime:remote --strict`
+passes with real provider credentials.

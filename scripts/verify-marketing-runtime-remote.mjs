@@ -29,12 +29,21 @@ async function readProviders() {
   return response.json();
 }
 
+async function readEmbeddingConfig() {
+  const response = await fetch(`${url}/rest/v1/app_settings?select=value&key=eq.ai_provider&limit=1`, { headers });
+  if (!response.ok) throw new Error(`AI configuration query failed (HTTP ${response.status}).`);
+  const rows = await response.json();
+  const value = rows[0]?.value ?? {};
+  return Boolean(value.openaiKey || process.env.OPENAI_API_KEY);
+}
+
 try {
   const jobStatuses = ['queued', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled'];
   const embeddingStatuses = ['ready', 'queued', 'failed', 'stale'];
-  const [publishedPages, providerRows, jobCounts, embeddingCounts] = await Promise.all([
+  const [publishedPages, providerRows, aiConfigured, jobCounts, embeddingCounts] = await Promise.all([
     count('marketing_pages?select=id&status=eq.published&deleted_at=is.null&limit=1', 'published pages'),
     readProviders(),
+    readEmbeddingConfig(),
     Promise.all(jobStatuses.map(async (status) => [status, await count(`marketing_generation_jobs?select=id&status=eq.${status}&limit=1`, `jobs.${status}`)])),
     Promise.all(embeddingStatuses.map(async (status) => [status, await count(`marketing_embeddings?select=id&status=eq.${status}&limit=1`, `embeddings.${status}`)])),
   ]);
@@ -46,9 +55,10 @@ try {
   const warnings = [];
   if (pending > 0) warnings.push(`marketing generation queue has ${pending.toLocaleString()} pending job${pending === 1 ? '' : 's'}`);
   if (publishedPages > 0 && embeddings.ready === 0) warnings.push('no ready marketing vector chunks are persisted');
+  if (!aiConfigured) warnings.push('embedding provider is not configured');
   if (providerWarnings.length) warnings.push(`provider readiness: ${providerWarnings.join(', ')}`);
 
-  console.log(`Marketing runtime: ${publishedPages.toLocaleString()} published pages, ${pending.toLocaleString()} pending jobs, ${embeddings.ready.toLocaleString()} ready vector chunks.`);
+  console.log(`Marketing runtime: ${publishedPages.toLocaleString()} published pages, ${pending.toLocaleString()} pending jobs, ${embeddings.ready.toLocaleString()} ready vector chunks, embedding provider ${aiConfigured ? 'configured' : 'not configured'}.`);
   for (const warning of warnings) console.warn(`WARN ${warning}`);
 
   if (strict && warnings.length) {
