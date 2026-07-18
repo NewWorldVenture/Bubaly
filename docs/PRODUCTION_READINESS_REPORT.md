@@ -1,11 +1,16 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-18 07:13 America/New_York
+Audit snapshot: 2026-07-18 08:20 America/New_York
 Decision: **NO-GO**
+
+Latest checkpoint: 2026-07-18 12:15 America/New_York. The unified reasoning
+engine now records failed Operating Index, relationship graph, and family signal
+reads, marks reports degraded, persists safe source labels, and surfaces a
+visible warning on `/dashboard/reasoning`.
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 627 Vitest files and 3,721 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
+- 629 Vitest files and 3,726 tests pass in the latest single-worker constrained full local gate. A two-worker retry produced five worker exits after 3,238 assertions; the single-worker rerun completed without unhandled errors.
 - Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
 - All 11 required live schema probes pass.

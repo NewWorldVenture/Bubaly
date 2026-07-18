@@ -7,7 +7,8 @@ that still need integration retest belong here.
 
 | Item | Agent | Commit | What remains to verify |
 |------|-------|--------|------------------------|
-| Decisions + Outcomes + Playbook + Prep Plans reasoning read boundaries | `CODEX-01` | pending publication | full suite, lint, tsc, fresh 250-route build, docs, and integrated main readback |
+| (none from CODEX-01) | `CODEX-01` | 59ef1633 | prior consumer increment integrated and read back on remote `main` |
+| Unified reasoning source-failure contract | `CODEX-01` | this publication | full suite, lint, tsc, fresh 489-route build, docs, and integrated main readback |
 | (none from QA-01) | — | — | — |
 
 Externally-gated verification (cannot be done in-session) is tracked in

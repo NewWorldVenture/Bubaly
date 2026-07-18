@@ -6,6 +6,7 @@ import {
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
+import { ErrorState } from '@/components/ui/states';
 import { loadAndSnapshotReasoning } from '@/lib/reasoning/engine-server';
 import type { ReasoningQuestionId } from '@/lib/reasoning/engine';
 import { cn } from '@/lib/utils/cn';
@@ -32,6 +33,7 @@ export default async function ReasoningPage() {
   const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id);
 
   const attention = report.answers.filter((a) => a.status === 'attention').length;
+  const hasReadErrors = report.readErrors.length > 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -47,18 +49,28 @@ export default async function ReasoningPage() {
             <p className="text-sm text-fg">
               <span className="font-medium">All clear.</span> Nothing needs the family right now — you’re in good shape.
             </p>
+          ) : hasReadErrors ? (
+            <p className="text-sm text-fg">
+              <span className="font-medium">Some reasoning data is unavailable.</span> Review the available areas and refresh before treating this report as complete.
+            </p>
           ) : (
             <p className="text-sm text-fg">
               <span className="font-medium">{attention} of 6</span> areas need your attention this week.
             </p>
           )}
-          {report.allClear && (
+          {report.allClear && !hasReadErrors && (
             <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" /> All clear
             </span>
           )}
         </div>
       </section>
+
+      {hasReadErrors && (
+        <div className="mb-5">
+          <ErrorState message="Some Family Reasoning data could not be loaded from Supabase. Results may be incomplete. Refresh and try again." />
+        </div>
+      )}
 
       <div className="grid gap-2.5 sm:grid-cols-2">
         {report.answers.map((a) => {

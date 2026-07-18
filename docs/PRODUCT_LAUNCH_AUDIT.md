@@ -2845,6 +2845,19 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: apply + idempotent re-apply on a clean PG16 bootstrap; enum-column introspection; VERIFY row counts.
 - Commit: this push.
 
+### PLA-0826 - Unified reasoning source-failure contract (A-05/A-15)
+
+- Timestamp: 2026-07-18 12:15 UTC.
+- The server-side reasoning loader now records failed Operating Index,
+  relationship-graph, and family-signal reads instead of silently treating
+  them as calm input. Degraded reports cannot present an unqualified all-clear.
+- Daily reasoning summaries persist only the typed source names and degraded
+  flag. `/dashboard/reasoning` keeps the six answers visible while showing an
+  explicit incomplete-data warning.
+- Verification: focused 13/13 tests; full 629-file / 3,726-test suite; lint;
+  typecheck; fresh production build generating 489 routes.
+- Publication: this atomic increment, pending remote readback.
+
 ### PLA-0780 - Blog: 525 new production-ready articles + SEO/AEO + sign-in-gated saves (A-17 marketing)
 
 - Timestamp: 2026-07-18 15:40 UTC · Service: A-17 marketing/content (public /blog)

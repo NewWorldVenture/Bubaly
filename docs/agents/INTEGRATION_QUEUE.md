@@ -14,6 +14,7 @@ backlog.
 | §3b crash sweep + class docs | QA-01 | 8e8d0c47 | read-only sweep | yes | yes |
 | next build gate GREEN | QA-01 | c236f344 | next build exit 0 | yes | yes |
 | Concierge + Briefing + Graph reasoning read boundaries + Windows test guards | CODEX-01 | fba93554 | 619 Vitest files / 3,690 tests, lint, tsc, fresh 250-route build, remote readback | yes | yes |
-| Decisions + Outcomes + Playbook + Prep Plans reasoning read boundaries | CODEX-01 | pending publication | 627 Vitest files / 3,721 tests, lint, tsc, fresh 489-route build; focused 4/4 tests | pending | pending |
+| Decisions + Outcomes + Playbook + Prep Plans reasoning read boundaries | CODEX-01 | 59ef1633 | 627 Vitest files / 3,721 tests, lint, tsc, fresh 489-route build; focused 4/4 tests | yes | yes |
+| Unified reasoning source-failure contract | CODEX-01 | this publication | 629 Vitest files / 3,726 tests, lint, tsc, fresh 489-route build; focused 13/13 tests | pending | pending |
 
 Nothing is currently awaiting integration from QA-01.

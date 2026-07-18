@@ -14,15 +14,25 @@ Formula: `verified completed weight / total audit weight * 100`
 
 Current calculation: `10 / 100 * 100 = 10.0%`
 
-Latest increment: Concierge, Briefing, Knowledge Graph, Decisions, Outcomes, Playbook, and Prep Plans reasoning read boundaries plus Windows test-portability guards validated with 627 test files and 3,721 tests;
+Latest increment: Unified reasoning source-failure contract plus the preceding dashboard reasoning read boundaries validated with 629 test files and 3,726 tests;
 the weighted completion remains 10.0% because the broader route, role, live Supabase, and deployment gates are
 not yet complete.
+
+## Latest Checkpoint
+
+At 2026-07-18 12:15 UTC, the unified reasoning engine now records failed live
+Operating Index, relationship graph, and family signal reads, prevents degraded
+reports from claiming all-clear, persists safe source labels, and shows a
+visible warning on `/dashboard/reasoning`. Focused 13/13, full 629-file / 3,726-
+test, lint, typecheck, and fresh 489-route build gates passed. The launch
+decision remains NO-GO because live Supabase, role/RLS, integration, CI, and
+deployment evidence is still incomplete.
 
 ## Weighted Inventory
 
 | ID | Audit unit | Weight | Status | Verified evidence | Next completion gate |
 | --- | --- | ---: | --- | --- | --- |
-| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 627 Vitest files, 3,721 tests; fresh 489-route production build; lint/typecheck/audit | Keep green after every repair |
+| A-01 | Build, lint, typecheck, dependency and CI gates | 5 | Verified | 629 Vitest files, 3,726 tests; fresh 489-route production build; lint/typecheck/audit | Keep green after every repair |
 | A-02 | Supabase migration, schema probe and independent seed baseline | 5 | Verified | 230 migration audit through 0214; 11 live schema probes; 600-record seed invariant | Verify remote migration ledger and seed execution |
 | A-03 | Authentication, tenant isolation and RLS | 7 | In progress | Auth/admin shell failure contracts, OAuth membership fail-closed handling, Admin Security/Auth Admin read-boundary handling, middleware public/internal API boundary tests, tenant/RLS contracts, migrations 0211/0212, and incomplete-family context fail-closed handling; live Auth Admin and cross-tenant probes still open | Apply 0211/0212, test every role/family boundary/session edge, and run live RLS paths |
 | A-04 | Onboarding, invitations, household roles and subscription gates | 4 | In progress | Replay-safe keyed finalization, per-user family claim, locked first-family provisioning contracts, fail-closed profile/compatibility provisioning reads and writes, and retryable Super Admin Onboarding Audit reads; focused onboarding/migration tests; live invite/tier/RLS evidence pending | Page/workflow/role matrix plus live invite and tier tests |

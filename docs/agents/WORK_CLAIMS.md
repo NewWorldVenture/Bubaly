@@ -22,3 +22,4 @@ board wins.
   conflicts.
 
 | C-CODEX-002 | `CODEX-01` | A-05 reasoning-consumer read boundaries | `app/(app)/dashboard/{decisions,outcomes,playbook,prep-plans}/page.tsx` + matching `tests/*-reasoning-read-boundary.test.ts` | 2026-07-18 11:20 | CODE COMPLETE; focused tests and typecheck passed; awaiting full integration gate |
+| C-CODEX-003 | `CODEX-01` | A-05/A-15 unified reasoning source-failure contract | `lib/reasoning/{engine,engine-server}.ts`, `app/(app)/dashboard/reasoning/page.tsx`, `tests/reasoning-*` | 2026-07-18 12:15 | CODE COMPLETE; full gate passed; this publication |

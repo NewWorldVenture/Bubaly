@@ -67,9 +67,8 @@ bash docs/audit/verify-pg.sh down
 - JSON.parse/localStorage crash — swept clean (all try/catch) (agent-02).
 
 ## Immediate next safe task (for whoever resumes as QA/cross-cutting)
-Finish the Codex reasoning-consumer increment: inspect the staged/uncommitted
-route/test/docs delta, commit it only after the gates remain green, fetch and
-rebase on `origin/main`, then publish and verify remote readback. After that,
+Publish the Codex unified reasoning source-failure increment after fetching and
+rebasing on `origin/main`, then verify remote readback. After that,
 continue the client-boundary hardening sweep into **`components/`
 sub-directories outside `components/modules/`** (e.g. `components/marketplace/`,
 `components/wallet/`, `components/dashboard/` non-A-05 leaf widgets) for the same

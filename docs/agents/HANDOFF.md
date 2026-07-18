@@ -1,5 +1,11 @@
 # HANDOFF
 
+## 2026-07-18 12:15 - CODEX-01
+- The four consumer boundary repairs are integrated on remote `main` at `59ef1633`.
+- The next atomic unit records failed Operating Index, relationship-graph, and family-signal reads in the unified reasoning report, prevents degraded reports from showing an unqualified all-clear, persists safe source labels, and renders a visible warning on `/dashboard/reasoning`.
+- Focused checks pass (13 tests), the constrained full gate passes (629 files / 3,726 tests), lint and typecheck pass, and a fresh production build generated all 489 routes.
+- This unit is documented locally and ready for fetch/rebase/push; no unrelated files are included.
+
 Reassignments and preserved-work records on session boundaries.
 
 ## 2026-07-18 11:30 — QA-01 (agent-02)
