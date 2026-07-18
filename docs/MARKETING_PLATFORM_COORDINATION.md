@@ -392,3 +392,13 @@ per-provider `configured`, `status`, and `rows` fields. Missing Search Console,
 Bing Webmaster, or AI-citation credentials remain explicitly `not_configured`; no
 rankings or citations are fabricated. Published to `main` as `8379895a` and
 `9e2f6a6e`; full local gates plus remote schema/access/coverage/asset gates passed.
+
+### Worker persistence checkpoint — 2026-07-18
+
+The durable marketing worker now fails closed on every state-changing Supabase
+write: idempotency reads, page-version snapshots, AEO replacement, success/failure
+job transitions, and the failure-state fallback. Job transitions are guarded by
+the claimed `running` status, and an inability to persist a failure escalates the
+cron response instead of silently leaving a job stranded. Published as `cb679fd4`;
+653 test files / 3,847 tests, sequential typecheck, production build (1,281
+routes), dependency audit, and all four remote marketing gates passed.
