@@ -44,4 +44,13 @@ describe('blog covers are free + unique (MKT-IMG / LB-016)', () => {
     expect(articlePage).not.toContain('loremflickr');
     expect(listPage).not.toContain('loremflickr');
   });
+
+  it('a migration purges the dead loremflickr URLs from the database', () => {
+    // Belt-and-suspenders: the render layer strips them, and 0231 removes them at
+    // the source so the production DB stores zero unverified-license image URLs.
+    const cleanup = fs.readFileSync('supabase/migrations/0231_blog_drop_loremflickr_covers.sql', 'utf8');
+    expect(cleanup).toMatch(/update\s+public\.blog_posts/i);
+    expect(cleanup).toContain("hero_image_url = null");
+    expect(cleanup).toMatch(/where hero_image_url like '%loremflickr\.com%'/i);
+  });
 });

@@ -27,7 +27,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Tests run: guard green (4); `tsc --noEmit` clean; `eslint` clean on all changed files; `next build` green
 - Validation evidence: preview of 12 generated covers (incl. 3 same-category "Parenting" posts) confirms per-title visual uniqueness; grep confirms no rendered cover references loremflickr
 - Commit: (this increment) · Integration commit: same (pushed to `main`)
-- Status: Verified · Remaining dependencies: optional future migration to null the dead `0226` loremflickr URLs
+- Status: Verified · Remaining dependencies: none — migration `0231_blog_drop_loremflickr_covers.sql` nulls the dead `0226` loremflickr URLs at the DB source (migration audit passes; next 0232)
 - Lane note: A-17 (marketing) is codex's active lane; this was executed under the product owner's direct request + that lane's own MKT-4 task (which names agent-05). Logged in `docs/MARKETING_PLATFORM_COORDINATION.md §6c` + LB-016.
 
 ### PLA-0823 - Calendar mini-calendar highlighted the week's Monday, not today; no way to compare members side by side

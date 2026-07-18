@@ -179,9 +179,10 @@ present. Changes:
 - `next.config.mjs` — `loremflickr.com` removed from `images.remotePatterns`
   (nothing renders it anymore; a stray URL can no longer reach `next/image`).
 - Guard: `tests/blog-cover-free-images.test.ts` (4). `tsc` + `eslint` + `next build`
-  green. Note: migration `0226`'s stored URLs are left as-is (applied migration,
-  not edited) but are **never rendered** — dead data, stripped on read. A future
-  cleanup can null them in a new migration.
+  green. Migration `0226`'s applied INSERT is left untouched, but new migration
+  **`0231_blog_drop_loremflickr_covers.sql`** nulls every `blog_posts.hero_image_url`
+  still pointing at loremflickr — so the production DB stores **zero**
+  unverified-license image URLs (belt-and-suspenders with the render-layer strip).
 
 ### 6d. Gate corrections to §4 — now RESOLVED
 - Row "Image integrity (free/unique/no-dup)" → **✅ SATISFIED** via §6c
