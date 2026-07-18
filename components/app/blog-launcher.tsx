@@ -5,7 +5,13 @@
 // blog is embedded same-origin (see the SAMEORIGIN frame header scoped to
 // /blog in next.config.mjs) with an "open in new tab" fallback. The icon uses
 // theme tokens (text-muted / text-fg / bg-surface) so it adapts to light + dark.
+//
+// The modal is PORTALED to <body> (so it escapes the header's backdrop-blur
+// containing block, which would otherwise clip a `fixed` overlay) and its left
+// edge is inset to the sidebar width on desktop — so it covers and blurs ONLY
+// the main content area, leaving the left navigation crisp and usable.
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, ExternalLink, X } from 'lucide-react';
 
 const BLOG_URL = '/blog';
@@ -13,6 +19,9 @@ const BLOG_URL = '/blog';
 export function BlogLauncher() {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Close on Escape + lock body scroll while the modal is up.
   useEffect(() => {
@@ -28,6 +37,77 @@ export function BlogLauncher() {
   }, [open]);
 
   const openModal = useCallback(() => { setLoaded(false); setOpen(true); }, []);
+  const close = useCallback(() => setOpen(false), []);
+
+  const modal = (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6 lg:left-[var(--sidebar-width)]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bubaly Blog"
+    >
+      {/* Scrim — blurs the main content behind it. Because the overlay's left
+          edge is the sidebar width on desktop, the left nav is NOT blurred. */}
+      <div
+        className="absolute inset-0 bg-black/55 backdrop-blur-md animate-fade-in"
+        onClick={close}
+        aria-hidden
+      />
+
+      {/* Panel */}
+      <div className="relative flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-glass animate-fade-in">
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-bg/70 px-4 py-3 backdrop-blur-xl">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand-text">
+              <BookOpen className="h-4 w-4" />
+            </span>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-fg">Bubaly Blog</p>
+              <p className="text-xs text-muted">Tips, stories &amp; insights for modern families</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <a
+              href={BLOG_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg"
+              title="Open the blog in a new tab"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Open in new tab</span>
+            </a>
+            {/* Close button — always visible top-right of the pop-up. */}
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close blog"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated/60 px-2.5 py-1.5 text-xs font-semibold text-fg transition hover:bg-elevated"
+            >
+              <X className="h-4 w-4" />
+              <span className="hidden sm:inline">Close</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Embedded blog — same-origin, fully navigable */}
+        <div className="relative flex-1 bg-bg">
+          {!loaded && (
+            <div className="absolute inset-0 grid place-items-center text-sm text-muted">
+              Loading the blog…
+            </div>
+          )}
+          <iframe
+            src={BLOG_URL}
+            title="Bubaly Blog"
+            onLoad={() => setLoaded(true)}
+            className="h-full w-full border-0"
+            loading="eager"
+          />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -42,72 +122,7 @@ export function BlogLauncher() {
         <BookOpen className="h-5 w-5" />
       </button>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Bubaly Blog"
-        >
-          {/* Scrim */}
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
-            onClick={() => setOpen(false)}
-            aria-hidden
-          />
-
-          {/* Panel */}
-          <div className="relative flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-glass animate-fade-in">
-            <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-bg/70 px-4 py-3 backdrop-blur-xl">
-              <div className="flex items-center gap-2.5">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand-text">
-                  <BookOpen className="h-4.5 w-4.5" />
-                </span>
-                <div className="leading-tight">
-                  <p className="text-sm font-semibold text-fg">Bubaly Blog</p>
-                  <p className="text-xs text-muted">Tips, stories &amp; insights for modern families</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <a
-                  href={BLOG_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg"
-                  title="Open the blog in a new tab"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Open in new tab</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close blog"
-                  className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Embedded blog — same-origin, fully navigable */}
-            <div className="relative flex-1 bg-bg">
-              {!loaded && (
-                <div className="absolute inset-0 grid place-items-center text-sm text-muted">
-                  Loading the blog…
-                </div>
-              )}
-              <iframe
-                src={BLOG_URL}
-                title="Bubaly Blog"
-                onLoad={() => setLoaded(true)}
-                className="h-full w-full border-0"
-                loading="eager"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {open && mounted ? createPortal(modal, document.body) : null}
     </>
   );
 }

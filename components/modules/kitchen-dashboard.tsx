@@ -97,6 +97,9 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
             <Link href="/dashboard/grocery" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
               <ShoppingCart className="h-4 w-4" /> Grocery {data.groceryOpen > 0 && <span className="rounded-full bg-brand/15 px-1.5 text-xs font-bold text-brand-text">{data.groceryOpen}</span>}
             </Link>
+            <Link href="/dashboard/fridge-chef" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
+              <Refrigerator className="h-4 w-4" /> Fridge Chef
+            </Link>
           </div>
         </div>
 

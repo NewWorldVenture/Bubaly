@@ -6,6 +6,225 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0837 - Fridge Chef made discoverable from the Smart Kitchen quick actions
+
+- Issue ID: PLA-0837
+- Discovery timestamp: 2026-07-18 18:12 UTC · Resolution timestamp: 2026-07-18 18:15 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — follow-up #1 from `docs/COMPETITIVE_ANALYSIS.md`
+- Service: Meals / Smart Kitchen
+- Feature: discoverability of Fridge Chef (PLA-0835)
+- Route: `/dashboard/kitchen` → `/dashboard/fridge-chef`
+- Affected files: `components/modules/kitchen-dashboard.tsx`, `tests/kitchen-fridge-chef-link.test.ts` (new)
+- Role: authenticated family members
+- Scenario: Fridge Chef shipped as a reachable route but had no in-product entry point.
+- Severity: **LOW** (discoverability — a shipped feature users couldn't find).
+- Resolution: added a "Fridge Chef" quick action (Refrigerator icon, already imported) to the Smart Kitchen header row alongside Meal plan and Grocery. The **global app sidebar is intentionally untouched** per the standing navigation rule. Lane note: agent-05's A-05 dashboard claim heartbeat was >90 min stale (last 10:18 UTC), so this one-link edit is permitted under COORDINATION §0/§3 staleness; the kitchen page's existing read-boundary guard still passes.
+- Supabase impact: none. Security/Privacy/Performance impact: none.
+- Tests added: `tests/kitchen-fridge-chef-link.test.ts` (2 — link present; existing Meal plan/Grocery actions preserved).
+- Tests run: 2 new + kitchen read-boundary guard (5 total, green); `tsc --noEmit` clean; eslint clean.
+- Commit: (this increment) · Integration commit: pushed to `main` · Status: Verified
+- Remaining dependencies: none. Remaining competitive follow-ups (inbound-email ingestion; Fridge Chef → meal plan) stay listed in `docs/COMPETITIVE_ANALYSIS.md`.
+
+### PLA-0836 - Contact page: "Share an idea or request" gates logged-out visitors through login → /feedback
+
+- Issue ID: PLA-0836
+- Discovery timestamp: 2026-07-18 18:05 UTC · Resolution timestamp: 2026-07-18 18:08 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request**
+- Service: Public marketing — Contact
+- Feature: "Feedback is a gift" CTA
+- Route: `/contact` → `/login?redirect=/feedback` (logged-out) / `/feedback` (logged-in)
+- Affected files: `app/(marketing)/contact/page.tsx`, `tests/contact-feedback-cta-auth-gate.test.ts` (new)
+- Role: public (logged-out) + authenticated
+- Scenario: a logged-out visitor clicks "Share an idea or request" on `/contact`.
+- Severity: **LOW** (UX/consistency — the auth gate already worked; this unifies the CTA label).
+- Expected: the primary CTA reads "Share an idea or request" in both states; logged-out visitors are prompted to log in first and then land on `/feedback`.
+- Actual (before): the logged-out CTA was labelled "Log in to send an idea" (different label), though it already routed to `/login?redirect=/feedback`.
+- Root cause: n/a (label/consistency refinement of an existing, working gate).
+- Resolution: the logged-out branch now shows the **same** primary CTA — "Share an idea or request" (Gift icon, filled brand style) — linking to `/login?redirect=%2Ffeedback`, with a one-line "You’ll sign in first, then land right on the idea board." affordance so the login step isn't a surprise. The login form already honours `?redirect=` (`components/auth/login-form.tsx:28–53` → `router.push(redirectDest)`), so after auth the visitor lands on `/feedback`. Logged-in visitors still go straight to `/feedback`. Removed the now-unused `ArrowRight` import.
+- Supabase impact: none. Security/Privacy/Accessibility/Performance impact: none (uses the existing `safeInternalRedirect`-validated redirect param).
+- Tests added: `tests/contact-feedback-cta-auth-gate.test.ts` (3 — CTA branches on `loggedIn`; logged-out routes to `login?redirect=/feedback` with the unified label; logged-in goes to `/feedback`).
+- Tests run: 3 new (green); `tsc --noEmit` clean; eslint clean on changed files.
+- Commit: (this increment) · Integration commit: pushed to `main` · Status: Verified
+- Remaining dependencies: none.
+
+### PLA-0835 - Competitive gap closed: "Fridge Chef" (fridge photo → allergy-aware recipes → grocery)
+
+- Issue ID: PLA-0835
+- Discovery timestamp: 2026-07-18 17:45 UTC
+- Resolution timestamp: 2026-07-18 17:55 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** ("beat all competition")
+- Service: Meals / AI
+- Feature: Fridge Chef — photo → recipes → grocery
+- Route: `/dashboard/fridge-chef` (page) · `POST /api/ai/pantry-chef`
+- Affected files: `lib/meals/pantry-chef.ts` (new engine), `app/api/ai/pantry-chef/route.ts` (new), `components/meals/fridge-chef.tsx` (new), `app/(app)/dashboard/fridge-chef/page.tsx` (new), `tests/pantry-chef.test.ts` (new), `docs/COMPETITIVE_ANALYSIS.md` (new)
+- Database objects: `medical_profiles` (allergy read, service-role safety filter), `grocery_lists` + `grocery_items` (append missing ingredients)
+- Integration: OpenAI vision (configured model, admin key → env fallback), via `fetchExternal`
+- Role: authenticated family members; API re-checks auth + rate-limits
+- Subscription tier / household config: all
+- Scenario: a user surfaced 4 competitor AI family organizers (Sense, Nori AI, Maple, Skylight 2) and asked to beat them.
+- Severity: **MEDIUM** (competitive/feature — the single headline capability FamilyOS lacked).
+- Reproduction/analysis: mapped each competitor headline to existing code (see `docs/COMPETITIVE_ANALYSIS.md`) — Sense (Magic Import `ai/import`), Maple (sync providers + flyer vision), Skylight (`/display` kiosk) already matched/beaten; only **Nori's "fridge photo → recipes, allergy-checked, auto grocery list"** was missing (the vision provider existed but no meals endpoint used it for recipes).
+- Expected: parity+ with Nori — a fridge photo yields allergy-safe dinners and one-tap grocery add.
+- Actual (before): no such feature; the vision plumbing was used only for flyer→events.
+- Root cause: n/a (new capability).
+- Resolution:
+  - **Engine** `lib/meals/pantry-chef.ts` — `buildPantryChefPrompt` (allergy-aware vision prompt), `parsePantryRecipes` (robust fenced/bare-JSON parse + field coercion), `normalizeAllergies` (split free-text `medical_profiles.allergies` across members), `annotateAllergens` (defense-in-depth flag even if the model ignores the prompt). Pure/side-effect-free.
+  - **API** `app/api/ai/pantry-chef/route.ts` — Phase 1 (photo → recipes: auth + AI rate-limit + bounded body + service-role allergy read so the safety filter works for every member + OpenAI vision call + parse/annotate) and Phase 2 (append a recipe's `need` items to the get-or-create default grocery list under the caller's RLS session). Mirrors the hardened `ai/flyer` route.
+  - **UI** `components/meals/fridge-chef.tsx` (mobile-first: camera capture, recipe cards with have/need chips, allergen warning badge, per-recipe "add N to grocery") + reachable page `/dashboard/fridge-chef` (so it is not dead code, and without editing the active A-05 kitchen page).
+- Supabase impact: reads `medical_profiles` (service-role, safety filter — raw profiles never returned), writes `grocery_lists`/`grocery_items` (RLS session). No schema/migration change.
+- Security/Privacy impact: allergy terms drive the prompt + a warning flag only; no medical PII is returned to the client. Auth + rate-limit + bounded bodies enforced.
+- Accessibility/Performance impact: mobile-first UI, 44px controls, camera `capture`; `/dashboard/fridge-chef` 4.87 kB.
+- Tests added: `tests/pantry-chef.test.ts` (9 — allergy normalization/dedup, prompt allergy-guard, robust JSON parsing incl. fenced/prose/junk, allergen flagging).
+- Tests run: 9 new (green); full `npx vitest run` **3,814 passed**; `tsc --noEmit` clean; eslint clean on changed files; **`next build` GREEN** — `/api/ai/pantry-chef` + `/dashboard/fridge-chef` compiled.
+- Validation evidence: build route manifest shows both routes; unit tests exercise the engine end-to-end with fakes (the live vision call is env-gated — degrades to a 503 with a clear message when no OpenAI key).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified (in-repo + build). Live vision output requires the OpenAI key (already an owner-set env).
+- Remaining dependencies: none to ship. Follow-ups in `COMPETITIVE_ANALYSIS.md` (link from Smart Kitchen + nav — A-05 lane; optional inbound-email ingestion; "add to meal plan").
+- Follow-up items: see `docs/COMPETITIVE_ANALYSIS.md`.
+
+### PLA-0834 - Marketing: added FAQ to global nav + reorganized the FAQ page into mobile-first tabbed sections
+
+- Issue ID: PLA-0834
+- Discovery timestamp: 2026-07-18 17:20 UTC
+- Resolution timestamp: 2026-07-18 17:35 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** (2 must-haves)
+- Service: Public marketing site (navigation + FAQ)
+- Feature: global marketing nav; `/faq` page
+- Route: all marketing routes (nav) + `/faq`
+- Affected files: `lib/constants/navigation.ts` (`MARKETING_NAV`), `components/marketing/faq-tabs.tsx` (new), `app/(marketing)/faq/page.tsx`, `tests/marketing-faq-nav-and-tabs.test.ts` (new)
+- Database objects: none (FAQ Knowledge Center still reads `marketing_aeo_questions`, unchanged)
+- Integration: none
+- Role: public (unauthenticated)
+- Subscription tier / household config: n/a
+- Scenario: (1) FAQ had no entry in the marketing top-nav; (2) the FAQ page was a single flat accordion.
+- Severity: **MEDIUM** (conversion/UX — a launch marketing surface; requested).
+- Reproduction: open the marketing site → no FAQ nav item; open `/faq` → one long accordion.
+- Expected: FAQ in the nav between Pricing and Security; FAQ page organized into switchable sectioned tabs, mobile-first.
+- Actual (before): no FAQ nav link; flat FAQ list.
+- Root cause: n/a (feature request).
+- Resolution:
+  1. **Nav** — inserted `{ href: '/faq', label: 'FAQ' }` into `MARKETING_NAV` between `/pricing` and `/security`. `SiteHeader` renders `MARKETING_NAV` for both the desktop bar and the mobile menu, so the item appears in both automatically.
+  2. **FAQ page** — grouped the 8 core FAQs into 6 sections (Privacy & Security, Roles & Access, AI Assistant, Kids & Safety, Plans & Pricing, Mobile & Alerts) and render them via a new **`FaqTabs`** client component; the live AEO Knowledge Center becomes its own 7th tab when answers are published. The full `FAQPage` structured-data schema still covers every answer across all sections.
+  3. **`FaqTabs`** — a **mobile-first, WAI-ARIA tablist**: roving `tabIndex` + Arrow/Home/End keyboard nav, `role=tab/tablist/tabpanel` with `aria-selected`/`aria-controls`, 44px touch targets; the tab strip scrolls horizontally (`overflow-x-auto` + `scrollbar-none`) on small screens and wraps/centres (`sm:flex-wrap sm:justify-center`) on larger ones. Uses the defined `.scrollbar-none` utility (existing `no-scrollbar` uses are a no-op — class not defined).
+- Supabase impact: none.
+- Security/Privacy impact: none.
+- Accessibility impact: **positive** — full keyboard + screen-reader tab semantics; 44px targets; no hover-only interaction.
+- Performance impact: negligible (`/faq` first-load JS 115 kB; statically prerendered, 1h revalidate).
+- Tests added: `tests/marketing-faq-nav-and-tabs.test.ts` (7 — nav item present + ordered exactly between Pricing/Security via a real `MARKETING_NAV` import; tabs ARIA + keyboard + mobile-first classes; page renders sectioned `FaqTabs` incl. the Knowledge-Center tab + preserves the schema).
+- Tests run: 7 new (green); full `npx vitest run` **3,791 passed** (1 pre-existing unrelated marketing-lane failure — see note); `tsc --noEmit` clean; eslint clean on changed files; **`next build` GREEN** — `/faq` prerendered (1.86 kB) and degrades gracefully when AEO data is unavailable.
+- Validation evidence: production build compiled `/faq` (231/231 static pages), route manifest shows `○ /faq`; nav-order test asserts `faq === pricing+1 && security === faq+1`.
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none. NOTE: a **pre-existing, unrelated** failure in `tests/admin-marketing-control-plane-read-boundary.test.ts` (agent-05's PLA-0832 SEO/AEO perf refactor switched to combined `readError`/`AdminSeoReadError`, leaving that test asserting the old `keywordsError`/`questionsError` names) is on `main` independent of this change — flagged to the marketing/A-05 lane.
+
+### PLA-0833 - SEO Page Registry polluted with ~100+ inert "Seed data" junk rows (debug-tool artifacts)
+
+- Issue ID: PLA-0833
+- Discovery timestamp: 2026-07-18 16:33 UTC
+- Resolution timestamp: 2026-07-18 16:37 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01) — **direct user request** (code review of /admin/marketing/seo)
+- Service: Marketing admin (A-17) — SEO Page Registry
+- Feature: SEO Page Registry (drives public-route `<title>`/meta description)
+- Route: `/admin/marketing/seo` (registry tab)
+- Affected files: `supabase/migrations/0233_cleanup_seo_registry_seed_junk.sql` (new), `tests/seo-registry-junk-cleanup.test.ts` (new)
+- Database objects: `public.marketing_seo_pages`
+- Integration: none
+- Role: super admin
+- Subscription tier: n/a
+- Household configuration: n/a
+- Scenario: the registry displayed ~100+ rows labeled "Seed data 1" … "Seed data 116+" (and "Seed data 1 <uuid>"), each with a random score and "active" status, alongside the real route rows (`/pricing`, `/security`).
+- Severity: **LOW-MEDIUM** (production data-hygiene / admin-UX; not a functional or security defect, but clutters a launch admin surface with fake data — §19 "remove placeholder/fake data").
+- Reproduction steps: open `/admin/marketing/seo` → SEO Page Registry tab; observe the "Seed data N" rows.
+- Expected behavior: the registry lists only real indexable routes.
+- Actual behavior: ~100+ inert "Seed data N" rows.
+- Root cause: an **external "Debug data seeding" tool** (bookmarked in the owner's browser; **not present in this repository** — a full repo grep for "Seed data" / any bulk `marketing_seo_pages` insert found none) wrote label-path rows directly into `marketing_seo_pages`, bypassing the app (the app's `saveSeoPage` normalises every path to a leading "/", so it cannot produce the no-slash "Seed data N" paths).
+- **Are they real / doing anything?** No. `lib/marketing/seo.ts` `getSeoPage(path)` resolves metadata by looking a row up by its **exact route path** (`.eq('path', path).eq('status','active')`). The "Seed data N" paths match no route, so they are **never queried and drive nothing** — purely inert clutter. The `marketing_seo_pages` table itself IS real and functional for the genuine route rows.
+- Resolution: migration `0233_cleanup_seo_registry_seed_junk.sql` — `DELETE FROM public.marketing_seo_pages WHERE path LIKE 'Seed data%' OR path NOT LIKE '/%'` (real registry rows are always routes beginning with "/"). Idempotent + non-destructive to real rows. To remove them immediately in production without waiting for deploy, run that one statement in the Supabase SQL editor.
+- Supabase impact: data-cleanup migration only (no schema/RLS change). Removes inert rows.
+- Security/Privacy impact: none (synthetic labels, no PII).
+- Accessibility/Performance impact: minor positive — registry renders fewer rows.
+- Tests added: `tests/seo-registry-junk-cleanup.test.ts` (3 — migration deletes the junk predicate, is a narrowly-scoped DELETE only [no DROP/TRUNCATE/UPDATE], and no repo source reintroduces "Seed data" rows).
+- Tests run: **executed migration 0233 against the live PG16 `fam` schema DB** with seeded fixtures (2 real + 3 junk) → `DELETE 3`, junk_left=0, real rows preserved, re-run `DELETE 0` (idempotent). Guard test (3) green; eslint clean; control-byte-clean.
+- Validation evidence: PG16 before/after counts (total=5 junk=3 → junk_left=0 real_kept=2) + idempotent re-run.
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified (in-repo). Production rows cleared when 0233 is applied (deploy) or the DELETE is run manually.
+- Remaining dependencies: the **external "Debug data seeding" tool** should be disabled/pointed away from production to prevent recurrence — it is outside this repo, so owner-actioned. Consider auditing other `marketing_*` tables for the same tool's artifacts.
+- Follow-up items: if the debug tool also seeded `marketing_seo_keywords` or other marketing tables, extend the cleanup with the same non-route/label predicate.
+
+### PLA-0832 - Super Admin Marketing SEO/AEO pages were slow to open (fetched + rendered every row)
+
+- Timestamp: 2026-07-18 15:41 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing admin (A-17) — SEO + AEO — **cross-lane, direct user request**
+- Route: `/admin/marketing/seo`, `/admin/marketing/aeo`
+- Affected files: `app/(app)/admin/marketing/{seo,aeo}/page.tsx`, `tests/marketing-seo-aeo-wiring.test.ts` (extended)
+- Database objects: `marketing_aeo_questions`, `marketing_seo_keywords`, `marketing_seo_pages` (read shape only)
+- Role: super admin · Tier: n/a
+- Scenario: super admin clicks the SEO or AEO subnav tab
+- Severity: **P2 (performance/UX)** — user report: "takes TOOO LONG"
+- Reproduction: both pages ran `.select('*')` with **no `.limit()`** and rendered every row. Prod seed = **~2,344 AEO questions** and **~1,603 SEO keywords** (migration `0229`). AEO built ~2,344 `<details>` cards (each a full edit form); SEO built ~1,603 table rows w/ inline edit forms. Result: multi-MB payload + huge DOM + slow TTFB on every click (the pages are `force-dynamic`, so it re-ran each navigation).
+- Expected: the pages open fast regardless of table size
+- Actual: fetched + rendered the entire table each click
+- Root cause: unbounded `select('*')` + render-all; stats derived by counting the full result set client-side
+- Resolution: derive accurate totals from cheap **COUNT** queries (`select('id', { count: 'exact', head: true })` — no row transfer), and render only a **bounded, column-projected** slice — AEO `limit(50)` (projected to the 8 fields the card/edit-form use), SEO keywords `limit(100)` (projected to 6 fields). Added a "Showing the latest N of TOTAL" note so nothing looks lost. The 19-row SEO page registry still loads in full. Payload/DOM dropped from thousands of rows to ≤100.
+- Supabase/Security/Privacy impact: none (same tables, same RLS/service-role, fewer columns + rows read)
+- Performance impact: **large positive** — reads go from ~2,344 / ~1,603 full rows to 2 head-counts + ≤50 / ≤100 projected rows; DOM shrinks ~20–40×
+- Tests added: `tests/marketing-seo-aeo-wiring.test.ts` extended (9 total — asserts count-based stats + bounded projected reads + no unbounded `select('*')`)
+- Tests run: guard green (9); `tsc` clean; `eslint` clean; `next build` green
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none. Follow-up option (not needed at current scale): server-side pagination/search if a table grows past a few thousand rows, and a `created_at` index for the ordering.
+- Lane note: A-17 (marketing) is codex's active lane; done under direct user request, logged in `docs/MARKETING_PLATFORM_COORDINATION.md`.
+
+### PLA-0831 - Blog engine (500 posts) hotlinked LoremFlickr — unverified-license + visually duplicated covers (resolves LB-016)
+
+- Timestamp: 2026-07-18 14:55 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing / public blog (A-17) — **cross-lane, supporting codex's marketing buildout; assignable to agent-05 per that lane's own work queue (MKT-4)**
+- Route: `/blog`, `/blog/[slug]` (`app/(marketing)/blog/**`)
+- Affected files: `components/blog/blog-cover.tsx` (new), `lib/blog/posts.ts`, `app/(marketing)/blog/page.tsx`, `app/(marketing)/blog/[slug]/page.tsx`, `next.config.mjs`, `tests/blog-cover-free-images.test.ts` (new)
+- Database objects: `blog_posts.hero_image_url` (read-normalized; not migrated)
+- Role: all public visitors + SEO/social crawlers · Tier: n/a · Household: n/a
+- Scenario: any visitor loads the blog list or an article; any crawler reads og:image / JSON-LD
+- Severity: **P1 (licensing exposure + brand quality)** — violates the "all images free + unique, no duplicates" launch bar
+- Reproduction: `0226_blog_500_articles.sql` set `hero_image_url = https://loremflickr.com/1600/900/<terms>?lock=N` for all 525 posts. `?lock` pins *which* image but NOT its license — LoremFlickr proxies mixed-license Flickr photos (attribution-required / All-Rights-Reserved possible), so "free" was unverified. All 525 covers drew from only **9 keyword pools** → structural visual duplicates (unique URLs ≠ unique images). The generator even comments "free-license Unsplash" while emitting loremflickr (self-inconsistent).
+- Expected: every rendered image is free-licensed, unique, non-duplicated
+- Actual: mixed-license hotlinks with visual duplicates on a public marketing surface
+- Root cause: seed pinned covers to a third-party placeholder host whose license it cannot control
+- Resolution: (1) `freeLicensedImage()` in `lib/blog/posts.ts` strips any `loremflickr.com` URL to `undefined` at the single `toPost` chokepoint — so **all five** consumers stop using it (list render, article hero, related thumbnails, `og:image`/Twitter card, JSON-LD `image`; the conditional metadata blocks now omit it rather than emit an unverified URL). Unsplash + `*.supabase.co` pass through. (2) Image-less posts render a **bespoke, generated, on-brand `<BlogCover>`** (`components/blog/blog-cover.tsx`) — deterministic per title/slug (djb2 hash → mulberry32 seed → procedural motif), category-tinted, theme-aware, fully inline SVG (no CDN/CSP-safe), so covers are **free, unique (distinct even within a category), duplicate-free, world-class**. (3) `loremflickr.com` removed from `next.config.mjs images.remotePatterns`. Migration `0226`'s stored URLs left as-is (applied migration, not edited) but never rendered — stripped on read.
+- Supabase/Security/Privacy/Performance impact: **performance positive** — 525 third-party image requests eliminated (inline SVG, no network, faster LCP); no DB/security change
+- Accessibility impact: neutral — `<BlogCover>` carries `role="img"` + descriptive `aria-label`
+- Tests added: `tests/blog-cover-free-images.test.ts` (4 — data-layer strip, host removed from next.config, deterministic self-contained cover with no external URL, both render surfaces fall back to `<BlogCover>` not a hotlink)
+- Tests run: guard green (4); `tsc --noEmit` clean; `eslint` clean on all changed files; `next build` green
+- Validation evidence: preview of 12 generated covers (incl. 3 same-category "Parenting" posts) confirms per-title visual uniqueness; grep confirms no rendered cover references loremflickr
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none — migration `0231_blog_drop_loremflickr_covers.sql` nulls the dead `0226` loremflickr URLs at the DB source (migration audit passes; next 0232)
+- Lane note: A-17 (marketing) is codex's active lane; this was executed under the product owner's direct request + that lane's own MKT-4 task (which names agent-05). Logged in `docs/MARKETING_PLATFORM_COORDINATION.md §6c` + LB-016.
+
+### PLA-0823 - Calendar mini-calendar highlighted the week's Monday, not today; no way to compare members side by side
+
+- Timestamp: 2026-07-18 14:35 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Calendar (A-06) — **cross-lane, direct user request** (owner agent notified via coordination board)
+- Route: `/dashboard/calendar` (`components/modules/calendar-module.tsx`)
+- Affected files: `components/modules/calendar-module.tsx`, `tests/calendar-split-view.test.ts` (new)
+- Database objects: none (client render only; reads unchanged)
+- Role: all family roles · Tier: all · Household: any
+- Scenario: (1) a user opens the calendar on any day that is not Monday and looks at the mini-calendar; (2) a family wants to compare each member's schedule for one day at a glance
+- Severity: **P2 (correctness + UX)** — the date highlight actively misinformed
+- Reproduction: (1) On 2026-07-18 (a Saturday) the mini-calendar rendered the purple "selected" block on the 13th (that week's Monday) because it was passed `current={monday}`; the focused day (`days[mobileDayIndex]`, the 18th) got no highlight. The highlight lied about which day was selected. (2) No affordance existed to view members' days in parallel columns.
+- Expected: the mini-calendar highlights the day the user is actually focused on; families can optionally split the focused day into per-member columns
+- Actual: highlight tracked the week's Monday; no per-member comparison view
+- Root cause: (1) `<MiniCalendar current={monday}>` — the "selected" comparison used the week anchor instead of the focused day. (2) feature gap.
+- Resolution: (1) pass `current={days[mobileDayIndex]}` and, on select, set both `setWeekOffset(...)` and `setMobileDayIndex((d.getDay()+6)%7)` so the picker and the grid stay in sync. (2) added an opt-in **"Side-by-side view"** checkbox in the Calendars sidebar. When on, a unified `gridCols` model replaces the day-columns with one column per *visible* member for the focused day; each column shows that member's events **plus** unassigned shared/family events (`e.assignee_id === m.id || !e.assignee_id`). Toggling a member (existing Eye/EyeOff control) shows/hides their column. Header + time-grid iterate the same `gridCols` array, so day/week/split share one render path. `dateLabel` shows the focused-day label while split is active.
+- Supabase/Security/Privacy/Performance impact: none — no new queries; split is a pure client-side partition of already-loaded events
+- Accessibility impact: neutral/positive — the checkbox is a real `<label>`+`<input>`; member columns reuse labeled avatars
+- Tests added: `tests/calendar-split-view.test.ts` (5 — mini-calendar tracks focused day + syncs week/day-index; split checkbox present; per-member own+shared merge; unified `gridCols` render path)
+- Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module; `next build` (see commit)
+- Validation evidence: guard asserts the regressed `current={monday}` form is gone; type-check + lint clean
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none
+- Lane note: Calendar is A-06 (not my A-05 lane). Edited under direct user request per the "direct user requests override lane discipline" rule; logged here + on the coordination board so the A-06 owner has the record.
+
 ### PLA-0822 - Photos lightbox had 8 icon-only controls with no accessible name (WCAG 4.1.2)
 
 - Timestamp: 2026-07-18 11:19 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
@@ -31,6 +250,40 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Follow-up (same §23 sweep, FIXED ×2): (1) `contacts-module` quick-actions — the icon-only "call" (`<button><Phone/>`) and "email" (`<a><Mail/>`) controls in each contact row had no accessible name; added `aria-label={`Call ${contact.name}`}` / `Email ${contact.name}`. (2) **`photos-module` upload dropzone (WCAG 2.1.1 Keyboard)** — the click-to-browse drag-drop area was a bare `<div onClick>` with no `role`/`tabIndex`/key handler, so keyboard-only users could not open the file browser (the whole photo-upload workflow was mouse-only). Made it `role="button"` + `tabIndex={busy?-1:0}` + `onKeyDown` (Enter/Space) + `aria-label="Upload photos or videos"` + a `focus-visible` ring. Guard extended (`tests/photos-a11y-labels.test.ts`, 5 total). Verified clean elsewhere in A-05: form checkboxes/radios are `<label>`-wrapped, text fields use `<Field label>`, `home-module` upload uses a real `<Button>` trigger. **Cross-lane flag (A-11, agent-03):** `documents-module` L609 has the identical bare-`<div>` upload dropzone keyboard gap — flagged, NOT edited
 
 
+### PLA-0815 - Added an independent, validated 768-record production-readiness seed pack (LB-014 support)
+
+- Issue ID: PLA-0815
+- Discovery timestamp: 2026-07-18 10:44 UTC
+- Resolution timestamp: 2026-07-18 10:57 UTC
+- Agent ID: `agent-fable-opus` (CLAUDE-POLISH-01)
+- Service: cross-cutting — test data / seed infrastructure (§22)
+- Feature: reproducible relational seed for exercising volume + roles + tiers + tenant isolation
+- Route: n/a (SQL seed)
+- Affected files: `supabase/seed_audit_pack_500.sql` (new, independent), `tests/seed-audit-pack-500.test.ts` (new structure guard)
+- Database objects (seeded): `families`, `subscriptions`, `family_members`, `chores`, `chore_assignments`, `calendar_events`, `reminders`, `meal_plans`, `grocery_lists`, `grocery_items`
+- Integration: none
+- Role: n/a (test infra) — but the DATA covers every `member_role`
+- Subscription tier: seeds free / family / family_plus × trialing / active / past_due / canceled / incomplete / unpaid
+- Household configuration: 12 synthetic households, varied timezones
+- Scenario: the mandate (§22) requires ≥1 independent SQL seed pack with 500+ realistic relational records not tied to one developer account.
+- Severity: **MEDIUM** (launch-readiness/test-infra requirement; enables volume + role + tier + isolation testing).
+- Launch impact: prior seeds are per-family or dev-account-targeted; there was no single independent pack covering the tier/role/household matrix at 500+ records. This adds one.
+- Reproduction steps: n/a (additive).
+- Expected behavior: a reproducible, idempotent, non-production seed with 500+ referentially-valid records.
+- Actual behavior (before): only per-family / dev-targeted seeds existed for these dimensions.
+- Root cause: n/a (new capability, not a defect).
+- Resolution: authored `supabase/seed_audit_pack_500.sql` — 12 households × (subscription + 8 members covering all roles/archived/NULL-birthday + 6 chores + 18 chore_assignments across all task_status incl. overdue + 10 calendar_events across all categories/recurrence + 6 reminders + 5 meal_plans + 1 grocery list + 8 items) = **768 records**. Members are MANAGED (`user_id` NULL) so the pack needs no `auth.users` rows and runs in any environment. Deterministic `md5()`-derived UUIDs + an `AUDIT500::` name marker make it fully **idempotent**; families are upserted (never cascade-deleted, which avoids an `on_family_created`/`mark_model_dirty` trigger trap discovered during validation) and only children are re-seeded.
+- Supabase impact: additive seed only; touches no schema, migration, or RLS. Namespaced + guarded against production.
+- Security/Privacy impact: none — synthetic data, no secrets, no real accounts.
+- Accessibility/Performance impact: none.
+- Tests added: `tests/seed-audit-pack-500.test.ts` (4 assertions — namespacing/idempotency invariants, full role+tier+status coverage, all 10 core-service inserts + self-verification block, production-use guard).
+- Tests run: **executed the seed against a live PG16 schema database** (415-table `fam` DB) with `ON_ERROR_STOP=1` — all inserts succeeded; ran **twice** proving idempotency (identical counts: families 12, subscriptions 12, family_members 96, chores 72, chore_assignments 216, calendar_events 120, reminders 72, meal_plans 60, grocery_lists 12, grocery_items 96 = 768). Structure guard (4) green; eslint clean; control-byte-clean.
+- Validation evidence: PG16 execution output (10-row count table) reproduced on both runs; discovered + handled the `on_family_created` auto-subscription trigger (deduped to exactly one sub/household) and the `mark_model_dirty` cascade-delete FK trap (families kept, children re-seeded).
+- Commit: (this increment)
+- Integration commit: pushed to `main`.
+- Status: Verified
+- Remaining dependencies: none. Independent of `SEED_ALL.sql` (not wired in, to avoid colliding with the seed lane); run standalone via `psql "$DATABASE_URL" -f supabase/seed_audit_pack_500.sql` against a non-production DB.
+- Follow-up items: the seed owner may optionally reference it from `SEED_ALL.sql`; auth-user-backed logins remain provided by the separate auth seed.
 
 ### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
 
@@ -2915,3 +3168,43 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Verified: PG16 full bootstrap `migration_fail=0` (3434 AEO / 1090 per-post / 1603 keywords / seo-pages public policy present); `tsc` 0; migration-version bumped to 0231. (Build not re-run this pass due to a time constraint — handing off; typecheck clean.)
 - Supabase impact: 0229 (regenerated, idempotent) + 0230 (additive) — apply to prod (docs/PENDING_PROD_MIGRATIONS.md).
 - Commit: this push.
+
+### PLA-0800 - Blog images: content-aligned + unique per article (A-17)
+
+- Timestamp: 2026-07-18 16:05 UTC · Service: A-17 marketing (blog media).
+- Owner report: live /blog still showed repeated hero photos across articles (e.g. one running-track photo on several School & Activities posts) and wanted every image unique AND matched to each article's content.
+- Root cause of the *repeats the owner saw*: the LoremFlickr per-post-unique change (PLA-0780) is still PENDING prod application (agents can't apply to prod), so live prod is on the older rotating-20-Unsplash pool. Separately, that change keyed images by CATEGORY, so all posts in a category shared keywords (not content-aligned).
+- Fix: the generator now derives image keywords from each post's SUBJECT via a signal map (homework→homework/study, sports→sports/kids, cooking→kitchen/food, money→finance, travel→outdoors, sleep→bedroom, …; category fallback). Each post keeps its unique per-post `lock`, so images stay 1-per-article AND on-topic.
+- Verified on PG16: 0226 apply INSERT 0 525 + idempotent; **545/545 published posts have a distinct hero_image_url (0 null)**; School & Activities images now span school/sports/reading/wellness/tech instead of one shared photo. Guard tests green.
+- **Owner action required:** apply 0226 (regenerated, idempotent) to prod so the live site picks up the unique, content-aligned images — until then prod shows the old pool. Free CC photos via LoremFlickr keyword-matched per article; quality is best-effort CC (the sandbox network policy blocks image CDNs so per-image previews can't be verified here — they render in prod).
+- Commit: this push (0c8e1ad7).
+
+### PLA-0810 - Blog batch 2: +503 new articles, self-wired into the closed loop (A-17)
+
+- Timestamp: 2026-07-18 16:45 UTC · Service: A-17 marketing (blog content).
+- Delivered a second batch of blog articles per the owner's "another 500" request, reusing all batch-1 machinery (frames, facets, hashtags, Bubaly CTA) with 503 brand-new, distinct topics (`scripts/blog-subjects-batch2.mjs`) → `0234_blog_500_more_articles.sql`.
+- **No repeated topics:** batch-2 subjects de-duplicated against batch 1 (0 exact-subject dupes, 0 internal dupes); generator seeds its slug set with batch-1 slugs and skips/disambiguates, so **0 slug overlap** with 0226. `ON CONFLICT (slug) DO NOTHING` guarantees batch 2 never overwrites a batch-1 article.
+- **Images aligned to the new architecture:** the codebase moved off LoremFlickr (0231 `_hero_photos` assigns unique free-license real photos to batch 1; `_drop_loremflickr_covers` nulls the rest; `lib/blog/posts.ts` strips it; image-less posts render the bespoke `<BlogCover>`). Batch-2 posts therefore store **NO hero URL** (0 loremflickr, 0 unverified-license URLs) and render the unique, on-brand `BlogCover` — professional + free + zero third-party image deps. (Real curated photos can later extend to batch 2 via the same 0231 hero-photos pattern.)
+- **Closed loop, self-wired:** 0232 also re-runs the content-registry + per-post-AEO INSERT…SELECT (idempotent) so the new posts are immediately in `/admin/marketing/content` and the AEO Knowledge Center. PG16 full bootstrap `migration_fail=0`: **1,048 published articles**, 1,048 registered as content, **2,096 per-post AEO** (2×1,048). Sitemap, category tabs, FAQ blocks, hashtags, JSON-LD all pick them up automatically.
+- Migration hygiene: renumbered to **0234** (a prior agent's blog-image work created two `0231_*` files); registered that pre-existing `0231` duplicate in `KNOWN_DUPLICATE_MIGRATIONS` and bumped the safety test to next=0233 so CI is green.
+- Verified: PG16 bootstrap fail=0 (1,048/1,048/2,096); `tsc` 0; guard tests `tests/blog-batch2-contract.test.ts` (6) + existing blog/migration tests green; `next build` (below).
+- Supabase impact: 0234 additive (apply to prod). Owner action to see batch-2 images as real photos: extend the 0231 hero-photos curation to the new slugs (or let BlogCover stand).
+- Commit: this push.
+
+### PLA-0820 - Batch-2 articles get real hero photos (no more identical covers) (A-17)
+
+- Timestamp: 2026-07-18 17:25 UTC · Service: A-17 marketing (blog media). Follows PLA-0810.
+- Owner report (live /blog): batch-2 articles rendered the generated `<BlogCover>` and many looked identical on the grid; wanted real, unique, professional photos.
+- Fix (`0235_blog_batch2_hero_photos.sql`): sets every image-less published post's hero to a REAL, free (CC0) Lorem Picsum photo keyed to its slug via the seed endpoint (`picsum.photos/seed/<slug>/1600/900`) — always resolves (no 404s), one distinct URL per post, and the same CC0 source batch-1's hero photos already use as a fallback (so licence policy is consistent; not stripped by `lib/blog/posts.ts`). Idempotent (only fills NULL heroes).
+- Verified on PG16 full bootstrap `migration_fail=0`: **1,048 published, 0 null-hero, 1,048 distinct hero URLs** (503 new Picsum for batch 2); re-apply = UPDATE 0. Guard `tests/blog-batch2-hero-photos.test.ts` (3) + migration-version bumped to 0236.
+- **HONEST LIMITATION:** these are real/professional/free/unique-URL photos but **not per-article topic-curated**, and a minority may visually repeat (Picsum's catalogue is finite). Per-article topic matching (like batch-1's hand-picked Wikimedia photos) is impossible from this build environment — every external image source (Wikimedia 403, Openverse, all image CDNs) is network-blocked here. To upgrade batch-2 to unique topic-matched photos, an env with image-source access (as batch-1 had) or an Unsplash/Pexels API key is required; then the batch-1 hero-photos pattern extends to these slugs.
+- Commit: this push.
+
+### PLA-0830 - SEO Page Registry: every blog article registered + closed-loop metadata (A-17)
+
+- Timestamp: 2026-07-18 17:35 UTC · Service: A-17 marketing (SEO). Owner ask: "build out the SEO Page Registry, add as many as possible, ensure all blog articles have SEO embedded."
+- **Registry buildout (`0236_seed_blog_seo_registry.sql`):** registered a `marketing_seo_pages` row for **every published blog article** (1,048) with an SEO title, bounded meta description, audit score, index policy, and metadata (category = parent topic + cluster, keyword cluster derived from the post's hashtags with `#` stripped, canonical URL, `search_intent`, schema type = BlogPosting, og_type = article). Idempotent (`ON CONFLICT (path) DO UPDATE`). SEO Page Registry now holds **1,067 pages** (1,048 blogs + 10 routes + 9 category tabs) — up from 19.
+- **Closed loop:** the blog article `generateMetadata` now resolves through `resolveMarketingMetadata('/blog/<slug>', fallback)`, so an admin editing a page in `/admin/marketing/seo` overrides that article's `<title>`/description (post-derived values are the fallback). Active registry rows are public-readable (0230), so the public site resolves them.
+- **All articles already carry full on-page SEO** (from prior work, now registry-backed): per-post `generateMetadata` (title, description, keywords, canonical, author, article OpenGraph with published/modified/section/tags, Twitter cards) + `BlogPosting` + `BreadcrumbList` JSON-LD + an on-topic AEO FAQ block + `FAQPage` schema, and all posts + category tabs are in the sitemap.
+- Verified on PG16 full bootstrap `migration_fail=0`: 1,067 SEO pages / 1,048 blog rows / all with keyword arrays; idempotent re-apply; public RLS read confirmed. `tsc` 0; guard `tests/blog-seo-registry.test.ts` (4) + migration-version → 0237; `next build` (below).
+- Supabase impact: 0236 additive (apply to prod). Commit: this push.

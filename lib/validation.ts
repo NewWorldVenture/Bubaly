@@ -4,9 +4,27 @@ import { z } from 'zod';
 
 export const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email address');
 
+// What's this about? — drives the support-ticket category + subject so the team
+// can triage web contacts (bug reports, feature requests, billing, etc.).
+export const CONTACT_TOPICS = [
+  { value: 'general', label: 'General question' },
+  { value: 'bug', label: 'Bug report — something’s broken' },
+  { value: 'feature', label: 'Feature request / enhancement' },
+  { value: 'billing', label: 'Billing & subscriptions' },
+  { value: 'account', label: 'Account & login help' },
+  { value: 'feedback', label: 'Feedback or a suggestion' },
+  { value: 'partnership', label: 'Partnership or press' },
+  { value: 'other', label: 'Something else' },
+] as const;
+export const CONTACT_TOPIC_VALUES = CONTACT_TOPICS.map((t) => t.value);
+export function contactTopicLabel(value: string | null | undefined): string {
+  return CONTACT_TOPICS.find((t) => t.value === value)?.label ?? 'General question';
+}
+
 export const contactSchema = z.object({
   name: z.string().trim().min(2, 'Please enter your name').max(120),
   email: emailSchema,
+  topic: z.enum(['general', 'bug', 'feature', 'billing', 'account', 'feedback', 'partnership', 'other']).default('general'),
   message: z.string().trim().min(10, 'Please add a little more detail').max(4000),
 });
 export type ContactInput = z.infer<typeof contactSchema>;

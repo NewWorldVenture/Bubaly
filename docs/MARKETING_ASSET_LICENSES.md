@@ -16,6 +16,6 @@ Run `npm run marketing:audit:assets` before publishing a shipped asset change an
 run `npm run marketing:verify:assets:remote` before publishing any Supabase-backed
 marketing image or video change. Blog hero-image writes with missing attribution,
 unknown licenses, non-HTTPS URLs, or duplicate sources are rejected by the
-`0232_blog_image_provenance.sql` trigger/index contract.
+`0238_blog_image_provenance.sql` trigger/index contract.
 The audit intentionally fails on remote raster URLs and exact duplicate bytes so
 an asset cannot silently become an unlicensed or redundant dependency.

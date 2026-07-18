@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Send, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea, Field } from '@/components/ui/input';
-import { contactSchema, fieldErrors } from '@/lib/validation';
+import { contactSchema, CONTACT_TOPICS, fieldErrors } from '@/lib/validation';
 import { useToast } from '@/components/ui/toast';
 import { describeDbError } from '@/lib/supabase/errors';
 
@@ -21,6 +21,7 @@ export function ContactForm() {
     const input = {
       name: String(form.get('name') ?? ''),
       email: String(form.get('email') ?? ''),
+      topic: String(form.get('topic') ?? 'general'),
       message: String(form.get('message') ?? ''),
     };
     const parsed = contactSchema.safeParse(input);
@@ -65,6 +66,20 @@ export function ContactForm() {
       </Field>
       <Field label="Email" error={errors.email} required>
         {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
+      </Field>
+      <Field label="What’s this about?" error={errors.topic}>
+        {(id) => (
+          <select
+            id={id}
+            name="topic"
+            defaultValue="general"
+            className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm text-fg focus-ring"
+          >
+            {CONTACT_TOPICS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        )}
       </Field>
       <Field label="Message" error={errors.message} required>
         {(id) => <Textarea id={id} name="message" placeholder="How can we help your family?" />}

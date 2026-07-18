@@ -58,6 +58,21 @@ describe('blog launcher — header button + embedded modal', () => {
     expect(launcher).toMatch(/e\.key === 'Escape'/);
   });
 
+  it('portals to <body> so the header backdrop-blur cannot clip the overlay', () => {
+    expect(launcher).toMatch(/createPortal\(modal, document\.body\)/);
+  });
+
+  it('blurs only the main content, leaving the left nav crisp', () => {
+    // overlay inset to the sidebar width on desktop + a blurred scrim
+    expect(launcher).toMatch(/lg:left-\[var\(--sidebar-width\)\]/);
+    expect(launcher).toMatch(/backdrop-blur-md/);
+  });
+
+  it('has a visible Close button (X) on the pop-up', () => {
+    expect(launcher).toMatch(/aria-label="Close blog"/);
+    expect(launcher).toMatch(/>Close</);
+  });
+
   it('uses theme tokens so the icon adapts to light + dark', () => {
     expect(launcher).toMatch(/text-muted/);
     expect(launcher).toMatch(/hover:text-fg/);

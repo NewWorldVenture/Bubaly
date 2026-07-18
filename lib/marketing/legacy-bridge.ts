@@ -61,7 +61,7 @@ export async function syncLegacyBlogToPlatform(db: MarketingDb, post: LegacyBlog
   }, { onConflict: 'path' }).select('id').single();
   if (error) {
     if (isMissingPlatformSchema(error)) {
-      console.warn('[marketing-legacy-bridge] migration 0231 is not applied; legacy blog publish remains active');
+      console.warn('[marketing-legacy-bridge] marketing platform migration is not applied; legacy blog publish remains active');
       return { available: false, pageId: null };
     }
     throw error;
@@ -114,7 +114,7 @@ export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyL
   }, { onConflict: 'path' }).select('id').single();
   if (error) {
     if (isMissingPlatformSchema(error)) {
-      console.warn('[marketing-legacy-bridge] migration 0231 is not applied; legacy landing page remains active');
+      console.warn('[marketing-legacy-bridge] marketing platform migration is not applied; legacy landing page remains active');
       return { available: false, pageId: null };
     }
     throw error;

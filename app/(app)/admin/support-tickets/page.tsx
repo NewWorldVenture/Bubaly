@@ -32,6 +32,9 @@ type TabKey = (typeof TABS)[number]['key'];
 const CATEGORY_LABELS: Record<string, string> = {
   technical: 'Technical', billing: 'Billing', account: 'Account',
   family: 'Family', general: 'General', feature_request: 'Feature Request',
+  // Contact-form topics (see lib/validation.ts CONTACT_TOPICS)
+  bug: 'Bug', feature: 'Feature Request', feedback: 'Feedback',
+  partnership: 'Partnership', other: 'Other',
 };
 
 const PRIORITY_TONE: Record<string, 'danger' | 'warning' | 'neutral'> = {
@@ -50,6 +53,7 @@ const STATUS_LABEL: Record<string, string> = {
 const CATEGORY_TONE: Record<string, 'brand' | 'warning' | 'success' | 'neutral' | 'danger'> = {
   account: 'brand', billing: 'warning', family: 'success', technical: 'danger',
   general: 'neutral', feature_request: 'neutral',
+  bug: 'danger', feature: 'brand', feedback: 'success', partnership: 'brand', other: 'neutral',
 };
 
 const STATUS_COLORS: Record<string, string> = {

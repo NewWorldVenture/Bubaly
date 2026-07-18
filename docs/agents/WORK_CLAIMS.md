@@ -13,6 +13,7 @@ board wins.
 | C-FE-005 | `CLAUDE-FRONTEND-01` (agent-05) | A-05 dashboard command-surface verification + hardening | `app/(app)/dashboard/**`, `app/(app)/display/**`, `components/dashboard/**`, `components/modules/*` (A-05 only) | 2026-07-18 10:18 | IN PROGRESS |
 | C-POLISH-001 | `agent-fable-opus` | App-wide UTF-8 mojibake repair (cross-cutting, one-shot) | 79 files under `app/`,`components/`,`lib/` (string content only) + `tests/no-mojibake-source.test.ts` | 2026-07-18 10:12 | DONE (`5c58ca7e`) — overlapped C-FE-005 files; see CONFLICT_LOG (non-destructive, string-only) |
 | C-POLISH-002 | `agent-fable-opus` | Page-level fail-closed read sweep (pre-board; overlaps codex server-read lane) | `app/(app)/**/page.tsx` (18 pages) + `app/gift/[token]` + `tests/*-read-boundary.test.ts` | 2026-07-18 (pre-board) | DONE (PLA-0770,0773–0782,0803–0810) — non-owning; codex owns the lane going forward |
+| C-POLISH-003 | `agent-fable-opus` | Independent 768-record seed pack (§22 / LB-014 support) — NEW standalone file, not wired into SEED_ALL | `supabase/seed_audit_pack_500.sql` (new) + `tests/seed-audit-pack-500.test.ts` (new) | 2026-07-18 10:44 | DONE (PLA-0815) — validated on PG16 `fam` (768 rows, idempotent); no collision with seed lane's `SEED_ALL.sql` |
 
 ## Rules (from COORDINATION §0/§8)
 - One agent per A-unit; keep file claims as narrow as practical.

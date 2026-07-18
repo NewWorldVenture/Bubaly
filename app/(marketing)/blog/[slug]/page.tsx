@@ -8,9 +8,11 @@ import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeading
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
 import { readAeoQuestionsForCategory } from '@/lib/marketing/aeo';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 import { HeartButton } from '@/components/blog/heart-button';
+import { BlogCover } from '@/components/blog/blog-cover';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -57,7 +59,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!post) return { title: 'Post not found' };
   const keywords = articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''));
   const canonical = `${SITE_URL}/blog/${post.slug}`;
-  return {
+  // Closed loop: the SEO Page Registry (/admin/marketing/seo) can override this
+  // article's title + description; the post-derived values are the fallback.
+  return resolveMarketingMetadata(`/blog/${post.slug}`, {
     title: post.title,
     description: post.excerpt,
     keywords,
@@ -84,7 +88,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       description: post.excerpt,
       ...(post.heroImageUrl ? { images: [post.heroImageUrl] } : {}),
     },
-  };
+  });
 }
 
 export default async function BlogPostPage({ params }: Params) {
@@ -158,11 +162,14 @@ export default async function BlogPostPage({ params }: Params) {
                 )}
               </figure>
             ) : (
-              <div className={cn('mb-8 flex h-48 items-end rounded-2xl bg-gradient-to-br p-6 sm:h-56', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')}>
-                <div className={cn('inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
-                  {post.category}
+              <figure className="mb-8">
+                <div className="relative flex h-48 items-end overflow-hidden rounded-2xl p-6 sm:h-80">
+                  <BlogCover title={post.title} category={post.category} seed={post.slug} className="absolute inset-0 h-full w-full object-cover" />
+                  <div className={cn('relative inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur', CATEGORY_COLORS[post.category])}>
+                    {post.category}
+                  </div>
                 </div>
-              </div>
+              </figure>
             )}
 
             {/* Title & meta */}
@@ -322,7 +329,9 @@ export default async function BlogPostPage({ params }: Params) {
                               <Image src={r.heroImageUrl} alt={r.heroImageAlt ?? r.title} fill sizes="48px" className="object-cover" />
                             </div>
                           ) : (
-                            <div className={cn('h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br', ACCENT_BG[r.category] ?? 'from-violet-600/20 to-blue-900/10')} />
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+                              <BlogCover title={r.title} category={r.category} seed={r.slug} className="absolute inset-0 h-full w-full object-cover" />
+                            </div>
                           )}
                           <div className="min-w-0">
                             <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>

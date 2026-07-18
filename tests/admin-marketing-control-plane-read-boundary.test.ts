@@ -11,7 +11,10 @@ const actions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
 
 describe('admin marketing control-plane read boundaries', () => {
   it('preserves SEO and AEO read failures instead of showing empty inventories', () => {
-    expect(seo).toContain('keywordsError');
+    // PLA-0832 (agent-05) consolidated the SEO reads under a single `readError`
+    // guard (was `keywordsError`) that renders <AdminSeoReadError/>; the
+    // fail-closed message + behaviour are unchanged.
+    expect(seo).toContain('readError');
     expect(seo).toContain('Could not load SEO keywords from Supabase. Refresh and try again.');
     expect(aeo).toContain('questionsError');
     expect(aeo).toContain('Could not load AEO questions from Supabase. Refresh and try again.');

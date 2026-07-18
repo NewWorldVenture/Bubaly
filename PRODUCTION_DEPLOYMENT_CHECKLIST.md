@@ -11,8 +11,8 @@
 
 - [ ] Back up the target database and confirm a tested restore path.
 - [ ] Run `npm run db:audit:migrations`, then reconcile and apply migrations in order through the validated current set, including `0208_atomic_wallet_goal_funding.sql` and `0210_onboarding_idempotency.sql`.
-- [ ] Apply `0231_marketing_platform_spine.sql` with the ordered migration set before enabling the marketing control center or public canonical page families.
-- [ ] Apply `0232_blog_image_provenance.sql` and run the image provenance backfill before publishing any blog hero image.
+- [ ] Apply `0237_marketing_platform_spine.sql` with the ordered migration set before enabling the marketing control center or public canonical page families.
+- [ ] Apply `0238_blog_image_provenance.sql` and run the image provenance backfill before publishing any blog hero image.
 - [ ] Run `npm.cmd run marketing:verify:remote` against the production Supabase URL and require all 12 platform schema/provenance/content checks to pass.
 - [ ] Run `npm.cmd run marketing:verify:public:remote` with the production anon key and require published-only public reads plus admin-table isolation to pass.
 - [ ] Run `npm.cmd run marketing:backfill:pages -- --apply` and confirm the dry run reports zero missing canonical pages on the next release.

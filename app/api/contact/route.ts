@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { contactSchema, fieldErrors } from '@/lib/validation';
+import { contactSchema, contactTopicLabel, fieldErrors } from '@/lib/validation';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { sendEmail } from '@/lib/server/email';
@@ -35,7 +35,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Validation failed', fields: fieldErrors(parsed.error) }, { status: 422 });
   }
 
-  const { name, email, message } = parsed.data;
+  const { name, email, topic, message } = parsed.data;
+  const topicLabel = contactTopicLabel(topic);
+  // Bug reports + feature requests deserve faster triage.
+  const priority = topic === 'bug' ? 'high' : topic === 'billing' || topic === 'account' ? 'medium' : 'medium';
   const to = process.env.CONTACT_INBOX ?? 'support@bubaly.com';
 
   // Persist as a support ticket so it surfaces in the admin console even if
@@ -46,20 +49,20 @@ export async function POST(req: Request) {
       .from('support_tickets')
       .insert({
         ticket_number: ticketNumber,
-        subject: `Contact from ${name}`,
+        subject: `[${topicLabel}] Contact from ${name}`,
         description: message,
-        category: 'general',
-        priority: 'medium',
+        category: topic,
+        priority,
         status: 'open',
         requester_name: name,
         requester_email: email,
-        tags: ['contact-form'],
+        tags: ['contact-form', `topic:${topic}`],
       });
     // Surface it in the Super Admin Notification Center.
     const { recordAdminNotification } = await import('@/lib/admin/notify');
     await recordAdminNotification(supabase, {
       kind: 'support_ticket',
-      title: `New support ticket from ${name}`,
+      title: `${topicLabel} — ${name}`,
       body: message.slice(0, 200),
       url: '/admin/support-tickets?tab=open',
       relatedType: 'support_ticket',
@@ -85,8 +88,8 @@ export async function POST(req: Request) {
   const result = await sendEmail({
     to,
     replyTo: email,
-    subject: `New Bubaly contact from ${name}`,
-    html: `<p><strong>${name}</strong> (${email}) wrote:</p><p>${message.replace(/</g, '&lt;')}</p>`,
+    subject: `[${topicLabel}] New Bubaly contact from ${name}`,
+    html: `<p><strong>${name}</strong> (${email}) — <em>${topicLabel}</em> — wrote:</p><p>${message.replace(/</g, '&lt;')}</p>`,
   });
 
   if (!result.ok) {

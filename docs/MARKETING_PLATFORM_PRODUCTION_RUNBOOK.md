@@ -23,7 +23,7 @@ production-ready until the remote checks below pass.
    npm.cmd run db:push
    ```
 
-   Migration `0231_marketing_platform_spine.sql` must be included. Do not run
+   Migration `0237_marketing_platform_spine.sql` must be included. Do not run
    an isolated marketing migration against a production database whose earlier
    migration history has not been reconciled. The production workflow performs
    the same ledger preflight and fails closed before `db push` when the remote

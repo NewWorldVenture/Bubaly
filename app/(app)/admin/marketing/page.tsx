@@ -149,9 +149,10 @@ export default async function MarketingDashboard() {
           ) : (
             <p className="text-sm text-muted">Everything looks healthy — no urgent actions.</p>
           )}
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <Link href="/admin/marketing/seo" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Search className="h-3.5 w-3.5" /> SEO {seoPages != null ? `(${seoPages})` : ''}</Link>
-            <Link href="/admin/marketing/campaigns/new" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Send className="h-3.5 w-3.5" /> New campaign</Link>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            <Link href="/admin/marketing/seo" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Search className="h-3.5 w-3.5 shrink-0" /> SEO {seoPages != null ? `(${seoPages})` : ''}</Link>
+            <Link href="/admin/marketing/aeo" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><MessageSquareText className="h-3.5 w-3.5 shrink-0" /> AEO {aeoReadiness != null ? `(${aeoReadiness}%)` : ''}</Link>
+            <Link href="/admin/marketing/campaigns/new" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Send className="h-3.5 w-3.5 shrink-0" /> New campaign</Link>
           </div>
         </Card>
       </div>

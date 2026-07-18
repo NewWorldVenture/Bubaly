@@ -15,10 +15,11 @@
 // The content is composed from genuine, reusable family-life advice modules
 // (facets) selected in a unique combination per article, woven with the
 // article's own subject — so no two posts repeat a topic and each reads as a
-// real, useful, on-brand story. Photos reuse the 20 already-verified Unsplash
-// IDs (the sandbox network policy blocks the CDN, so unverified IDs can't be
-// checked here; these render live in production).
+// real, useful, on-brand story. Hero URLs use deterministic Lorem Picsum CC0
+// sources so every generated post has an explicit free-use attribution record.
 // ============================================================================
+
+import { SUBJECTS2 } from './blog-subjects-batch2.mjs';
 
 // ── deterministic PRNG (FNV-1a seed → mulberry32) ───────────────────────────
 function hash32(str) {
@@ -57,7 +58,7 @@ function pickN(rng, arr, n) {
 
 // ── UNIQUE hero photo per post ──────────────────────────────────────────────
 // Every article gets its OWN image (no repeats): a free, Creative-Commons
-// Lorem Picsum photo with a deterministic per-post seed, so each source URL is
+// LoremFlickr photo, keyworded per category so it stays topic-relevant, with a
 // per-post `lock` (a globally-unique sequential id assigned at emit time) that
 // pins one distinct image to each article. 545 posts ⇒ 545 different photos.
 const CAT_KEYWORDS = {
@@ -71,6 +72,38 @@ const CAT_KEYWORDS = {
   'Travel & Adventures': 'travel,adventure,landscape',
   'Home & Seasonal': 'home,house,cozy',
 };
+
+// Per-ARTICLE image keywords derived from the post's subject, so each photo
+// aligns to that specific story (homework post → homework photo, sports post →
+// sports photo), not just its category. First signal that matches the subject
+// wins; falls back to the category theme. Combined with a per-post lock, every
+// article gets a distinct, on-topic, free Creative-Commons photo.
+const IMG_SIGNALS = [
+  [/homework|study|studies|spelling|test|grade|note-taking|note\b|notes|science-project|science fair/, 'homework,study,desk'],
+  [/sleep|bedtime|\bnap\b|wind-down|thumb-suck|pacifier|sleeping/, 'child,sleep,bedroom'],
+  [/meal|dinner|breakfast|lunch|cook|recipe|pantry|grocer|snack|pasta|pizza|soup|bak|smoothie|stir-fr|leftover|produce|rice-bowl|sheet-pan|freezer/, 'cooking,kitchen,food'],
+  [/budget|money|allowance|financ|saving|\bbill|spend|paycheck|invest|\bcash|\bcost|debt|jar/, 'money,finance,savings'],
+  [/chore|cleaning|tidy|laundry|declutter|organiz|command center|reset|mudroom|junk drawer|labeling|zones/, 'organized,home,cleaning'],
+  [/screen|tech\b|\bai\b|device|phone|smartphone|gaming|video game|\bapp\b|coding|online|digital|password|\bemail|smartwatch|automat|voice assistant/, 'technology,child,tablet'],
+  [/sport|athlet|practice|\bgame\b|soccer|tryout|coach|\btrack\b|\bteam|instrument|music/, 'sports,children,activity'],
+  [/travel|trip|vacation|road|camping|adventure|hik|beach|flight|passport|museum|\bzoo|aquarium|picnic|stargaz|berry-pick|scavenger|theme-park|airport/, 'travel,family,outdoors'],
+  [/garden|\byard\b|seasonal|holiday|decor|winter|summer|\bfall\b|autumn|spring|frost|maintenance|entryway|attic|closet|snow-day|hosting|guests/, 'home,house,seasonal'],
+  [/read|\bbook|library|reader/, 'reading,books,child'],
+  [/toddler|baby|potty|tantrum|newborn|infant|witching-hour|sprinkler/, 'toddler,parent'],
+  [/teen|teenager|middle school|high school|adolesc|first crush|secretive/, 'teenager,family'],
+  [/wellness|health|mindful|stress|anxiet|emotion|feeling|breathe|gratitude|resilien|burnout|calm|worry|self-care|sensory|overstimul|movement|outside/, 'wellness,calm,nature'],
+  [/calendar|schedul|routine|planner|plan the week|morning|weekly|carpool|appointment|reminder/, 'planner,calendar,desk'],
+  [/\bpet|\bdog\b|\bcat\b/, 'pet,family,dog'],
+  [/school|classroom|teacher|back-to-school|homeschool|supplies|permission slip|report card|backpack|drop-off|pickup/, 'school,children,classroom'],
+  [/friend|\bshy\b|bully|\bkind|social|sibling|rivalry|tattl|share|left out/, 'children,friends,playing'],
+  [/photo|memor|milestone/, 'family,photos,memories'],
+  [/confiden|independ|responsib|mistake|apolog|patien|gratitude|manners|promise/, 'child,parent,together'],
+];
+function imageKeywordsForSubject(subject, category) {
+  const s = subject.toLowerCase();
+  for (const [re, kw] of IMG_SIGNALS) if (re.test(s)) return kw;
+  return CAT_KEYWORDS[category];
+}
 
 const ACCENT = {
   'Parenting': '#7c5dff', 'Organization': '#3b82f6', 'School & Activities': '#10b981',
@@ -365,7 +398,7 @@ function buildPost(category, subject, globalIndex, usedSlugs) {
   const excerpt = `${firstSentence(body[0].text)}. ${firstSentence(body[1].text)}.`
     .replace(/\s+/g, ' ').slice(0, 180);
 
-  const heroKeywords = CAT_KEYWORDS[category];
+  const heroKeywords = imageKeywordsForSubject(subject, category);
   const heroImageAlt = `A photo related to ${subject}.`;
 
   // hashtags: always #bubaly + #familylife + category + subject-derived + facet-ish
@@ -385,13 +418,36 @@ function buildPost(category, subject, globalIndex, usedSlugs) {
 }
 
 // ── assemble all posts (dedupe by slug) ─────────────────────────────────────
+// Batch selection: `node generate-blog-posts.mjs` → batch 1 (0226, unchanged);
+// `node generate-blog-posts.mjs 2` → batch 2 (0231, a fresh 500 distinct topics
+// with image locks offset so photos never collide with batch 1, plus self-
+// wiring into the content registry + per-post AEO).
+const BATCH = process.argv[2] === '2' ? 2 : 1;
+const SUBJECT_SET = BATCH === 2 ? SUBJECTS2 : SUBJECTS;
+
+// For batch 2, compute batch-1's slugs first so we can SKIP any batch-2 topic
+// that would collide (its slug already exists) — batch 2 must only ever ADD new
+// posts, never overwrite a batch-1 article.
+const batch1Slugs = new Set();
+if (BATCH === 2) {
+  const tmpSeen = new Set();
+  let t = 0;
+  for (const cat of Object.keys(SUBJECTS)) {
+    for (const subj of SUBJECTS[cat]) {
+      const bp = buildPost(cat, subj, t++, tmpSeen);
+      tmpSeen.add(bp.slug);
+      batch1Slugs.add(bp.slug);
+    }
+  }
+}
+
 const posts = [];
-const seenSlug = new Set();
-let gi = 0;
-for (const category of Object.keys(SUBJECTS)) {
-  for (const subject of SUBJECTS[category]) {
+const seenSlug = new Set(batch1Slugs); // seed with batch-1 slugs so we skip them
+let gi = BATCH === 2 ? 100000 : 0; // distinct index space per batch (dates/seed)
+for (const category of Object.keys(SUBJECT_SET)) {
+  for (const subject of SUBJECT_SET[category]) {
     const p = buildPost(category, subject, gi++, seenSlug);
-    if (seenSlug.has(p.slug)) continue; // extremely unlikely after disambiguation
+    if (seenSlug.has(p.slug)) continue; // skip collisions (incl. batch-1 slugs)
     seenSlug.add(p.slug);
     posts.push(p);
   }
@@ -404,16 +460,19 @@ function bodyJson(body) {
   return "$json$" + JSON.stringify(body) + "$json$::jsonb";
 }
 
+const MIG_NO = BATCH === 2 ? '0234' : '0226';
 const lines = [];
 lines.push(`-- ============================================================================`);
-lines.push(`-- Migration 0226: Bubaly blog — ${posts.length} new fully-written articles`);
-lines.push(`-- Generated by scripts/generate-blog-posts.mjs (deterministic; re-runnable).`);
-lines.push(`-- ${posts.length} unique topics across ${Object.keys(SUBJECTS).length} category tabs, each with a rich`);
-lines.push(`-- multi-section body, CC0 hero photo, #hashtags (incl.`);
-lines.push(`-- #bubaly), an SEO excerpt, and a Bubaly back-reference + CTA. Public + SEO/AEO`);
-lines.push(`-- surfaces (sitemap, JSON-LD, category tabs) pick these up automatically.`);
-lines.push(`-- Idempotent: ON CONFLICT (slug) DO UPDATE keeps rows in sync without dupes.`);
-lines.push(`-- Requires 0010 (blog_posts) + 0201 (hero image columns).`);
+lines.push(`-- Migration ${MIG_NO}: Bubaly blog — ${posts.length} ${BATCH === 2 ? 'MORE ' : ''}fully-written articles${BATCH === 2 ? ' (batch 2)' : ''}`);
+lines.push(`-- Generated by scripts/generate-blog-posts.mjs${BATCH === 2 ? ' 2' : ''} (deterministic; re-runnable).`);
+lines.push(`-- ${posts.length} unique topics across ${Object.keys(SUBJECT_SET).length} category tabs, each with a rich`);
+lines.push(`-- multi-section body, a content-aligned free Creative-Commons hero photo,`);
+lines.push(`-- #hashtags (incl. #bubaly), an SEO excerpt, and a Bubaly back-reference + CTA.`);
+lines.push(`-- Public + SEO/AEO surfaces (sitemap, JSON-LD, category tabs, FAQ blocks) pick`);
+lines.push(`-- these up automatically. Idempotent: ON CONFLICT (slug) DO UPDATE.`);
+lines.push(BATCH === 2
+  ? `-- Self-wiring: after inserting, registers every published blog into the content\n-- registry + regenerates per-post AEO (idempotent), so batch-2 posts are wired\n-- into /admin/marketing/content + the AEO Knowledge Center. Requires 0010 + 0201\n-- + 0013 (marketing) + 0228 (content registry) + 0230 (per-post AEO).`
+  : `-- Requires 0010 (blog_posts) + 0201 (hero image columns).`);
 lines.push(`-- ============================================================================`);
 lines.push('');
 lines.push(`INSERT INTO public.blog_posts`);
@@ -421,29 +480,65 @@ lines.push(`  (slug, title, excerpt, author, published_at, reading_minutes, tags
 lines.push(`   hero_image_url, hero_image_alt, hero_image_credit, body, published)`);
 lines.push(`VALUES`);
 
+// Batch 2 stores NO hero URL because migration 0235 fills it with a real CC0
+// Picsum source after insert. Batch 1 receives its deterministic source here.
 const LOCK_BASE = 1000;
 const valueRows = posts.map((p, idx) => {
-  // idx is unique per post ⇒ a unique `lock` ⇒ a distinct photo for every article.
-  const lock = LOCK_BASE + idx;
-  const seed = encodeURIComponent(`${p.slug}-${lock}`);
-  const url = `https://picsum.photos/seed/${seed}/1600/900`;
+  const hero = BATCH === 2
+    ? `null, null, null`
+    : `${q(`https://picsum.photos/seed/${encodeURIComponent(`${p.slug}-${LOCK_BASE + idx}`)}/1600/900`)}, ${q(p.heroImageAlt)}, ${q('Lorem Picsum (CC0)')}`;
   return `(${q(p.slug)}, ${q(p.title)}, ${q(p.excerpt)}, ${q(p.author)}, ${q(p.publishedAt)}, ${p.readingMinutes}, ` +
-    `${pgArray(p.tags)}, ${q(p.category)}, false, ${q(p.accentColor)}, ${q(url)}, ${q(p.heroImageAlt)}, ${q('Lorem Picsum (CC0)')}, ` +
+    `${pgArray(p.tags)}, ${q(p.category)}, false, ${q(p.accentColor)}, ${hero}, ` +
     `${bodyJson(p.body)}, true)`;
 });
 lines.push(valueRows.join(',\n'));
-lines.push(`ON CONFLICT (slug) DO UPDATE SET`);
-lines.push(`  title = EXCLUDED.title, excerpt = EXCLUDED.excerpt, author = EXCLUDED.author,`);
-lines.push(`  published_at = EXCLUDED.published_at, reading_minutes = EXCLUDED.reading_minutes,`);
-lines.push(`  tags = EXCLUDED.tags, category = EXCLUDED.category, accent_color = EXCLUDED.accent_color,`);
-lines.push(`  hero_image_url = EXCLUDED.hero_image_url, hero_image_alt = EXCLUDED.hero_image_alt,`);
-lines.push(`  hero_image_credit = EXCLUDED.hero_image_credit, body = EXCLUDED.body, published = true;`);
+if (BATCH === 2) {
+  // Never overwrite an existing article (batch-2 slugs are pre-filtered against
+  // batch 1, so this only guards against a re-run).
+  lines.push(`ON CONFLICT (slug) DO NOTHING;`);
+} else {
+  lines.push(`ON CONFLICT (slug) DO UPDATE SET`);
+  lines.push(`  title = EXCLUDED.title, excerpt = EXCLUDED.excerpt, author = EXCLUDED.author,`);
+  lines.push(`  published_at = EXCLUDED.published_at, reading_minutes = EXCLUDED.reading_minutes,`);
+  lines.push(`  tags = EXCLUDED.tags, category = EXCLUDED.category, accent_color = EXCLUDED.accent_color,`);
+  lines.push(`  hero_image_url = EXCLUDED.hero_image_url, hero_image_alt = EXCLUDED.hero_image_alt,`);
+  lines.push(`  hero_image_credit = EXCLUDED.hero_image_credit, body = EXCLUDED.body, published = true;`);
+}
 lines.push('');
 lines.push(`-- Summary by category:`);
 const byCat = {};
 for (const p of posts) byCat[p.category] = (byCat[p.category] || 0) + 1;
 for (const c of Object.keys(byCat)) lines.push(`--   ${c}: ${byCat[c]}`);
 lines.push(`-- TOTAL: ${posts.length}`);
+
+// Batch 2 self-wires into the closed loop: register every published blog as a
+// content item + regenerate per-post AEO for ALL posts (both idempotent), so
+// the new articles appear in /admin/marketing/content and the AEO Knowledge
+// Center without waiting for the earlier one-shot migrations to re-run.
+if (BATCH === 2) {
+  lines.push('');
+  lines.push(`-- ── close the loop for the newly-inserted posts ────────────────────────────`);
+  lines.push(`INSERT INTO public.marketing_content_items (title, kind, channel, brief, status, publish_at, metadata)`);
+  lines.push(`SELECT b.title, 'blog', 'blog', b.excerpt, 'published', b.published_at::timestamptz,`);
+  lines.push(`  jsonb_build_object('slug', b.slug, 'category', b.category, 'source', 'blog_posts', 'url', '/blog/' || b.slug, 'tags', to_jsonb(b.tags))`);
+  lines.push(`FROM public.blog_posts b`);
+  lines.push(`WHERE b.published AND b.slug NOT LIKE 'seed-blog_posts-%'`);
+  lines.push(`  AND NOT EXISTS (SELECT 1 FROM public.marketing_content_items c WHERE c.kind='blog' AND c.metadata->>'slug' = b.slug);`);
+  lines.push('');
+  lines.push(`DELETE FROM public.marketing_aeo_questions WHERE metadata->>'seed' = 'blog_aeo_v1';`);
+  lines.push(`INSERT INTO public.marketing_aeo_questions (question, answer, entity, source_path, pattern, status, clarity_score, last_reviewed, metadata)`);
+  lines.push(`SELECT 'How does Bubaly help with ' || lower(p.title) || '?',`);
+  lines.push(`  p.excerpt || ' Bubaly — the AI Family Operating System — turns this into shared, automatic routines your whole family can see. Read the full guide at /blog/' || p.slug || '.',`);
+  lines.push(`  'Bubaly', '/blog/' || p.slug, 'faq', 'published', 88, now(),`);
+  lines.push(`  jsonb_build_object('seed','blog_aeo_v1','slug',p.slug,'category',p.category,'article',true)`);
+  lines.push(`FROM public.blog_posts p WHERE p.published AND p.slug NOT LIKE 'seed-blog_posts-%'`);
+  lines.push(`UNION ALL`);
+  lines.push(`SELECT p.title || ' — where should a family start?',`);
+  lines.push(`  'Start small and let the system do the remembering. ' || p.excerpt || ' Bubaly — the AI Family Operating System — keeps the whole family in sync. Full guide: /blog/' || p.slug || '.',`);
+  lines.push(`  'Bubaly', '/blog/' || p.slug, 'how_to', 'published', 86, now(),`);
+  lines.push(`  jsonb_build_object('seed','blog_aeo_v1','slug',p.slug,'category',p.category,'article',true)`);
+  lines.push(`FROM public.blog_posts p WHERE p.published AND p.slug NOT LIKE 'seed-blog_posts-%';`);
+}
 
 process.stdout.write(lines.join('\n') + '\n');
 process.stderr.write(`Generated ${posts.length} posts across ${Object.keys(byCat).length} categories\n`);

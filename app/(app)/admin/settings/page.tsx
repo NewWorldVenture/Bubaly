@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { getAIConfigView } from '@/lib/ai/settings';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 
@@ -31,11 +32,23 @@ export default async function AdminSettingsPage() {
     return <ReadFailure />;
   }
 
+  // Resolve the *live* OpenAI status (admin-saved config in app_settings → env
+  // fallback), so the row reflects the model and key source the app actually
+  // uses at runtime rather than a bare env presence check. Best-effort: a read
+  // failure degrades to the env signal instead of failing the whole page.
+  const ai = await getAIConfigView(supabase).catch(() => null);
+  const openaiReady = ai ? ai.openaiKeySet : !!process.env.OPENAI_API_KEY;
+  const openaiModel = ai?.model ?? process.env.AI_MODEL ?? 'default model';
+  const openaiFromEnv = ai?.openaiFromEnv ?? true;
+  const openaiDetail = openaiReady
+    ? `${openaiModel} · key from ${openaiFromEnv ? 'env (OPENAI_API_KEY)' : 'admin console'}`
+    : 'OPENAI_API_KEY not set';
+
   const providers = [
     { name: 'Supabase (database, auth, storage)', ready: !!process.env.NEXT_PUBLIC_SUPABASE_URL, detail: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
     { name: 'Stripe (payments)', ready: !!process.env.STRIPE_SECRET_KEY, detail: 'STRIPE_SECRET_KEY' },
     { name: 'Resend (email)', ready: !!process.env.RESEND_API_KEY, detail: 'RESEND_API_KEY' },
-    { name: 'OpenAI (AI)', ready: !!process.env.OPENAI_API_KEY, detail: process.env.AI_MODEL ?? 'OPENAI_API_KEY' },
+    { name: 'OpenAI (AI)', ready: openaiReady, detail: openaiDetail },
     { name: 'Google OAuth (sign-in + calendar)', ready: !!process.env.GOOGLE_CLIENT_ID, detail: 'GOOGLE_CLIENT_ID' },
     { name: 'Twilio (SMS)', ready: !!process.env.TWILIO_AUTH_TOKEN, detail: 'TWILIO_AUTH_TOKEN' },
     { name: 'Resend webhook (email tracking)', ready: !!process.env.RESEND_WEBHOOK_SECRET, detail: 'RESEND_WEBHOOK_SECRET' },
@@ -47,6 +60,8 @@ export default async function AdminSettingsPage() {
     { label: 'Environment', value: process.env.NODE_ENV ?? 'unknown' },
     { label: 'Supabase project', value: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
     { label: 'App URL', value: process.env.NEXT_PUBLIC_APP_URL ?? '—' },
+    { label: 'AI provider', value: 'OpenAI' },
+    { label: 'AI model', value: ai?.model ?? process.env.AI_MODEL ?? 'default' },
     { label: 'Super administrators', value: String(superAdmins ?? 0) },
   ];
 

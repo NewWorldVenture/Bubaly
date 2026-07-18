@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
-const imageMigration = readFileSync('supabase/migrations/0232_blog_image_provenance.sql', 'utf8');
+const migration = readFileSync('supabase/migrations/0237_marketing_platform_spine.sql', 'utf8');
+const imageMigration = readFileSync('supabase/migrations/0238_blog_image_provenance.sql', 'utf8');
 const platform = readFileSync('lib/marketing/platform.ts', 'utf8');
 const worker = readFileSync('app/api/cron/marketing/route.ts', 'utf8');
 const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf8');
@@ -13,7 +13,7 @@ const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
 const remoteAssetVerifier = readFileSync('scripts/verify-marketing-assets-remote.mjs', 'utf8');
 const videoActions = readFileSync('app/(app)/admin/marketing/video/actions.ts', 'utf8');
 const provenanceBackfill = readFileSync('scripts/backfill-marketing-asset-provenance.mjs', 'utf8');
-const migrationSource = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
+const migrationSource = readFileSync('supabase/migrations/0237_marketing_platform_spine.sql', 'utf8');
 const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
 const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
 const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
@@ -175,7 +175,7 @@ describe('marketing platform spine contract', () => {
   it('provides a missing-schema-safe legacy blog bridge', () => {
     expect(legacyBridge).toContain("page_type: 'blog'");
     expect(legacyBridge).toContain("onConflict: 'path'");
-    expect(legacyBridge).toContain('migration 0231 is not applied');
+    expect(legacyBridge).toContain('marketing platform migration is not applied');
     expect(legacyBridge).toContain('archiveLegacyBlogOnPlatform');
     expect(contentActions).toContain('syncLegacyBlogToPlatform');
     expect(contentActions).toContain('syncLegacyBlogVisibility');

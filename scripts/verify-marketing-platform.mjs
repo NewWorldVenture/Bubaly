@@ -11,17 +11,17 @@ if (!url || !key) {
 }
 
 const checks = [
-  ['marketing_pages', '0231_marketing_platform_spine.sql'],
-  ['marketing_page_versions', '0231_marketing_platform_spine.sql'],
-  ['marketing_content_templates', '0231_marketing_platform_spine.sql'],
-  ['marketing_brand_rules', '0231_marketing_platform_spine.sql'],
-  ['marketing_generation_jobs', '0231_marketing_platform_spine.sql'],
-  ['marketing_page_relationships', '0231_marketing_platform_spine.sql'],
-  ['marketing_embeddings', '0231_marketing_platform_spine.sql'],
-  ['marketing_provider_observations', '0231_marketing_platform_spine.sql'],
-  ['marketing_provider_syncs', '0231_marketing_platform_spine.sql'],
-  ['marketing_assets.provenance', '0231_marketing_platform_spine.sql', 'marketing_assets?select=content_hash,license,source_url,attribution&limit=0'],
-  ['marketing_videos.provenance', '0231_marketing_platform_spine.sql', 'marketing_videos?select=source_hash,license&limit=0'],
+  ['marketing_pages', '0237_marketing_platform_spine.sql'],
+  ['marketing_page_versions', '0237_marketing_platform_spine.sql'],
+  ['marketing_content_templates', '0237_marketing_platform_spine.sql'],
+  ['marketing_brand_rules', '0237_marketing_platform_spine.sql'],
+  ['marketing_generation_jobs', '0237_marketing_platform_spine.sql'],
+  ['marketing_page_relationships', '0237_marketing_platform_spine.sql'],
+  ['marketing_embeddings', '0237_marketing_platform_spine.sql'],
+  ['marketing_provider_observations', '0237_marketing_platform_spine.sql'],
+  ['marketing_provider_syncs', '0237_marketing_platform_spine.sql'],
+  ['marketing_assets.provenance', '0237_marketing_platform_spine.sql', 'marketing_assets?select=content_hash,license,source_url,attribution&limit=0'],
+  ['marketing_videos.provenance', '0237_marketing_platform_spine.sql', 'marketing_videos?select=source_hash,license&limit=0'],
 ];
 
 const headers = { apikey: key, Authorization: `Bearer ${key}` };
@@ -39,14 +39,14 @@ try {
   const body = response.ok ? await response.json() : null;
   results.push({
     name: 'marketing_pages.content',
-    migration: '0231_marketing_platform_spine.sql + marketing:backfill:pages',
+    migration: '0237_marketing_platform_spine.sql + marketing:backfill:pages',
     status: response.status,
     ok: response.ok && Array.isArray(body) && body.length > 0,
   });
 } catch (error) {
   results.push({
     name: 'marketing_pages.content',
-    migration: '0231_marketing_platform_spine.sql + marketing:backfill:pages',
+    migration: '0237_marketing_platform_spine.sql + marketing:backfill:pages',
     status: 0,
     ok: false,
     error: error instanceof Error ? error.message : String(error),

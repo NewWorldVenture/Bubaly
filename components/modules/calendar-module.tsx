@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { expandEvents } from '@/lib/calendar/recurrence';
@@ -192,6 +192,8 @@ export function CalendarModule() {
   // Per-member / per-category visibility (the image's Calendars + Show toggles).
   const [hiddenMembers, setHiddenMembers] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  // Side-by-side per-member columns for the focused day (opt-in checkbox).
+  const [splitByMember, setSplitByMember] = useState(false);
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(() => {
@@ -368,12 +370,43 @@ export function CalendarModule() {
   const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
   const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
 
+  // Desktop time-grid columns: normally one per day (week / day view). When
+  // "split by person" is on, the FOCUSED DAY is instead broken into one column
+  // per visible member, so families can compare everyone's day side by side.
+  // A member's column shows events assigned to them plus shared/family events.
+  const visibleMembers = members.filter((m) => !hiddenMembers.has(m.id));
+  const splitActive = splitByMember && visibleMembers.length > 0;
+  const gridCols = splitActive
+    ? visibleMembers.map((m) => {
+        const own = (e: Event) => e.assignee_id === m.id || !e.assignee_id;
+        return {
+          key: m.id,
+          date: mobileDay,
+          isToday: mobileDayStr === todayStr,
+          timed: (timedByDay.get(mobileDayStr) ?? []).filter(own),
+          allDay: (allDayByDay.get(mobileDayStr) ?? []).filter(own),
+          member: { name: m.display_name, color: m.color as string | null },
+        };
+      })
+    : gridColumns.map((d) => {
+        const dStr = d.toISOString().slice(0, 10);
+        return {
+          key: dStr,
+          date: d,
+          isToday: dStr === todayStr,
+          timed: timedByDay.get(dStr) ?? [],
+          allDay: allDayByDay.get(dStr) ?? [],
+          member: undefined as { name: string; color: string | null } | undefined,
+        };
+      });
+
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const dateLabel = view === 'month'
     ? monthAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    : view === 'day'
+    : view === 'day' || splitActive
+      // Split view compares members on one day, so label the focused day, not the week span.
       ? days[mobileDayIndex].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
       : `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
@@ -560,28 +593,33 @@ export function CalendarModule() {
               {/* Day headers */}
               <div className="flex flex-shrink-0 border-b border-border">
                 <div className="w-14 flex-shrink-0" />
-                {gridColumns.map((d, i) => {
-                  const dStr = d.toISOString().slice(0, 10);
-                  const isToday = dStr === todayStr;
-                  return (
-                    <div key={i} className="flex flex-1 flex-col items-center border-l border-border py-2">
-                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand-text' : 'text-muted')}>
-                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                      </span>
-                      <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-fg')}>
-                        {d.getDate()}
-                      </span>
-                      {/* All-day events */}
-                      <div className="mt-1 w-full space-y-0.5 px-1">
-                        {(allDayByDay.get(dStr) ?? []).map(e => (
-                          <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
-                            {e.title}
-                          </div>
-                        ))}
+                {gridCols.map((col) => (
+                  <div key={col.key} className="flex flex-1 flex-col items-center border-l border-border py-2">
+                    {col.member ? (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Avatar name={col.member.name} color={col.member.color} size={22} />
+                        <span className="max-w-[8rem] truncate text-[11px] font-semibold text-fg">{col.member.name}</span>
                       </div>
+                    ) : (
+                      <>
+                        <span className={cn('text-[10px] font-semibold uppercase tracking-wide', col.isToday ? 'text-brand-text' : 'text-muted')}>
+                          {col.date.toLocaleDateString('en-US', { weekday: 'short' })}
+                        </span>
+                        <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', col.isToday ? 'bg-brand text-white' : 'text-fg')}>
+                          {col.date.getDate()}
+                        </span>
+                      </>
+                    )}
+                    {/* All-day events */}
+                    <div className="mt-1 w-full space-y-0.5 px-1">
+                      {col.allDay.map(e => (
+                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                          {e.title}
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
 
               {/* Scrollable time grid */}
@@ -596,19 +634,17 @@ export function CalendarModule() {
                 </div>
 
                 {/* Day columns */}
-                {gridColumns.map((d, i) => {
-                  const dStr = d.toISOString().slice(0, 10);
-                  const isToday = dStr === todayStr;
-                  const dayEvents = timedByDay.get(dStr) ?? [];
+                {gridCols.map((col) => {
+                  const dayEvents = col.timed;
                   return (
-                    <div key={i} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
+                    <div key={col.key} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
                       {/* Hour lines */}
                       {HOURS.map(h => (
                         <div key={h} style={{ top: (h - 6) * HOUR_HEIGHT, height: HOUR_HEIGHT }} className="absolute left-0 right-0 border-t border-border/40" />
                       ))}
 
                       {/* Current time line */}
-                      {isToday && nowTop >= 0 && nowTop <= HOURS.length * HOUR_HEIGHT && (
+                      {col.isToday && nowTop >= 0 && nowTop <= HOURS.length * HOUR_HEIGHT && (
                         <div style={{ top: nowTop }} className="absolute left-0 right-0 z-20 flex items-center">
                           <div className="h-2 w-2 rounded-full bg-brand" />
                           <div className="h-px flex-1 bg-brand" />
@@ -732,6 +768,18 @@ export function CalendarModule() {
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Calendars</span>
             <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand-text hover:underline">Manage</a>
           </div>
+          {/* Side-by-side per-member day view */}
+          <label className="mb-1.5 flex cursor-pointer items-center gap-2 rounded-lg border border-border px-2 py-1.5 transition hover:bg-elevated">
+            <input type="checkbox" checked={splitByMember} onChange={(e) => setSplitByMember(e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-brand" />
+            <span className="flex-1 text-xs font-medium">Side-by-side view</span>
+            <Columns className="h-3.5 w-3.5 text-muted" />
+          </label>
+          {splitByMember && (
+            <p className="mb-1.5 px-1 text-[10px] leading-4 text-muted">
+              Each visible member gets a column for {mobileDay.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}. Toggle members below to show or hide their column.
+            </p>
+          )}
           <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
             {calendarRows.map((row) => {
               const visible = !hiddenMembers.has(row.key);
