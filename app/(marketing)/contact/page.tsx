@@ -5,6 +5,7 @@ import { Mail, MessageCircle, Shield, Gift, Sparkles } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { ContactForm } from '@/components/marketing/contact-form';
 import { getUser } from '@/lib/supabase/auth';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/contact', {
@@ -18,6 +19,7 @@ export default async function ContactPage() {
   const loggedIn = !!user;
 
   return (
+    <>
     <Section className="pt-20">
       <SectionHeading eyebrow="Contact" title="We’d love to hear from you" description="Questions, feedback, or just saying hi — send us a note." />
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
@@ -86,5 +88,7 @@ export default async function ContactPage() {
         <ContactForm />
       </div>
     </Section>
+    <MarketingAeoSection path="/contact" name="Contact Bubaly" description="Get in touch with the Bubaly team for questions, feedback, or support." />
+    </>
   );
 }

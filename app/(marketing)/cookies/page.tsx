@@ -52,6 +52,7 @@ export default function CookiesPage() {
         title="Cookie Policy"
         summary="The small files that keep you signed in and Bubaly running — and how to control them."
         lastUpdated="June 24, 2026"
+        path="/cookies"
         sections={SECTIONS}
       />
       <CTASection />

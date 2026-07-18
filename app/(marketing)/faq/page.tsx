@@ -3,7 +3,7 @@ import { Section, SectionHeading } from '@/components/marketing/sections';
 import { type FAQ } from '@/components/marketing/faq-accordion';
 import { FaqTabs, type FaqSection } from '@/components/marketing/faq-tabs';
 import { CTASection } from '@/components/marketing/cta';
-import { FaqStructuredData } from '@/components/marketing/structured-data';
+import { FaqStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
 import { readPublishedAeoQuestions } from '@/lib/marketing/aeo';
 
 export const metadata: Metadata = {
@@ -80,6 +80,7 @@ export default async function FAQPage() {
   return (
     <>
       <FaqStructuredData items={schemaItems} />
+      <MarketingPageStructuredData path="/faq" name="FAQ & Family Knowledge Center" description="Answers to common questions about Bubaly." />
       <Section className="pt-20 text-center">
         <SectionHeading eyebrow="FAQ" title="Questions, answered" description="Everything you need to know to get your family started with the AI Family Operating System." />
       </Section>

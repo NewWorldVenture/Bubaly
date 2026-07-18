@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { ArrowRight, BookOpen, Calendar, Clock, Mail, Tag } from 'lucide-react';
 import { getAllPosts, getFeaturedPost, getPostsByCategory, getCategoryCounts, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
 import { articleHashtags, toHashtag } from '@/lib/blog/engagement';
-import { BlogListStructuredData } from '@/components/marketing/structured-data';
+import { BlogListStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { BlogHeroArt } from '@/components/blog/blog-hero-art';
@@ -137,6 +137,7 @@ export default async function BlogPage({ searchParams }: Props) {
   return (
     <PageWrap>
       <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
+      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description="Practical advice, real stories, and smart tips for modern families." />
 
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (

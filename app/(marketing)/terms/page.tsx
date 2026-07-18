@@ -103,6 +103,7 @@ export default function TermsPage() {
         title="Terms of Service"
         summary="The agreement that governs your use of Bubaly. Plain language, no surprises."
         lastUpdated="June 24, 2026"
+        path="/terms"
         sections={SECTIONS}
       />
       <CTASection />

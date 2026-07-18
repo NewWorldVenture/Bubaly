@@ -129,6 +129,7 @@ export default function PrivacyPage() {
         title="Privacy Policy"
         summary="What we collect, why, and the choices you have — written for families, in plain language."
         lastUpdated="June 24, 2026"
+        path="/privacy"
         sections={SECTIONS}
       />
       <CTASection />

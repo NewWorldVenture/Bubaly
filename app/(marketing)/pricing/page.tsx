@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { FEATURE_CATALOG, FEATURE_SECTIONS } from '@/lib/constants/feature-catalog';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/pricing', {
@@ -28,5 +29,5 @@ export default async function PricingPage() {
       .map((f) => ({ label: f.label, tier: (resolved[f.key] ?? f.defaultTier) as Exclude<FeatureTier, 'off'> })),
   })).filter((s) => s.items.length > 0);
 
-  return <PricingContent familiesCount={families} featureMatrix={matrix} />;
+  return <><PricingContent familiesCount={families} featureMatrix={matrix} /><MarketingAeoSection path="/pricing" name="Bubaly Pricing" description="Simple pricing for happier families." /></>;
 }

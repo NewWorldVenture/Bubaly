@@ -82,6 +82,35 @@ export function FaqStructuredData({ items }: { items: { q: string; a: string }[]
   return <JsonLd data={data} />;
 }
 
+/** Page-level schema for public marketing routes and their admin-managed FAQs. */
+export function MarketingPageStructuredData({
+  path,
+  name,
+  description,
+  questions = [],
+}: {
+  path: string;
+  name: string;
+  description: string;
+  questions?: { q: string; a: string }[];
+}) {
+  const pageUrl = `${SITE_URL}${path === '/' ? '' : path}`;
+  return (
+    <Fragment>
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name,
+        description,
+        url: pageUrl,
+        isPartOf: { '@type': 'WebSite', name: 'Bubaly', url: SITE_URL },
+        inLanguage: 'en-US',
+      }} />
+      {questions.length > 0 ? <FaqStructuredData items={questions} /> : null}
+    </Fragment>
+  );
+}
+
 type BlogPostSchemaInput = {
   slug: string;
   title: string;

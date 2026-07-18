@@ -3,6 +3,7 @@ import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { Smartphone, Bell, WifiOff, RefreshCw } from 'lucide-react';
 import { Section, SectionHeading, FeatureCard } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/mobile', {
@@ -44,6 +45,7 @@ export default function MobilePage() {
         </div>
       </Section>
       <CTASection title="Take Bubaly with you" subtitle="Sign up and install on every device." />
+      <MarketingAeoSection path="/mobile" name="Bubaly Mobile App" description="Bubaly goes everywhere your family does with installable web, iOS, and Android experiences." />
     </>
   );
 }

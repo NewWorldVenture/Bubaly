@@ -78,6 +78,7 @@ export default function AcceptableUsePage() {
         title="Acceptable Use Policy"
         summary="Simple rules that keep Bubaly safe, reliable, and welcoming for every family."
         lastUpdated="June 24, 2026"
+        path="/acceptable-use"
         sections={SECTIONS}
       />
       <CTASection />

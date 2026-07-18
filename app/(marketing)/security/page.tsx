@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { FAQAccordion } from '@/components/marketing/faq-accordion';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 import { cn } from '@/lib/utils/cn';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -554,6 +555,7 @@ export default function SecurityPage() {
           </div>
         </Container>
       </div>
+      <MarketingAeoSection path="/security" name="Bubaly Security" description="How Bubaly protects family data with privacy-first architecture and strict access controls." />
     </PageWrap>
   );
 }

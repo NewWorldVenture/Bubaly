@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Section } from '@/components/marketing/sections';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export type LegalSection = {
   id: string;
@@ -18,11 +19,13 @@ export function LegalPage({
   summary,
   lastUpdated,
   sections,
+  path,
 }: {
   title: string;
   summary: string;
   lastUpdated: string;
   sections: LegalSection[];
+  path: string;
 }) {
   return (
     <>
@@ -89,6 +92,7 @@ export function LegalPage({
           </article>
         </div>
       </Section>
+      <MarketingAeoSection path={path} name={title} description={summary} />
     </>
   );
 }

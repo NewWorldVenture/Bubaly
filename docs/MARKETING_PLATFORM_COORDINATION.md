@@ -337,3 +337,27 @@ accurate**.
   auto-apply; prod is the owner's migration step, per `docs/PENDING_PROD_MIGRATIONS.md`).
 - Note for `agent-05` (BlogCover author): this supersedes covers-as-primary per the
   owner's explicit instruction; covers are now the fallback only. No revert intended.
+
+## Codex handoff checkpoint — 2026-07-18
+
+The public marketing discovery loop now has a shared `MarketingAeoSection` in
+`components/marketing/marketing-aeo-section.tsx`. It reads only published,
+non-deleted `marketing_pages.aeo` payloads through the anonymous Supabase client,
+renders answered FAQs when available, and emits WebPage/FAQ JSON-LD. It is wired
+to the homepage, features, how-it-works, AI, mobile, security, contact, pricing,
+FAQ, blog, and legal routes. `/f/[id]` and `/demo/upgrade` remain intentionally
+noindex utility surfaces.
+
+Parallel-agent ownership: the engine lane owns `lib/marketing/**`,
+`app/(app)/admin/marketing/**`, and marketing API/cron work; the public lane owns
+`app/(marketing)/**` and `components/marketing/**` and should consume this shared
+section rather than creating route-specific AEO readers; the data lane owns new
+SQL/backfills and must use the next version from `npm run db:audit:migrations`
+(currently `0239`); the verification lane runs typecheck, build, Vitest, and the
+four remote marketing gates. Do not force-push; publish reviewed checkpoints with
+`git push origin HEAD:main`.
+
+This checkpoint passed 653 test files / 3,843 tests, generated 1,281 pages,
+migration and dependency audits, and all four remote marketing gates. Production
+workflow secrets and Supabase migration-ledger ownership remain owner-side
+blockers for automated migration apply.

@@ -24,6 +24,16 @@ import {
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
 import { SiteStructuredData } from '@/components/marketing/structured-data';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
+import type { Metadata } from 'next';
+import { resolveMarketingMetadata } from '@/lib/marketing/seo';
+
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveMarketingMetadata('/', {
+    title: 'Bubaly — The AI Operating System for Family Life',
+    description: 'Bubaly quietly handles the logistics of family life so your family can spend less time managing life and more time living it.',
+  });
+}
 
 export default async function HomePage() {
   return (
@@ -114,6 +124,11 @@ export default async function HomePage() {
           ))}
         </ul>
       </section>
+      <MarketingAeoSection
+        path="/"
+        name="Bubaly"
+        description="The AI operating system for family life."
+      />
     </PageWrap>
   );
 }

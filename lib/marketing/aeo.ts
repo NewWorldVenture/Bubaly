@@ -32,6 +32,26 @@ function anonClient() {
 
 type Row = Database['public']['Tables']['marketing_aeo_questions']['Row'];
 
+function toPayloadQuestions(value: unknown, fallbackPath: string): AeoQuestion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    const question = typeof row.question === 'string' ? row.question.trim() : '';
+    const answer = typeof row.answer === 'string' ? row.answer.trim() : '';
+    if (!question || !answer) return [];
+    return [{
+      question,
+      answer,
+      entity: typeof row.entity === 'string' ? row.entity : null,
+      pattern: typeof row.pattern === 'string' ? row.pattern : null,
+      sourcePath: typeof row.sourcePath === 'string' ? row.sourcePath : typeof row.source_path === 'string' ? row.source_path : fallbackPath,
+      topic: typeof row.topic === 'string' ? row.topic : null,
+      category: typeof row.category === 'string' ? row.category : null,
+    }];
+  });
+}
+
 function toQuestion(r: Row): AeoQuestion {
   const meta = (r.metadata ?? {}) as Record<string, unknown>;
   return {
@@ -113,4 +133,30 @@ export async function readAeoQuestionsForCategory(category: string, limit = 4): 
 
 export async function getAeoQuestionsForCategory(category: string, limit = 4): Promise<AeoQuestion[]> {
   return (await readAeoQuestionsForCategory(category, limit)).questions;
+}
+
+/** Read the canonical page payload populated by the Super Admin content loop. */
+export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<PublicAeoRead> {
+  try {
+    const { data, error } = await anonClient()
+      .from('marketing_pages')
+      .select('aeo')
+      .eq('path', path)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) {
+      console.error('[marketing-aeo] path questions read failed', error);
+      return { questions: [], available: false };
+    }
+    const payload = data?.aeo;
+    const questions = toPayloadQuestions(
+      payload && typeof payload === 'object' ? (payload as Record<string, unknown>).questions : payload,
+      path,
+    );
+    return { questions: questions.slice(0, limit), available: true };
+  } catch (error) {
+    console.error('[marketing-aeo] path questions read failed', error);
+    return { questions: [], available: false };
+  }
 }

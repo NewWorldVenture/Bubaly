@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Clock } from 'lucide-react';
 import { DemoUpgradeChoices } from '@/components/demo/demo-upgrade-choices';
 
-export const metadata: Metadata = { title: 'Your demo has ended' };
+export const metadata: Metadata = { title: 'Your demo has ended', robots: { index: false, follow: false } };
 
 /**
  * Shown when an email that has ALREADY used its one 5-minute demo tries to demo

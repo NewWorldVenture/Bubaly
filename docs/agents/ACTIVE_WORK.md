@@ -16,6 +16,8 @@ Update at each checkpoint (≤15 min while active).
 | `agent-05` | 2026-07-18 10:53 | A-05 read-performance sweep **COMPLETE** (§25): growth-log tables (behavior_logs, care_log, home_security_events, experience_audits → rolling 365d/1000 — PLA-0813) + calendar over-fetch consumers (next-actions, briefing → date-window push-down — PLA-0814). SSR pages (command-center, conflicts, journeys, migrate) verified already bounded. Commits `83066d99`→`04a1fe91`. Full suite **3687 green**. | `components/modules/{behavior,care,security,experience-scorecard,next-actions,briefing}-module.tsx` (done) | Next A-05 unit: dashboard action/empty-state/mobile matrix, or wiring-matrix evidence for remaining A-05 features |
 | agent-01/03/04 | stale >18h | IN_REVIEW; may resume | see registry | reclaimable per §0 |
 
+| `codex` | 2026-07-18 15:02 | Public marketing AEO/SEO handoff: added the shared Supabase-backed `MarketingAeoSection`, WebPage/FAQ JSON-LD, static-route wiring, and explicit parallel-agent ownership rules. Full 653-file / 3,843-test gate, build, audits, and all four remote marketing gates passed. | `components/marketing/marketing-aeo-section.tsx`, `lib/marketing/aeo.ts`, `components/marketing/structured-data.tsx`, public marketing routes, coordination docs | Preserve the shared reader/schema contract; engine and data lanes may proceed independently. |
+
 ## QA-01 done this session (all on main, verified)
 - `next build` GREEN + tsc/vitest re-gate after concurrent landings.
 - §3b null-string SSR crash class: swept clean (74 modules).

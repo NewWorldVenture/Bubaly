@@ -10,6 +10,7 @@ import { Section, SectionHeading } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
 import { Button } from '@/components/ui/button';
 import { AiActionDemo } from '@/components/marketing/ai-showcase';
+import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/ai', {
@@ -198,6 +199,7 @@ export default function AIPage() {
         title="Meet the assistant that actually does things"
         subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
       />
+      <MarketingAeoSection path="/ai" name="Bubaly AI" description="An assistant that takes real action inside your family life." />
     </>
   );
 }
