@@ -12,6 +12,7 @@ const subnav = fs.readFileSync('app/(app)/admin/marketing/marketing-subnav.tsx',
 const seoPage = fs.readFileSync('app/(app)/admin/marketing/seo/page.tsx', 'utf8');
 const aeoPage = fs.readFileSync('app/(app)/admin/marketing/aeo/page.tsx', 'utf8');
 const actions = fs.readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
+const healthPage = fs.readFileSync('app/(app)/admin/marketing/health/page.tsx', 'utf8');
 
 describe('Marketing SEO/AEO buttons point to the right admin routes', () => {
   it('the subnav links both pages', () => {
@@ -53,5 +54,15 @@ describe('Marketing AEO page is wired to Supabase (read + write)', () => {
     expect(actions).toMatch(/addAeoQuestion[\s\S]*?requireMarketingAdmin\(\)/);
     expect(actions).toMatch(/addAeoQuestion[\s\S]*?from\('marketing_aeo_questions'\)\.insert/);
     expect(actions).toMatch(/deleteAeoQuestion[\s\S]*?from\('marketing_aeo_questions'\)\.delete/);
+  });
+});
+
+describe('Marketing Customer Health fails closed on a read error (no false-empty)', () => {
+  it('uses the error-returning reader and renders an error state, not "no customers"', () => {
+    // Previously used getMarketingCustomers (drops the error → [] on failure), so a
+    // transient DB blip rendered "No customers yet" and hid every at-risk family.
+    expect(healthPage).toContain('getMarketingCustomersWithError');
+    expect(healthPage).not.toMatch(/=\s*await getMarketingCustomers\(/);
+    expect(healthPage).toContain('CustomerHealthReadError');
   });
 });

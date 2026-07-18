@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { HeartPulse, ShieldAlert, Activity, Gauge, ArrowRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { getMarketingCustomers } from '@/lib/marketing/customers';
+import { ErrorState } from '@/components/ui/states';
+import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { customerHealth, summarizeHealth, HEALTH_BAND_LABEL, type Health } from '@/lib/marketing/health';
 
 export const metadata: Metadata = { title: 'Customer Health', robots: { index: false } };
@@ -17,7 +18,13 @@ const BAND_STYLE = {
 
 export default async function CustomerHealthPage() {
   const supabase = createServiceClient();
-  const customers = await getMarketingCustomers(supabase);
+  // Fail closed: a transient read failure must NOT render as "no customers" — that
+  // would hide every at-risk/churning family from the super-admin during an outage.
+  const { customers, error: customersError } = await getMarketingCustomersWithError(supabase);
+  if (customersError) {
+    console.error('[admin-marketing-health] customer read failed', customersError);
+    return <CustomerHealthReadError />;
+  }
 
   const rows = customers
     .map((c) => ({ c, h: customerHealth({ lifecycle: c.lifecycle, memberCount: c.memberCount, lastActivityAt: c.lastActivityAt }) }))
@@ -82,6 +89,19 @@ export default async function CustomerHealthPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function CustomerHealthReadError() {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Customer Health</h1>
+        <p className="mt-1 text-sm text-muted">Per-customer health &amp; churn risk.</p>
+      </div>
+      <ErrorState message="Could not load customer health from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/health" className="text-sm font-medium text-brand-text underline">Refresh Customer Health</Link>
     </div>
   );
 }

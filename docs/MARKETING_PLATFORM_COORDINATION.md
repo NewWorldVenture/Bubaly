@@ -216,4 +216,27 @@ Super Admin → Marketing **SEO** (`/admin/marketing/seo`) and **AEO**
   `0013` (tables) + `0229` (seed) must be applied to the production DB — tracked
   under LB-002 (remote migration ledger, human/ops-owned).
 
-_§6 last updated: 2026-07-18 15:20 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
+### 6f. Full admin-page wiring sweep — 41/41 fail closed (1 fix)
+Swept every `app/(app)/admin/marketing/**/page.tsx` (≈41 routes) for Supabase
+read-wiring + fail-closed behavior:
+- **40/41 already correct** — server pages read via `createServiceClient()` or a
+  `lib/marketing/*` server module and render an error state (not a false-empty) on
+  read failure. `assistant` is the one intentional `'use client'` shell (POSTs to
+  the assistant API route).
+- **1 defect found + fixed (`health`):** `/admin/marketing/health` used
+  `getMarketingCustomers()` — which drops the error and returns `[]` — so a
+  transient DB read failure rendered **"No customers yet"**, hiding every at-risk /
+  churning family from the super-admin during an outage (false-empty; same class as
+  PLA-0793). Now uses `getMarketingCustomersWithError()` + a `CustomerHealthReadError`
+  fail-closed state. Guard extended in `tests/marketing-seo-aeo-wiring.test.ts` (7).
+- The two remaining error-dropping `getMarketingCustomers` callers are **background
+  contexts** where degrade-to-empty is the *safer* mode, left intentionally: the AI
+  assist route (`app/api/admin/marketing/ai/route.ts` — AI just gets no customer
+  context) and `automation-runner.ts` (processes zero customers rather than acting
+  on a partial read). Segments + Customers pages already fail closed.
+
+**Net marketing read-path status: production-grade** — every user-facing admin page
+now fails closed. (Write-path round-trip smokes for send/automation remain codex's
+gate per §3.)
+
+_§6 last updated: 2026-07-18 15:29 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
