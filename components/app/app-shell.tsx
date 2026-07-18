@@ -17,6 +17,7 @@ import { SidebarAccount } from './sidebar-account';
 import { isActive, resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { FreeTierSidebar } from './free-tier-sidebar';
 import { NotificationBell } from './notification-bell';
+import { BlogLauncher } from './blog-launcher';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
 import { OfflineBanner } from './offline-banner';
@@ -373,6 +374,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {demo?.expiresAt && <DemoClockPill expiresAt={demo.expiresAt} />}
           <div className="flex-1" />
           <HeaderSearch />
+          {/* Nudge the search bar left of the action cluster for breathing room. */}
+          <div className="hidden md:block md:w-4 lg:w-10" aria-hidden />
+          <BlogLauncher />
           <Link href="/feedback" aria-label="Share an idea" title="Share an idea" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
