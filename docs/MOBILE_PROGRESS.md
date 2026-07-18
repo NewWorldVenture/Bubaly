@@ -552,7 +552,20 @@ Weighting (per the mission brief):
   build-emitted JSON; no layout change → no build re-run needed beyond M-023's.)
 - **Parallel-bot note:** file-disjoint (`app/manifest.ts` + test only).
 
-## Next steps (autonomous, in order)
+### M-026 — Push-notification tap stacked a new app instance instead of focusing the open one — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P2, Phase 16):** the SW `notificationclick` handler called
+  `clients.openWindow` unconditionally, so every push tap opened **another**
+  app window/tab even when Bubaly was already open (notification spam →
+  window pile-up, especially on Android PWAs).
+- **Fix:** standard focus-or-open — `clients.matchAll({type:'window',
+  includeUncontrolled:true})` → `focus()` + `navigate(target)` an existing
+  window; `openWindow` only as the no-window fallback. Notification close +
+  `/dashboard` default preserved.
+- **Guard:** `tests/mobile-sw-notification-focus.test.ts` (2) — matchAll/focus/
+  navigate before openWindow (fallback-only), close + default kept.
+- **Evidence:** guard green (7 across both SW guards); `sw.js` parse-checked;
+  eslint 0. File-disjoint (`public/sw.js` + test only).
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

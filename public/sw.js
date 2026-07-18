@@ -80,5 +80,18 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data || '/dashboard'));
+  const target = event.notification.data || '/dashboard';
+  // Focus an already-open app window and navigate it, instead of stacking a new
+  // instance/tab on every push tap (M-026). Fall back to opening one.
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const win = wins.find((w) => 'focus' in w);
+      if (win) {
+        return win.focus().then((focused) =>
+          'navigate' in focused ? focused.navigate(target).catch(() => focused) : focused,
+        );
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
 });
