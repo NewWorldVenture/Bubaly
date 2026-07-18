@@ -26,6 +26,14 @@ production-ready until the remote checks below pass.
    an isolated marketing migration against a production database whose earlier
    migration history has not been reconciled.
 
+4. Audit existing Supabase media. If the dry run reports legacy rows without
+   hashes, resolve any duplicate groups first, then run the explicit write:
+
+   ```powershell
+   npm.cmd run marketing:backfill:provenance
+   npm.cmd run marketing:backfill:provenance -- --apply
+   ```
+
 ## Verify
 
 Run the local gates against the release commit:
@@ -35,6 +43,7 @@ npm.cmd run typecheck
 npm.cmd test -- --reporter=dot
 npm.cmd run marketing:audit:assets
 npm.cmd run marketing:verify:remote
+npm.cmd run marketing:verify:assets:remote
 ```
 
 `marketing:verify:remote` must report these as available: the nine platform

@@ -19,6 +19,8 @@
     "db:audit:schema": "node scripts/audit-supabase-schema.mjs",
     "db:audit:auth": "node scripts/audit-supabase-auth.mjs",
     "marketing:audit:assets": "node scripts/audit-marketing-assets.mjs",
+    "marketing:backfill:provenance": "node scripts/backfill-marketing-asset-provenance.mjs",
+    "marketing:verify:assets:remote": "node scripts/verify-marketing-assets-remote.mjs",
     "marketing:verify:remote": "node scripts/verify-marketing-platform.mjs",
     "db:seed:calendar": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_calendar.sql",
     "db:seed:location": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_location_one_family.sql",

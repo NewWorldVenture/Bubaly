@@ -8,6 +8,8 @@ const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf
 const featureRoute = readFileSync('app/(marketing)/features/[slug]/page.tsx', 'utf8');
 const customRoute = readFileSync('app/(marketing)/p/[slug]/page.tsx', 'utf8');
 const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
+const remoteAssetVerifier = readFileSync('scripts/verify-marketing-assets-remote.mjs', 'utf8');
+const provenanceBackfill = readFileSync('scripts/backfill-marketing-asset-provenance.mjs', 'utf8');
 const migrationSource = readFileSync('supabase/migrations/0231_marketing_platform_spine.sql', 'utf8');
 const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
 const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
@@ -69,6 +71,16 @@ describe('marketing platform spine contract', () => {
     expect(verifier).toContain('marketing_embeddings');
     expect(verifier).toContain('marketing_assets?select=content_hash,license,source_url,attribution');
     expect(verifier).toContain('process.exit(1)');
+  });
+
+  it('ships strict remote asset provenance and a safe legacy backfill', () => {
+    expect(remoteAssetVerifier).toContain('content_hash');
+    expect(remoteAssetVerifier).toContain('source_hash');
+    expect(remoteAssetVerifier).toContain('duplicate asset hash');
+    expect(remoteAssetVerifier).toContain('source_url and attribution');
+    expect(provenanceBackfill).toContain("process.argv.includes('--apply')");
+    expect(provenanceBackfill).toContain('Dry run only');
+    expect(provenanceBackfill).toContain("from('marketing-assets')");
   });
 
   it('does not enqueue regeneration for archived canonical pages', () => {
