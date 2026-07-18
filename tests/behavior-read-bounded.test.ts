@@ -13,6 +13,7 @@ const src = fs.readFileSync('components/modules/behavior-module.tsx', 'utf8');
 const care = fs.readFileSync('components/modules/care-module.tsx', 'utf8');
 const security = fs.readFileSync('components/modules/security-module.tsx', 'utf8');
 const scorecard = fs.readFileSync('components/modules/experience-scorecard-module.tsx', 'utf8');
+const nextActions = fs.readFileSync('components/modules/next-actions-module.tsx', 'utf8');
 
 describe('A-05 growth-table module reads are bounded (perf)', () => {
   it('behavior_logs: rolling window AND a hard row cap', () => {
@@ -42,5 +43,14 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
     expect(fetcher).toContain(".gte('audited_on'");
     expect(fetcher).toMatch(/\.limit\(1000\)/);
     expect(fetcher).toContain('Date.now()');
+  });
+
+  // PLA-0814: next-actions pushed its 45-day horizon into the calendar_events query
+  // instead of loading the family's full calendar history and filtering client-side.
+  it('next-actions calendar_events: bounded by an upcoming date window + cap', () => {
+    const fetcher = nextActions.slice(nextActions.indexOf("table: 'calendar_events'"), nextActions.indexOf("table: 'calendar_events'") + 700);
+    expect(fetcher).toContain(".gte('starts_at'");
+    expect(fetcher).toContain(".lte('starts_at'");
+    expect(fetcher).toMatch(/\.limit\(500\)/);
   });
 });

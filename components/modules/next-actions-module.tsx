@@ -58,7 +58,14 @@ export function NextActionsModule() {
 
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId),
+    // Only upcoming events matter here (the list is trimmed to a 45-day horizon
+    // below). Push that bound into the query instead of loading the family's ENTIRE
+    // calendar history and filtering client-side — a generous window (yesterday →
+    // +46 days) with a hard cap keeps the read bounded; the client trim stays exact.
+    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId)
+      .gte('starts_at', new Date(Date.now() - 86_400_000).toISOString())
+      .lte('starts_at', new Date(Date.now() + 46 * 86_400_000).toISOString())
+      .order('starts_at', { ascending: true }).limit(500),
   });
   const { data: tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useRealtimeQuery<Task>({
     table: 'todo_items', familyId, deps: [familyId],

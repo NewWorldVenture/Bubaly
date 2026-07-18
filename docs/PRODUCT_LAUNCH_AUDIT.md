@@ -6,6 +6,30 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0814 - Next Actions loaded the family's entire calendar history to show the next 45 days
+
+- Timestamp: 2026-07-18 10:50 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Home / dashboard command surfaces (A-05) — Next Actions
+- Route: `/dashboard/next-actions` (`components/modules/next-actions-module.tsx`)
+- Affected files: `components/modules/next-actions-module.tsx`, `tests/behavior-read-bounded.test.ts` (extended)
+- Database objects: `calendar_events` (read only — table is A-06-owned; this is a consumption-side fix in an A-05 module, no change to the calendar module/table)
+- Role: all family roles · Tier: all · Household: any with calendar history
+- Scenario: a family with months/years of calendar events opens Next Actions
+- Severity: P2 (perf/reliability — unbounded read + over-fetch)
+- Reproduction: the `useRealtimeQuery` fetcher ran `sb.from('calendar_events').select('*').eq('family_id', familyId)` with **no date filter and no limit**, then the component filtered client-side to a 45-day horizon (`if (k < today || k > horizon) continue`). So it downloaded the ENTIRE calendar history (all past + future events, all columns) to render the next ~45 days
+- Expected: fetch only the ~45-day window the view uses
+- Actual: full-history read; payload grows with the family's total event count and re-fetches on every realtime change
+- Root cause: the horizon bound lived only in client-side JS; it was never pushed into the query
+- Resolution: push the window into the query — `.gte('starts_at', now-1d).lte('starts_at', now+46d).order('starts_at').limit(500)`. Generous by a day on each side so the exact client-side `dayKey` trim (unchanged) still governs display; the cap backstops dense calendars. Reduces the read from all-history to ~47 days
+- Supabase impact: none — read-shaping only; also cuts DB/egress substantially for large calendars
+- Security/Privacy/Accessibility impact: none
+- Performance impact: **positive** — bounds a previously-unbounded read and stops over-fetching irrelevant past/future events
+- Tests added: `tests/behavior-read-bounded.test.ts` extended (5 total) — asserts the `.gte`/`.lte('starts_at')` window + `.limit(500)`
+- Tests run: guard green (5); `tsc --noEmit` clean; `eslint` clean on the module
+- Validation evidence: guard asserts the bounded fetcher; client-side horizon trim preserved (correctness unchanged)
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none · Follow-up: `todo_items`/`opportunities` reads in the same module are bounded-by-nature (open-only / small collections), left as-is
+
 ### PLA-0813 - Behavior Tracking loaded a family's entire behavior_logs history (unbounded client read)
 
 - Timestamp: 2026-07-18 10:23 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
