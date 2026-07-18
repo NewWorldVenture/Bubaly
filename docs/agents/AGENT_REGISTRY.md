@@ -13,6 +13,7 @@ handles (`agent-01`..`agent-05`, `codex`).
 | `CLAUDE-INTEGRATIONS-01` | `agent-03` | Opus 4.8 | A-16 notifications/cron, A-11 messages/storage, observability | (pushed to main) | IN_REVIEW (heartbeat stale) | 2026-07-17 ~18:55 | Health endpoint, cron auth, messages/storage RLS |
 | `CLAUDE-SECURITY-01` | `agent-04` | Fable 5 | A-15/17/18/19/20 authz, GRANT scoping, a11y/build gates | (pushed to main) | IN_REVIEW (heartbeat stale) | 2026-07-17 ~00:06 | Admin authz, sync fail-closed, axe/overflow baseline |
 | `CLAUDE-FRONTEND-01` | `agent-05` | Opus 4.8 | A-05 home/dashboard/display command surfaces + §3e read sweep | (pushed to main) | **ACTIVE** | **2026-07-18 10:18** | Resuming A-05 dashboard wiring/verification matrix (user UI tasks /ai trial-copy + /blog hero art done: `162c9946`,`5e7b6fc1`); next: verify+harden remaining A-05 dashboard command surfaces |
+| `CLAUDE-POLISH-01` | `agent-fable-opus` | Opus 4.8 | Cross-cutting page-level fail-closed read sweep + null-`display_name` crash class + **app-wide UTF-8 mojibake repair** | (pushed to main) | **ACTIVE** | **2026-07-18 10:20** | Registering + logging lane overlaps (below); mojibake repair PLA-0812 shipped (`5c58ca7e`). NOTE: joined this relay before the `docs/agents/` board existed and overlapped codex's server-read lane + agent-05's module claim — all work validated + rebased clean (no file collisions), logged in `CONFLICT_LOG.md`. |
 
 ## Notes
 - Directive IDs are aliases; the operative identity on the claim board and in

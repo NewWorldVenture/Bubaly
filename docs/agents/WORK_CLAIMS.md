@@ -11,6 +11,8 @@ board wins.
 | C-QA-002 | `CLAUDE-QA-01` | Recovery/coordination system | `docs/agents/**` | 2026-07-18 11:20 | IN PROGRESS |
 | C-QA-003 | `CLAUDE-QA-01` | Integration gate (read-only) | `tsc`/`vitest`/`next build` at latest main; `docs/progress/**` | ongoing | RECURRING |
 | C-FE-005 | `CLAUDE-FRONTEND-01` (agent-05) | A-05 dashboard command-surface verification + hardening | `app/(app)/dashboard/**`, `app/(app)/display/**`, `components/dashboard/**`, `components/modules/*` (A-05 only) | 2026-07-18 10:18 | IN PROGRESS |
+| C-POLISH-001 | `agent-fable-opus` | App-wide UTF-8 mojibake repair (cross-cutting, one-shot) | 79 files under `app/`,`components/`,`lib/` (string content only) + `tests/no-mojibake-source.test.ts` | 2026-07-18 10:12 | DONE (`5c58ca7e`) — overlapped C-FE-005 files; see CONFLICT_LOG (non-destructive, string-only) |
+| C-POLISH-002 | `agent-fable-opus` | Page-level fail-closed read sweep (pre-board; overlaps codex server-read lane) | `app/(app)/**/page.tsx` (18 pages) + `app/gift/[token]` + `tests/*-read-boundary.test.ts` | 2026-07-18 (pre-board) | DONE (PLA-0770,0773–0782,0803–0810) — non-owning; codex owns the lane going forward |
 
 ## Rules (from COORDINATION §0/§8)
 - One agent per A-unit; keep file claims as narrow as practical.
