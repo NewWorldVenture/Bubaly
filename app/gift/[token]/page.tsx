@@ -24,7 +24,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   if (linkError) {
     console.error('[gift/token] gift link read failed', linkError);
     return (
-      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
         <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
           We couldn&apos;t load this gift link right now. Please refresh and try again in a moment.
@@ -51,7 +51,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 py-10">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10">
       <div className="text-center">
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
         <h1 className="text-2xl font-bold">Send a gift to {childName}</h1>

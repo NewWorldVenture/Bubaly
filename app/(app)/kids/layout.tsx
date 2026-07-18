@@ -8,7 +8,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 export default async function KidsLayout({ children }: { children: React.ReactNode }) {
   await requireUserContext();
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-dvh bg-bg">
       <header className="flex items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2"><LogoMark className="h-8 w-14" /><span className="text-lg font-black">My Bubaly</span></div>
         <Link href="/dashboard" className="rounded-full bg-surface px-4 py-2 text-sm font-semibold">Grown-up view</Link>

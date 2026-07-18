@@ -38,7 +38,7 @@ export default async function PayHandlePage({ params }: { params: Promise<{ hand
   // No handle / no active link → a friendly dead-end (never leaks whether a
   // handle exists beyond "no active link right now").
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-4 py-10 text-center">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 px-4 py-10 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
       <h1 className="text-2xl font-bold">No active gift link</h1>
       <p className="text-sm text-muted">

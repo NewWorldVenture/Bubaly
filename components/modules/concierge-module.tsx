@@ -151,7 +151,7 @@ export function ConciergeModule() {
         <div className="module-page">
           {activeKind ? (
             /* ── Chat view ── */
-            <div className="flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
+            <div className="flex flex-col" style={{ height: 'calc(100dvh - 140px)' }}>
               <div className="flex items-center gap-3 mb-4">
                 <button onClick={() => { setActiveKind(null); setMessages([]); }}
                   className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">

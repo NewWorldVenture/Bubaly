@@ -46,7 +46,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="reference-page soft-grid-bg min-h-screen overflow-hidden text-fg transition-colors duration-300">
+    <div className="reference-page soft-grid-bg min-h-dvh overflow-hidden text-fg transition-colors duration-300">
       {children}
     </div>
   );

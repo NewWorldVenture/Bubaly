@@ -541,7 +541,7 @@ export function MessagesModule() {
   const isMuted = activeConv ? mutedIds.has(activeConv.id) : false;
 
   return (
-    <div className="flex h-[calc(100vh-var(--topbar-height)-1rem)] flex-col gap-4">
+    <div className="flex h-[calc(100dvh-var(--topbar-height)-1rem)] flex-col gap-4">
       {/* ── Page header ─────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
