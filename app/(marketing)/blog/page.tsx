@@ -89,12 +89,15 @@ function PostImage({ post, sizes, className, priority }: { post: BlogPost; sizes
   );
 }
 
-type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string; tag?: string }> };
+type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string; tag?: string; page?: string }> };
+
+const PAGE_SIZE = 24; // cards per page — keeps the grid + image requests light
 
 export default async function BlogPage({ searchParams }: Props) {
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
   const activeTag = params.tag ? toHashtag(params.tag) : null;
+  const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
   const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
 
   const [allPostsRaw, featured, categoryCounts] = await Promise.all([
@@ -112,9 +115,22 @@ export default async function BlogPage({ searchParams }: Props) {
     ? allPostsRaw.filter((p) => articleHashtags(p.tags, 12).includes(activeTag))
     : allPostsRaw;
 
-  const postsForGrid = activeCategory || activeTag
+  const gridSource = activeCategory || activeTag
     ? allPosts
     : allPosts.filter((p) => !p.featured);
+
+  // Paginate the grid so a page never renders 1,000+ cards + image requests.
+  const totalPages = Math.max(1, Math.ceil(gridSource.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const postsForGrid = gridSource.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageHref = (p: number) => {
+    const qs = new URLSearchParams();
+    if (activeCategory) qs.set('category', activeCategory);
+    if (params.tag) qs.set('tag', params.tag);
+    if (p > 1) qs.set('page', String(p));
+    const s = qs.toString();
+    return s ? `/blog?${s}` : '/blog';
+  };
 
   const recentPosts = allPosts.slice(0, 5);
 
@@ -150,7 +166,7 @@ export default async function BlogPage({ searchParams }: Props) {
             <p className="mt-3 text-base leading-7 text-white/60">
               Practical advice, real stories, and smart tips to help you stay organized and enjoy more time together.
             </p>
-            <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, category: p.category }))} />
+            <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt.slice(0, 90), category: p.category }))} />
           </div>
           <div className="hidden lg:flex lg:justify-end">
             <BlogHeroArt className="h-auto w-full max-w-[360px]" />
@@ -275,6 +291,23 @@ export default async function BlogPage({ searchParams }: Props) {
                   </Link>
                 ))}
               </div>
+            )}
+
+            {/* Pagination — keeps each page light instead of one giant grid. */}
+            {totalPages > 1 && (
+              <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Blog pagination">
+                {currentPage > 1 ? (
+                  <Link href={pageHref(currentPage - 1)} rel="prev" className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:border-violet-400/30 hover:text-white">
+                    &larr; Previous
+                  </Link>
+                ) : <span />}
+                <span className="text-xs text-white/40">Page {currentPage} of {totalPages}</span>
+                {currentPage < totalPages ? (
+                  <Link href={pageHref(currentPage + 1)} rel="next" className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:border-violet-400/30 hover:text-white">
+                    Next &rarr;
+                  </Link>
+                ) : <span />}
+              </nav>
             )}
           </div>
 

@@ -123,6 +123,14 @@ function toPost(r: Row): BlogPost {
  * the tab bar while the section itself listed 56). Paginating guarantees the
  * count/list see every real article regardless of how many seed rows exist.
  */
+// Card/list columns — everything EXCEPT the large `body` JSONB. Only the single
+// article page needs `body`, so list surfaces (the /blog grid, sitemap, related
+// + adjacent posts, generateStaticParams) fetch this projection instead of `*`.
+// For 1,000+ posts this cuts the payload from megabytes to kilobytes and is the
+// single biggest speedup for /blog. toPost() coerces a missing body → [].
+const CARD_COLUMNS =
+  'slug, title, excerpt, author, published_at, reading_minutes, tags, category, featured, accent_color, hero_image_url, hero_image_alt, hero_image_credit';
+
 async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Promise<Pick<Row, K>[]> {
   const PAGE = 1000;
   const out: Pick<Row, K>[] = [];
@@ -143,7 +151,7 @@ async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Prom
 
 export async function getAllPosts(): Promise<BlogPost[]> {
   try {
-    const rows = await fetchAllPublishedRows<keyof Row>('*');
+    const rows = await fetchAllPublishedRows<keyof Row>(CARD_COLUMNS);
     return publicRows(rows as Row[]).map(toPost);
   } catch {
     return [];
@@ -173,11 +181,11 @@ export async function getPostsByCategory(category: BlogCategory): Promise<BlogPo
   try {
     const { data } = await anonClient()
       .from('blog_posts')
-      .select('*')
+      .select(CARD_COLUMNS)
       .eq('published', true)
       .eq('category', category)
       .order('published_at', { ascending: false });
-    return publicRows(data).map(toPost);
+    return publicRows(data as unknown as Row[]).map(toPost);
   } catch {
     return [];
   }
@@ -202,12 +210,12 @@ export async function getFeaturedPost(): Promise<BlogPost | undefined> {
   try {
     const { data } = await anonClient()
       .from('blog_posts')
-      .select('*')
+      .select(CARD_COLUMNS)
       .eq('published', true)
       .eq('featured', true)
       .order('published_at', { ascending: false })
       .limit(20);
-    const featured = publicRows(data)[0];
+    const featured = publicRows(data as unknown as Row[])[0];
     if (featured) return toPost(featured);
   } catch {
     /* fall through to first post */
@@ -220,13 +228,13 @@ export async function getRelatedPosts(slug: string, category: BlogCategory, limi
   try {
     const { data } = await anonClient()
       .from('blog_posts')
-      .select('*')
+      .select(CARD_COLUMNS)
       .eq('published', true)
       .eq('category', category)
       .neq('slug', slug)
       .order('published_at', { ascending: false })
       .limit(Math.max(limit * 10, 50));
-    return publicRows(data).map(toPost).slice(0, limit);
+    return publicRows(data as unknown as Row[]).map(toPost).slice(0, limit);
   } catch {
     return [];
   }
@@ -238,21 +246,21 @@ export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost |
     const [{ data: older }, { data: newer }] = await Promise.all([
       client
         .from('blog_posts')
-        .select('*')
+        .select(CARD_COLUMNS)
         .eq('published', true)
         .lt('published_at', date)
         .order('published_at', { ascending: false })
         .limit(20),
       client
         .from('blog_posts')
-        .select('*')
+        .select(CARD_COLUMNS)
         .eq('published', true)
         .gt('published_at', date)
         .order('published_at', { ascending: true })
         .limit(20),
     ]);
-    const previous = publicRows(older)[0];
-    const following = publicRows(newer)[0];
+    const previous = publicRows(older as unknown as Row[])[0];
+    const following = publicRows(newer as unknown as Row[])[0];
     return {
       prev: previous ? toPost(previous) : null,
       next: following ? toPost(following) : null,
