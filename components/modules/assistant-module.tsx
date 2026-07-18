@@ -376,7 +376,7 @@ export function AssistantModule() {
               ))}
             </div>
 
-            <div className="mt-7 flex-1 space-y-6 overflow-y-auto pb-4">
+            <div className="mt-7 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-4">
               {messages.map((msg) =>
                 msg.role === 'assistant' ? (
                   <div key={msg.id} className="assistant-message-enter flex gap-4">

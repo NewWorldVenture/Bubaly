@@ -176,7 +176,7 @@ export function ConciergeModule() {
               </div>
 
               {/* Chat messages */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              <div className="flex-1 overflow-y-auto overscroll-contain space-y-4 pr-1">
                 {messages.map((msg, i) => (
                   <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                     {msg.role === 'assistant' && (

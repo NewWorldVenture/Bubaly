@@ -680,6 +680,23 @@ Weighting (per the mission brief):
 - **Evidence:** guard green; tsc 0; eslint 0 errors (2 documented pre-existing
   warnings). Attribute-only edits to 3 files nobody has in flight.
 
+### M-032 — Pull-to-refresh inside chat threads wiped the typed draft (Chrome Android) — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P3, Phase 8):** none of the chat thread scrollers contained
+  overscroll, so on Chrome Android pulling down at the top of the Messages /
+  Assistant / Concierge thread chained to the document, fired browser
+  pull-to-refresh, and **reloaded the page — wiping the draft** typed in the
+  composer below.
+- **Fix:** `overscroll-contain` on the three draft-holding thread scrollers
+  (messages thread, assistant conversation, concierge chat). Desktop and iOS
+  behaviour unchanged; page-level pull-to-refresh elsewhere is standard and
+  left alone.
+- **Guard:** `tests/mobile-chat-overscroll.test.ts` (1) — asserts each thread
+  scroller's exact class list carries `overscroll-contain`.
+- **Evidence:** guard green + adjacent chat guards (enterKeyHint, panel-height)
+  still green; eslint 0 errors. Class-only edits to 3 files nobody has in
+  flight.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

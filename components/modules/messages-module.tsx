@@ -702,7 +702,7 @@ export function MessagesModule() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1">
               {loadingMsgs ? (
                 <SkeletonList />
               ) : messages.length === 0 ? (
