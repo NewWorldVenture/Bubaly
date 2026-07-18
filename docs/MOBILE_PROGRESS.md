@@ -159,6 +159,22 @@ Weighting (per the mission brief):
   changed blind.
 - **Test:** `tests/mobile-overlay-safe-area.test.ts` (6). **25 mobile guard tests** total.
 
+### M-005b — Tablet gap in the M-005 fix (coarse-pointer escape) — _agent-02_
+- **Severity:** P1 (tablet). The M-005 form `opacity-100 sm:opacity-0
+  sm:group-hover:opacity-100` is correct on **phones** (base `opacity-100` shows
+  below `sm`) but **re-hides on tablets**: an iPad is `≥ sm` width yet has no hover,
+  so `sm:opacity-0` hides the control and `sm:group-hover:*` never fires — the
+  largest touch form-factor loses edit/delete/favorite/drag.
+- **Fix:** appended a width-independent coarse-pointer escape `coarse:opacity-100`
+  to all 11 hits across the same 10 modules. New utility in `app/globals.css`
+  (`@media (pointer: coarse) { .coarse\:opacity-100 { opacity: 1 !important } }`)
+  forces the control visible on **any** touch device regardless of width, while
+  desktop (fine pointer) keeps the clean hover-reveal untouched.
+- **Test:** `tests/mobile-hover-reveal-tablet.test.ts` (2) — asserts the utility
+  exists in a coarse-pointer block and that every `sm:opacity-0 sm:group-hover`
+  hover-reveal carries the `coarse:opacity-100` escape. tsc + eslint clean.
+- **Evidence:** grep → 11/11 modules carry the escape; both guards green.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

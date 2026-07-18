@@ -558,6 +558,11 @@ body::before {
   .coarse\:min-h-12 { min-height: 3rem; }
   .coarse\:py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
   .coarse\:gap-4 { gap: 1rem; }
+  /* M-005: hover-reveal row controls (opacity-0 group-hover:opacity-100) are
+     unreachable on touch (no hover). Force them visible on ANY coarse-pointer
+     device — phones AND tablets (iPad Safari included), width-independent —
+     while desktop keeps the clean hover-reveal. */
+  .coarse\:opacity-100 { opacity: 1 !important; }
 }
 
 /* ============================================================
