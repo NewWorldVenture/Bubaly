@@ -9,6 +9,9 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
       // Blog hero photos — free-license Unsplash CDN images (0195/0196).
       { protocol: 'https', hostname: 'images.unsplash.com' },
+      // Blog hero photos — free Creative-Commons LoremFlickr images, one unique
+      // photo per article via a per-post `lock` (0226). Keyworded per category.
+      { protocol: 'https', hostname: 'loremflickr.com' },
     ],
   },
   async redirects() {

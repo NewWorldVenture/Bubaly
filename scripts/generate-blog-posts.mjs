@@ -55,39 +55,21 @@ function pickN(rng, arr, n) {
   return out;
 }
 
-// ── hero photos (verified-live Unsplash IDs + real alt text), by affinity ───
-const IMG = {
-  '1584697964358-3e14ca57658b': 'A parent raising her arms in triumph at a tidy desk — on top of everything for once',
-  '1476703993599-0035a21b17a9': 'A parent on the couch with two young children, sharing a tablet together',
-  '1531482615713-2afd69097998': 'A mentor sitting beside a student at a computer, working through a problem together',
-  '1506784983877-45594efa4cbe': 'A weekly planner open on a desk beside a cup of coffee',
-  '1606787366850-de6330128bfc': 'A colorful overhead spread of fresh food on a table',
-  '1556911220-bff31c812dba': 'A clean, bright kitchen counter ready for the week',
-  '1476234251651-f353703a034d': 'A parent and child reading a book together outdoors',
-  '1495364141860-b0d03eccd065': 'A hand holding a small alarm clock — the mental load is always running',
-  '1611371805429-8b5c1b2c34ba': 'A close-up of a classic board game money track — the family economy in miniature',
-  '1587616211892-f743fcca64f9': 'Children celebrating at a colorful birthday party',
-  '1484480974693-6ca0a78fb36b': 'A hand writing out a checklist in a notebook',
-  '1461896836934-ffe607ba8211': 'A young athlete crouched at the starting blocks of a running track',
-  '1427504494785-3a9ca7044f45': 'Tall library shelves lined with colorful books',
-  '1502086223501-7ea6ecd79368': 'Kids playing with a ball outdoors among the trees',
-  '1560253023-3ec5d502959f': 'Kids with headsets focused on their computer screens',
-  '1610890716171-6b1bb98ffd09': 'A colorful strategy board game mid-play, pieces scattered across the board',
-  '1489710437720-ebb67ec84dd2': 'A child playing joyfully in a sprinkler in golden summer light',
-  '1554224155-6726b3ff858f': 'Receipts and a calculator on a table — budget night in progress',
-  '1579621970563-ebec7560ff3e': 'A seedling sprouting from a pile of coins — money that grows',
-  '1554224154-26032ffc0d07': 'Paperwork and a calculator mid-audit on a desk',
-};
-const IMG_BY_CAT = {
-  'Parenting': ['1476234251651-f353703a034d','1476703993599-0035a21b17a9','1495364141860-b0d03eccd065','1489710437720-ebb67ec84dd2','1587616211892-f743fcca64f9'],
-  'Organization': ['1506784983877-45594efa4cbe','1484480974693-6ca0a78fb36b','1584697964358-3e14ca57658b','1495364141860-b0d03eccd065'],
-  'School & Activities': ['1531482615713-2afd69097998','1461896836934-ffe607ba8211','1427504494785-3a9ca7044f45','1502086223501-7ea6ecd79368','1610890716171-6b1bb98ffd09'],
-  'AI & Technology': ['1560253023-3ec5d502959f','1476703993599-0035a21b17a9','1584697964358-3e14ca57658b','1531482615713-2afd69097998'],
-  'Wellness': ['1489710437720-ebb67ec84dd2','1502086223501-7ea6ecd79368','1476234251651-f353703a034d','1495364141860-b0d03eccd065'],
-  'Family Finances': ['1611371805429-8b5c1b2c34ba','1554224155-6726b3ff858f','1579621970563-ebec7560ff3e','1554224154-26032ffc0d07'],
-  'Recipes & Food': ['1606787366850-de6330128bfc','1556911220-bff31c812dba','1476234251651-f353703a034d'],
-  'Travel & Adventures': ['1502086223501-7ea6ecd79368','1489710437720-ebb67ec84dd2','1476234251651-f353703a034d','1587616211892-f743fcca64f9'],
-  'Home & Seasonal': ['1556911220-bff31c812dba','1584697964358-3e14ca57658b','1506784983877-45594efa4cbe','1489710437720-ebb67ec84dd2'],
+// ── UNIQUE hero photo per post ──────────────────────────────────────────────
+// Every article gets its OWN image (no repeats): a free, Creative-Commons
+// LoremFlickr photo, keyworded per category so it stays topic-relevant, with a
+// per-post `lock` (a globally-unique sequential id assigned at emit time) that
+// pins one distinct image to each article. 545 posts ⇒ 545 different photos.
+const CAT_KEYWORDS = {
+  'Parenting': 'family,children,parenting',
+  'Organization': 'planner,desk,organized',
+  'School & Activities': 'school,classroom,students',
+  'AI & Technology': 'technology,computer,family',
+  'Wellness': 'wellness,nature,health',
+  'Family Finances': 'money,savings,finance',
+  'Recipes & Food': 'food,cooking,kitchen',
+  'Travel & Adventures': 'travel,adventure,landscape',
+  'Home & Seasonal': 'home,house,cozy',
 };
 
 const ACCENT = {
@@ -383,8 +365,8 @@ function buildPost(category, subject, globalIndex, usedSlugs) {
   const excerpt = `${firstSentence(body[0].text)}. ${firstSentence(body[1].text)}.`
     .replace(/\s+/g, ' ').slice(0, 180);
 
-  const imgPool = IMG_BY_CAT[category];
-  const imgId = imgPool[hash32('img:' + slug) % imgPool.length];
+  const heroKeywords = CAT_KEYWORDS[category];
+  const heroImageAlt = `A photo related to ${subject}.`;
 
   // hashtags: always #bubaly + #familylife + category + subject-derived + facet-ish
   const subjTag = '#' + subject.split(' ').filter((w) => w.length > 3).slice(0, 2).join('').replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -398,7 +380,7 @@ function buildPost(category, subject, globalIndex, usedSlugs) {
   return {
     slug, title: t, excerpt, author, publishedAt, readingMinutes,
     tags, category, accentColor: ACCENT[category],
-    heroImageId: imgId, heroImageAlt: IMG[imgId], body,
+    heroKeywords, heroImageAlt, body,
   };
 }
 
@@ -439,10 +421,13 @@ lines.push(`  (slug, title, excerpt, author, published_at, reading_minutes, tags
 lines.push(`   hero_image_url, hero_image_alt, hero_image_credit, body, published)`);
 lines.push(`VALUES`);
 
-const valueRows = posts.map((p) => {
-  const url = `https://images.unsplash.com/photo-${p.heroImageId}?auto=format&fit=crop&w=1600&q=80`;
+const LOCK_BASE = 1000; // keep locks clear of low ids other LoremFlickr users hit
+const valueRows = posts.map((p, idx) => {
+  // idx is unique per post ⇒ a unique `lock` ⇒ a distinct photo for every article.
+  const lock = LOCK_BASE + idx;
+  const url = `https://loremflickr.com/1600/900/${p.heroKeywords}?lock=${lock}`;
   return `(${q(p.slug)}, ${q(p.title)}, ${q(p.excerpt)}, ${q(p.author)}, ${q(p.publishedAt)}, ${p.readingMinutes}, ` +
-    `${pgArray(p.tags)}, ${q(p.category)}, false, ${q(p.accentColor)}, ${q(url)}, ${q(p.heroImageAlt)}, ${q('Unsplash')}, ` +
+    `${pgArray(p.tags)}, ${q(p.category)}, false, ${q(p.accentColor)}, ${q(url)}, ${q(p.heroImageAlt)}, ${q('LoremFlickr (CC)')}, ` +
     `${bodyJson(p.body)}, true)`;
 });
 lines.push(valueRows.join(',\n'));

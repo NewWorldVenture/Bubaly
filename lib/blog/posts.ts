@@ -115,6 +115,28 @@ export async function getAllPosts(): Promise<BlogPost[]> {
   }
 }
 
+/**
+ * Published-article count per category, computed from ALL posts (independent of
+ * any active filter) so every tab can show an accurate count at all times.
+ * Excludes synthetic seed rows, matching what the public pages render.
+ */
+export async function getCategoryCounts(): Promise<Record<string, number>> {
+  try {
+    const { data } = await anonClient()
+      .from('blog_posts')
+      .select('slug, category')
+      .eq('published', true);
+    const counts: Record<string, number> = {};
+    for (const row of publicRows(data as Row[] | null)) {
+      const c = row.category;
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
 export async function getPostsByCategory(category: BlogCategory): Promise<BlogPost[]> {
   try {
     const { data } = await anonClient()

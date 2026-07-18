@@ -40,9 +40,15 @@ describe('0226 blog seed — 500+ unique, on-brand articles', () => {
     }
   });
 
-  it('gives every article a free Unsplash hero photo', () => {
-    const withImg = rows.filter((r) => /images\.unsplash\.com\/photo-/.test(r) && /'Unsplash'/.test(r));
+  it('gives every article a free hero photo', () => {
+    const withImg = rows.filter((r) => /loremflickr\.com\/1600\/900\//.test(r) && /'LoremFlickr \(CC\)'/.test(r));
     expect(withImg.length).toBe(rows.length);
+  });
+
+  it('gives every article a UNIQUE hero photo (no repeats)', () => {
+    const urls = rows.map((r) => r.match(/(https:\/\/loremflickr\.com\/1600\/900\/[^']+)/)![1]);
+    expect(urls.length).toBe(rows.length);
+    expect(new Set(urls).size).toBe(urls.length); // every image URL is distinct
   });
 
   it('places every article under a known category tab', () => {

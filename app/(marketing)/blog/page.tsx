@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, BookOpen, Calendar, Clock, Mail, Tag } from 'lucide-react';
-import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
+import { getAllPosts, getFeaturedPost, getPostsByCategory, getCategoryCounts, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
 import { articleHashtags, toHashtag } from '@/lib/blog/engagement';
 import { BlogListStructuredData } from '@/components/marketing/structured-data';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
@@ -96,10 +96,14 @@ export default async function BlogPage({ searchParams }: Props) {
   const activeTag = params.tag ? toHashtag(params.tag) : null;
   const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
 
-  const [allPostsRaw, featured] = await Promise.all([
+  const [allPostsRaw, featured, categoryCounts] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
     activeCategory || activeTag ? Promise.resolve(undefined) : getFeaturedPost(),
+    // Always fetch per-category counts (independent of the active filter) so
+    // EVERY tab shows an accurate count, even when a category/tag is selected.
+    getCategoryCounts(),
   ]);
+  const totalCount = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
 
   // Optional hashtag filter (from the Popular Tags cloud): match against each
   // post's normalized hashtag set so legacy + new posts both filter correctly.
@@ -112,13 +116,6 @@ export default async function BlogPage({ searchParams }: Props) {
     : allPosts.filter((p) => !p.featured);
 
   const recentPosts = allPosts.slice(0, 5);
-
-  const categoryCounts = new Map<string, number>();
-  if (!activeCategory) {
-    for (const p of allPosts) {
-      categoryCounts.set(p.category, (categoryCounts.get(p.category) ?? 0) + 1);
-    }
-  }
 
   return (
     <PageWrap>
@@ -171,6 +168,7 @@ export default async function BlogPage({ searchParams }: Props) {
             )}
           >
             All Articles
+            <span className="ml-1.5 text-xs text-white/30">({totalCount})</span>
           </Link>
           {ALL_CATEGORIES.map((cat) => (
             <Link
@@ -184,9 +182,8 @@ export default async function BlogPage({ searchParams }: Props) {
               )}
             >
               {cat}
-              {!activeCategory && categoryCounts.has(cat) && (
-                <span className="ml-1.5 text-xs text-white/30">({categoryCounts.get(cat)})</span>
-              )}
+              {/* Always show an accurate count on every tab. */}
+              <span className="ml-1.5 text-xs text-white/30">({categoryCounts[cat] ?? 0})</span>
             </Link>
           ))}
         </div>
@@ -324,9 +321,7 @@ export default async function BlogPage({ searchParams }: Props) {
                     >
                       <div className={cn('h-2 w-2 rounded-full', CATEGORY_ICON_COLORS[cat])} />
                       <span className="flex-1">{cat}</span>
-                      {categoryCounts.has(cat) && (
-                        <span className="text-xs text-white/30">{categoryCounts.get(cat)}</span>
-                      )}
+                      <span className="text-xs text-white/30">{categoryCounts[cat] ?? 0}</span>
                     </Link>
                   </li>
                 ))}
