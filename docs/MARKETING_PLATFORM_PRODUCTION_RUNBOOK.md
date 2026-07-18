@@ -19,12 +19,17 @@ production-ready until the remote checks below pass.
 
    ```powershell
    npm.cmd run db:audit:migrations
+   supabase migration list --linked
    npm.cmd run db:push
    ```
 
    Migration `0231_marketing_platform_spine.sql` must be included. Do not run
    an isolated marketing migration against a production database whose earlier
-   migration history has not been reconciled.
+   migration history has not been reconciled. The production workflow performs
+   the same ledger preflight and fails closed before `db push` when the remote
+   history cannot be read. If a migration was applied manually, use the
+   reviewed `supabase migration repair --status applied <version>` command only
+   after confirming that migration's schema changes are already present.
 
 4. Audit existing Supabase media. If the dry run reports legacy rows without
    hashes, resolve any duplicate groups first, then run the explicit write:

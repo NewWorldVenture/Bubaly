@@ -20,7 +20,11 @@ authoritative list.
 > and `npm.cmd run marketing:verify:assets:remote` passed the media provenance
 > gate. The migration was applied in eight SQL editor chunks because the
 > dashboard editor rejected one full paste. Keep the production workflow
-> configured to reconcile future environments.
+> configured to reconcile future environments. The remote
+> `supabase_migrations.schema_migrations` ledger still requires an
+> owner-reviewed reconciliation before the automated migration workflow can
+> safely run; its new preflight fails closed rather than replaying unknown
+> historical migrations.
 
 ## 🔴 SECURITY MIGRATIONS — APPLY FIRST (launch-blocking)
 

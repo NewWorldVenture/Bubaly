@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/supabase-production-migrations.yml'
+      - 'package.json'
+      - 'package-lock.json'
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
@@ -62,6 +65,15 @@ jobs:
 
       - name: Link production project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Verify remote migration ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! supabase migration list --linked; then
+            echo "Remote Supabase migration history is unavailable or out of sync. Repair the reviewed migration ledger before db push." >&2
+            exit 1
+          fi
 
       - name: Apply ordered migrations
         run: supabase db push --yes
