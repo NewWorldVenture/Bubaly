@@ -591,6 +591,26 @@ Weighting (per the mission brief):
   app-shell), agent-02 (overlays), and agent-fable-opus (PWA/SW). First **responsive-
   layout content-parity** fix (prior blog/marketing increments were touch-target/viewport).
 
+### M-028 — Photos lightbox video hijacked into iOS fullscreen (missing playsInline) — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P3, Phase 8):** the photos lightbox `<video autoPlay controls>` had
+  no `playsInline`, so on iPhone tapping play kicked the family video out of the
+  lightbox into Safari's native fullscreen player (and unmuted `autoPlay` is
+  blocked by iOS anyway, so it sat paused until tapped). `camera-capture.tsx`
+  already had it.
+- **Fix:** added `playsInline` (one attribute; `muted` deliberately NOT added —
+  memories videos should play with sound on tap).
+- **Also swept (clean):** touch-dead interaction classes — HTML5 drag-and-drop
+  (all 5 sites are file-drop zones with tap-to-browse `type="file"` fallbacks:
+  photos, scan, documents, migrate-wizard, feedback-attachments), `onDoubleClick`
+  (0 uses), `onContextMenu` (0 uses). No defect; no touch-unreachable feature.
+- **Guard:** `tests/mobile-video-playsinline.test.ts` (1) — walks every rendered
+  `.tsx` (comments stripped) and asserts no `<video>` opening tag lacks
+  `playsInline`.
+- **Evidence:** guard green; tsc 0; eslint 0. File-disjoint one-attribute change
+  (photos-module was not in any bot's in-flight edit; agent-05's module heartbeat
+  stale per §0).
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

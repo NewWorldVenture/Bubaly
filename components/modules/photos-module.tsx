@@ -412,6 +412,7 @@ export function PhotosModule() {
                 src={photos[lightboxIdx].url ?? ''}
                 controls
                 autoPlay
+                playsInline
                 className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
               />
             ) : (
