@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0807 - Public gift page told a giver "this link is no longer active" on a transient read failure
+
+- Timestamp: 2026-07-18 09:52 UTC
+- Service: Wallet / gifting — public gift-redemption flow (agent-`fable-opus` lane)
+- Route: `/gift/[token]` (public, unauthenticated)
+- Affected files: `app/gift/[token]/page.tsx`, `tests/gift-token-read-boundary.test.ts`
+- Database objects: `gift_links` (primary); `child_wallets`, `family_members`, `families` (identity enrichment, already best-effort behind the active-link check)
+- Role: a gift-giver (public, no account) opening a family's gift link
+- Scenario: the `gift_links` lookup fails to read (transient, connection, RLS) for a token that is actually valid and active.
+- Severity: **P1** (public money-conversion flow — a valid gift link is falsely reported dead, turning away a giver mid-payment).
+- Launch impact: the page destructured only `{ data: link }` from the `gift_links` `.maybeSingle()` and dropped the `error`. On a transient read failure `link` became null → `active = false` → the giver saw **"This gift link is no longer active. Please ask the family for a new one."** for a perfectly valid link. A genuinely missing/expired token (`data` null, `error` null) *should* show that message — but a read *error* must not, or a paying gift-giver is wrongly turned away.
+- Root cause: the primary `gift_links` read dropped its `error`, conflating "not found" with "failed to read".
+- Resolution: capture `error: linkError`; when it is set, `console.error('[gift/token] gift link read failed', …)` + render a retryable message ("We couldn't load this gift link right now. Please refresh and try again in a moment.") that is visually distinct from the inactive-link message. The not-found case (data null, no error) still falls through to the existing active/inactive logic. The identity enrichment reads stay best-effort behind the active-link check (and keep their non-disclosure guard for inactive links).
+- Supabase impact: none (read error-handling only; no schema/migration change).
+- Tests run: new `tests/gift-token-read-boundary.test.ts` (3 assertions — error captured, retryable message on error, not-found still treated as inactive); `tsc --noEmit` clean (only the known optional `@axe-core/playwright` e2e noise); eslint clean on changed files. NOTE: the full-suite run has **one pre-existing unrelated failure** in `tests/reasoning-context-read-boundary.test.ts` (the reasoning lane's `loadFamilyGraph` was changed to throw in commit `1ee6813b` without updating its degrade-expecting test) — not caused by and not in scope of this increment; flagged for the reasoning-lane owner.
+- Commit: (this increment)
+- Status: RESOLVED in-repo and pushed to `main`.
+- Remaining dependencies: none agent-doable for this page; the P0/P1 live blockers (LB-001..015) remain owner/live-infra.
+
 ### PLA-0806 - Kids dashboard told a child "All done! 🎉" and "0 points" when a read failed
 
 - Timestamp: 2026-07-18 09:43 UTC
