@@ -222,7 +222,7 @@ Weighting (per the mission brief):
   green *execution* is a CI concern — the sandbox's build+`next start` cycle was
   flaky here (server-start aborts), so the run itself is deferred to CI (see M-009 remaining in TODO).
   This is emulated coverage, explicitly **not** physical-device (see
-  `PHYSICAL_DEVICE_TEST_PLAN` — to be authored).
+  `PHYSICAL_DEVICE_TEST_PLAN.md` (authored)).
 - **Evidence:** `--list` shows all 4 mobile projects × mobile/overflow/public specs;
   eslint 0 on config + spec.
 - **CI gate (M-009 follow-up):** `scripts/run-e2e.mjs` runs `playwright test` with no
