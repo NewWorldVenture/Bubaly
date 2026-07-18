@@ -5,6 +5,7 @@ import { ArrowRight, BookOpen, Calendar, Clock, Mail, Tag } from 'lucide-react';
 import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
+import { BlogHeroArt } from '@/components/blog/blog-hero-art';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 
@@ -124,21 +125,7 @@ export default async function BlogPage({ searchParams }: Props) {
             <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, category: p.category }))} />
           </div>
           <div className="hidden lg:flex lg:justify-end">
-            <div className="relative h-64 w-80">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-600/20 to-blue-900/20" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="grid grid-cols-3 gap-4 p-8">
-                  {['📅', '✅', '❤️', '🤖', '🛒', '📚'].map((emoji, i) => (
-                    <div key={i} className="grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.06] text-2xl">
-                      {emoji}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-                <div className="h-24 w-24 rounded-full bg-violet-600/30 blur-2xl" />
-              </div>
-            </div>
+            <BlogHeroArt className="h-auto w-full max-w-[440px]" />
           </div>
         </div>
 
