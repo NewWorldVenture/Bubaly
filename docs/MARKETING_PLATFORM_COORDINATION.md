@@ -239,4 +239,33 @@ read-wiring + fail-closed behavior:
 now fails closed. (Write-path round-trip smokes for send/automation remain codex's
 gate per §3.)
 
-_§6 last updated: 2026-07-18 15:29 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
+### 6g. Blog ↔ SEO/AEO integration — audited, production-grade (verified, not rebuilt)
+"Building out SEO + AEO with Marketing and Blog" is **already wired end-to-end** —
+audited so codex doesn't redo this slice:
+- **Per-post SEO:** `app/(marketing)/blog/[slug]/page.tsx` `generateMetadata()`
+  emits per-post title / canonical / OpenGraph / Twitter / `robots`.
+- **Structured data:** `BlogPostStructuredData` (Article) + `FaqStructuredData`
+  (FAQPage) render JSON-LD per article.
+- **AEO FAQ on every article:** `readAeoQuestionsForCategory()` pulls published,
+  answered, category-matched questions (falls back to general published ones,
+  degrades gracefully to an "unavailable" note — never a hard error).
+- **AEO auto-derived from Blog on publish:** `content/actions.ts` calls
+  `deriveArticleAeoQuestions()` → upserts `marketing_aeo_questions` keyed by
+  `source_path=/blog/{slug}` + `metadata.seed='blog_aeo_v1'` (idempotent: deletes
+  prior seed rows first; best-effort, never blocks a publish).
+- **Sitemap (`app/sitemap.ts`):** static routes + **all published posts** + blog
+  category tabs + published landing pages, every DB read fail-closed/degrade-safe.
+- **Admin R/W:** SEO (keywords + page registry) and AEO (questions) pages both read
+  via service client (fail closed) and write behind `requireMarketingAdmin()` +
+  audit log; write actions surface failures via `marketingActionFailure` (no silent
+  writes).
+
+**One open enhancement → codex (flagged, NOT built to avoid collision):** the ~500
+posts seeded by migration `0226` were not published through `content/actions.ts`,
+so they have **no per-post derived AEO rows** (`source_path=/blog/{slug}`) — they
+still show *category-level* FAQs, but not post-specific answer-engine Q&A. A
+one-time backfill (run `deriveArticleAeoQuestions` over every seeded post; the
+delete-by-seed keeps it idempotent) would complete per-post AEO coverage. Left for
+the AEO-lifecycle owner (codex) since it is squarely their active build.
+
+_§6 last updated: 2026-07-18 15:34 UTC · `agent-05` (CLAUDE-FRONTEND-01)._
