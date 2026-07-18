@@ -378,3 +378,17 @@ Blog articles now prefer their `/blog/{slug}` published AEO rows, falling back t
 category answers only for legacy posts without per-post coverage. A successful
 path query is authoritative even when empty, so deleting or unpublishing an answer
 cannot resurrect stale generated JSON from the page payload.
+
+### Operations and provider-readiness checkpoint — 2026-07-18
+
+The Super Admin marketing control center now reads exact all-time generation-job
+counts, detects running locks older than 15 minutes, shows the latest successful
+worker job, and reports per-provider observation counts/freshness/errors from
+Supabase. It no longer treats the latest 30 jobs as the whole queue.
+
+The provider cron contract now distinguishes `completed` (the sync ran without a
+runtime failure) from `ready` (every provider is configured and connected), with
+per-provider `configured`, `status`, and `rows` fields. Missing Search Console,
+Bing Webmaster, or AI-citation credentials remain explicitly `not_configured`; no
+rankings or citations are fabricated. Published to `main` as `8379895a` and
+`9e2f6a6e`; full local gates plus remote schema/access/coverage/asset gates passed.
