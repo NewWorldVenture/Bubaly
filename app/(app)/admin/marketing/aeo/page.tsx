@@ -18,17 +18,33 @@ const STATUS_TONE: Record<string, 'neutral' | 'warning' | 'brand' | 'success'> =
   opportunity: 'warning', drafting: 'neutral', answered: 'brand', published: 'success',
 };
 
+// Only the latest slice is rendered — the table can hold thousands of rows, and
+// fetching/rendering all of them made the page slow to open. Accurate totals come
+// from cheap COUNT queries (head:true → no row transfer); the editable list is
+// bounded + column-projected.
+const LIST_LIMIT = 50;
+
 export default async function AeoPage() {
   const supabase = createServiceClient();
-  const { data: questions, error: questionsError } = await supabase.from('marketing_aeo_questions').select('*').order('created_at', { ascending: false });
+  const [totalRes, answeredRes, listRes] = await Promise.all([
+    supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }),
+    supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }).in('status', ['answered', 'published']),
+    supabase
+      .from('marketing_aeo_questions')
+      .select('id, question, answer, status, pattern, entity, clarity_score, source_path')
+      .order('created_at', { ascending: false })
+      .limit(LIST_LIMIT),
+  ]);
+  const questionsError = totalRes.error ?? answeredRes.error ?? listRes.error;
   if (questionsError) {
     console.error('[admin-marketing-aeo] question read failed', questionsError);
     return <AdminAeoReadError />;
   }
 
-  const rows = questions ?? [];
-  const answered = rows.filter((q) => q.status === 'answered' || q.status === 'published').length;
-  const readiness = rows.length > 0 ? Math.round((answered / rows.length) * 100) : 0;
+  const total = totalRes.count ?? 0;
+  const answered = answeredRes.count ?? 0;
+  const readiness = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const rows = listRes.data ?? [];
 
   return (
     <div className="space-y-5">
@@ -48,15 +64,18 @@ export default async function AeoPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <Card><p className="text-xs text-muted">Questions</p><p className="text-2xl font-bold">{rows.length}</p></Card>
-            <Card><p className="text-xs text-muted">Answered</p><p className="text-2xl font-bold">{answered}</p></Card>
+            <Card><p className="text-xs text-muted">Questions</p><p className="text-2xl font-bold">{total.toLocaleString()}</p></Card>
+            <Card><p className="text-xs text-muted">Answered</p><p className="text-2xl font-bold">{answered.toLocaleString()}</p></Card>
             <Card><p className="text-xs text-muted">Readiness</p><p className="text-2xl font-bold">{readiness}%</p></Card>
           </div>
 
-          {rows.length === 0 ? (
+          {total === 0 ? (
             <EmptyState icon={MessagesSquare} title="No questions tracked" description="Capture the questions your customers ask AI engines." />
           ) : (
             <div className="space-y-2">
+              {total > rows.length && (
+                <p className="px-1 text-xs text-muted">Showing the latest {rows.length} of {total.toLocaleString()} questions.</p>
+              )}
               {rows.map((q) => (
                 <Card key={q.id}>
                   <div className="flex items-start justify-between gap-3">

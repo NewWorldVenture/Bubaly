@@ -20,20 +20,30 @@ const INTENTS = ['informational', 'navigational', 'commercial', 'transactional']
 const KEYWORD_STATUSES = ['idea', 'tracking', 'won', 'dropped'];
 const PAGE_STATUSES = ['active', 'noindex', 'archived'];
 
+// The keyword table can hold thousands of rows; fetching + rendering all of them
+// made the page slow to open. Render a bounded, column-projected slice and show the
+// true total from a cheap COUNT (head:true → no row transfer). The page registry is
+// small (one row per public route) so it loads in full.
+const KEYWORD_LIMIT = 100;
+
 export default async function SeoPage() {
   const supabase = createServiceClient();
-  const [keywordsResult, pagesResult] = await Promise.all([
-    supabase.from('marketing_seo_keywords').select('*').order('created_at', { ascending: false }),
+  const [keywordCountResult, keywordsResult, pagesResult] = await Promise.all([
+    supabase.from('marketing_seo_keywords').select('id', { count: 'exact', head: true }),
+    supabase
+      .from('marketing_seo_keywords')
+      .select('id, keyword, intent, target_path, source, status')
+      .order('created_at', { ascending: false })
+      .limit(KEYWORD_LIMIT),
     supabase.from('marketing_seo_pages').select('*').order('path', { ascending: true }),
   ]);
-  const keywordsError = keywordsResult.error;
-  const pagesError = pagesResult.error;
-  const readError = keywordsError ?? pagesError;
+  const readError = keywordCountResult.error ?? keywordsResult.error ?? pagesResult.error;
   if (readError) {
     console.error('[admin-marketing-seo] read failed', readError);
     return <AdminSeoReadError />;
   }
   const keywords = keywordsResult.data ?? [];
+  const keywordTotal = keywordCountResult.count ?? 0;
   const seoPages = pagesResult.data ?? [];
 
   return (
@@ -119,8 +129,13 @@ export default async function SeoPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 font-semibold">Tracked keywords</h2>
-            {(keywords ?? []).length === 0 ? (
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="font-semibold">Tracked keywords</h2>
+              {keywordTotal > keywords.length && (
+                <span className="text-xs text-muted">Latest {keywords.length} of {keywordTotal.toLocaleString()}</span>
+              )}
+            </div>
+            {keywordTotal === 0 ? (
               <EmptyState icon={Search} title="No keywords tracked" description="Add target keywords on the right." />
             ) : (
               <div className="overflow-x-auto">

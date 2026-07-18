@@ -6,6 +6,29 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0832 - Super Admin Marketing SEO/AEO pages were slow to open (fetched + rendered every row)
+
+- Timestamp: 2026-07-18 15:41 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)
+- Service: Marketing admin (A-17) — SEO + AEO — **cross-lane, direct user request**
+- Route: `/admin/marketing/seo`, `/admin/marketing/aeo`
+- Affected files: `app/(app)/admin/marketing/{seo,aeo}/page.tsx`, `tests/marketing-seo-aeo-wiring.test.ts` (extended)
+- Database objects: `marketing_aeo_questions`, `marketing_seo_keywords`, `marketing_seo_pages` (read shape only)
+- Role: super admin · Tier: n/a
+- Scenario: super admin clicks the SEO or AEO subnav tab
+- Severity: **P2 (performance/UX)** — user report: "takes TOOO LONG"
+- Reproduction: both pages ran `.select('*')` with **no `.limit()`** and rendered every row. Prod seed = **~2,344 AEO questions** and **~1,603 SEO keywords** (migration `0229`). AEO built ~2,344 `<details>` cards (each a full edit form); SEO built ~1,603 table rows w/ inline edit forms. Result: multi-MB payload + huge DOM + slow TTFB on every click (the pages are `force-dynamic`, so it re-ran each navigation).
+- Expected: the pages open fast regardless of table size
+- Actual: fetched + rendered the entire table each click
+- Root cause: unbounded `select('*')` + render-all; stats derived by counting the full result set client-side
+- Resolution: derive accurate totals from cheap **COUNT** queries (`select('id', { count: 'exact', head: true })` — no row transfer), and render only a **bounded, column-projected** slice — AEO `limit(50)` (projected to the 8 fields the card/edit-form use), SEO keywords `limit(100)` (projected to 6 fields). Added a "Showing the latest N of TOTAL" note so nothing looks lost. The 19-row SEO page registry still loads in full. Payload/DOM dropped from thousands of rows to ≤100.
+- Supabase/Security/Privacy impact: none (same tables, same RLS/service-role, fewer columns + rows read)
+- Performance impact: **large positive** — reads go from ~2,344 / ~1,603 full rows to 2 head-counts + ≤50 / ≤100 projected rows; DOM shrinks ~20–40×
+- Tests added: `tests/marketing-seo-aeo-wiring.test.ts` extended (9 total — asserts count-based stats + bounded projected reads + no unbounded `select('*')`)
+- Tests run: guard green (9); `tsc` clean; `eslint` clean; `next build` green
+- Commit: (this increment) · Integration commit: same (pushed to `main`)
+- Status: Verified · Remaining dependencies: none. Follow-up option (not needed at current scale): server-side pagination/search if a table grows past a few thousand rows, and a `created_at` index for the ordering.
+- Lane note: A-17 (marketing) is codex's active lane; done under direct user request, logged in `docs/MARKETING_PLATFORM_COORDINATION.md`.
+
 ### PLA-0831 - Blog engine (500 posts) hotlinked LoremFlickr — unverified-license + visually duplicated covers (resolves LB-016)
 
 - Timestamp: 2026-07-18 14:55 UTC · Agent: `CLAUDE-FRONTEND-01` (agent-05)

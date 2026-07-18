@@ -57,6 +57,22 @@ describe('Marketing AEO page is wired to Supabase (read + write)', () => {
   });
 });
 
+describe('Marketing SEO/AEO pages load fast — bounded, projected reads (not select all rows)', () => {
+  it('AEO derives stats from COUNT queries and renders a bounded, projected list', () => {
+    // The table holds thousands of rows — fetching/rendering all of them was slow.
+    expect(aeoPage).toContain("count: 'exact', head: true");
+    expect(aeoPage).toMatch(/\.limit\(LIST_LIMIT\)/);
+    // No unbounded select-* of the whole questions table.
+    expect(aeoPage).not.toMatch(/from\('marketing_aeo_questions'\)\.select\('\*'\)/);
+  });
+
+  it('SEO fetches a bounded, projected keyword slice + a COUNT for the true total', () => {
+    expect(seoPage).toContain("count: 'exact', head: true");
+    expect(seoPage).toMatch(/\.limit\(KEYWORD_LIMIT\)/);
+    expect(seoPage).not.toMatch(/from\('marketing_seo_keywords'\)\.select\('\*'\)/);
+  });
+});
+
 describe('Marketing Customer Health fails closed on a read error (no false-empty)', () => {
   it('uses the error-returning reader and renders an error state, not "no customers"', () => {
     // Previously used getMarketingCustomers (drops the error → [] on failure), so a
