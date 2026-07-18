@@ -122,14 +122,47 @@ Weighting (per the mission brief):
   touch-visible app-wide (inbox archive done here as the first).
 
 ## Next steps (autonomous, in order)
-1. Complete Phase 1 route inventory → `MOBILE_AUDIT.md` (every route × role × data
-   source × mobile risk).
-2. Phase 7 forms sweep: `inputmode`/`type`/`autocomplete` on inputs (email, tel,
-   numeric, OTP) + iOS zoom-on-focus (font-size ≥ 16px on inputs).
-3. Phase 6 touch targets: icon-only controls < 44px + missing `aria-label`.
-4. Phase 4 horizontal-overflow sweep across the dashboard modules.
-5. Establish the Playwright mobile viewport matrix (Phase 2) for automated E2E.
+The prioritized, ready-to-pick backlog lives in **`docs/MOBILE_TODO.md`** (M-005…
+M-010) with exact `file:line` targets. Top of queue: **M-005 — hover-reveal
+controls invisible on touch** (~30 `group-hover`-gated row actions; template is the
+inbox-archive fix in M-004).
 
-**Blocked / external:** physical-device tests, App Store / Play Console, live
-push credentials — will be enumerated in `PHYSICAL_DEVICE_TEST_PLAN.md` as they
-arise. Nothing is marked done without shipped code + a passing check.
+---
+
+## 🤝 Handoff — how another Claude bot resumes this
+
+**Read first:** this file (status), `docs/MOBILE_TODO.md` (backlog + exact
+targets), `docs/MOBILE_AUDIT.md` (route inventory). Then take the top OPEN item in
+MOBILE_TODO.
+
+**Branch:** `main` — fleet-shared, multiple bots push here. **Always**
+`git pull --rebase origin main` before pushing; expect non-fast-forward and retry.
+
+**Working agreement (one increment = one commit):**
+1. Find a real, concrete mobile defect (grep/read — verify it's a true offender,
+   not a false positive; many `group-hover`/`w-[…]`/`text-sm` hits are fine in
+   context — check for `sm:`/`lg:` prefixes, `max-w`, scroll wrappers, adjacent
+   visible text).
+2. Fix it for real — never mask (no global `overflow-x:hidden`), never hide
+   functionality on mobile, never weaken RLS/auth/validation.
+3. Add a **guard test** (`tests/mobile-*.test.ts`, static `fs.readFileSync` +
+   assertions — matches the existing four) that locks the fix and forbids
+   regression.
+4. Verify: `npx vitest run tests/mobile-*.test.ts` → green; `npx tsc --noEmit` → 0
+   (takes ~2–4 min, not hung); `npx eslint <changed files>` → 0 errors; run
+   `npm run build` for layout/CSS/route changes.
+5. Update this file: add an `M-###` entry + bump the % from **verified** work only.
+6. Commit `fix(mobile): … [M-###]` (or `test(mobile): …`), rebase, push to `main`.
+
+**Verification notes:** mobile work needs no PG16/DB harness (that's for blog/seed
+migrations). The full vitest suite (~3700+) should stay green. Last full
+`next build` on the mobile work: exit 0.
+
+**Conventions that matter:** touch target ≥ ~44px where practical; icon-only
+controls need `aria-label`; use `dvh`/`svh` not `100vh` for full-height; inputs
+≥16px on touch (already global via `app/globals.css`); hover-reveal must have a
+touch/focus escape hatch.
+
+**Blocked / external** (enumerate in `PHYSICAL_DEVICE_TEST_PLAN.md` when reached):
+physical-device tests, App Store / Play Console, live push credentials. Nothing is
+marked done without shipped code + a passing check.
