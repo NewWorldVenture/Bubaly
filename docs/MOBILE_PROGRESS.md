@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~31% (early)
+## Overall completion: ~32% (early)
 
 Weighting (per the mission brief):
 
@@ -297,6 +297,23 @@ Weighting (per the mission brief):
   TS surface.)
 - **Parallel note:** continues my hand-rolled-overlay surface (M-012/M-013),
   disjoint from the module + app-shell files the other bot works.
+
+### M-015 — Guardian contact editor inputs lacked mobile keyboards (Phase 7)
+- **Severity:** P2 (mobile forms). **Phase:** 7 (forms & keyboard).
+- **Problem:** agent-05's M-006 gave the money + search inputs their mobile keyboards,
+  but the **guardian contact editor** (`components/guardian/contact-list.tsx`, a
+  non-module component not in that sweep) had a **phone** and **email** input with no
+  `type` / `inputMode`, so mobile browsers showed the plain alphabetic keyboard
+  instead of the telephone keypad / email keyboard — slow + error-prone entry.
+- **Fix:** phone → `type="tel"` `inputMode="tel"` `autoComplete="tel"`; email →
+  `type="email"` `inputMode="email"` `autoComplete="email"` `autoCapitalize="none"`
+  `spellCheck={false}`; name → `autoCapitalize="words"` `autoComplete="name"`. A
+  cross-`components/` scan confirmed these were the only remaining non-module
+  phone/email inputs missing keyboard semantics.
+- **Files:** `components/guardian/contact-list.tsx`.
+- **Test:** `tests/mobile-contact-input-keyboard.test.ts` (2).
+- **Evidence:** guard green; `tsc --noEmit` 0; eslint 0.
+- **Parallel note:** non-module file, disjoint from the module inputs M-006 covered.
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

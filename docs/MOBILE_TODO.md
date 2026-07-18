@@ -28,11 +28,13 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-010 | 16 | PWA update prompt — RegisterSW detects a new SW + shows a mobile-safe "new version → Reload" banner; SW/manifest verified | (this commit) |
 | M-012 | 11 | Hand-rolled full-screen overlays now lock background scroll on mobile (shared `useLockBodyScroll` hook applied to camera, command bar, exit-intent, paywall, app-lock, account-closed) | `57142f32` |
 | M-013 | 6 | Dialog a11y semantics (`role="dialog"`+`aria-modal`+labelled heading, ESC on dismissible) added to 4 hand-rolled overlays (exit-intent, app-lock, guardian rules-editor + contact-editor) so mobile VoiceOver/TalkBack announce them | `cd945c1d` |
-| M-014 | 8 | Landscape safe-area: the edge-to-edge full-screen **camera** now pads left/right insets too (`--safe-left`/`--safe-right`), so the top-bar + shutter controls clear the side notch when a phone is held in landscape | (this commit) |
+| M-014 | 8 | Landscape safe-area: the edge-to-edge full-screen **camera** now pads left/right insets too (`--safe-left`/`--safe-right`), so the top-bar + shutter controls clear the side notch when a phone is held in landscape | `d13f0c88` |
+| M-015 | 7 | Mobile keyboards for the guardian **contact editor** (non-module, missed by M-006): phone→`type=tel`+`inputMode=tel`, email→`type=email`+`inputMode=email`+`autoCapitalize=none`, name→`autoComplete=name` | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
-`tests/mobile-overlay-dialog-a11y.test.ts` (5), and
-`tests/mobile-landscape-safe-area.test.ts` (2) alongside the prior mobile guards.
+`tests/mobile-overlay-dialog-a11y.test.ts` (5),
+`tests/mobile-landscape-safe-area.test.ts` (2), and
+`tests/mobile-contact-input-keyboard.test.ts` (2) alongside the prior mobile guards.
 
 > **Parallel-bot note:** M-012 was done concurrently with agent-05's M-006/M-007.
 > It is **file-disjoint** and **complementary** to M-007: agent-05's M-007 audited

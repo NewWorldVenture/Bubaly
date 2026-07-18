@@ -278,9 +278,9 @@ function ContactModal({
       >
         <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">
-          <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name *" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
-          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="Phone (e.g. +15551234567)" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
-          <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="Email (optional)" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name *" autoCapitalize="words" autoComplete="name" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="Phone (e.g. +15551234567)" type="tel" inputMode="tel" autoComplete="tel" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="Email (optional)" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
           <div>
             <label className="mb-1 block text-xs font-medium text-muted">Trust Level</label>
             <div className="grid grid-cols-2 gap-1.5">
