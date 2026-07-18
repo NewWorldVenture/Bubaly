@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Lock, Delete, LogOut } from 'lucide-react';
 import { verifyPin, unlockKey } from '@/lib/security/app-lock';
 import { cn } from '@/lib/utils/cn';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 export function AppLockGate({
   enabled, salt, hash, userId, children,
@@ -94,6 +95,10 @@ export function AppLockGate({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [unlocked, enabled, mounted, press, back]);
+
+  // While the lock screen covers the app, lock the page behind it so mobile
+  // touch-scroll can't drag the protected content out from under the overlay.
+  useLockBodyScroll(enabled && !unlocked);
 
   // Not locked → render the app normally.
   if (!enabled || unlocked) return <>{children}</>;

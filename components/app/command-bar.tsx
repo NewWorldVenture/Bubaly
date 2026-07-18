@@ -19,6 +19,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { NAV_CATALOG } from '@/lib/constants/navigation';
 import { routeCommand, type CommandResult } from '@/lib/command-bar/route';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -33,6 +34,10 @@ export function CommandBar() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const results = useMemo(() => (open ? routeCommand(query, NAV_ITEMS) : []), [open, query]);
+
+  // Lock the page behind the command palette so mobile touch-scroll stays in the
+  // overlay instead of dragging the underlying page.
+  useLockBodyScroll(open);
 
   // Global open shortcut: ⌘K / Ctrl+K anywhere; "/" only when not already typing.
   useEffect(() => {

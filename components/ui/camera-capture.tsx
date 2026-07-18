@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, X, SwitchCamera, ImagePlus, Check } from 'lucide-react';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 type FacingMode = 'environment' | 'user';
 
@@ -37,6 +38,10 @@ export function CameraCapture({
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
   const [flash, setFlash] = useState(false);
+
+  // Full-screen camera: lock the page behind it so touch-scroll can't drag the
+  // underlying page out from under the viewfinder on mobile.
+  useLockBodyScroll(true);
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());

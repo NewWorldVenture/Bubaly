@@ -7,10 +7,14 @@ import { Archive, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { reopenAccountAction } from '@/app/(app)/account/actions';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 export function AccountClosedGate() {
   const [busy, setBusy] = useState(false);
   const { error: toastError, success } = useToast();
+
+  // Blocking full-screen gate: lock the page behind it (mobile scroll-bleed).
+  useLockBodyScroll(true);
 
   async function reopen() {
     if (busy) return;

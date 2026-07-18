@@ -23,11 +23,19 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-004 | 6 | Labeled 4 icon-only buttons; inbox archive made touch-visible + bigger target | `ded0e179` |
 | M-005 | 6 | Hover-reveal row actions made touch-visible across 10 modules (was invisible on phones) | `d678557f` |
 | M-006 | 7 | 29 money/decimal `type=number` inputs got `inputMode="decimal"` (iOS decimal keypad) across 19 modules | `67acb018` |
-| M-007 | 11/8 | Overlay/shell audit — shared Modal (bottom-sheet/dvh/safe-area/focus-trap) + app-shell (pb-24, safe-bottom nav) verified excellent; ratcheted | (this commit) |
+| M-007 | 11/8 | Overlay/shell audit — shared Modal (bottom-sheet/dvh/safe-area/focus-trap) + app-shell (pb-24, safe-bottom nav) verified excellent; ratcheted | `0c00ff0b` |
+| M-012 | 11 | Hand-rolled full-screen overlays now lock background scroll on mobile (shared `useLockBodyScroll` hook applied to camera, command bar, exit-intent, paywall, app-lock, account-closed) | (this commit) |
 
-Guard tests: `tests/mobile-viewport-height.test.ts`, `tests/mobile-forms.test.ts`,
-`tests/mobile-no-horizontal-overflow.test.ts`, `tests/mobile-touch-a11y.test.ts`
-(14 assertions total).
+Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7) alongside the
+prior mobile guards.
+
+> **Parallel-bot note:** M-012 was done concurrently with agent-05's M-006/M-007.
+> It is **file-disjoint** and **complementary** to M-007: agent-05's M-007 audited
+> overlay **safe-area / focus-trap** and found the shared `Modal` excellent, but the
+> six hand-rolled full-screen overlays that bypass `Modal` still lacked the
+> **background scroll-lock** that `Modal` bakes in — M-012 closes exactly that gap.
+> (Renumbered from a transient M-011 to avoid colliding with agent-05's M-011
+> chat-panel item.)
 
 ---
 

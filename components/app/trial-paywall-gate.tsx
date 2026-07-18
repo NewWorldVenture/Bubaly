@@ -11,12 +11,17 @@ import { useToast } from '@/components/ui/toast';
 import { closeAccountAction } from '@/app/(app)/account/actions';
 import { BASIC_ANNUAL_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { cn } from '@/lib/utils/cn';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 const fmt = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
   const [busy, setBusy] = useState<string | null>(null);
   const { error: toastError, success } = useToast();
+
+  // Blocking full-screen paywall: lock the page behind it so it can't be
+  // scrolled out from under on mobile.
+  useLockBodyScroll(true);
 
   async function checkout(plan: 'basic_annual' | 'plus_annual') {
     if (busy) return;

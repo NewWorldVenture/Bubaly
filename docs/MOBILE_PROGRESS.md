@@ -8,7 +8,7 @@ into it.**
 
 _Owner: agent-05 (CLAUDE-FRONTEND-01). Started 2026-07-18 20:12 UTC._
 
-## Overall completion: ~22% (early)
+## Overall completion: ~23% (early)
 
 Weighting (per the mission brief):
 
@@ -174,6 +174,36 @@ Weighting (per the mission brief):
   exists in a coarse-pointer block and that every `sm:opacity-0 sm:group-hover`
   hover-reveal carries the `coarse:opacity-100` escape. tsc + eslint clean.
 - **Evidence:** grep → 11/11 modules carry the escape; both guards green.
+
+### M-012 — Hand-rolled full-screen overlays didn't lock background scroll (Phase 11)
+- **Severity:** P2 (mobile). **Phase:** 11 (overlays & drawers).
+- **Problem:** the shared `Modal` primitive locks background scroll while open
+  (`document.body.style.overflow = 'hidden'`), but several full-screen overlays are
+  hand-rolled and bypass `Modal`. On mobile Safari / Android Chrome an overlay that
+  doesn't lock the body lets the page behind it keep scrolling ("scroll bleed") —
+  touch-scrolling the overlay bubbles to the underlying page, which can be dragged
+  out from under a camera viewfinder, command palette, paywall, or app-lock gate.
+- **Fix:** added a shared `useLockBodyScroll(active)` hook
+  (`lib/hooks/use-lock-body-scroll.ts`) that mirrors the `Modal` behavior (captures
+  the previous `overflow`, restores it on cleanup, client-only so SSR is untouched),
+  and wired it into the six genuinely-blocking full-screen overlays: camera capture,
+  the ⌘K command bar, the exit-intent offer, the trial paywall gate, the app-lock
+  (PIN) gate, and the account-closed gate. Deliberately **left the cookie-consent
+  banner alone** — it's a dismissible bottom bar that should not lock page scroll.
+- **Files:** `lib/hooks/use-lock-body-scroll.ts` (new),
+  `components/ui/camera-capture.tsx`, `components/app/command-bar.tsx`,
+  `components/marketing/exit-intent.tsx`, `components/app/trial-paywall-gate.tsx`,
+  `components/app/app-lock-gate.tsx`, `components/app/account-closed-gate.tsx`.
+- **Test:** `tests/mobile-overlay-scroll-lock.test.ts` (7) — locks the hook contract
+  + each overlay onto it.
+- **Evidence:** guard green; `tsc --noEmit` 0; eslint 0 on changed files;
+  `next build` exit 0.
+- **Parallel note:** complements agent-05's M-007 (which audited overlay
+  **safe-area / focus-trap** and found `Modal` excellent): the six hand-rolled
+  overlays that bypass `Modal` still lacked the **background scroll-lock** `Modal`
+  bakes in, and M-012 closes that gap. File-disjoint from M-005/M-006/M-007 so it
+  ran concurrently without collision. (Renumbered from a transient M-011 to avoid
+  clashing with agent-05's M-011 chat-panel item.)
 
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:

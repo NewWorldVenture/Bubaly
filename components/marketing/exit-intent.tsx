@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 
 type Offer = {
   id: string;
@@ -31,6 +32,9 @@ function recentlySeen(): boolean {
 export function ExitIntent() {
   const [offer, setOffer] = useState<Offer | null>(null);
   const [open, setOpen] = useState(false);
+
+  // Lock background scroll while the offer modal is showing (mobile scroll-bleed).
+  useLockBodyScroll(Boolean(offer) && open);
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
