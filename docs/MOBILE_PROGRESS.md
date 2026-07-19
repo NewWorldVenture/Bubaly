@@ -793,6 +793,26 @@ Weighting (per the mission brief):
   shipped mobile fix now has either an automated guard or a scripted device
   check.
 
+### M-038 — Pricing billing-period toggle was a sub-44px touch target (Phase 6) — _parallel bot (public marketing surface)_
+- **Severity:** P3 (mobile polish, but a key conversion control). **Phase:** 6 (touch targets).
+- **Problem:** the pricing page's **Monthly / Yearly** billing-period toggle
+  (`app/(marketing)/pricing/pricing-content.tsx`) used `px-5 py-2` ≈ **36px** tall —
+  below the 44px minimum tap target on touch. This is the control that flips the whole
+  price grid, so an easy mis-tap on a phone matters on a conversion page. (Verified the
+  rest of the page is already compliant: the plan-card CTAs and the demo button are
+  `h-12`/48px, and the feature-matrix table is `overflow-x-auto` + `min-w-[640px]`.)
+- **Fix:** `coarse:min-h-11` + `inline-flex items-center justify-center` on both toggle
+  segments — ≥44px tall on coarse-pointer (touch), compact on desktop-with-a-mouse.
+  Reuses the M-019 utility; no new CSS.
+- **Files:** `app/(marketing)/pricing/pricing-content.tsx`.
+- **Test:** `tests/mobile-pricing-toggle-touch-target.test.ts` (1) — asserts both
+  Monthly/Yearly segments carry the coarse escape; forbids a regression.
+- **Evidence:** guard green (1/1); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** public marketing surface — file-disjoint from agent-05
+  (modules/app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Extends the
+  touch-target sweep beyond blog to the pricing conversion page.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

@@ -416,13 +416,13 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
               <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
                 <button
                   onClick={() => setPeriod('monthly')}
-                  className={cn('rounded-full px-5 py-2 font-bold transition sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                  className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
                   Monthly
                 </button>
                 <button
                   onClick={() => setPeriod('yearly')}
-                  className={cn('rounded-full px-5 py-2 font-bold transition sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                  className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
                   Yearly
                 </button>
