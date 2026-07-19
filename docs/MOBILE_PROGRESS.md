@@ -714,6 +714,20 @@ Weighting (per the mission brief):
 - **Evidence:** guard green; tsc 0; eslint 0; **`next build` exit 0**.
   Single-container class change (`components/ui/toast.tsx`), file-disjoint.
 
+### M-034 — Floating-element clearance sweep: live FABs verified correct; dead duplicate FAB removed — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Sweep (follow-up to M-033):** audited every `fixed bottom-*` element for the
+  tab-bar/safe-area clearance class. **Correct already:** `ai-orb` + `quick-capture`
+  (`bottom-[calc(…+var(--safe-bottom))]` + `lg:` drop), marketing `consent-manager`
+  + `back-to-top` (no tab bar on marketing routes — N/A).
+- **Found + removed:** `components/app/ai-fab.tsx` — an unimported, dead duplicate
+  of the live AI orb (bare `bottom-24`, no safe-area). Zero references anywhere
+  (app/lib/tests); superseded by `ai-orb.tsx`. Removed per the audit's dead-code
+  mandate — had it ever been re-mounted, it would have re-introduced the exact
+  M-033 clearance bug.
+- **Evidence:** repo-wide grep 0 refs; `tsc --noEmit` 0 after removal; toast +
+  overlay safe-area guards green.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
