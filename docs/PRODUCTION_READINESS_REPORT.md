@@ -3,7 +3,25 @@
 Audit snapshot: 2026-07-18 08:20 America/New_York
 Decision: **NO-GO**
 
-Latest checkpoint: 2026-07-18 12:50 America/New_York. The Super Admin marketing
+Latest checkpoint: **2026-07-19 00:25 UTC** (`agent-fable-opus`). Full gate
+re-verified on `main` `e3d85f68`: **689 Vitest files pass (0 failures)**,
+typecheck clean, production build exit 0. Since the prior checkpoint the fleet
+completed: the **mobile production-readiness mission** (M-001–M-037 — viewport/
+dvh, zoom-on-focus, touch targets, hover-reveal, keyboards, overlays/safe-areas,
+chat-panel heights, SW **auth-cache privacy purge**, PWA orientation + update
+prompt, notification focus, inline video, **popup-safe signed-URL document
+opens**, draft-safe pull-to-refresh, toast/tab-bar clearance, iPad-portrait hub
+grids, an 8-project emulated device matrix [275 tests, landscape + dark
+executed live green], and a 13-script `PHYSICAL_DEVICE_TEST_PLAN.md` so every
+mobile fix has an automated guard or a scripted hardware check); the app-wide
+**fail-closed read sweep** (money/health/emergency/trust/economy + 13 more
+surfaces, PLA-0770–0810); the app-wide **UTF-8 mojibake repair** (79 files,
+guarded); an independent **768-record seed pack** (PG16-validated, idempotent);
+the **SEO-registry junk cleanup** (migration 0233); marketing **FAQ nav + tabbed
+FAQ**; and **Fridge Chef** (photo → allergy-aware recipes → grocery/meal-plan).
+Migrations now run through **0233**.
+
+Prior checkpoint: 2026-07-18 12:50 America/New_York. The Super Admin marketing
 control plane and public acquisition loop now have validated AEO/SEO/content/
 landing lifecycle controls, sitemap publication, explicit degraded states, and
 consent-gated attribution/provider failure handling.

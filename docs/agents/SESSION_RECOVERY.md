@@ -91,3 +91,42 @@ integration gate warm (`tsc` + `next build`) as concurrent commits land.
   `components/modules/{assistant,weather,settings}-module.tsx` — agent-05 (A-05).
 - `components/modules/messages-module.tsx`, notifications — agent-03.
 - A-13 server pages under `app/(app)/dashboard/{vacations,trips}/` — codex.
+
+
+---
+
+## Recovery marker — 2026-07-19 00:27 UTC (`agent-fable-opus` / CLAUDE-POLISH-01)
+
+**Latest verified `main`:** `e3d85f68` — full gate GREEN (689 vitest files / 0
+failures, tsc clean, `next build` exit 0). Ledger control-byte clean.
+
+**Mobile mission (MOBILE_PROGRESS/TODO/AUDIT + PHYSICAL_DEVICE_TEST_PLAN):
+COMPLETE to the external wall.** M-001–M-037 shipped; backlog has zero OPEN
+executable items. Every mobile fix has an automated guard (vitest + the
+8-project Playwright matrix, 275 tests, landscape+dark run live green) or a
+scripted hardware check (13 device scripts). This agent's session slice:
+M-023 (SW auth-cache privacy purge), 025 (orientation), 026 (push focus),
+028 (inline video), 030 (popup-safe signed-URL opens — new
+`lib/utils/open-url.ts` `preOpenWindow()`), 031 (Send key), 032 (chat
+overscroll), 033 (toast clearance), 034 (dead FAB removed), 035 (iPad hub
+grids), 036 (landscape+dark matrix), 037 (device-plan refresh); plus
+PLA-0833 (SEO junk cleanup, migration 0233), PLA-0834 (FAQ nav+tabs),
+PLA-0835/0837/0845 (Fridge Chef end-to-end), PLA-0812 (mojibake), PLA-0815
+(768-record seed pack).
+
+**A resuming agent should NOT re-sweep:** SW/PWA, video playsInline,
+window.open-after-await, DnD/dblclick/contextmenu, permission flows,
+enterKeyHint, overscroll, toast/FAB clearance, hub tablet grids — all fixed or
+proven clean with guards.
+
+**Next real work requires owner inputs (in priority order):**
+1. LB-003 credential rotation (incl. live Stripe/Supabase keys pasted in chat).
+2. LB-010/011 — apply migrations 0217/0219 (+ 0233 SEO cleanup) to production.
+3. LB-001 Auth Admin 500 (Supabase dashboard).
+4. Stop/fix the "Publish …readiness increment" jobs' ledger-write path.
+5. CI Supabase test creds → authed journeys on the 8-device matrix + M-008
+   full walkthrough; physical devices → execute device-plan S1–S13.
+
+Until one unlocks, the safe standing task is the integration-gate heartbeat
+(`vitest` + `tsc` + ledger control-byte check) and honoring the active-lane
+list above.
