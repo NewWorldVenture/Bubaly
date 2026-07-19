@@ -813,6 +813,31 @@ Weighting (per the mission brief):
   (modules/app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Extends the
   touch-target sweep beyond blog to the pricing conversion page.
 
+### M-039 — Legal pages (privacy/terms/cookies/acceptable-use) had no mobile Table of Contents (Phase 3 responsive parity) — _parallel bot (public marketing surface)_
+- **Severity:** P3 (mobile content parity / navigation). **Phase:** 3 (responsive layout).
+- **Problem:** the shared legal-document layout (`components/marketing/legal.tsx`, used by
+  **privacy, terms, acceptable-use, cookies**) rendered its "On this page" ToC only in the
+  sticky sidebar `<aside className="hidden lg:block">`. Below `lg` the sidebar is hidden, so
+  a phone/tablet reader of a long multi-section legal doc got **no jump navigation** — and
+  the component's own comment even claimed "TOC collapses above the content on mobile",
+  which it did **not**. Same class as M-029 (blog ToC) / M-027 (blog related).
+- **Fix:** added a **native `<details>` collapsible ToC** (no JS / no hydration — this is a
+  server component) shown only `lg:hidden`, above the document body. It links to the same
+  section anchor ids (`#${s.id}`), rotates its chevron via the compile-verified
+  `group-open:rotate-90`, and gives its summary + jump links `coarse:min-h-11` (≥44px on
+  touch). Gated on `sections.length > 1`. The sticky sidebar ToC still owns `lg+`; no
+  duplicate (inline is `lg:hidden`, sidebar is `hidden lg:block`). Corrected the stale
+  comment to describe the behaviour that now actually ships.
+- **Files:** `components/marketing/legal.tsx`.
+- **Test:** `tests/mobile-legal-toc-parity.test.ts` (4) — asserts the `lg:hidden`
+  `<details>` ToC, shared-anchor jump links, the 44px touch target, and the sidebar's
+  `hidden lg:block` scoping.
+- **Evidence:** guard green (4/4); `tsc --noEmit` clean; `eslint` on changed files 0;
+  `next build` exit 0.
+- **Parallel-bot note:** public marketing surface — file-disjoint from agent-05
+  (modules/app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Extends the
+  ToC-parity pattern (M-029) to all four legal pages via their shared layout.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

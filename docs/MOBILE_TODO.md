@@ -40,7 +40,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-024 | 6 | Blog **engagement CTAs**: Save (♥) pill (~36px) + Subscribe card button (~40px) grow to ≥44px tall on touch (`coarse:min-h-11`). Completes the blog/marketing touch-target sweep. Blog feature components (parallel bot) | `19738aa0` |
 | M-027 | 3 | Blog article **Related Articles** now render on mobile/tablet (`lg:hidden` inline section) — were `hidden lg:block` sidebar-only, so phones got no related-article links. Public blog surface (parallel bot) | `2f0b3374` |
 | M-029 | 3 | Blog article **Table of Contents** now on mobile — native `<details>` collapsible ToC (`lg:hidden`, shared h2 anchors, 44px links) — was `hidden lg:block` sidebar-only. Public blog surface (parallel bot) | `af0c11ca` |
-| M-038 | 6 | Pricing **billing-period toggle** (Monthly/Yearly, ~36px) grows to ≥44px tall on touch (`coarse:min-h-11`) — a key conversion control. Public marketing surface (parallel bot) | (this commit) |
+| M-038 | 6 | Pricing **billing-period toggle** (Monthly/Yearly, ~36px) grows to ≥44px tall on touch (`coarse:min-h-11`) — a key conversion control. Public marketing surface (parallel bot) | `f9c9fade` |
+| M-039 | 3 | **Legal pages** (privacy/terms/cookies/acceptable-use) get a mobile Table of Contents — native `<details>` collapsible ToC (`lg:hidden`, shared section anchors, 44px links) via their shared `legal.tsx` layout — was `hidden lg:block` sidebar-only. Public marketing surface (parallel bot) | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),

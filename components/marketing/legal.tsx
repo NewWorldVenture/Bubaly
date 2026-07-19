@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { Section } from '@/components/marketing/sections';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
@@ -41,6 +42,31 @@ export function LegalPage({
 
       <Section className="pt-12">
         <div className="grid gap-10 lg:grid-cols-[240px_1fr]">
+          {/* Mobile/tablet table of contents — the sticky sidebar below is
+              `hidden lg:block`, so without this a phone reader gets no jump nav
+              through a long legal doc. Native <details> (no JS/hydration), shown
+              only < lg; the sidebar owns lg+. */}
+          {sections.length > 1 && (
+            <details className="group rounded-2xl border border-border bg-surface/40 lg:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">
+                On this page
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden />
+              </summary>
+              <ul className="space-y-1 border-t border-border px-3 py-2">
+                {sections.map((s) => (
+                  <li key={s.id}>
+                    <a
+                      href={`#${s.id}`}
+                      className="flex items-center rounded-lg px-2 py-2 text-sm leading-snug text-muted transition coarse:min-h-11 hover:bg-elevated/60 hover:text-fg"
+                    >
+                      {s.heading}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
           {/* Sticky table of contents */}
           <aside className="hidden lg:block">
             <nav className="sticky top-24">
