@@ -751,6 +751,28 @@ Weighting (per the mission brief):
   exit 0**. M-008's remaining scope (full per-route iPad walkthrough) stays
   open for a device/emulator pass.
 
+### M-036 — Device matrix extended to landscape + dark mode, executed live (M-009 slice) — _parallel bot (`agent-fable-opus`)_
+
+- **Gap (Phase 2/23):** the emulated matrix ran portrait/light only — but
+  rotation is where overflow bugs hide (M-014's class) and theme CSS can shift
+  layout. The M-009 remainder listed "landscape + dark-mode variants" as open
+  (this part was never creds-gated).
+- **Fix:** three new projects in `playwright.config.ts` — `iphone-landscape`
+  (iPhone 14 Pro landscape) + `ipad-landscape` (iPad gen 7 landscape) in **both**
+  engine branches (WebKit + chromium-pinned), and `pixel-dark` (Pixel 7,
+  `colorScheme: 'dark'`) — running the mobile-invariant + overflow specs.
+  Matrix: **225 tests / 5 projects → 275 tests / 8 projects**.
+- **Executed live in this sandbox** (built app + `next start`, real Chromium):
+  `iphone-landscape` **13/13**, `ipad-landscape` + `pixel-dark` **26/26** —
+  **39 live assertions green, zero landscape-overflow or dark-mode layout
+  defects found** (M-014 + theme CSS hold up). CI runs the full matrix via
+  `run-e2e.mjs` (no filter), so the new projects gate PRs automatically.
+- **Guard:** `tests/mobile-e2e-matrix.test.ts` (3) — landscape projects in both
+  branches + dark variant + original portrait matrix intact.
+- **Evidence:** live run output above; `--list` 275/8; tsc 0; eslint 0.
+- **Still creds-gated in M-009:** authed journeys (login → create → upload)
+  need CI Supabase test credentials.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

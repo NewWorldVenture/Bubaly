@@ -155,7 +155,7 @@ the nav on a taller-home-indicator phone.
   input < 16px** (runtime iOS-zoom guard). `--list` → 225 tests / 5 projects.
 - 🔜 **Remaining:** (a) authed critical journeys (login → create/edit record →
   upload → nav) need CI Supabase creds — extend `PUBLIC_ROUTES` → authed once
-  available (see `authenticated.spec.ts`); (b) landscape + dark-mode variants;
+  available (see `authenticated.spec.ts`); (b) ✅ landscape + dark-mode variants — DONE (M-036, `agent-fable-opus`): iphone/ipad-landscape + pixel-dark projects, 275 tests/8 projects, 39 assertions executed live green;
   (c) wire the mobile projects into CI — ✅ **DONE**: `run-e2e.mjs` runs all projects with no filter, so the CI `e2e` job (PR + push to main) now executes the mobile matrix as a gate. Running the full matrix needs a
   `next build` + server (~5 min) — kicked once for evidence.
 

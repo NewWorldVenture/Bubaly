@@ -37,13 +37,22 @@ export default defineConfig({
           { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'] } },
           { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'] } },
           { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'] } },
+          // Landscape variants (M-036): rotation is where overflow bugs hide.
+          { name: 'iphone-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPhone 14 Pro landscape'] } },
+          { name: 'ipad-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPad (gen 7) landscape'] } },
         ]
       : [
           { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'], browserName: 'chromium' as const } },
           { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'], browserName: 'chromium' as const } },
           { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'], browserName: 'chromium' as const } },
+          // Landscape variants (M-036): rotation is where overflow bugs hide.
+          { name: 'iphone-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPhone 14 Pro landscape'], browserName: 'chromium' as const } },
+          { name: 'ipad-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPad (gen 7) landscape'], browserName: 'chromium' as const } },
         ]),
     { name: 'pixel', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['Pixel 7'] } },
+    // Dark-mode variant (M-036): theme CSS can shift layout/overflow; run the
+    // mobile invariants once under prefers-color-scheme: dark.
+    { name: 'pixel-dark', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['Pixel 7'], colorScheme: 'dark' as const } },
   ],
   // The npm script builds first, then Playwright owns this single server
   // process. A flat lifecycle lets the runner reliably stop Next on Windows.
