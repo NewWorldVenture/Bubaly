@@ -773,6 +773,26 @@ Weighting (per the mission brief):
 - **Still creds-gated in M-009:** authed journeys (login → create → upload)
   need CI Supabase test credentials.
 
+### M-037 — Physical-device plan updated to cover this session's 12 fixes — _parallel bot (`agent-fable-opus`)_
+
+- **Gap:** `PHYSICAL_DEVICE_TEST_PLAN.md` predated M-023..M-036 — it still
+  treated M-011 as an UNVERIFIED known-risk (resolved in M-016/M-017), said the
+  matrix had 4 projects (now 8), and had no device scripts for the session's
+  device-only proofs.
+- **Update:** header corrected (8 projects incl. landscape+dark); S1 rewritten to
+  verify (not expect) the chat-panel fix + the M-032 pull-to-refresh containment;
+  S8 gains the M-025 rotation/kiosk check; S9 gains the **M-023 logout→offline
+  cache-privacy** check (Cache Storage = `bubaly-v4`, public shell only); S10
+  gains the M-026 focus-not-stack push check; S11 gains the M-035 two-up hub
+  expectation; **new S12** (M-030 signed-URL opens under real Safari popup
+  blocking, incl. the self-closing blank tab on failure) and **new S13** (M-028
+  inline video / M-031 "Send" key / M-033 toast clearance). Results table
+  extended. 13 scripts total.
+- **Evidence:** doc-only; control-byte clean. This completes the handoff mandate
+  ("enumerate in PHYSICAL_DEVICE_TEST_PLAN.md when the wall is reached") — every
+  shipped mobile fix now has either an automated guard or a scripted device
+  check.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),

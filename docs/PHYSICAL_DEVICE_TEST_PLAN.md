@@ -5,10 +5,10 @@ iOS/iPadOS Safari + Android Chrome behavior, the software keyboard, safe areas,
 camera/photo pickers, PWA install, push, and biometrics. Pairs with
 `MOBILE_PROGRESS.md` (what shipped) and `MOBILE_AUDIT.md` (route inventory).
 
-**Why this exists:** the automated mobile matrix (`tests/e2e/mobile.spec.ts`, 4
-Chromium-emulated device projects) covers layout invariants (no horizontal
-overflow, no sub-16px inputs) but runs Chromium, not WebKit, and cannot exercise a
-real keyboard/notch/camera. CI is additionally blocked (LB-015: runners not
+**Why this exists:** the automated mobile matrix (`tests/e2e/mobile.spec.ts`, 8
+Chromium-emulated device projects incl. landscape + dark-mode variants, M-036)
+covers layout invariants (no horizontal overflow, no sub-16px inputs) but runs
+Chromium, not WebKit, and cannot exercise a real keyboard/notch/camera. CI is additionally blocked (LB-015: runners not
 provisioning), so until that clears, these scripts are the primary device evidence.
 
 **How to use:** run each script on each listed device, in the app served from
@@ -108,20 +108,55 @@ Legend: **P**/**F**/**N/A**. Evidence = what to capture.
    infinite spinner). 2. Submit a form on a flaky connection → clear status; retry
    is safe; **no duplicate** record on double-tap. 3. Restore network → recovery is
    clean. Evidence: recording.
+4. **Cache privacy (M-023):** sign in → browse the dashboard → **sign out** → go
+   offline → reopen the app: **no private family content may render** (only the
+   public shell / offline page). Also, updating from a pre-M-023 build must purge
+   the old cache (DevTools → Cache Storage shows only `bubaly-v4`, containing only
+   `/` and `/offline`). Evidence: screenshots of Cache Storage + offline relaunch.
 
 ## S10 — Push & biometrics (Phases 21/22)
 **Devices:** D1, D4 (real push credentials required).
 1. Notification permission is requested **with context** (not on first load).
 2. Deny → app handles gracefully. 3. Grant → a test push arrives; its deep link
-   respects auth. 4. App-lock (PIN/biometric) gate: unlock via Face ID / fingerprint.
-   Evidence: recording.
+   respects auth. 4. **Focus-not-stack (M-026):** with the app already open, tap a
+   push → the **existing** window/instance is focused and navigated (no second
+   window/tab piles up). 5. App-lock (PIN/biometric) gate: unlock via Face ID /
+   fingerprint. Evidence: recording.
 
 ## S11 — Tablet layout (verifies pending M-008)
 **Devices:** D3, D5.
 1. Dashboard + list/detail screens use the width well — no narrow centered phone
    column with huge empty margins; sidebars (`lg:grid-cols-[1fr_340px]`) render.
+   **iPad portrait (M-035):** the family hubs (Health / Emergency / School /
+   Sports / COO / CFO) show their card pairs **two-up**, not stacked.
 2. External keyboard: Tab/Shift-Tab focus order is sane; Esc closes dialogs.
    Evidence: screenshots portrait + landscape.
+
+## S12 — Signed-URL document opens (verifies M-030)
+**Devices:** D1 (iOS Safari — the popup-blocker case), D4.
+1. **Documents** → tap **View/Download** on a stored file.
+   - Expect: a tab opens and shows the file (a blank tab may flash first — that is
+     the gesture-blessed pre-open). **Nothing happening = fail (the pre-M-030 bug).**
+2. Repeat on **Files Hub**, **Tax Vault**, a **Home warranty doc**, and (as super
+   admin) the admin document viewer.
+3. Turn OFF "Block Pop-ups" → same flows still work. Turn it ON (Safari default)
+   → flows still work (that's the fix). With an aggressive third-party blocker,
+   the file may open **in the same tab** — acceptable fallback; Back returns.
+4. Kill network, tap View → the blank tab **closes itself** + an error toast
+   (no orphaned about:blank tab). Evidence: recording of 1/3/4.
+
+## S13 — Media & chat polish (verifies M-028, M-031, M-033)
+**Devices:** D1, D4.
+1. **Photos** → open a **video** in the lightbox → it plays **inline inside the
+   lightbox with sound** (does not hijack into the system fullscreen player;
+   fullscreen remains available via the control). (M-028)
+2. Focus the **Messages / Assistant / Concierge** composer → the keyboard's
+   return key reads **"Send"** and sends; the Kitchen AI-Chef box's return key
+   inserts a newline (send is the button). (M-031)
+3. Trigger any success toast (e.g. save a note) on D1 (notched) and D3 →
+   the toast is **fully visible above the bottom tab bar** / home indicator,
+   and above the keyboard-less bar on iPad widths. (M-033)
+   Evidence: recordings of 1–3.
 
 ---
 
@@ -141,6 +176,8 @@ Copy this table per test session (date / build SHA / tester):
 | S9 |  |  |  |  |  |  |  |
 | S10 |  |  |  |  |  |  |  |
 | S11 |  |  |  |  |  |  |  |
+| S12 |  |  |  |  |  |  |  |
+| S13 |  |  |  |  |  |  |  |
 
 **External dependencies to unblock device testing:** LB-015 (CI runners) for the
 automated matrix; real push credentials (S10); App Store Connect / Play Console for
