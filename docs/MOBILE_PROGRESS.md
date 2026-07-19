@@ -697,6 +697,23 @@ Weighting (per the mission brief):
   still green; eslint 0 errors. Class-only edits to 3 files nobody has in
   flight.
 
+### M-033 — Toasts rendered behind the mobile bottom tab bar on tablets + notched iPhones — _parallel bot (`agent-fable-opus`, PWA/SW lane)_
+
+- **Problem (P2, Phase 8):** the global toast container used
+  `bottom-20 sm:bottom-6` — but the bottom tab bar is visible until **lg**
+  (`app-shell` nav is `lg:hidden`), so on 640–1024px widths (iPads, large
+  phones landscape) toasts dropped to 24px and rendered **behind the 64px
+  bar**; and on notched iPhones `bottom-20` (80px) didn't clear bar +
+  home-indicator (~98px). Success/error feedback — including undo-style
+  toasts — was hidden exactly where taps happen.
+- **Fix:** `bottom-[calc(5rem+var(--safe-bottom))] lg:bottom-6` — safe-area-
+  aware clearance that only shrinks once the bar is gone (same convention as
+  the FABs / M-016–M-018 family).
+- **Guard:** `tests/mobile-toast-safe-area.test.ts` (1) — safe-area calc +
+  lg-only drop; forbids `sm:bottom-6` / bare `bottom-20` regressions.
+- **Evidence:** guard green; tsc 0; eslint 0; **`next build` exit 0**.
+  Single-container class change (`components/ui/toast.tsx`), file-disjoint.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
