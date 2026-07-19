@@ -88,7 +88,7 @@ export default async function FamilyEmergencyPage() {
         ) : <MiniEmpty icon={Phone} text={manager ? 'No emergency contacts yet — add one above.' : 'No emergency contacts on file.'} />}
       </SectionCard>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SectionCard
           title="Emergency Plans"
           action={manager ? (

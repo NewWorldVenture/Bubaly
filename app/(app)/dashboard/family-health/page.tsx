@@ -62,7 +62,7 @@ export default async function FamilyHealthPage() {
         <StatTile href="/dashboard/family-emergency" label="Emergency" value="Card" icon={ShieldPlus} accent="bg-emerald-600" sublabel="Med summary" />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SectionCard title="Upcoming Appointments" viewAllHref="/dashboard/medical">
           {appts && appts.length > 0 ? (
             <ul className="divide-y divide-border">

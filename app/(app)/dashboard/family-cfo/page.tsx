@@ -68,7 +68,7 @@ export default async function FamilyCfoPage() {
         <StatTile label="Savings goals" value={goals?.length ?? 0} icon={PiggyBank} accent="bg-violet-600" />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SectionCard title="Upcoming Bills" description="Next 30 days" viewAllHref="/dashboard/billing">
           {bills && bills.length > 0 ? (
             <ul className="divide-y divide-border">

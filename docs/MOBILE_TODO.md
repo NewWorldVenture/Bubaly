@@ -135,9 +135,16 @@ Key lesson (locked in both guards): the calc must subtract the **real**
 `var(--safe-bottom)`, not a flat constant — a `-5rem` guess left the composer behind
 the nav on a taller-home-indicator phone.
 
-### M-008 (P2) — Tablet layouts don't waste space (Phase 9)
-iPad portrait/landscape: check dashboard grids + `lg:grid-cols-[1fr_340px]` sidebars
-render well; avoid narrow centered phone columns on tablets. Mostly a review pass.
+### 🟡 M-008 (P2) — Tablet layouts don't waste space (Phase 9) — HUB-GRID SLICE DONE
+- ✅ **Family-hub pair grids (M-035, `agent-fable-opus`, reclaimed per §0):** the 7
+  two-card grids on health/emergency/school/sports/COO×2/CFO split at `md:` now
+  (was `lg:` — iPad portrait stacked them single-column). Guard
+  `tests/mobile-tablet-hub-grids.test.ts`.
+- ✅ Verified non-defects: `lg:grid-cols-[1fr_340px]` sidebar rails correctly stay
+  lg-gated (340px rail doesn't fit at 768px); guardian/kids/reports `max-w-2xl`
+  surfaces are deliberate reading-width columns.
+- 🔜 Remaining: full per-route iPad portrait/landscape walkthrough (best done in
+  the M-009 device matrix once authed journeys unlock).
 
 ### 🟡 M-009 (P1 infra) — Playwright mobile matrix (Phase 2/23) — MATRIX UP; journeys remain
 - ✅ **Device matrix stood up (agent-05):** `playwright.config.ts` now has 4 emulated

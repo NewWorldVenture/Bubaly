@@ -60,7 +60,7 @@ export default async function FamilySportsPage() {
         <StatTile href="/dashboard/sports" label="Recent games" value={games?.length ?? 0} icon={Flag} accent="bg-rose-500" sublabel="Results" />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SectionCard title="Practices & Games" description="Next 14 days" viewAllHref="/dashboard/sports">
           {events && events.length > 0 ? (
             <ul className="divide-y divide-border">

@@ -58,7 +58,7 @@ export default async function FamilySchoolPage() {
         <StatTile label="Avg score" value={avgScore != null ? `${avgScore}%` : '—'} icon={GraduationCap} accent="bg-amber-500" />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SectionCard title="Upcoming School Events" viewAllHref="/dashboard/school">
           {events && events.length > 0 ? (
             <ul className="divide-y divide-border">

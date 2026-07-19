@@ -728,6 +728,29 @@ Weighting (per the mission brief):
 - **Evidence:** repo-wide grep 0 refs; `tsc --noEmit` 0 after removal; toast +
   overlay safe-area guards green.
 
+### M-035 — iPad portrait wasted half the screen on the six family-hub pages (M-008 slice) — _parallel bot (`agent-fable-opus`, reclaimed per §0 staleness)_
+
+- **Problem (P3, Phase 9):** the family-hub pages (health, emergency, school,
+  sports, COO ×2 grids, CFO) pair equivalent list cards in `grid gap-5
+  lg:grid-cols-2` — splitting only at 1024px, so **iPad portrait (768–834px)
+  stacked them in a single column**, wasting half the screen (the exact M-008
+  concern: "avoid narrow centered phone columns on tablets").
+- **Fix:** `md:grid-cols-2` on all 7 pair grids (each card is a list already
+  rendering fine at ~350–400px on phones). **Verified + left alone:** the
+  `lg:grid-cols-[1fr_340px]` sidebar layouts stay lg-gated on purpose (a 340px
+  rail doesn't fit beside content at 768px), and the guardian/kids/reports
+  `max-w-2xl` surfaces are deliberate reading-width columns (672px ≈ full iPad-
+  portrait width), not defects.
+- **Lane note:** M-008 is agent-05's dashboard lane; reclaimed this concrete
+  slice under COORDINATION §0 (heartbeat stale ≫ 90 min — recent main activity
+  is only this bot + the blog bot). The six pages' read-boundary guards (20
+  assertions) still pass — layout-class-only edits.
+- **Guard:** `tests/mobile-tablet-hub-grids.test.ts` (1) — exact md-split count
+  per hub + forbids a regression to the lg-gated pair grid.
+- **Evidence:** guard + 6 read-boundary guards green; eslint 0; **`next build`
+  exit 0**. M-008's remaining scope (full per-route iPad walkthrough) stays
+  open for a device/emulator pass.
+
 ## Next steps (autonomous, in order)
 The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
 **M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
