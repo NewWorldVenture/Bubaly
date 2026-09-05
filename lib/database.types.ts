@@ -33,6 +33,10 @@ export type MoveKind = 'local' | 'long_distance' | 'international' | 'within_bui
 export type MoveTaskCategory = 'admin' | 'address' | 'utilities' | 'movers' | 'packing' | 'school' | 'medical' | 'pets' | 'finance' | 'cleaning' | 'settling' | 'other';
 export type MoveTaskStatus = 'todo' | 'doing' | 'done' | 'skipped';
 export type MoveBoxStatus = 'empty' | 'packed' | 'loaded' | 'delivered' | 'unpacked';
+export type HomeProjectKind = 'repair' | 'renovation' | 'upgrade' | 'outdoor' | 'decor' | 'safety' | 'organization' | 'other';
+export type HomeProjectStatus = 'idea' | 'planning' | 'quoting' | 'scheduled' | 'in_progress' | 'on_hold' | 'done' | 'cancelled';
+export type HomeProjectPriority = 'low' | 'medium' | 'high';
+export type ProjectQuoteStatus = 'requested' | 'received' | 'accepted' | 'declined' | 'expired';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2494,6 +2498,21 @@ export interface Database {
         { id: string; family_id: string; move_id: string; box_number: number; label: string; from_room: string | null; to_room: string | null; contents: string[]; is_fragile: boolean; is_essential: boolean; status: MoveBoxStatus; packed_by: string | null; photo_path: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; move_id: string; box_number: number; label: string; from_room?: string | null; to_room?: string | null; contents?: string[]; is_fragile?: boolean; is_essential?: boolean; status?: MoveBoxStatus; packed_by?: string | null; photo_path?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ box_number: number; label: string; from_room: string | null; to_room: string | null; contents: string[]; is_fragile: boolean; is_essential: boolean; status: MoveBoxStatus; packed_by: string | null; photo_path: string | null; notes: string | null }>
+      >;
+      home_projects: T<
+        { id: string; family_id: string; title: string; description: string | null; room: string | null; kind: HomeProjectKind; status: HomeProjectStatus; priority: HomeProjectPriority; is_diy: boolean; budget_cents: number | null; labor_cents: number; target_start: string | null; target_end: string | null; completed_at: string | null; owner_id: string | null; contractor_id: string | null; photo_path: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; room?: string | null; kind?: HomeProjectKind; status?: HomeProjectStatus; priority?: HomeProjectPriority; is_diy?: boolean; budget_cents?: number | null; labor_cents?: number; target_start?: string | null; target_end?: string | null; completed_at?: string | null; owner_id?: string | null; contractor_id?: string | null; photo_path?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; description: string | null; room: string | null; kind: HomeProjectKind; status: HomeProjectStatus; priority: HomeProjectPriority; is_diy: boolean; budget_cents: number | null; labor_cents: number; target_start: string | null; target_end: string | null; completed_at: string | null; owner_id: string | null; contractor_id: string | null; photo_path: string | null; notes: string | null }>
+      >;
+      project_materials: T<
+        { id: string; family_id: string; project_id: string; name: string; quantity: number; unit: string | null; est_cost_cents: number | null; actual_cost_cents: number | null; is_purchased: boolean; store: string | null; url: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; project_id: string; name: string; quantity?: number; unit?: string | null; est_cost_cents?: number | null; actual_cost_cents?: number | null; is_purchased?: boolean; store?: string | null; url?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; quantity: number; unit: string | null; est_cost_cents: number | null; actual_cost_cents: number | null; is_purchased: boolean; store: string | null; url: string | null; notes: string | null }>
+      >;
+      project_quotes: T<
+        { id: string; family_id: string; project_id: string; contractor_id: string | null; contractor_name: string; amount_cents: number; includes_materials: boolean; lead_time_days: number | null; valid_until: string | null; status: ProjectQuoteStatus; received_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; project_id: string; contractor_id?: string | null; contractor_name: string; amount_cents: number; includes_materials?: boolean; lead_time_days?: number | null; valid_until?: string | null; status?: ProjectQuoteStatus; received_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ contractor_id: string | null; contractor_name: string; amount_cents: number; includes_materials: boolean; lead_time_days: number | null; valid_until: string | null; status: ProjectQuoteStatus; received_on: string | null; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };

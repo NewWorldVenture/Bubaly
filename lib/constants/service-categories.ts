@@ -117,7 +117,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
       '/dashboard/calendar', '/dashboard/todos', '/dashboard/reminders',
       '/dashboard/grocery', '/dashboard/weather', '/dashboard/kitchen',
       '/dashboard/meals', '/dashboard/pantry', '/dashboard/recipes',
-      '/dashboard/documents', '/dashboard/home', '/dashboard/inventory', '/dashboard/declutter', '/dashboard/moving', '/dashboard/utilities',
+      '/dashboard/documents', '/dashboard/home', '/dashboard/inventory', '/dashboard/declutter', '/dashboard/moving', '/dashboard/projects', '/dashboard/utilities',
       '/dashboard/binder', '/dashboard/auto', '/dashboard/renewals',
       '/dashboard/trips', '/dashboard/vacations', '/dashboard/weekend',
       '/dashboard/rides', '/dashboard/trip-memories', '/display', '/dashboard/scan',
