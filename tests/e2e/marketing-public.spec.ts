@@ -7,6 +7,43 @@ test.beforeEach(async ({ page }) => {
   if (await rejectCookies.isVisible()) await rejectCookies.click();
 });
 
+test('the mobile menu becomes usable when its client code is ready', async ({ context }) => {
+  const slowPage = await context.newPage();
+  await slowPage.setViewportSize({ width: 390, height: 844 });
+  let releaseScripts!: () => void;
+  const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
+  let heldScripts = 0;
+  await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+    heldScripts += 1;
+    await scriptsReady;
+    await route.continue();
+  });
+
+  try {
+    await slowPage.goto('/', { waitUntil: 'commit' });
+    const toggle = slowPage.getByRole('button', { name: 'Toggle menu' });
+    const navigation = slowPage.getByRole('navigation', { name: 'Mobile navigation' });
+    await expect(toggle).toBeVisible();
+    await expect.poll(() => heldScripts).toBeGreaterThan(0);
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(navigation).toBeHidden();
+
+    releaseScripts();
+    await expect(toggle).toBeEnabled({ timeout: 15_000 });
+    await toggle.focus();
+    await expect(toggle).toBeFocused();
+    await slowPage.keyboard.press('Enter');
+    await expect(navigation).toBeVisible();
+    await slowPage.keyboard.press('Escape');
+    await expect(navigation).toBeHidden();
+    await expect(toggle).toBeFocused();
+  } finally {
+    releaseScripts();
+    await slowPage.close();
+  }
+});
+
 test('Get started reaches the welcome page before sign-in', async ({ page }) => {
   await page.getByRole('link', { name: /get started/i }).first().click();
   await expect(page).toHaveURL(/\/welcome$/);
@@ -32,6 +69,8 @@ test('each homepage feature leads to its existing detail card', async ({ page })
 
 test('kid sign-in has a labelled PIN and a usable visibility control', async ({ page }) => {
   await page.goto('/kid-login');
+  const username = page.getByRole('textbox', { name: 'Username', exact: true });
+  expect(await username.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(16);
   const pin = page.getByLabel('4-digit PIN', { exact: true });
   await pin.fill('1234');
   await expect(pin).toHaveAttribute('type', 'password');
@@ -51,7 +90,10 @@ test('the mobile menu supports keyboard dismissal and returns focus', async ({ p
   await page.setViewportSize({ width: 390, height: 844 });
   const toggle = page.getByRole('button', { name: 'Toggle menu' });
   const navigation = page.getByRole('navigation', { name: 'Mobile navigation' });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toBeEnabled();
   await toggle.focus();
+  await expect(toggle).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation).toBeVisible();

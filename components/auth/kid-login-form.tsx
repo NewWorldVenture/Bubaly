@@ -44,7 +44,7 @@ export function KidLoginForm() {
             onChange={(e) => setUsername(e.target.value)}
             autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
             placeholder="e.g. emma"
-            className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-visible:focus-ring"
+            className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-base focus-visible:focus-ring"
           />
         </label>
         <div className="block">

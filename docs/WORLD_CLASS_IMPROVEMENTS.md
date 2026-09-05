@@ -127,3 +127,10 @@ global CSS helper and app sidebar are unchanged.
 - Validation: 32 focused schema/migration/workflow tests passed; the 4 GB TypeScript check passed. The audit against the live public API passed all 11 legacy checks and reported all 27 new module tables unavailable (HTTP 404). This is an API-schema readiness result, not proof of physical table absence; authenticated migration-ledger and schema inspection are still needed.
 - GitHub CI run 33971159244 for b756815631398095675bbefcfdc99a9bbcdb645a completed: quality and mobile configuration jobs passed. Browser tests recorded 394 passed, two flaky menu keyboard cases, and one failing kid-login input-size check (username input rendered at 14 px). These issues remain unresolved in this schema-audit-only follow-up.
 - The Production environment contains `SUPABASE_PROJECT_REF` and `SUPABASE_ANON_KEY`. Rollout still requires `SUPABASE_ACCESS_TOKEN` and `SUPABASE_SERVICE_ROLE_KEY`, supplied privately through GitHub environment settings, followed by migration review and authenticated CRUD/RLS verification. Do not treat this follow-up as a completed production rollout.
+
+### Mobile entry-point repair
+
+- A live Chromium diagnostic with 6x CPU throttling reproduced the early menu activation failure in one of four attempts. The button received keyboard and click events but did not open, consistent with an interaction arriving before startup had settled.
+- The marketing menu toggle is now disabled in server-rendered markup and becomes enabled after its client mount effects run. Normal navigation links remain server-rendered links; no shared app navigation was changed.
+- The kid username field now uses a 16 px base font. The existing runtime mobile invariant and the kid sign-in journey both cover the minimum input size.
+- The public journey suite now holds back client JavaScript, asserts that the menu is disabled while scripts are unavailable, then releases them and checks keyboard opening, Escape dismissal, and focus restoration. The ordinary keyboard journey also waits for a visible, enabled, focused button instead of relying on page-load timing.

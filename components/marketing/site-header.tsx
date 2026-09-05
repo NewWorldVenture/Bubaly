@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils/cn';
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(false);
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -18,6 +19,8 @@ export function SiteHeader() {
   useEffect(() => { setOpen(false); }, [pathname]);
 
   useEffect(() => {
+    // Do not accept an early interaction before hydration and mount effects settle.
+    setReady(true);
     const desktop = window.matchMedia('(min-width: 1024px)');
     const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
     desktop.addEventListener('change', closeOnDesktop);
@@ -97,6 +100,7 @@ export function SiteHeader() {
           <button
             ref={menuButtonRef}
             type="button"
+            disabled={!ready}
             className="inline-flex items-center justify-center rounded-lg p-2 text-fg coarse:min-h-11 coarse:min-w-11 lg:hidden focus-visible:focus-ring"
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
