@@ -76,7 +76,7 @@ export function LoginForm() {
         </div>
       ) : (
       <>
-      {/* Phone-first: the number is the primary way in, then Google/Apple. */}
+      {/* Phone-first: the number is the primary way in, then Google. */}
       <button
         type="button"
         onClick={() => setShowPhone(true)}
