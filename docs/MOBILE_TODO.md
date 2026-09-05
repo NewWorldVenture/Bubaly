@@ -42,6 +42,8 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-029 | 3 | Blog article **Table of Contents** now on mobile — native `<details>` collapsible ToC (`lg:hidden`, shared h2 anchors, 44px links) — was `hidden lg:block` sidebar-only. Public blog surface (parallel bot) | `af0c11ca` |
 | M-038 | 6 | Pricing **billing-period toggle** (Monthly/Yearly, ~36px) grows to ≥44px tall on touch (`coarse:min-h-11`) — a key conversion control. Public marketing surface (parallel bot) | `f9c9fade` |
 | M-039 | 3 | **Legal pages** (privacy/terms/cookies/acceptable-use) get a mobile Table of Contents — native `<details>` collapsible ToC (`lg:hidden`, shared section anchors, 44px links) via their shared `legal.tsx` layout — was `hidden lg:block` sidebar-only. Public marketing surface (parallel bot) | (this commit) |
+| M-040 | native | **iOS bundle-id collision fixed.** The Capacitor shell and the Expo companion both declared `com.bubaly.bubaly`. One bundle id binds to one App Store Connect record, and on a device the second install *replaces* the first — so neither could be TestFlighted alongside the other, and nothing surfaced the clash until submission. Expo companion → `com.bubaly.companion` (iOS + Android). Guard `tests/mobile-bundle-id-distinct.test.ts` (3) | (this commit) |
+| M-041 | 16 | **iOS PWA launch screens.** An installed home-screen PWA launched on a blank white screen — no `apple-touch-startup-image` existed, and iOS only accepts an exact device-pixel match. Added 11 generated launch images covering every current iPhone (`public/launch/*`, from `scripts/generate-icons.mjs`), the media queries that select them (`lib/pwa/launch-screens.ts` → `app/layout.tsx`), the legacy `apple-mobile-web-app-capable` meta (pre-15.4 iOS opened the icon in a browser tab), and a root `/apple-touch-icon.png` (was 404). Guard `tests/mobile-ios-launch-screens.test.ts` (5) | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),
@@ -156,8 +158,17 @@ the nav on a taller-home-indicator phone.
   viewport-meta `viewport-fit=cover`, no horizontal overflow, and **no focusable
   input < 16px** (runtime iOS-zoom guard). `--list` → 225 tests / 5 projects.
 - 🔜 **Remaining:** (a) authed critical journeys (login → create/edit record →
-  upload → nav) need CI Supabase creds — extend `PUBLIC_ROUTES` → authed once
-  available (see `authenticated.spec.ts`); (b) ✅ landscape + dark-mode variants — DONE (M-036, `agent-fable-opus`): iphone/ipad-landscape + pixel-dark projects, 275 tests/8 projects, 39 assertions executed live green;
+  upload → nav) at phone viewports. **The stated blocker is stale:** the CI `e2e`
+  job now provisions an isolated Supabase and runs `authenticated.spec.ts` with
+  `E2E_AUTHENTICATED=1` — but only under the desktop `chromium` project, because
+  the mobile projects' `testMatch` is `/(mobile|overflow|public)\.spec\.ts/`.
+  Closing this is a one-line change: add `authenticated` to the `iphone` project's
+  `testMatch` in `playwright.config.ts` (one phone, not all 8 — the journey is
+  slow and the matrix already multiplies). **Deliberately not done blind:** the
+  journey needs a local Supabase to run, so it cannot be validated outside CI, and
+  pushing it untested to `main` risks reddening the branch that deploys
+  production. Do it in a session that can run `supabase start` first;
+ (b) ✅ landscape + dark-mode variants — DONE (M-036, `agent-fable-opus`): iphone/ipad-landscape + pixel-dark projects, 275 tests/8 projects, 39 assertions executed live green;
   (c) wire the mobile projects into CI — ✅ **DONE**: `run-e2e.mjs` runs all projects with no filter, so the CI `e2e` job (PR + push to main) now executes the mobile matrix as a gate. Running the full matrix needs a
   `next build` + server (~5 min) — kicked once for evidence.
 

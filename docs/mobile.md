@@ -11,6 +11,13 @@ signed-in user) and one visual language (`design/tokens.json`):
    default + light toggle, glass surfaces, brand palette) and talking to the
    assistant through the canonical `/api/ai` route with a bearer token.
 
+> **The two tracks are two separate apps and must keep separate identifiers.**
+> Capacitor shell → `com.bubaly.bubaly`; Expo companion → `com.bubaly.companion`.
+> App Store Connect binds one bundle id to one app record, and on a device the
+> second install of a shared id *replaces* the first rather than sitting beside
+> it — so a collision makes it impossible to test both, and doesn't surface until
+> submission. `tests/mobile-bundle-id-distinct.test.ts` fails if they converge.
+
 ## Expo app (`mobile/`)
 
 | Layer | Files |
@@ -68,6 +75,7 @@ iPad is covered by the iOS target (universal app).
 | Push storage + delivery | `supabase/migrations/0035_push_devices.sql`, `app/api/push/{subscribe,unsubscribe}/route.ts`, `lib/server/push.ts` |
 | Push fan‑out wired into notifications | `app/api/cron/notifications/route.ts`, `app/api/notifications/generate/route.ts` |
 | PWA install assets | `app/manifest.ts`, `public/icons/*`, `public/apple-touch-icon.png`, `scripts/generate-icons.mjs` |
+| iOS launch screens (per-device) | `public/launch/*`, `lib/pwa/launch-screens.ts` (media queries rendered in `app/layout.tsx`), guard `tests/mobile-ios-launch-screens.test.ts` |
 | Service worker (offline + web push) | `public/sw.js` |
 
 ## One‑time setup on a Mac / dev machine
@@ -79,7 +87,8 @@ Native compilation requires platform SDKs that aren't in CI:
 
 ```bash
 npm install
-npm run icons                 # (re)generate the PNG icon set from public/icon.svg
+npm run icons                 # (re)generate icons, iOS launch screens and apple-touch-icon
+                              # from public/brand/bubaly-mark.png
 npm run cap:add:ios           # creates the ios/ Xcode project
 npm run cap:add:android       # creates the android/ Studio project
 ```
