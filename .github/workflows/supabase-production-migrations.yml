@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
+      - 'scripts/audit-supabase-schema.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
       - 'scripts/backfill-marketing-image-provenance.mjs'
       - 'scripts/backfill-marketing-coverage.mjs'
@@ -81,6 +82,9 @@ jobs:
 
       - name: Apply ordered migrations
         run: supabase db push --yes
+
+      - name: Verify household module schema
+        run: npm run db:audit:schema
 
       - name: Backfill and enforce media provenance
         run: npm run marketing:backfill:provenance -- --apply

@@ -119,3 +119,11 @@ gives typechecking the existing build's 4 GB heap allowance. This increment's
 public links and PIN controls use `focus-visible:focus-ring`, with browser
 assertions covering both idle and keyboard-focused appearance. The shared
 global CSS helper and app sidebar are unchanged.
+
+## Schema readiness follow-up (2026-09-05)
+
+- Extended the existing `db:audit:schema` command from 11 legacy checks to 38 checks, covering all 27 tables introduced by migrations 0240 through 0248. Requests return zero rows, use bounded concurrency and deadlines, and do not follow redirects or print response bodies.
+- The Production migration workflow now runs this audit immediately after the ordered migration push, before marketing backfills. It cannot report a successful rollout while required household module schema remains unavailable.
+- Validation: 32 focused schema/migration/workflow tests passed; the 4 GB TypeScript check passed. The audit against the live public API passed all 11 legacy checks and reported all 27 new module tables unavailable (HTTP 404). This is an API-schema readiness result, not proof of physical table absence; authenticated migration-ledger and schema inspection are still needed.
+- GitHub CI run 33971159244 for b756815631398095675bbefcfdc99a9bbcdb645a completed: quality and mobile configuration jobs passed. Browser tests recorded 394 passed, two flaky menu keyboard cases, and one failing kid-login input-size check (username input rendered at 14 px). These issues remain unresolved in this schema-audit-only follow-up.
+- The Production environment contains `SUPABASE_PROJECT_REF` and `SUPABASE_ANON_KEY`. Rollout still requires `SUPABASE_ACCESS_TOKEN` and `SUPABASE_SERVICE_ROLE_KEY`, supplied privately through GitHub environment settings, followed by migration review and authenticated CRUD/RLS verification. Do not treat this follow-up as a completed production rollout.
