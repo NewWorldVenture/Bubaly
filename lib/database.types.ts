@@ -22,6 +22,9 @@ export type WatchKind = 'movie' | 'show' | 'documentary' | 'kids' | 'special';
 export type WatchService = 'netflix' | 'disney' | 'prime' | 'hulu' | 'max' | 'apple' | 'peacock' | 'paramount' | 'youtube' | 'library' | 'theater' | 'other';
 export type WatchStatus = 'want' | 'watching' | 'watched' | 'skipped';
 export type WatchVote = 'love' | 'up' | 'down';
+export type HomeLocationKind = 'room' | 'closet' | 'garage' | 'attic' | 'basement' | 'shed' | 'storage_unit' | 'box' | 'shelf' | 'drawer' | 'cabinet' | 'vehicle' | 'other';
+export type InventoryCategory = 'electronics' | 'tools' | 'sports' | 'toys' | 'documents' | 'kitchen' | 'furniture' | 'seasonal' | 'clothing' | 'outdoor' | 'medical' | 'keys' | 'jewelry' | 'other';
+export type InventoryStatus = 'in_place' | 'lent' | 'lost' | 'disposed' | 'in_repair';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2423,6 +2426,21 @@ export interface Database {
         { id: string; family_id: string; title_id: string | null; title_name: string; watched_on: string; member_ids: string[]; rating: number | null; minutes: number | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title_id?: string | null; title_name: string; watched_on?: string; member_ids?: string[]; rating?: number | null; minutes?: number | null; notes?: string | null; created_by?: string | null },
         Partial<{ title_id: string | null; title_name: string; watched_on: string; member_ids: string[]; rating: number | null; minutes: number | null; notes: string | null }>
+      >;
+      home_locations: T<
+        { id: string; family_id: string; name: string; kind: HomeLocationKind; parent_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; kind?: HomeLocationKind; parent_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; kind: HomeLocationKind; parent_id: string | null; notes: string | null }>
+      >;
+      inventory_items: T<
+        { id: string; family_id: string; name: string; category: InventoryCategory; location_id: string | null; owner_member_id: string | null; quantity: number; value_cents: number | null; purchased_on: string | null; brand: string | null; model: string | null; serial_number: string | null; warranty_until: string | null; photo_path: string | null; tags: string[]; status: InventoryStatus; lent_to: string | null; lent_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; category?: InventoryCategory; location_id?: string | null; owner_member_id?: string | null; quantity?: number; value_cents?: number | null; purchased_on?: string | null; brand?: string | null; model?: string | null; serial_number?: string | null; warranty_until?: string | null; photo_path?: string | null; tags?: string[]; status?: InventoryStatus; lent_to?: string | null; lent_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; category: InventoryCategory; location_id: string | null; owner_member_id: string | null; quantity: number; value_cents: number | null; purchased_on: string | null; brand: string | null; model: string | null; serial_number: string | null; warranty_until: string | null; photo_path: string | null; tags: string[]; status: InventoryStatus; lent_to: string | null; lent_on: string | null; notes: string | null }>
+      >;
+      inventory_moves: T<
+        { id: string; family_id: string; item_id: string; from_location_id: string | null; to_location_id: string | null; moved_by: string | null; moved_at: string; reason: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; item_id: string; from_location_id?: string | null; to_location_id?: string | null; moved_by?: string | null; moved_at?: string; reason?: string | null; created_by?: string | null },
+        Partial<{ from_location_id: string | null; to_location_id: string | null; moved_by: string | null; moved_at: string; reason: string | null }>
       >;
     };
     Views: { [_ in never]: never };
