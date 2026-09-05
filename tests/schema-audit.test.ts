@@ -19,12 +19,21 @@ describe('household schema availability', () => {
     '0240_closet_outfits.sql', '0241_family_watchlist.sql', '0242_home_inventory.sql',
     '0243_sleep_coach.sql', '0244_declutter.sql', '0245_move_planner.sql',
     '0246_home_projects.sql', '0247_career_hub.sql', '0248_language_practice.sql',
+    '0250_ai_runtime_core.sql',
   ])('covers every table actually created by %s', (migration) => {
     const sql = readFileSync(resolve('supabase/migrations', migration), 'utf8');
     const tables = [...sql.matchAll(/create\s+table\s+if\s+not\s+exists\s+public\.(\w+)/gi)]
       .map((match) => match[1]).sort();
     expect(tables.length).toBeGreaterThan(0);
-    expect(SCHEMA_CHECKS.filter(([, file]) => file === migration).map(([table]) => table).sort()).toEqual(tables);
+    expect(SCHEMA_CHECKS.filter(([table, file]) => file === migration && !table.includes('.')).map(([table]) => table).sort()).toEqual(tables);
+  });
+
+  it('also checks the AI runtime extensions on existing tables', () => {
+    for (const table of ['family_automation_runs', 'ai_conversations', 'ai_messages', 'approval_requests']) {
+      const check = SCHEMA_CHECKS.find(([name]) => name === `${table}.runtime_columns`);
+      expect(check?.[2]).toBeTruthy();
+      expect(check?.[2]).not.toBe('*');
+    }
   });
 
   it('keeps checks unique and retains the Stripe claim-column requirement', () => {
