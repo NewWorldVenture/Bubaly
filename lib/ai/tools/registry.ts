@@ -20,6 +20,7 @@
 // shadowed tool discovered when an approval executes the wrong thing.
 import { calendarTools } from './calendar';
 import { familyTools } from './family';
+import { routineTools } from './routines';
 import { groceryTools } from './groceries';
 import { mealTools } from './meals';
 import { memoryTools } from './memory';
@@ -62,7 +63,7 @@ function register(tool: ToolDefinition): void {
   for (const alias of tool.aliases ?? []) index(alias, tool.name);
 }
 
-for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...homeTools, ...documentTools, ...schoolTools, ...sportsTools]) {
+for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...homeTools, ...documentTools, ...schoolTools, ...sportsTools, ...routineTools]) {
   register(tool);
 }
 

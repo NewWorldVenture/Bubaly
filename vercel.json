@@ -1,32 +1,56 @@
 {
   "crons": [
     {
-      "path": "/api/cron/feedback-github-sync",
-      "schedule": "15 6 * * *"
+      "path": "/api/cron/admin-digest",
+      "schedule": "30 12 * * *"
     },
     {
-      "path": "/api/cron/chore-reminders",
-      "schedule": "0 18 * * 0"
+      "path": "/api/cron/ai-runs",
+      "schedule": "20 9 * * *"
     },
     {
-      "path": "/api/cron/weekly-digest",
-      "schedule": "0 8 * * 1"
+      "path": "/api/cron/automations",
+      "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/notifications",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/cron/push-scan",
-      "schedule": "0 12 * * *"
+      "path": "/api/cron/autopilot-scan",
+      "schedule": "30 6 * * *"
     },
     {
       "path": "/api/cron/calendar-feeds",
       "schedule": "0 5 * * *"
     },
     {
-      "path": "/api/cron/automations",
-      "schedule": "0 13 * * *"
+      "path": "/api/cron/checkout-abandoned",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/chore-reminders",
+      "schedule": "0 18 * * 0"
+    },
+    {
+      "path": "/api/cron/close-auctions",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/demo-cleanup",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/family-routines",
+      "schedule": "10 9 * * *"
+    },
+    {
+      "path": "/api/cron/feedback-github-sync",
+      "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/guardian-learning",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/journey-recovery",
+      "schedule": "0 15 * * *"
     },
     {
       "path": "/api/cron/marketing",
@@ -37,18 +61,6 @@
       "schedule": "15 7 * * *"
     },
     {
-      "path": "/api/cron/checkout-abandoned",
-      "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/autopilot-scan",
-      "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/cron/wallet-allowance",
-      "schedule": "0 7 * * *"
-    },
-    {
       "path": "/api/cron/model-refresh",
       "schedule": "0 4 * * *"
     },
@@ -57,36 +69,28 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/guardian-learning",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/demo-cleanup",
-      "schedule": "0 5 * * *"
+      "path": "/api/cron/notifications",
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/cron/provider-sync",
       "schedule": "15 8 * * *"
     },
     {
-      "path": "/api/cron/journey-recovery",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/cron/close-auctions",
-      "schedule": "0 10 * * *"
+      "path": "/api/cron/push-scan",
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/return-reminders",
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/cron/admin-digest",
-      "schedule": "30 12 * * *"
+      "path": "/api/cron/wallet-allowance",
+      "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/ai-runs",
-      "schedule": "20 9 * * *"
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 8 * * 1"
     }
   ]
 }

@@ -54,6 +54,8 @@ export const SCHEMA_CHECKS = [
   ['approval_requests.runtime_columns', '0251_ai_trust_hardening.sql', 'request_id,run_id,plan_step_id,plan_step_ids,consequences,evidence,edited_payload,payload_kind,reviewed_by,review_note'],
   ['ai_requests.runtime_columns', '0255_ai_runtime_lockdown.sql', 'client_request_id'],
   ['home_briefs.runtime_columns', '0258_home_briefs_kind.sql', 'kind,handled,delivered_at'],
+  ['routine_runs', '0259_routine_schedules.sql'],
+  ['family_automation_rules.runtime_columns', '0259_routine_schedules.sql', 'schedule_kind,schedule_expr,anchor_key,offset_days,at_hour,next_run_at,said,source_request_id'],
 ];
 
 export async function auditSupabaseSchema({
