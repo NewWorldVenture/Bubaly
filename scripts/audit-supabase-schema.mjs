@@ -30,7 +30,8 @@ const results = await Promise.all(expected.map(async ([table, migration]) => {
     const response = await fetch(`${url}/rest/v1/${table}?select=*&limit=0`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    return { table, migration, status: response.status, ok: response.ok };
+    const body = response.ok ? '' : (await response.text()).replace(/\s+/g, ' ').slice(0, 200);
+    return { table, migration, status: response.status, ok: response.ok, error: body || undefined };
   } catch (error) {
     return {
       table,
@@ -50,7 +51,8 @@ const columnResults = await Promise.all(columnChecks.map(async ([table, migratio
     const response = await fetch(`${url}/rest/v1/${resource}&limit=0`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    return { table, migration, status: response.status, ok: response.ok };
+    const body = response.ok ? '' : (await response.text()).replace(/\s+/g, ' ').slice(0, 200);
+    return { table, migration, status: response.status, ok: response.ok, error: body || undefined };
   } catch (error) {
     return {
       table,
