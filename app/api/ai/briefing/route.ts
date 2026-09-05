@@ -5,6 +5,7 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/response-schema';
 
 export async function POST(req: NextRequest) {
   try {
@@ -207,6 +208,10 @@ Rules:
 - Score categories 0-100 honestly based on the data
 - Use appropriate emojis for schedule items (🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday)
 - Color choices for schedule: blue, purple, rose, emerald, amber, cyan, indigo
+- Reminder urgency: high, medium, low. Outstanding urgency: high, medium. Stress level: low, moderate, high.
+- Keep lists to ${BRIEFING_RESPONSE_LIMITS.listItems} entries, nested items/missing/notes to ${BRIEFING_RESPONSE_LIMITS.nestedItems}, and score categories to ${BRIEFING_RESPONSE_LIMITS.categories}.
+- Keep greeting, subtitle, names, titles, labels, meal/status/category text to ${BRIEFING_RESPONSE_LIMITS.label} characters; other text to ${BRIEFING_RESPONSE_LIMITS.text}, schedule times to ${BRIEFING_RESPONSE_LIMITS.time}, and emoji/icon strings to ${BRIEFING_RESPONSE_LIMITS.icon}.
+- If age is known, use a whole number from 0 to ${BRIEFING_RESPONSE_LIMITS.age}; otherwise omit it. Tomorrow's event count must be a whole number from 0 to ${BRIEFING_RESPONSE_LIMITS.eventCount}.
 - Kids needs should infer from school events, sports events, and reminders
 - For evening briefing, populate completed/outstanding/tomorrowPreview
 - For weekly briefing, populate weeklyHighlights and weeklyConflicts
@@ -222,7 +227,7 @@ Rules:
     }));
     const subtitle = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-    let briefing: Record<string, unknown>;
+    let briefing: Record<string, unknown> | null = null;
 
     if (await isAIConfigured()) {
       const provider = await resolveProvider();
@@ -232,19 +237,11 @@ Rules:
         tools: [],
         maxTokens: 2000,
       });
-      const text = completion.text || '{}';
-      try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        briefing = JSON.parse(jsonMatch?.[0] ?? '{}');
-      } catch {
-        briefing = null as unknown as Record<string, unknown>;
-      }
-    } else {
-      briefing = null as unknown as Record<string, unknown>;
+      briefing = parseBriefingResponse(completion.text);
     }
 
     // Deterministic concierge briefing — used when AI is off or returns junk.
-    if (!briefing || typeof briefing !== 'object') {
+    if (!briefing) {
       briefing = {
         greeting: `Good ${type === 'evening' ? 'evening' : 'morning'}, ${firstName}!`,
         subtitle,
