@@ -58,7 +58,10 @@ const nextConfig = {
     const commonSecurity = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+      // Voice messages, document capture, and family check-ins need these APIs.
+      // Same-origin access still requires the user's browser permission and
+      // does not delegate device access to embedded third-party content.
+      { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(self)' },
       // HSTS: force HTTPS for two years across subdomains. The site is
       // HTTPS-only (canonical is https://www.bubaly.com and Vercel serves
       // TLS), so this only hardens against protocol-downgrade / SSL-strip.

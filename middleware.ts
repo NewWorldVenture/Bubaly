@@ -4,6 +4,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
+  // Both are sign-in entry points, not authenticated family data. The header's
+  // Get started link and a child's PIN sign-in must work before a session exists.
+  '/welcome', '/kid-login',
   '/join', '/offline',
   // Legal pages — public for everyone, including signed-out visitors.
   '/terms', '/privacy', '/cookies', '/acceptable-use',

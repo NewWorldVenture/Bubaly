@@ -875,12 +875,12 @@ export function ManifestoBand() {
 }
 
 export const FEATURE_RAIL = [
-  { icon: CalendarDays, title: 'Shared Calendar', body: "See everyone's schedule in one beautiful view.", tone: 'violet' },
-  { icon: CheckSquare2, title: 'Chores & Rewards', body: 'Assign chores, earn points, build habits.', tone: 'green' },
-  { icon: UtensilsCrossed, title: 'Meal Planning', body: 'Plan meals, build grocery lists, save time.', tone: 'orange' },
-  { icon: GraduationCap, title: 'School & Sports', body: 'Stay on top of school and activities.', tone: 'blue' },
-  { icon: Heart, title: 'Health & Reminders', body: 'Medications, appointments, and important reminders.', tone: 'pink' },
-  { icon: Folder, title: 'Documents & Notes', body: 'Store what matters, access anywhere.', tone: 'violet' },
+  { icon: CalendarDays, title: 'Shared Calendar', body: "See everyone's schedule in one beautiful view.", tone: 'violet', href: '/features#smart-calendar' },
+  { icon: CheckSquare2, title: 'Chores & Rewards', body: 'Assign chores, earn points, build habits.', tone: 'green', href: '/features#tasks-chores' },
+  { icon: UtensilsCrossed, title: 'Meal Planning', body: 'Plan meals, build grocery lists, save time.', tone: 'orange', href: '/features#meal-planning' },
+  { icon: GraduationCap, title: 'School & Sports', body: 'Stay on top of school and activities.', tone: 'blue', href: '/features#school-hub' },
+  { icon: Heart, title: 'Health & Reminders', body: 'Medications, appointments, and important reminders.', tone: 'pink', href: '/features#health-medications' },
+  { icon: Folder, title: 'Documents & Notes', body: 'Store what matters, access anywhere.', tone: 'violet', href: '/features#home-management' },
 ] as const;
 
 export const FEATURE_TOPICS = [

@@ -120,6 +120,7 @@ function TinyAvatar({ index = 0, className }: { index?: number; className?: stri
 }
 
 function FeatureCard({
+  id,
   icon,
   tone,
   title,
@@ -127,6 +128,7 @@ function FeatureCard({
   children,
   row = 1,
 }: {
+  id?: string;
   icon: LucideIcon;
   tone: Tone;
   title: string;
@@ -135,7 +137,7 @@ function FeatureCard({
   row?: 1 | 2;
 }) {
   return (
-    <article className={cn('dark flex flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
+    <article id={id} className={cn('dark flex scroll-mt-24 flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
       <div className="flex items-center gap-2.5">
         <SquareIcon icon={icon} tone={tone} />
         <h3 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h3>
@@ -191,6 +193,7 @@ export function FeaturesReferencePage() {
 
         <section className="mt-[18px] grid gap-[14px] px-0 sm:grid-cols-2 lg:grid-cols-4 lg:px-[14px]">
           <FeatureCard
+            id="smart-calendar"
             icon={CalendarDays}
             tone="violet"
             title="Smart Calendar"
@@ -199,6 +202,7 @@ export function FeaturesReferencePage() {
             <MiniCalendar />
           </FeatureCard>
           <FeatureCard
+            id="tasks-chores"
             icon={CheckSquare2}
             tone="green"
             title="Tasks & Chores"
@@ -207,6 +211,7 @@ export function FeaturesReferencePage() {
             <TaskList />
           </FeatureCard>
           <FeatureCard
+            id="meal-planning"
             icon={UtensilsCrossed}
             tone="orange"
             title="Meal Planning"
@@ -223,6 +228,7 @@ export function FeaturesReferencePage() {
             <GroceryList />
           </FeatureCard>
           <FeatureCard
+            id="school-hub"
             icon={GraduationCap}
             tone="blue"
             title="School Hub"
@@ -232,6 +238,7 @@ export function FeaturesReferencePage() {
             <SchoolList />
           </FeatureCard>
           <FeatureCard
+            id="health-medications"
             icon={HeartPulse}
             tone="pink"
             title="Health & Medications"
@@ -241,6 +248,7 @@ export function FeaturesReferencePage() {
             <HealthList />
           </FeatureCard>
           <FeatureCard
+            id="home-management"
             icon={HousePlus}
             tone="green"
             title="Home Management"

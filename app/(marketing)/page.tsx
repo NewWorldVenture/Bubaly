@@ -1,12 +1,5 @@
-import {
-  CalendarDays,
-  CheckSquare2,
-  Folder,
-  GraduationCap,
-  Heart,
-  Sparkles,
-  UtensilsCrossed,
-} from 'lucide-react';
+import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 import {
   Container,
   DeviceShowcase,
@@ -59,7 +52,7 @@ export default async function HomePage() {
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
               <PrimaryLink href="/signup">Start Free Trial</PrimaryLink>
-              <WatchDemoLink href="/how-it-works">Watch Demo</WatchDemoLink>
+              <WatchDemoLink href="/how-it-works">See how it works</WatchDemoLink>
             </div>
             <div className="mt-6 flex justify-center lg:justify-start">
               <PlatformBadges />
@@ -82,15 +75,16 @@ export default async function HomePage() {
 
       {/* ── Feature rail ── */}
       <Container className="max-w-[1440px] px-5 pb-4 pt-10 sm:px-8 sm:pt-12 lg:px-10">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
-          {FEATURE_RAIL.map(({ icon, title, body, tone }) => (
-            <div key={title} className="group flex flex-col items-center text-center">
+        <h2 className="sr-only">Tools for everyday family life</h2>
+        <nav aria-label="Explore family tools" className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+          {FEATURE_RAIL.map(({ icon, title, body, tone, href }) => (
+            <Link key={title} href={href} className="focus-ring group flex flex-col items-center rounded-xl px-2 py-3 text-center transition hover:bg-white/[0.045]">
               <IconOrb icon={icon} tone={tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
               <h3 className="mt-3 text-xs font-semibold">{title}</h3>
               <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{body}</p>
-            </div>
+            </Link>
           ))}
-        </div>
+        </nav>
       </Container>
 
       {/* ── AI Family Assistant ── */}
@@ -113,17 +107,6 @@ export default async function HomePage() {
         <DeviceShowcase />
       </Container>
 
-      {/* Hidden SEO content */}
-      <section className="sr-only">
-        <h2>Bubaly modules</h2>
-        <ul>
-          {[CalendarDays, CheckSquare2, UtensilsCrossed, GraduationCap, Heart, Folder, Sparkles].map((Icon, index) => (
-            <li key={index}>
-              <Icon /> Built for busy families.
-            </li>
-          ))}
-        </ul>
-      </section>
       <MarketingAeoSection
         path="/"
         name="Bubaly"

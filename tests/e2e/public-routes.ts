@@ -11,4 +11,6 @@ export const PUBLIC_ROUTES = [
   '/contact',
   '/login',
   '/signup',
+  '/welcome',
+  '/kid-login',
 ] as const;
