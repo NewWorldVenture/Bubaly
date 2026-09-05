@@ -1,6 +1,6 @@
 # Minimal Supabase config. Run `supabase init` to generate the full file,
 # or use this as-is for local dev (`supabase start`).
-project_id = "familyos"
+project_id = "bubaly"
 
 [db]
 port = 54322

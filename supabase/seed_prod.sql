@@ -673,7 +673,7 @@ SELECT sm.family_id, sm.id,
 FROM (SELECT id, family_id FROM public.family_members WHERE family_id IN ('11111111-1111-1111-1111-111111111111'::uuid,'22222222-2222-2222-2222-222222222222'::uuid,'33333333-3333-3333-3333-333333333333'::uuid,'44444444-4444-4444-4444-444444444444'::uuid,'55555555-5555-5555-5555-555555555555'::uuid)) AS sm, generate_series(1,20) g;
 
 -- ============================================================
--- NEW FAMILY-OS MODULE TABLES — 100/family × 5 = 500 each
+-- NEW BUBALY MODULE TABLES — 100/family × 5 = 500 each
 -- ============================================================
 
 -- family_routines

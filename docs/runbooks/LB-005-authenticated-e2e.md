@@ -19,7 +19,7 @@ blocker is that CI can't currently execute (LB-015 infra).
 - `.github/workflows/ci.yml` (E2E job) — already does the full sequence: `supabase start` →
   overrides env to the **local** Supabase (`api.url`, `auth.anon_key`, `auth.service_role_key`) →
   `db:audit:auth` + `db:audit:schema` → `test:e2e` with `E2E_AUTHENTICATED=1` and a unique per-run
-  `E2E_AUTH_EMAIL=familyos-e2e-<run_id>-<attempt>@example.test`.
+  `E2E_AUTH_EMAIL=bubaly-e2e-<run_id>-<attempt>@example.test`.
 
 **So the CI authed E2E self-provisions a throwaway Supabase — there is no "missing test credentials"
 gap.** The reason it isn't producing green evidence is **LB-015**: the CI jobs currently fail at
@@ -39,7 +39,7 @@ export SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase start>
 
 # 2) enable the authed journey + a unique throwaway account
 export E2E_AUTHENTICATED=1
-export E2E_AUTH_EMAIL="familyos-e2e-$(date +%s)@example.test"
+export E2E_AUTH_EMAIL="bubaly-e2e-$(date +%s)@example.test"
 export E2E_AUTH_PASSWORD="$(openssl rand -base64 18)"
 
 # 3) build once, then run the browser suite (playwright starts `next start` itself)
