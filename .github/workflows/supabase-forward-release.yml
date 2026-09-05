@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Apply the pinned 0240-0252 release after the read-only preflight
+        description: Apply the pinned 0240-0254 release after the read-only preflight
         type: boolean
         default: false
 

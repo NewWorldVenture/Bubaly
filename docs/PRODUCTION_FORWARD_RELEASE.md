@@ -7,21 +7,27 @@ the Supabase ledger. The 33 tables introduced by 0240-0248 and 0250 were absent.
 ## Scope and safeguards
 
 The one-time `Supabase reviewed forward release` workflow applies only the
-hash-pinned files 0240-0252. It does not claim that older migrations ran.
+hash-pinned files 0240-0254. It does not claim that older migrations ran.
 The original production workflow's unrecorded-history guard remains enabled.
 
 - The manifest targets only the audited Bubaly project.
 - Default dispatch is a read-only preview. Applying requires the explicit apply input.
-- Preflight compares 113 existing columns, 40 constraints, five approval/write policies,
+- Preflight compares 113 existing columns, 40 constraints, 37 approval/wallet policies,
   and four helper definitions against the metadata-only audit.
 - The same checks run again inside the write transaction under a ledger lock.
-- All 13 migrations and their actual ledger entries commit together, including the
-  0252 INSERT hardening. Failure rolls back the entire forward release.
+- All 15 migrations and their actual ledger entries commit together, including
+  0252 INSERT hardening, 0253 explicit client RPC revocation, and 0254 restrictive
+  manager guards on five wallet tables. Failure rolls back the entire release.
 - A five-second lock timeout prevents an extended lock wait.
 - Existing household rows are not deleted or reset. The reviewed upstream migrations
   update GPT conversation provider labels and add a 48-hour expiry to existing
   pending approvals that lack an expiry.
 - Table RLS, approval-policy shape, and worker RPC privileges are checked before commit.
+- Production default privileges grant EXECUTE directly to anon/authenticated;
+  0253 removes those direct grants rather than relying on revoking PUBLIC.
+- The audit found older permissive wallet writes alongside manager policies.
+  0254 removes those known writes and adds restrictive guards against recurrence.
+- Wallet behavior probes run only in isolated Supabase, never against production.
 - A fresh metadata audit and the 48 zero-row API checks follow a successful apply.
 - Network errors are never automatically retried. Read the ledger to resolve an
   uncertain outcome first. Artifacts contain metadata only and expire in three days.

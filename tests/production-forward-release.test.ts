@@ -14,17 +14,21 @@ const released = () => ({
   ...snapshot(),
   migrations: releaseLedger(manifest),
   tables: [...manifest.requiredTables, ...manifest.newTables].map((name: string) => ({ name, rls: true })),
-  policies: [...manifest.policyTables, 'ai_requests'].map((table: string) => ({
+  workerRpc: { exists: true, anonymousExecute: false, authenticatedExecute: false, serviceExecute: true },
+  policies: [...[...manifest.policyTables, 'ai_requests'].map((table: string) => ({
     table, name: table + '_insert', command: 'INSERT', roles: ['authenticated'], checkHash: 'non-empty-reviewed-check',
-  })),
+  })), ...manifest.walletTables.flatMap((table: string) => ['INSERT', 'UPDATE', 'DELETE'].map((command) => ({
+    table, name: table + '_manager_' + command.toLowerCase() + '_guard', command,
+    roles: ['authenticated'], permissive: 'RESTRICTIVE',
+  })))],
 });
 const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 201 });
 
 describe('reviewed production forward release', () => {
-  it('pins precisely 0240-0252 and normalizes checkout line endings', () => {
-    expect(files).toHaveLength(13);
+  it('pins precisely 0240-0254 and normalizes checkout line endings', () => {
+    expect(files).toHaveLength(15);
     expect(files[0].version).toBe('0240');
-    expect(files.at(-1)?.version).toBe('0252');
+    expect(files.at(-1)?.version).toBe('0254');
     expect(readReleaseFiles(manifest, (file: string) => readFileSync(file, 'utf8').replace(/\r?\n/g, '\r\n'))).toEqual(files);
     expect(() => readReleaseFiles(manifest, () => 'changed migration')).toThrow('checksum changed');
     expect(() => readReleaseFiles({ ...manifest, projectRef: 'wrong-project' })).toThrow('pinned');
@@ -57,7 +61,7 @@ describe('reviewed production forward release', () => {
     expect(sql.endsWith('commit;')).toBe(true);
     expect(sql).toContain("lock_timeout = '5s'");
     expect(sql.indexOf('Release ledger changed')).toBeLessThan(sql.indexOf(files[0].sql));
-    expect(sql.match(/insert into supabase_migrations.schema_migrations\(/g)).toHaveLength(13);
+    expect(sql.match(/insert into supabase_migrations.schema_migrations\(/g)).toHaveLength(15);
     for (const file of files) expect(sql).toContain(file.sql);
     expect(sql).not.toMatch(/migration repair|--include-all|drop schema|truncate table/i);
     expect(sql).toContain('AI worker RPC permissions are incorrect');

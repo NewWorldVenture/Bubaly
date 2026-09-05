@@ -27,7 +27,12 @@
     "family_model_dirty",
     "trust_audit_logs",
     "home_contractors",
-    "family_automation_rules"
+    "family_automation_rules",
+    "child_wallets",
+    "family_wallets",
+    "wallet_buckets",
+    "wallet_rules",
+    "wallet_transactions"
   ],
   "boundaryTables": [
     "families",
@@ -138,6 +143,14 @@
     {
       "file": "0252_ai_insert_authority.sql",
       "sha256": "0aa32fb1c5135c0654f7e3637a4f58933d8c9eeeb0f441bf91d6863eaf8b095f"
+    },
+    {
+      "file": "0253_ai_worker_execute_lockdown.sql",
+      "sha256": "ac30e3b5ff959702c9eb6f9a12def6508809d370101f015129e8543e7fff5f0c"
+    },
+    {
+      "file": "0254_wallet_write_policy_drift.sql",
+      "sha256": "9671b78a918dd50cc800c15c459868df2a9379470b6c217ebde0f8b1409f8843"
     }
   ],
   "boundary": {
@@ -1118,6 +1131,358 @@
         "checkHash": "34a9724c95501071f6077ea93474f44e",
         "usingHash": "34a9724c95501071f6077ea93474f44e",
         "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_delete",
+        "roles": [
+          "public"
+        ],
+        "table": "child_wallets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_insert",
+        "roles": [
+          "public"
+        ],
+        "table": "child_wallets",
+        "command": "INSERT",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_mng_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "child_wallets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_mng_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "child_wallets",
+        "command": "INSERT",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_mng_update",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "child_wallets",
+        "command": "UPDATE",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_select",
+        "roles": [
+          "public"
+        ],
+        "table": "child_wallets",
+        "command": "SELECT",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "child_wallets_update",
+        "roles": [
+          "public"
+        ],
+        "table": "child_wallets",
+        "command": "UPDATE",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_delete",
+        "roles": [
+          "public"
+        ],
+        "table": "family_wallets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_insert",
+        "roles": [
+          "public"
+        ],
+        "table": "family_wallets",
+        "command": "INSERT",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_mng_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "family_wallets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_mng_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "family_wallets",
+        "command": "INSERT",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_mng_update",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "family_wallets",
+        "command": "UPDATE",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_select",
+        "roles": [
+          "public"
+        ],
+        "table": "family_wallets",
+        "command": "SELECT",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "family_wallets_update",
+        "roles": [
+          "public"
+        ],
+        "table": "family_wallets",
+        "command": "UPDATE",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_delete",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_buckets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_insert",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_buckets",
+        "command": "INSERT",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_mng_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_buckets",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_mng_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_buckets",
+        "command": "INSERT",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_mng_update",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_buckets",
+        "command": "UPDATE",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_select",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_buckets",
+        "command": "SELECT",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_buckets_update",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_buckets",
+        "command": "UPDATE",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_rules_mng_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_rules",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_rules_mng_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_rules",
+        "command": "INSERT",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_rules_mng_update",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_rules",
+        "command": "UPDATE",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_rules_select",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_rules",
+        "command": "SELECT",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_delete",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_transactions",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_insert",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_transactions",
+        "command": "INSERT",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_mng_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_transactions",
+        "command": "DELETE",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_mng_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_transactions",
+        "command": "INSERT",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_mng_update",
+        "roles": [
+          "authenticated"
+        ],
+        "table": "wallet_transactions",
+        "command": "UPDATE",
+        "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_select",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_transactions",
+        "command": "SELECT",
+        "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
+      },
+      {
+        "name": "wallet_transactions_update",
+        "roles": [
+          "public"
+        ],
+        "table": "wallet_transactions",
+        "command": "UPDATE",
+        "checkHash": "34a9724c95501071f6077ea93474f44e",
+        "usingHash": "34a9724c95501071f6077ea93474f44e",
+        "permissive": "PERMISSIVE"
       }
     ],
     "functions": [
@@ -1146,5 +1511,22 @@
         "securityDefiner": false
       }
     ]
-  }
+  },
+  "walletTables": [
+    "child_wallets",
+    "family_wallets",
+    "wallet_buckets",
+    "wallet_rules",
+    "wallet_transactions"
+  ],
+  "policyBoundaryTables": [
+    "approval_requests",
+    "parent_approvals",
+    "family_automation_runs",
+    "child_wallets",
+    "family_wallets",
+    "wallet_buckets",
+    "wallet_rules",
+    "wallet_transactions"
+  ]
 }

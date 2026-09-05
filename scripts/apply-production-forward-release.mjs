@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { CATALOG_QUERY, readProductionMigrationState } from './audit-production-migration-state.mjs';
 
 const PROJECT = 'ltcxlbipiihclxwioyqj';
-const RELEASE_VERSIONS = Array.from({ length: 13 }, (_, index) => String(240 + index).padStart(4, '0'));
+const RELEASE_VERSIONS = Array.from({ length: 15 }, (_, index) => String(240 + index).padStart(4, '0'));
 const canonical = (value) => JSON.stringify(value, (_, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
@@ -15,10 +15,10 @@ const textArray = (values) => 'ARRAY[' + values.map(literal).join(',') + ']::tex
 export function readReleaseFiles(manifest, read = (file) => readFileSync(file, 'utf8')) {
   if (manifest.projectRef !== PROJECT ||
       !sameRows(manifest.migrations.map(({ file }) => file.slice(0, 4)), RELEASE_VERSIONS)) {
-    throw new Error('Only the pinned 0240-0252 production release is supported.');
+    throw new Error('Only the pinned 0240-0254 production release is supported.');
   }
   return manifest.migrations.map(({ file, sha256 }) => {
-    if (!/^0(?:24\d|25[0-2])_[a-z0-9_]+\.sql$/.test(file)) throw new Error('Invalid release filename.');
+    if (!/^0(?:24\d|25[0-4])_[a-z0-9_]+\.sql$/.test(file)) throw new Error('Invalid release filename.');
     const sql = read('supabase/migrations/' + file).replace(/\r\n/g, '\n');
     if (createHash('sha256').update(sql).digest('hex') !== sha256) {
       throw new Error('Reviewed migration checksum changed: ' + file);
@@ -36,7 +36,7 @@ export function boundaryOf(snapshot, manifest) {
   return {
     columns: snapshot.columns.filter(({ table }) => manifest.boundaryTables.includes(table)),
     constraints: snapshot.constraints.filter(({ table }) => manifest.boundaryTables.includes(table)),
-    policies: snapshot.policies.filter(({ table }) => manifest.policyTables.includes(table)),
+    policies: snapshot.policies.filter(({ table }) => manifest.policyBoundaryTables.includes(table)),
     functions: snapshot.functions.filter(({ name }) => manifest.functionNames.includes(name)),
   };
 }
@@ -78,6 +78,20 @@ export function assertReleased(snapshot, manifest) {
       throw new Error('Released INSERT security boundary was not confirmed: ' + table);
     }
   }
+  const rpc = snapshot.workerRpc;
+  if (!rpc?.exists || rpc.anonymousExecute !== false || rpc.authenticatedExecute !== false || rpc.serviceExecute !== true) {
+    throw new Error('Released worker RPC grants were not confirmed.');
+  }
+  for (const table of manifest.walletTables) {
+    for (const command of ['INSERT', 'UPDATE', 'DELETE']) {
+      const policy = snapshot.policies.find((p) =>
+        p.table === table && p.name === table + '_manager_' + command.toLowerCase() + '_guard');
+      if (!policy || policy.command !== command || policy.permissive !== 'RESTRICTIVE' ||
+          !sameRows(policy.roles, ['authenticated'])) {
+        throw new Error('Restrictive wallet manager boundary was not confirmed: ' + table);
+      }
+    }
+  }
 }
 
 export function buildReleaseSql(manifest, files) {
@@ -111,7 +125,7 @@ export function buildReleaseSql(manifest, files) {
     "  foreach k in array ARRAY['columns','constraints','policies','functions'] loop",
     "    select coalesce(jsonb_agg(e), '[]'::jsonb) into actual from jsonb_array_elements(s->k) e",
     "      where case when k = 'functions' then e->>'name' = any(" + textArray(manifest.functionNames) + ')',
-    "        when k = 'policies' then e->>'table' = any(" + textArray(manifest.policyTables) + ')',
+    "        when k = 'policies' then e->>'table' = any(" + textArray(manifest.policyBoundaryTables) + ')',
     "        else e->>'table' = any(" + textArray(manifest.boundaryTables) + ') end;',
     "    if not (actual @> (expected->k) and (expected->k) @> actual) then raise exception 'Release catalog changed: %', k; end if;",
     '  end loop;',
@@ -135,9 +149,18 @@ export function buildReleaseSql(manifest, files) {
     "  if exists (select 1 from pg_policies where schemaname = 'public' and cmd = 'ALL'",
     '    and tablename = any(' + textArray([...manifest.policyTables, 'ai_requests']) + '))',
     "    then raise exception 'Broad approval write policy remains'; end if;",
-    "  if has_function_privilege('authenticated', 'public.claim_ai_runs(integer,integer)', 'EXECUTE')",
+    "  if has_function_privilege('anon', 'public.claim_ai_runs(integer,integer)', 'EXECUTE')",
+    "    or has_function_privilege('authenticated', 'public.claim_ai_runs(integer,integer)', 'EXECUTE')",
     "    or not has_function_privilege('service_role', 'public.claim_ai_runs(integer,integer)', 'EXECUTE')",
     "    then raise exception 'AI worker RPC permissions are incorrect'; end if;",
+    '  foreach t in array ' + textArray(manifest.walletTables) + ' loop',
+    "    if (select count(*) from pg_policies where schemaname = 'public' and tablename = t",
+    "      and permissive = 'RESTRICTIVE' and roles = ARRAY['authenticated']::name[]",
+    "      and ((policyname = t || '_manager_insert_guard' and cmd = 'INSERT')",
+    "        or (policyname = t || '_manager_update_guard' and cmd = 'UPDATE')",
+    "        or (policyname = t || '_manager_delete_guard' and cmd = 'DELETE'))) <> 3",
+    "      then raise exception 'Restrictive wallet manager boundary missing'; end if;",
+    '  end loop;',
     'end $release_check$;',
     "notify pgrst, 'reload schema';",
     'commit;',
@@ -180,6 +203,7 @@ export async function runForwardRelease({ manifest, files, projectRef, token, ap
       'Release catalog changed: constraints', 'Release catalog changed: policies',
       'Release catalog changed: functions', 'Release table security missing',
       'Broad approval write policy remains', 'AI worker RPC permissions are incorrect',
+      'Restrictive wallet manager boundary missing',
     ].find((message) => body.includes(message));
     throw new Error('Release returned HTTP ' + response.status + (state ? ' (SQLSTATE ' + state + ')' : '') +
       (guard ? ' [' + guard + ']' : '') +

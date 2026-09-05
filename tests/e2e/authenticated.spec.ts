@@ -140,6 +140,13 @@ test.describe('authenticated first-value journey', () => {
       });
       const { error: signInError } = await member.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
+      const anonymous = createClient(supabaseUrl, publicKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      for (const client of [anonymous, member]) {
+        const { error } = await client.rpc('claim_ai_runs', { p_limit: 1, p_lease_seconds: 30 });
+        expect(error?.code, 'Only the server worker may claim AI jobs').toBe('42501');
+      }
       const familyId = membership.family_id;
       const { data: plan, error: planError } = await service.from('ai_plans')
         .insert({ family_id: familyId, objective: 'Isolated permission probe' }).select('id').single();
@@ -179,6 +186,49 @@ test.describe('authenticated first-value journey', () => {
       const { error: trustedError } = await service.from('family_automation_runs')
         .insert({ ...run, plan_id: plan.id, requested_by_member_id: membership.id, state: 'paused' });
       expect(trustedError).toBeNull();
+
+      await test.step('wallet money writes require a manager even when legacy policies existed', async () => {
+        if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(new URL(supabaseUrl).hostname)) {
+          throw new Error('Wallet role probes are restricted to isolated local Supabase.');
+        }
+        const credit = {
+          family_id: familyId, type: 'adjustment', direction: 'credit', status: 'completed',
+          amount_cents: 100, created_by: user.id, description: 'Isolated permission probe',
+        };
+        const { data: transaction, error: createError } = await member.from('wallet_transactions')
+          .insert(credit).select('id').single();
+        if (createError) throw createError;
+        const { error: childRoleError } = await service.from('family_members')
+          .update({ role: 'child' }).eq('id', membership.id);
+        if (childRoleError) throw childRoleError;
+        try {
+          const { error: mintError } = await member.from('wallet_transactions').insert(credit);
+          expect(mintError?.code, 'Children cannot mint completed wallet credits').toBe('42501');
+          const { data: changed, error: changeError } = await member.from('wallet_transactions')
+            .update({ amount_cents: 9999 }).eq('id', transaction.id).select('id');
+          expect(changeError).toBeNull();
+          expect(changed).toEqual([]);
+          const { data: deleted, error: deleteError } = await member.from('wallet_transactions')
+            .delete().eq('id', transaction.id).select('id');
+          expect(deleteError).toBeNull();
+          expect(deleted).toEqual([]);
+          const { data: visible, error: readError } = await member.from('wallet_transactions')
+            .select('amount_cents').eq('id', transaction.id).single();
+          expect(readError).toBeNull();
+          expect(Number(visible?.amount_cents)).toBe(100);
+          const { error: serverCreditError } = await service.from('wallet_transactions')
+            .insert({ ...credit, amount_cents: 75 });
+          expect(serverCreditError).toBeNull();
+        } finally {
+          const { error: restoreError } = await service.from('family_members')
+            .update({ role: 'parent' }).eq('id', membership.id);
+          if (restoreError) throw restoreError;
+        }
+        const { data: managerChange, error: managerError } = await member.from('wallet_transactions')
+          .update({ amount_cents: 125 }).eq('id', transaction.id).select('amount_cents').single();
+        expect(managerError).toBeNull();
+        expect(Number(managerChange?.amount_cents)).toBe(125);
+      });
     });
   });
 });
