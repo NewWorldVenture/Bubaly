@@ -41,6 +41,11 @@ export const SCHEDULES = {
   '/api/cron/close-auctions': '*/5 * * * *',
   '/api/cron/return-reminders': '0 8 * * *',
   '/api/cron/admin-digest': '30 12 * * *',
+  // AI run continuation: the executor resumes runs parked on a time budget,
+  // released by an approval, or abandoned by a dead worker. Five minutes is
+  // the shortest the dispatcher ticks, and /api/cron/ai-runs boxes its own
+  // work at 85 s so it never trips the dispatcher's 120 s abort.
+  '/api/cron/ai-runs': '*/5 * * * *',
 };
 
 /** The workflow ticks on this cadence; a route is due if any minute in (prev tick, now] matches. */
