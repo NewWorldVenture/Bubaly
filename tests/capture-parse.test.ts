@@ -114,6 +114,14 @@ describe('parseDueDate', () => {
     expect(parseDueDate('Submit report friday at 5pm', NOW)).toEqual({ title: 'Submit report', dueDate: '2026-07-03' });
   });
 
+  it('keeps the title as typed when the day says what the task is for', () => {
+    // The onboarding journey's first task: never "Pack lunches for".
+    expect(parseDueDate('Pack lunches for tomorrow', NOW)).toEqual({ title: 'Pack lunches for tomorrow', dueDate: '2026-06-27' });
+    expect(parseDueDate('Prep slides for next monday', NOW)).toEqual({ title: 'Prep slides for next monday', dueDate: '2026-07-06' });
+    // "for" elsewhere in the sentence still strips the day reference.
+    expect(parseDueDate('Buy a gift for mom tomorrow', NOW)).toEqual({ title: 'Buy a gift for mom', dueDate: '2026-06-27' });
+  });
+
   it('does not set a due date for a bare time or no day', () => {
     expect(parseDueDate('Call the plumber', NOW)).toEqual({ title: 'Call the plumber', dueDate: null });
     expect(parseDueDate('Standup at 9am', NOW)).toEqual({ title: 'Standup at 9am', dueDate: null });
