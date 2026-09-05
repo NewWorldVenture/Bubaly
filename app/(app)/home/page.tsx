@@ -17,9 +17,20 @@ import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
-import { FrontDoorHero } from '@/components/home/front-door-hero';
-import { buildFrontDoor, mergeHandled } from '@/lib/home/front-door';
 import { AskBar } from '@/components/home/ask-bar';
+import { NeedsAttention } from '@/components/concierge/needs-attention';
+import { WorkingOn } from '@/components/concierge/working-on';
+import { CompletedByBubaly } from '@/components/concierge/completed-by-bubaly';
+import {
+  buildToday, mergeCompletedByBubaly, workingRunsFrom, WORKING_RUN_STATES,
+  type AiActivityRow, type CompletedRunRow, type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
+  type WorkingRunRow, type WorkingStepRow,
+} from '@/lib/home/today';
+import { buildHomeNeeds } from '@/lib/home/needs-build';
+import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
+import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
+import { listPending } from '@/lib/services/approvals';
+import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
@@ -123,9 +134,14 @@ export default async function HomePage() {
   const supabase = await createServer();
 
   const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-  const todayIso = isoDate(now);
+  // The family's own day, not the server's: the Today section and its reads
+  // resolve "today" in the family timezone.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const dayBounds = zonedDayBoundsMs(todayKey, tz);
+  const todayStart = new Date(dayBounds.start);
+  const todayEnd = new Date(dayBounds.end);
+  const todayIso = todayKey;
   const week = weekStrip(now);
   const weekStartIso = week[0].date;
   const weekEndIso = week[6].date;
@@ -215,37 +231,108 @@ export default async function HomePage() {
 
   const msgs = (messages ?? []) as { id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; created_at: string; read_by: string[] }[];
 
-  // R5 — the proactive front door: what the assistant already handled (reversible
-  // auto-executed autopilot actions, last 48h) + what still needs a human (pending
-  // approvals). Best-effort: Supabase returns {data:null} for a missing table, so a
-  // drifted DB degrades to a hidden hero rather than crashing Home.
+  // §16 Command Center reads. The family's own day (not the server's): the
+  // window and the day key come from the family timezone so "today" is today
+  // for them. Every read is family-scoped and captures its error; a failed
+  // read logs and renders as empty rather than as a false "all clear" — except
+  // the approvals inbox, whose failure is shown, because "nothing needs you"
+  // is a claim.
+  const dayEndIso = todayEnd.toISOString();
   const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
-  const [doneRes, doneCountRes, agentRes, agentCountRes, pendingRes, pendingCountRes] = await Promise.all([
-    supabase.from('autopilot_suggestions').select('id, title, kind')
-      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
-      .order('created_at', { ascending: false }).limit(5),
-    supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h),
-    // Specialist-agent actions completed in the same window — the Chief of Staff
-    // reports its whole staff's work, not just autopilot's.
-    supabase.from('agent_activity').select('id, title, agent')
+  const manager = isManager(me.role);
+  const [
+    activeRunsRes, completedRunsRes, agentRes, autoDoneRes, recsRes, aiApprovalsRes,
+    moneyApprovalsRes, choreSignoffRes, todosDueRes, choresDueRes, remindersDueRes,
+  ] = await Promise.all([
+    supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
+      .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
+    supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
+      .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
+      .order('completed_at', { ascending: false, nullsFirst: false }).limit(6),
+    // Specialist-agent actions completed recently — the Chief of Staff reports
+    // its whole staff's work, not just the run executor's.
+    supabase.from('agent_activity').select('id, title, detail, href, created_at')
       .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h)
       .order('created_at', { ascending: false }).limit(5),
-    supabase.from('agent_activity').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h),
-    supabase.from('approval_requests').select('id, title, agent, priority')
+    supabase.from('autopilot_suggestions').select('id, title, created_at')
+      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
-    supabase.from('approval_requests').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('status', 'pending'),
+    listPending(scopeFromUserContext(ctx, supabase)),
+    manager
+      ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
+          .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(20)
+      : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
+    manager
+      ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'submitted')
+      : Promise.resolve({ count: 0, error: null }),
+    supabase.from('todo_items').select('id, title, due_date, priority, assigned_to_id')
+      .eq('family_id', familyId).eq('is_done', false).lte('due_date', todayKey).order('due_date', { ascending: true }).limit(20),
+    supabase.from('chore_assignments').select('id, chore_id, member_id, status, due_at')
+      .eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', dayEndIso).order('due_at', { ascending: true }).limit(20),
+    supabase.from('family_reminders').select('id, title, remind_at, member_id, priority')
+      .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
+      .order('remind_at', { ascending: true }).limit(20),
   ]);
-  const frontDoor = buildFrontDoor({
-    done: mergeHandled(
-      (doneRes.data ?? []) as { id: string; title: string; kind?: string | null }[],
-      (agentRes.data ?? []) as { id: string; title: string; agent?: string | null }[],
-    ),
-    doneCount: (doneCountRes.count ?? 0) + (agentCountRes.count ?? 0) || undefined,
-    pending: (pendingRes.data ?? []) as { id: string; title: string; agent?: string | null; priority?: string | null }[],
-    pendingCount: pendingCountRes.count ?? undefined,
+  for (const [label, res] of [
+    ['active runs', activeRunsRes], ['completed runs', completedRunsRes], ['agent activity', agentRes], ['autopilot handled', autoDoneRes],
+    ['recommendations', recsRes], ['money approvals', moneyApprovalsRes], ['chore sign-offs', choreSignoffRes],
+    ['todos due', todosDueRes], ['chores due', choresDueRes], ['reminders due', remindersDueRes],
+  ] as const) {
+    if (res.error) console.error(`[home] ${label} read failed`, res.error);
+  }
+  if (!aiApprovalsRes.ok) console.error('[home] pending AI approvals read failed', aiApprovalsRes.error);
+
+  const activeRuns = (activeRunsRes.data ?? []) as WorkingRunRow[];
+  const activePlanIds = activeRuns.map((r) => r.plan_id).filter((x): x is string => !!x);
+  const { data: activeStepRows, error: activeStepError } = activePlanIds.length
+    ? await supabase.from('ai_plan_steps').select('plan_id, status').eq('family_id', familyId).in('plan_id', activePlanIds)
+    : { data: [] as WorkingStepRow[], error: null };
+  if (activeStepError) console.error('[home] active run steps read failed', activeStepError);
+  const workingRuns = workingRunsFrom(activeRuns, (activeStepRows ?? []) as WorkingStepRow[]);
+
+  const completedItems = mergeCompletedByBubaly(
+    (completedRunsRes.data ?? []) as CompletedRunRow[],
+    [
+      ...((agentRes.data ?? []) as AiActivityRow[]),
+      ...((autoDoneRes.data ?? []) as { id: string; title: string; created_at: string }[])
+        .map((s) => ({ id: s.id, title: s.title, detail: null, href: '/dashboard/autopilot', created_at: s.created_at })),
+    ],
+  );
+
+  const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
+  const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
+  const homeNeeds = buildHomeNeeds({
+    approvals: (moneyApprovalsRes.data ?? []) as ParentApprovalRow[],
+    renewals: [], documents: [], conflicts: [],
+    pendingApprovals: choreSignoffRes.count ?? 0,
+    overdueMeds: false,
+    overdueReminders: overdueReminders ?? 0,
+    dueTodayReminders: 0,
+    pendingChores: 0, lowGrocery: false, openTodos: 0,
+    now,
+    aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
+    awaitingRuns: activeRuns as AwaitingRunRow[],
+    recommendations,
+  });
+  const needs = topNeeds(homeNeeds, 5);
+  const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
+
+  const choresDue = (choresDueRes.data ?? []) as TodayChoreRow[];
+  const missingChoreIds = [...new Set(choresDue.map((c) => c.chore_id).filter((id) => !choreTitleById.has(id)))];
+  if (missingChoreIds.length) {
+    const { data: moreChores, error: moreChoresError } = await supabase.from('chores').select('id, title').in('id', missingChoreIds).eq('family_id', familyId);
+    if (moreChoresError) console.error('[home] chore titles read failed', moreChoresError);
+    for (const c of moreChores ?? []) choreTitleById.set(c.id, c.title);
+  }
+  const today = buildToday({
+    events: ((todayEvents ?? []) as TodayEventRow[]),
+    todos: (todosDueRes.data ?? []) as TodayTodoRow[],
+    chores: choresDue,
+    reminders: (remindersDueRes.data ?? []) as TodayReminderRow[],
+    choreTitles: Object.fromEntries(choreTitleById),
+    todayKey, tz, now,
   });
 
   // R11 — the category metric: how much family admin the system removed this week.
@@ -316,8 +403,86 @@ export default async function HomePage() {
           engine ("plan Emma's party"), a page, or the assistant. */}
       <AskBar />
 
-      {/* R5 — the proactive front door: "I already handled X · waiting on you: Y" */}
-      <FrontDoorHero frontDoor={frontDoor} canDecide={isManager(me.role)} />
+      {/* §16 Command Center: what needs a person, what Bubaly is doing, the
+          family's day, what is coming, and what Bubaly finished. */}
+      <NeedsAttention
+        items={needs.shown}
+        more={needs.more}
+        headline={needsHeader}
+        approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
+        moneyApprovalKinds={Object.fromEntries(((moneyApprovalsRes.data ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
+        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        canDecide={manager}
+      />
+
+      <WorkingOn familyId={familyId} initial={workingRuns} />
+
+      <Card>
+        <CardHead icon={Clock} title="Today" href="/dashboard/calendar" action="View calendar" />
+        {today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>A clear day — nothing scheduled and nothing due.</EmptyRow>}
+        {today.schedule.length > 0 && (
+          <ul className="space-y-3" aria-label="Today's schedule">
+            {today.schedule.map((item) => {
+              const who = item.memberId ? memberById.get(item.memberId) : undefined;
+              return (
+                <li key={item.key}>
+                  <Link href={item.href} className="flex min-h-[44px] gap-3 rounded-xl focus-ring">
+                    <div className="w-16 shrink-0 text-xs font-semibold text-brand-text">{item.allDay ? 'All day' : fmtTime(item.at)}</div>
+                    <div className="min-w-0 flex-1 border-l border-border pl-3">
+                      <p className="truncate text-sm font-semibold">{item.title}</p>
+                      <p className="truncate text-xs text-muted">{item.kind === 'reminder' ? 'Reminder' : 'Event'}{who ? ` · ${firstName(who.display_name)}` : ''}</p>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {today.tasks.length > 0 && (
+          <ul className={cn('space-y-2.5', today.schedule.length > 0 && 'mt-4 border-t border-border pt-4')} aria-label="Due today">
+            {today.tasks.map((item) => {
+              const who = item.memberId ? memberById.get(item.memberId) : undefined;
+              const overdue = item.bucket === 'overdue';
+              return (
+                <li key={item.key}>
+                  <Link href={item.href} className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
+                    <span className={cn('h-4 w-4 shrink-0 rounded-full border-2', overdue ? 'border-rose-400/70' : 'border-emerald-400/60')} aria-hidden />
+                    <p className="min-w-0 flex-1 truncate text-sm">{item.title}</p>
+                    <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold', overdue ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400')}>{item.reason}</span>
+                    {who && <Avatar name={who.display_name} color={who.color ?? undefined} size={22} className="shrink-0 rounded-full" />}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead icon={CalendarDays} title="Coming up" href="/dashboard/calendar" action="View calendar" />
+        <div className="space-y-2.5">
+          {(upcomingEvents ?? []).length === 0 && <EmptyRow>Nothing on the horizon yet.</EmptyRow>}
+          {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
+            const d = new Date(e.starts_at);
+            const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
+            return (
+              <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString('en-US', { month: 'short' })}</span>
+                  <span className="text-sm font-black leading-none">{d.getDate()}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{e.title}</p>
+                  <p className="truncate text-xs text-muted">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</p>
+                </div>
+                {owner && <Avatar name={owner.display_name} color={owner.color ?? undefined} size={24} className="shrink-0 rounded-full" />}
+              </Link>
+            );
+          })}
+        </div>
+      </Card>
+
+      <CompletedByBubaly items={completedItems} />
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner data={timeSaved} />
@@ -368,23 +533,6 @@ export default async function HomePage() {
           </div>
         </Card>
 
-        {/* Today's Schedule */}
-        <Card>
-          <CardHead icon={Clock} title="Today's Schedule" href="/dashboard/calendar" action="View calendar" />
-          <div className="space-y-3">
-            {(todayEvents ?? []).length === 0 && <EmptyRow>Nothing scheduled today.</EmptyRow>}
-            {((todayEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; location: string | null }[]).map((e) => (
-              <div key={e.id} className="flex gap-3">
-                <div className="w-16 shrink-0 text-xs font-semibold text-brand-text">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</div>
-                <div className="min-w-0 flex-1 border-l border-border pl-3">
-                  <p className="truncate text-sm font-semibold">{e.title}</p>
-                  {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
         {/* Tasks */}
         <Card>
           <CardHead icon={ListChecks} title="Tasks" href="/dashboard/todos" />
@@ -406,31 +554,6 @@ export default async function HomePage() {
           <Link href="/dashboard/todos" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand-text">
             <Plus className="h-3.5 w-3.5" /> Add a new task
           </Link>
-        </Card>
-
-        {/* Upcoming Events */}
-        <Card>
-          <CardHead icon={CalendarDays} title="Upcoming Events" href="/dashboard/calendar" action="View calendar" />
-          <div className="space-y-2.5">
-            {(upcomingEvents ?? []).length === 0 && <EmptyRow>No upcoming events.</EmptyRow>}
-            {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
-              const d = new Date(e.starts_at);
-              const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
-              return (
-                <div key={e.id} className="flex items-center gap-3">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
-                    <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString('en-US', { month: 'short' })}</span>
-                    <span className="text-sm font-black leading-none">{d.getDate()}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{e.title}</p>
-                    <p className="truncate text-xs text-muted">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</p>
-                  </div>
-                  {owner && <Avatar name={owner.display_name} color={owner.color ?? undefined} size={24} className="shrink-0 rounded-full" />}
-                </div>
-              );
-            })}
-          </div>
         </Card>
 
         {/* What's for Dinner */}

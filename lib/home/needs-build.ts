@@ -5,7 +5,9 @@
 import type { NeedItem } from './needs-attention';
 import {
   parentApprovalToNeed, renewalToNeed, documentExpiryToNeed,
+  aiApprovalToNeed, awaitingRunToNeed, recommendationToNeed,
   type ParentApprovalRow, type RenewalRow, type DocumentRow,
+  type AiApprovalRow, type AwaitingRunRow, type RecommendationRow,
 } from './needs-sources';
 
 export type HomeNeedsInput = {
@@ -21,6 +23,12 @@ export type HomeNeedsInput = {
   lowGrocery: boolean;
   openTodos: number;
   now: Date;
+  /** Pending `approval_requests` Bubaly opened (§12) — optional so older callers keep working. */
+  aiApprovals?: AiApprovalRow[];
+  /** Runs parked in `awaiting_approval` / `awaiting_context`. */
+  awaitingRuns?: AwaitingRunRow[];
+  /** Pending `family_ai_recommendations` (§11 level 1). */
+  recommendations?: RecommendationRow[];
 };
 
 /**
@@ -35,6 +43,22 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
   const plural = (n: number) => (n > 1 ? 's' : '');
 
   for (const a of data.approvals) items.push(parentApprovalToNeed(a));
+
+  // An approval that gates a run and the run parked on it are ONE decision:
+  // the approval card is the actionable half (Approve / Edit / Decline resumes
+  // the run), so the run's own "waiting for your OK" line is dropped rather
+  // than shown twice.
+  const gatedRunIds = new Set<string>();
+  for (const a of data.aiApprovals ?? []) {
+    items.push(aiApprovalToNeed(a));
+    if (a.runId) gatedRunIds.add(a.runId);
+  }
+  for (const r of data.awaitingRuns ?? []) {
+    if (r.state === 'awaiting_approval' && gatedRunIds.has(r.id)) continue;
+    const n = awaitingRunToNeed(r);
+    if (n) items.push(n);
+  }
+  for (const r of data.recommendations ?? []) items.push(recommendationToNeed(r));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
   for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
   for (const c of data.conflicts)

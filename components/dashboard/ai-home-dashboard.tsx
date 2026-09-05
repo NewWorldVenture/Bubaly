@@ -1,8 +1,6 @@
 import Link from 'next/link';
 import {
-  Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
-  ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw, CalendarClock, FileClock,
+  Sparkles, Calendar, ArrowRight, Bell, ChevronRight, Sun, Clock, MessageSquare, Plane, PhoneCall,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -18,16 +16,25 @@ import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
 import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
 import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
 import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
-import { HomeAskBar } from '@/components/dashboard/home-ask-bar';
+import { AskBubaly } from '@/components/concierge/ask-bubaly';
+import { NeedsAttention } from '@/components/concierge/needs-attention';
+import { WorkingOn } from '@/components/concierge/working-on';
+import { CompletedByBubaly } from '@/components/concierge/completed-by-bubaly';
+import {
+  buildToday, mergeCompletedByBubaly, workingRunsFrom, WORKING_RUN_STATES,
+  type AiActivityRow, type CompletedRunRow, type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
+  type WorkingRunRow, type WorkingStepRow,
+} from '@/lib/home/today';
+import { listPending } from '@/lib/services/approvals';
+import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { Heart } from 'lucide-react';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
-import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
-import { type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib/home/needs-sources';
+import { topNeeds, summarizeNeeds, needsHeadline } from '@/lib/home/needs-attention';
+import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type AwaitingRunRow, type RecommendationRow } from '@/lib/home/needs-sources';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
 import { buildHomeBrief, homeBriefSummary } from '@/lib/home/home-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { CircleCheck, Circle, Utensils } from 'lucide-react';
@@ -45,23 +52,6 @@ function todayLabel() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-// Render metadata (icon + accent + CTA + fallback subtitle) per NeedItem.kind.
-type NeedRenderMeta = { icon: React.ComponentType<{ className?: string }>; iconBg: string; cta: string; subtitle: string };
-const NEED_META: Record<string, NeedRenderMeta> = {
-  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'A family member is waiting on your approval.' },
-  calendar_conflict: { icon: CalendarClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Resolve', subtitle: 'Two events are double-booked.' },
-  renewal: { icon: RefreshCw, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'Renew', subtitle: 'Renew it before it lapses.' },
-  document: { icon: FileClock, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'View', subtitle: 'A document is expiring soon.' },
-  chore_signoff: { icon: CheckSquare, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'Chores are waiting for your sign-off.' },
-  reminder_overdue: { icon: AlarmClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Catch up', subtitle: 'These were due earlier.' },
-  meds: { icon: Pill, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'View', subtitle: 'Check the medication schedule.' },
-  reminder_today: { icon: Bell, iconBg: 'bg-sky-500/15 text-sky-400', cta: 'View', subtitle: 'Coming up today.' },
-  chores_todo: { icon: CheckSquare, iconBg: 'bg-violet-500/15 text-violet-400', cta: 'View', subtitle: 'Keep the momentum going.' },
-  grocery: { icon: ShoppingCart, iconBg: 'bg-emerald-500/15 text-emerald-400', cta: 'Update', subtitle: 'Items may be running low.' },
-  todos: { icon: CheckSquare, iconBg: 'bg-teal-500/15 text-teal-400', cta: 'View', subtitle: 'Personal items waiting for you.' },
-};
-const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', subtitle: '' };
-
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const familyId = ctx.active.familyId;
   const me = ctx.active.member;
@@ -70,8 +60,13 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const supabase = await createServer();
 
   const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
+  // The family's own day, not the server's (§16 Today): the window and the
+  // day key resolve in the family timezone.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const dayBounds = zonedDayBoundsMs(todayKey, tz);
+  const todayStart = new Date(dayBounds.start);
+  const todayEnd = new Date(dayBounds.end);
 
   const [
     { count: pendingChores },
@@ -147,10 +142,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     resolveFamilyPlanLevel(supabase, familyId),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
-    supabase.from('family_reminders').select('id, remind_at, status')
+    supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
-      .lte('remind_at', todayEnd.toISOString()).limit(100),
+      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(100),
     supabase.from('family_reminders').select('id, title, remind_at')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
@@ -187,6 +182,56 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .gte('plan_date', todayStart.toISOString().slice(0, 10))
       .lte('plan_date', new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)),
   ]);
+
+  // §16 Command Center reads: what Bubaly is doing, what it finished, what it
+  // is asking. Family-scoped; every error is captured and logged, and a failed
+  // read renders as empty rather than as a false "all clear" — except the
+  // approvals inbox, whose failure is logged loudly because "nothing needs
+  // you" is a claim.
+  const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
+  const [activeRunsRes, completedRunsRes, agentRes, recsRes, aiApprovalsRes, todosDueRes, choresDueRes] = await Promise.all([
+    supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
+      .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
+    supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
+      .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
+      .order('completed_at', { ascending: false, nullsFirst: false }).limit(6),
+    supabase.from('agent_activity').select('id, title, detail, href, created_at')
+      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h)
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
+      .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
+    listPending(scopeFromUserContext(ctx, supabase)),
+    supabase.from('todo_items').select('id, title, due_date, priority, assigned_to_id')
+      .eq('family_id', familyId).eq('is_done', false).lte('due_date', todayKey).order('due_date', { ascending: true }).limit(20),
+    supabase.from('chore_assignments').select('id, chore_id, member_id, status, due_at')
+      .eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', todayEnd.toISOString()).order('due_at', { ascending: true }).limit(20),
+  ]);
+  for (const [label, res] of [
+    ['active runs', activeRunsRes], ['completed runs', completedRunsRes], ['agent activity', agentRes],
+    ['recommendations', recsRes], ['todos due', todosDueRes], ['chores due', choresDueRes],
+  ] as const) {
+    if (res.error) console.error(`[dashboard-home] ${label} read failed`, res.error);
+  }
+  if (!aiApprovalsRes.ok) console.error('[dashboard-home] pending AI approvals read failed', aiApprovalsRes.error);
+
+  const activeRuns = (activeRunsRes.data ?? []) as WorkingRunRow[];
+  const activePlanIds = activeRuns.map((r) => r.plan_id).filter((x): x is string => !!x);
+  const choresDue = (choresDueRes.data ?? []) as TodayChoreRow[];
+  const choreIds = [...new Set(choresDue.map((c) => c.chore_id))];
+  const [{ data: activeStepRows, error: activeStepError }, { data: choreDefs, error: choreDefsError }] = await Promise.all([
+    activePlanIds.length
+      ? supabase.from('ai_plan_steps').select('plan_id, status').eq('family_id', familyId).in('plan_id', activePlanIds)
+      : Promise.resolve({ data: [] as WorkingStepRow[], error: null }),
+    choreIds.length
+      ? supabase.from('chores').select('id, title').eq('family_id', familyId).in('id', choreIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[], error: null }),
+  ]);
+  if (activeStepError) console.error('[dashboard-home] active run steps read failed', activeStepError);
+  if (choreDefsError) console.error('[dashboard-home] chore titles read failed', choreDefsError);
+  const workingRuns = workingRunsFrom(activeRuns, (activeStepRows ?? []) as WorkingStepRow[]);
+  const completedItems = mergeCompletedByBubaly((completedRunsRes.data ?? []) as CompletedRunRow[], (agentRes.data ?? []) as AiActivityRow[]);
+  const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
+  const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
   const relReminder = upcomingRelationship(
@@ -244,16 +289,23 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     lowGrocery: (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
+    aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
+    awaitingRuns: activeRuns as AwaitingRunRow[],
+    recommendations,
   });
   const needs = topNeeds(homeNeeds, 5);
   const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
-  // Map each approval need back to its row so the card can offer one-tap approve.
-  const approvalKindByNeedId = new Map<string, string>(
-    ((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [`approval:${a.id}`, a.kind]),
-  );
 
   const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
-  const hasEvents = (todayEvents ?? []).length > 0;
+  const today = buildToday({
+    events: (todayEvents ?? []) as TodayEventRow[],
+    todos: (todosDueRes.data ?? []) as TodayTodoRow[],
+    chores: choresDue,
+    reminders: (dueReminderRows ?? []) as TodayReminderRow[],
+    choreTitles: Object.fromEntries((choreDefs ?? []).map((c) => [c.id, c.title])),
+    todayKey, tz, now,
+  });
+  const hasEvents = today.schedule.length > 0 || today.tasks.length > 0;
 
   // "Coming Up" merges this week's calendar events and timed reminders.
   const upcomingItems = mergeUpcoming(
@@ -373,8 +425,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </Link>
       </div>
 
-      {/* Ask-anything bar → deep-links to the assistant (auto-sends) */}
-      <HomeAskBar />
+      {/* §16: one natural-language entry — a request becomes a run with a page. */}
+      <AskBubaly variant="hero" />
 
       {/* T4: the one proactive insight of the day, above the fold */}
       {insightRow && <InsightHero insight={insightRow} />}
@@ -504,86 +556,66 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </Link>
       </div>
 
-      {/* Needs you — the single, ranked cross-domain decision queue */}
-      {needs.shown.length > 0 && (
-        <div className="space-y-3">
+      {/* §16 Needs Your Attention — one ranked queue, decisions made in place */}
+      <NeedsAttention
+        items={needs.shown}
+        more={needs.more}
+        headline={needsHeader}
+        approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
+        moneyApprovalKinds={Object.fromEntries(((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
+        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        canDecide={manager}
+      />
+
+      {/* §16 Bubaly Is Working On — live from Realtime after the first paint */}
+      <WorkingOn familyId={familyId} initial={workingRuns} />
+
+      {/* §16 Today — the unified schedule plus what is owed by today */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand-text" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs you</h2>
+            <Sun className="h-4 w-4 text-amber-400" aria-hidden />
+            <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Today</h2>
           </div>
-          <p className="-mt-1 text-sm text-fg/80">{needsHeader}</p>
-          <div className="space-y-2.5">
-            {needs.shown.map((item) => {
-              const meta = NEED_META[item.kind] ?? DEFAULT_NEED_META;
-              const Icon = meta.icon;
-              const urgent = item.urgency === 'urgent' || item.urgency === 'emergency';
-              const approvalKind = item.kind === 'approval' ? approvalKindByNeedId.get(item.id) : undefined;
-              const cardClass = cn(
-                'flex items-center gap-4 rounded-2xl border p-4 transition',
-                urgent ? 'border-amber-500/20 bg-amber-500/5' : 'border-border bg-surface/40',
-              );
-              const body = (
-                <>
-                  <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', meta.iconBg)}>
-                    <Icon className="h-5 w-5" />
+          <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
+        </div>
+        {!hasEvents && (
+          <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">A clear day — nothing scheduled and nothing due.</p>
+        )}
+        {today.schedule.length > 0 && (
+          <ul className="space-y-2" aria-label="Today's schedule">
+            {today.schedule.map((item) => (
+              <li key={item.key}>
+                <Link href={item.href} className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 transition hover:bg-elevated focus-ring">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-500/10">
+                    {item.kind === 'reminder' ? <Bell className="h-4 w-4 text-sky-400" aria-hidden /> : <Clock className="h-4 w-4 text-blue-400" aria-hidden />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{item.title}</p>
-                    {meta.subtitle && <p className="mt-0.5 truncate text-xs text-muted">{meta.subtitle}</p>}
-                  </div>
-                </>
-              );
-              // Approvals get one-tap Approve/Decline inline (buttons can't nest in
-              // an <a>, so the card is a div with the title linking out).
-              if (approvalKind !== undefined) {
-                return (
-                  <div key={item.id} className={cardClass}>
-                    <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90">{body}</Link>
-                    <HomeApprovalActions approvalId={item.id.slice('approval:'.length)} kind={approvalKind} />
-                  </div>
-                );
-              }
-              return (
-                <Link key={item.id} href={item.href} className={cn(cardClass, 'hover:bg-elevated')}>
-                  {body}
-                  <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-text">
-                    {meta.cta} <ChevronRight className="h-3.5 w-3.5" />
+                    <p className="text-xs text-muted">{item.allDay ? 'All day' : fmtTime(item.at)}</p>
                   </div>
                 </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {today.tasks.length > 0 && (
+          <ul className="space-y-1.5" aria-label="Due today">
+            {today.tasks.map((item) => {
+              const overdue = item.bucket === 'overdue';
+              return (
+                <li key={item.key}>
+                  <Link href={item.href} className="flex min-h-[44px] items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5 transition hover:bg-elevated focus-ring">
+                    <span className={cn('h-4 w-4 shrink-0 rounded-full border-2', overdue ? 'border-rose-400/70' : 'border-emerald-400/60')} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
+                    <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold', overdue ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400')}>{item.reason}</span>
+                  </Link>
+                </li>
               );
             })}
-          </div>
-          {needs.more > 0 && (
-            <p className="text-xs text-muted">+{needs.more} more {needs.more === 1 ? 'item' : 'items'} need you.</p>
-          )}
-        </div>
-      )}
-
-      {/* Today's schedule */}
-      {hasEvents && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sun className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Today</h2>
-            </div>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
-          </div>
-          <div className="space-y-2">
-            {(todayEvents ?? []).map((ev) => (
-              <div key={ev.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-500/10">
-                  <Clock className="h-4 w-4 text-blue-400" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{ev.title}</p>
-                  <p className="text-xs text-muted">{ev.all_day ? 'All day' : fmtTime(ev.starts_at)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          </ul>
+        )}
+      </div>
 
       {/* Upcoming this week */}
       {hasUpcoming && (
@@ -613,6 +645,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           </div>
         </div>
       )}
+
+      {/* §16 Completed By Bubaly — recent outcomes, partial ones labelled honestly */}
+      <CompletedByBubaly items={completedItems} />
 
       {/* Customizable, tier-aware quick actions */}
       <DashboardQuickActions

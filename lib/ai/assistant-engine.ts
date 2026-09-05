@@ -1,13 +1,18 @@
 // lib/ai/assistant-engine.ts — the agentic family assistant, as a reusable
 // engine behind the canonical /api/ai route.
 //
-// One turn = load the family snapshot + conversation history, build the tool
-// set (the assistant toolbox, the lib/ai/actions.ts bridge, and the rest of the
-// `lib/ai/tools` registry — trust-wrapped for the caller's role), run the
-// provider's tool loop, then persist both turns. Two transports share the exact
-// same preparation and persistence:
-//   - SSE stream (web): `action` chips as tools fire, `delta` text chunks, `done`.
-//   - JSON (mobile, scripts): one response with the final text + action summaries.
+// One turn = classify the message, build the household context the intent
+// needs (`lib/ai/context/builder.ts` — §27 slices, §4 policy, §44 fencing) +
+// conversation history, build the tool set (the assistant toolbox, the
+// lib/ai/actions.ts bridge, and the rest of the `lib/ai/tools` registry —
+// trust-wrapped for the caller's role), run the provider's tool loop, then
+// persist both turns. Two transports share the exact same preparation and
+// persistence:
+//   - SSE stream (web): `action` lines as tools fire, `card` / `run` events for
+//     the outcomes worth more than a line (§53), `delta` text chunks, `done`.
+//   - JSON (mobile, scripts): one response with the final text, the action
+//     summaries and the same cards.
+// The wire contract for both is `lib/ai/result-cards.ts`.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -15,9 +20,17 @@ import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import { buildActionTools, mergeToolSets } from '@/lib/ai/action-tools';
+import { buildContext, type ContextBundle } from '@/lib/ai/context/builder';
+import { classifyIntent, type IntentClassification, type IntentKey } from '@/lib/ai/context/intents';
+import { ASSISTANT_RULES } from '@/lib/ai/prompts/assistant';
+import {
+  approvalIdFromToolResult, cardFromToolResult, runHref, runIdFromToolResult, toStructuredContent, toolResultData,
+  type CardContext, type ResultCard, type StructuredContent,
+} from '@/lib/ai/result-cards';
 import { toToolSpecs } from '@/lib/ai/tools/legacy-adapter';
 import { getTool, toolNames } from '@/lib/ai/tools/registry';
-import type { MemberRole } from '@/lib/constants/roles';
+import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
+import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -55,6 +68,10 @@ export type AssistantTurnInput = {
   tz: string;
   conversationId: string;
   message: string;
+  /** Skip classification when the caller already knows what this is (a routine, a card action). */
+  intent?: IntentKey;
+  /** Where the person is in the app — narrows classification and lets slices focus. */
+  pageContext?: { module?: string; entityIds?: string[] } | null;
 };
 
 export type ExecutedAssistantAction = { name: string; args: Record<string, unknown>; result: unknown };
@@ -65,6 +82,12 @@ export type PreparedAssistantTurn = {
   messages: AIMessage[];
   tools: ToolSpec[];
   provider: AIProvider;
+  /** How the message was read, so the route can report it and evals can assert it. */
+  intent: IntentClassification;
+  /** The household context the prompt was built from; `stats` say what was loaded. */
+  context: ContextBundle;
+  /** Member names and currency, so a card says "Dan" and "$40", never an id or a bare number. */
+  cardContext: CardContext;
 };
 
 /** Pull a friendly summary + ok flag out of a tool result for the UI. */
@@ -94,6 +117,15 @@ export type FamilySnapshot = {
   now?: Date;
 };
 
+// The assistant's standing rules live in lib/ai/prompts/assistant.ts (§66,
+// version-controlled, shared with the planner) so the two prompt builders
+// below cannot drift from each other or from the plan prompt.
+
+/**
+ * The legacy prompt over a hand-assembled snapshot. Kept for callers that
+ * build their own five-field picture (tests, scripts); the assistant itself
+ * now prompts from a context bundle via `buildAssistantSystemPromptFromContext`.
+ */
 export function buildAssistantSystemPrompt(snapshot: FamilySnapshot): string {
   const { tz } = snapshot;
   const now = snapshot.now ?? new Date();
@@ -121,20 +153,16 @@ export function buildAssistantSystemPrompt(snapshot: FamilySnapshot): string {
     `Saved meals: ${snapshot.meals.map((m) => m.name).join(', ') || 'none'}`,
   ].join('\n');
 
-  return [
-    "You are Bubaly's family assistant — a warm, sharp, proactive chief of staff for this household.",
-    'You can take real actions with the provided tools (calendar, chores, grocery list, to-dos, reminders, notes, goals, meal plan).',
-    'Some tools are named `domain_action` (for example `calendar_updateEvent`, `tasks_assignTodo`, `groceries_checkItem`). They are ordinary tools — use them the same way, and prefer the one that matches the request exactly over a close-enough alternative.',
-    'Guidelines:',
-    "- When the user asks you to schedule, add, remind, or plan something, USE the tools to actually do it — don't just describe it.",
-    '- Resolve relative dates ("tomorrow", "next Friday at 3pm") against the current local date/time and pass ISO 8601 datetimes in the family time zone.',
-    '- You may call several tools in one turn (e.g. add multiple grocery items). Prefer one tool call per item.',
-    '- After acting, confirm crisply what you did. If you need a critical detail (like a date), ask one short question instead of guessing.',
-    '- Be concise, friendly, and genuinely helpful. Never invent data you were not given.',
-    '',
-    'Current family context:',
-    context,
-  ].join('\n');
+  return [...ASSISTANT_RULES, '', 'Current family context:', context].join('\n');
+}
+
+/**
+ * The prompt the assistant actually runs with: the standing rules plus the
+ * context bundle's rendering — header, the slices the intent asked for, every
+ * row-derived string fenced, already trimmed to budget.
+ */
+export function buildAssistantSystemPromptFromContext(context: Pick<ContextBundle, 'text'>): string {
+  return [...ASSISTANT_RULES, '', 'Current family context:', context.text].join('\n');
 }
 
 /**
@@ -145,38 +173,55 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   { ok: true; turn: PreparedAssistantTurn } | { ok: false; error: string }
 > {
   const { supabase, familyId, userId, conversationId, message } = input;
-  const nowIso = new Date().toISOString();
   const [
     { data: history, error: historyError },
     { data: members, error: membersError },
-    { data: events, error: eventsError },
-    { data: chores, error: choresError },
-    { data: meals, error: mealsError },
   ] = await Promise.all([
     supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
     // `user_id` is selected so the acting member can be picked out of the roster
-    // the snapshot already needs — the tool registry scopes writes by
-    // `family_members.id`, not by the auth user id.
+    // — the tool registry scopes writes by `family_members.id`, not by the auth
+    // user id. The context builder loads the roster again through the family
+    // service; that read is what gives it ages and manager flags.
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),
-    supabase.from('chore_assignments').select('status').eq('family_id', familyId).in('status', ['todo', 'in_progress']),
-    supabase.from('meals').select('name, meal_type').eq('family_id', familyId).limit(5),
   ]);
-  const contextError = historyError ?? membersError ?? eventsError ?? choresError ?? mealsError;
+  const contextError = historyError ?? membersError;
   if (contextError) {
-    console.error('[assistant-engine] family context load failed', contextError);
+    console.error('[assistant-engine] conversation context load failed', contextError);
     return { ok: false, error: describeActionError(contextError, 'Could not load the family assistant context.') };
   }
 
   const memberRows = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
-  const system = buildAssistantSystemPrompt({
-    familyName: input.familyName,
+  const acting = (members ?? []).find((m) => m.user_id === userId) ?? null;
+  if (!acting) {
+    // The route resolves the caller through `requireUserContext` before getting
+    // here, so this means the roster and the session disagree. The turn still
+    // runs — refusing to answer would be a worse failure than an unattributed
+    // write — but the services will record no `created_by`, so say so.
+    console.error('[assistant-engine] no active family_members row for the caller', { familyId, userId });
+  }
+  const scope: ServiceScope = {
+    db: supabase,
+    familyId,
+    userId,
+    memberId: acting?.id ?? null,
+    role: (acting?.role ?? input.role ?? 'adult') as MemberRole,
+    actorKind: 'ai',
     tz: input.tz,
-    members: (members ?? []).map((m) => ({ display_name: m.display_name, role: m.role })),
-    events: (events ?? []).map((e) => ({ title: e.title, starts_at: e.starts_at })),
-    openChores: chores?.length ?? 0,
-    meals: (meals ?? []).map((m) => ({ name: m.name })),
-  });
+  };
+
+  // What is being asked decides which parts of the household the prompt
+  // carries (§27). Fast paths are free; the model is consulted only for text
+  // none of them recognises, and a classifier outage degrades to "other".
+  const intent: IntentClassification = input.intent
+    ? { intent: input.intent, confidence: 1, entities: {}, source: 'fast_path' }
+    : await classifyIntent(scope, message, { pageContext: input.pageContext ?? null });
+
+  const context = await buildContext(scope, { intent: intent.intent, pageContext: input.pageContext ?? null });
+  if (!context.ok) {
+    console.error('[assistant-engine] household context build failed', { intent: intent.intent, error: context.error });
+    return { ok: false, error: context.error };
+  }
+  const system = buildAssistantSystemPromptFromContext(context.data);
 
   const messages: AIMessage[] = [
     ...(history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -211,23 +256,6 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
       .map((tool) => getTool(tool.name)?.name)
       .filter((name): name is string => Boolean(name)),
   );
-  const acting = (members ?? []).find((m) => m.user_id === userId) ?? null;
-  if (!acting) {
-    // The route resolves the caller through `requireUserContext` before getting
-    // here, so this means the roster and the session disagree. The turn still
-    // runs — refusing to answer would be a worse failure than an unattributed
-    // write — but the services will record no `created_by`, so say so.
-    console.error('[assistant-engine] no active family_members row for the caller', { familyId, userId });
-  }
-  const scope: ServiceScope = {
-    db: supabase,
-    familyId,
-    userId,
-    memberId: acting?.id ?? null,
-    role: (acting?.role ?? input.role ?? 'adult') as MemberRole,
-    actorKind: 'ai',
-    tz: input.tz,
-  };
   const registryTools = toToolSpecs(scope, { names: toolNames().filter((name) => !covered.has(name)) });
   const tools = wrapToolsWithTrust(
     mergeToolSets(assistantTools, actionTools, registryTools),
@@ -235,21 +263,75 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   );
 
   const provider = await resolveProvider();
-  return { ok: true, turn: { system, messages, tools, provider } };
+  const cardContext: CardContext = {
+    members: Object.fromEntries(memberRows.map((m) => [m.id, m.display_name])),
+    currency: context.data.header.currency,
+  };
+  return { ok: true, turn: { system, messages, tools, provider, intent, context: context.data, cardContext } };
+}
+
+// ─── Outcomes: cards, runs, approvals ───────────────────────────────────────
+
+/** What one executed tool contributes beyond its summary line. */
+export type ToolOutcomeView = { card: ResultCard | null; runId: string | null; runStatus: string | null };
+
+/**
+ * The card and run for a tool result. Synchronous and pure apart from the
+ * registry lookup, which turns whatever spelling the model used into the
+ * canonical name the card builder keys on.
+ */
+export function outcomeOfAction(name: string, args: Record<string, unknown>, result: unknown, cardContext: CardContext): ToolOutcomeView {
+  const canonical = getTool(name)?.name ?? name;
+  const card = cardFromToolResult(canonical, args, result, cardContext);
+  const runId = runIdFromToolResult(result);
+  const data = toolResultData(result);
+  const runStatus = data && typeof data.state === 'string' ? data.state : data && typeof data.status === 'string' ? data.status : null;
+  return { card, runId, runStatus };
+}
+
+/**
+ * The approval card for a gated tool result. A pending approval is a real
+ * outcome (§31): the family sees the decision, not a "waiting" line, so the
+ * row is read back (family-scoped, under the caller's RLS) and rendered with
+ * the same data the inbox uses. A failed read degrades to no card — the
+ * `action` line already said the request is waiting on a parent.
+ */
+export async function approvalCardFor(
+  supabase: DB,
+  args: { familyId: string; role: string | null | undefined; approvalId: string },
+): Promise<ResultCard | null> {
+  const { data, error } = await supabase
+    .from('approval_requests')
+    .select('*')
+    .eq('id', args.approvalId)
+    .eq('family_id', args.familyId)
+    .maybeSingle();
+  if (error) {
+    console.error('[assistant-engine] approval card read failed', error);
+    return null;
+  }
+  if (!data) return null;
+  const approval = toApprovalCardData(data as unknown as TrustApproval, { requestedBy: null, canEdit: isManager(args.role) });
+  return { kind: 'approval', title: approval.title, approval };
 }
 
 /** Persist both turns + structured actions and refresh the conversation metadata. */
 export async function persistAssistantTurn(
   supabase: DB,
-  args: { familyId: string; conversationId: string; message: string; assistantContent: string; actions: ExecutedAssistantAction[]; model: string },
+  args: {
+    familyId: string; conversationId: string; message: string; assistantContent: string; actions: ExecutedAssistantAction[]; model: string;
+    /** The turn's cards and runs (0250 `structured_content`), so the conversation re-opens with its outcomes. */
+    structured?: StructuredContent | null;
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { familyId, conversationId, message, assistantContent, actions, model } = args;
   const rows: MessageInsert[] = [
     { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
     {
-      family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+      family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent, model,
       tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as MessageInsert['tool_calls']) : null,
       tool_results: actions.length ? (actions.map((a) => a.result) as unknown as MessageInsert['tool_results']) : null,
+      structured_content: args.structured ? (args.structured as unknown as MessageInsert['structured_content']) : null,
     },
   ];
   const { error: insertError } = await supabase.from('ai_messages').insert(rows);
@@ -273,10 +355,35 @@ export async function persistAssistantTurn(
 export type AssistantTurnResult = {
   content: string;
   actions: AssistantActionSummary[];
+  /** The turn's outcomes as cards, in the order the tools produced them. */
+  cards: ResultCard[];
+  /** Runs the turn started or attached; the client links each to its run page. */
+  runIds: string[];
   persisted: boolean;
   persistenceError?: string;
   model: string;
 };
+
+/**
+ * Every card and run for a finished turn's actions, in order. The approval
+ * reads are the only async part; they run one at a time so a turn that queued
+ * several approvals renders them in the order the family expects.
+ */
+async function collectOutcomes(input: AssistantTurnInput, prepared: PreparedAssistantTurn, actions: ExecutedAssistantAction[]): Promise<{ cards: ResultCard[]; runIds: string[] }> {
+  const cards: ResultCard[] = [];
+  const runIds: string[] = [];
+  for (const a of actions) {
+    const outcome = outcomeOfAction(a.name, a.args, a.result, prepared.cardContext);
+    if (outcome.card) cards.push(outcome.card);
+    if (outcome.runId) runIds.push(outcome.runId);
+    const approvalId = approvalIdFromToolResult(a.result);
+    if (approvalId) {
+      const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
+      if (card) cards.push(card);
+    }
+  }
+  return { cards, runIds: [...new Set(runIds)] };
+}
 
 /** Non-streaming transport: run the whole turn and return one JSON-friendly result. */
 export async function runAssistantTurn(input: AssistantTurnInput, prepared: PreparedAssistantTurn): Promise<AssistantTurnResult> {
@@ -284,13 +391,16 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
   const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
   const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
   const content = finalizeAssistantContent(result.text, actions.length);
+  const { cards, runIds } = await collectOutcomes(input, prepared, actions);
   const persisted = await persistAssistantTurn(input.supabase, {
     familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-    assistantContent: content, actions, model: provider.model,
+    assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
   });
   return {
     content,
     actions: actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })),
+    cards,
+    runIds,
     persisted: persisted.ok,
     ...(persisted.ok ? {} : { persistenceError: persisted.error }),
     model: provider.model,
@@ -298,10 +408,13 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
 }
 
 /**
- * Streaming transport: Server-Sent Events. Emits `action` as tools fire,
- * `delta` text chunks, an `error` if the provider stream breaks, then `done`
- * (after persisting). Falls back to a single non-streaming run when streaming
- * fails before any text was produced (e.g. a proxy buffered the response).
+ * Streaming transport: Server-Sent Events. Emits `action` as tools fire, a
+ * `card` right after any action whose result deserves one and a `run` for any
+ * that started a run, `delta` text chunks, an `error` if the provider stream
+ * breaks, then `done` (after persisting). Falls back to a single non-streaming
+ * run when streaming fails before any text was produced (e.g. a proxy
+ * buffered the response). Event shapes: `AssistantStreamEvent` in
+ * `lib/ai/result-cards.ts`.
  */
 export function createAssistantStream(input: AssistantTurnInput, prepared: PreparedAssistantTurn): ReadableStream<Uint8Array> {
   const { system, messages, tools, provider } = prepared;
@@ -311,14 +424,30 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
       const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
       let content = '';
       const actions: ExecutedAssistantAction[] = [];
-      const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
+      const cards: ResultCard[] = [];
+      const runIds: string[] = [];
+      // The card follows its action on the wire, so a client that renders as
+      // it reads shows the line first and the card the moment it exists. The
+      // approval read is the only await; the provider generator waits for it.
+      const pushAction = async (name: string, args: Record<string, unknown>, result: unknown) => {
         actions.push({ name, args, result });
         send({ type: 'action', name, ...summarizeToolResult(result) });
+        const outcome = outcomeOfAction(name, args, result, prepared.cardContext);
+        if (outcome.card) { cards.push(outcome.card); send({ type: 'card', card: outcome.card }); }
+        if (outcome.runId) {
+          if (!runIds.includes(outcome.runId)) runIds.push(outcome.runId);
+          send({ type: 'run', runId: outcome.runId, href: runHref(outcome.runId), status: outcome.runStatus ?? 'queued', summary: summarizeToolResult(result).summary });
+        }
+        const approvalId = approvalIdFromToolResult(result);
+        if (approvalId) {
+          const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
+          if (card) { cards.push(card); send({ type: 'card', card }); }
+        }
       };
       try {
         for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
           if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
-          else pushAction(ev.name, ev.args, ev.result);
+          else await pushAction(ev.name, ev.args, ev.result);
         }
       } catch (streamErr) {
         console.error('[assistant-engine] stream error:', streamErr);
@@ -326,7 +455,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
           try {
             const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
             for (const a of result.actions) {
-              if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
+              if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
             }
             if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
           } catch (fallbackErr) {
@@ -343,7 +472,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
       const assistantContent = finalizeAssistantContent(content, actions.length);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-        assistantContent, actions, model: provider.model,
+        assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
       });
       if (!persisted.ok) send({ type: 'error', error: persisted.error });
       send({ type: 'done', content: assistantContent, persisted: persisted.ok });
