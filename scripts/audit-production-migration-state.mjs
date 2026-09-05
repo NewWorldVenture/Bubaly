@@ -6,6 +6,20 @@ import { pathToFileURL } from 'node:url';
 export const CATALOG_QUERY = `
 select pg_catalog.jsonb_build_object(
   'hasMigrationLedger', pg_catalog.to_regclass('supabase_migrations.schema_migrations') is not null,
+  'publicFunctionDefaults', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'schema', coalesce(n.nspname, '*'), 'owner', pg_catalog.pg_get_userbyid(d.defaclrole),
+    'grantee', case when a.grantee = 0 then 'public' else pg_catalog.pg_get_userbyid(a.grantee) end,
+    'privilege', a.privilege_type))
+    from pg_catalog.pg_default_acl d
+    left join pg_catalog.pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral pg_catalog.aclexplode(d.defaclacl) a
+    where d.defaclobjtype = 'f' and (d.defaclnamespace = 0 or n.nspname = 'public')), '[]'::jsonb),
+  'workerRpc', (select pg_catalog.jsonb_build_object(
+    'exists', oid is not null,
+    'anonymousExecute', case when oid is not null then pg_catalog.has_function_privilege('anon', oid, 'EXECUTE') else null end,
+    'authenticatedExecute', case when oid is not null then pg_catalog.has_function_privilege('authenticated', oid, 'EXECUTE') else null end,
+    'serviceExecute', case when oid is not null then pg_catalog.has_function_privilege('service_role', oid, 'EXECUTE') else null end)
+    from (select pg_catalog.to_regprocedure('public.claim_ai_runs(integer,integer)') as oid) f),
   'tables', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
     'name', c.relname, 'rls', c.relrowsecurity) order by c.relname)
     from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace

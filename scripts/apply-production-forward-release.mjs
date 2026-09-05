@@ -174,7 +174,15 @@ export async function runForwardRelease({ manifest, files, projectRef, token, ap
   if (!response.ok) {
     const body = await response.text().catch(() => '');
     const state = body.match(/ERROR:\s+([0-9A-Z]{5}):/)?.[1];
+    const guard = [
+      'Release ledger changed', 'Required protected table missing',
+      'Unrecorded release table exists', 'Release catalog changed: columns',
+      'Release catalog changed: constraints', 'Release catalog changed: policies',
+      'Release catalog changed: functions', 'Release table security missing',
+      'Broad approval write policy remains', 'AI worker RPC permissions are incorrect',
+    ].find((message) => body.includes(message));
     throw new Error('Release returned HTTP ' + response.status + (state ? ' (SQLSTATE ' + state + ')' : '') +
+      (guard ? ' [' + guard + ']' : '') +
       '. Read the audit before any retry; private database error details were withheld.');
   }
   await response.body?.cancel();
