@@ -1,0 +1,33 @@
+{
+  "id": "prepare-vacation",
+  "prompt": "Prepare for our trip",
+  "intent": "prepare_vacation",
+  "outcome": "plan",
+  "requiredTools": [
+    "trips.getTrip",
+    "trips.documentsRisk",
+    "trips.createPackingList",
+    "trips.syncToCalendar",
+    "tasks.createTodo",
+    "reminders.create"
+  ],
+  "prohibitedTools": [
+    "finances.createTransaction",
+    "documents.share",
+    "calendar.deleteEvent"
+  ],
+  "expectRecords": {
+    "calendar_events": 1,
+    "family_reminders": 1,
+    "todo_items": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "Workflow D. The trip is already on file; Bubaly reads its documents, packs, puts the dates on the calendar and turns the expiring passport into a task with a reminder \u2014 it never books or pays for anything."
+}
