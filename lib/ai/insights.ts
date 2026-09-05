@@ -58,7 +58,8 @@ export type InsightKind =
   | 'inventory'
   | 'sleep'
   | 'declutter'
-  | 'moving';
+  | 'moving'
+  | 'projects';
 
 export type InsightMember = { id: string; name: string };
 
@@ -727,6 +728,28 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         .map((b) => `- #${b.box_number} ${b.label} → ${b.to_room ?? 'unassigned'} [${b.status}${b.is_fragile ? ', fragile' : ''}${b.is_essential ? ', essentials' : ''}]${Array.isArray(b.contents) && b.contents.length ? `: ${b.contents.slice(0, 6).join(', ')}` : ''}`)
         .join('\n') || 'No boxes yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nMove:\n${move}\n\nTasks:\n${tasks}\n\nBoxes:\n${boxes}\n\nGive: (1) the three things to do this week in order, with who, (2) anything overdue or missing for this family's situation, (3) a first-night / day-one plan from the essentials boxes, (4) one budget observation.${q(d)}`;
+    },
+  },
+
+  projects: {
+    label: 'AI project manager',
+    title: 'AI Home Project Manager',
+    blurb: 'Scope, materials and budget sanity for each project, which quote to take, and what to do this weekend.',
+    maxTokens: 800,
+    allowQuestion: true,
+    system:
+      'You are a practical home-improvement project manager for a family. Work ONLY from the projects, materials and quotes provided. ' +
+      'Be specific about money and dates, prefer safety and licensed pros for electrical, gas, roof and structural work, and never invent prices or contractors. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const projects = cap(r(d, 'home_projects'), 12).shown.map((p) => {
+        const mats = r(d, 'project_materials').filter((m) => m.project_id === p.id);
+        const quotes = r(d, 'project_quotes').filter((q) => q.project_id === p.id);
+        const matLine = mats.length ? mats.slice(0, 8).map((m) => `${m.name} ×${m.quantity}${m.is_purchased ? ' ✓' : ''}${m.est_cost_cents != null ? ` ~${money(Number(m.est_cost_cents))}` : ''}`).join(', ') : 'no materials listed';
+        const quoteLine = quotes.length ? quotes.map((q) => `${q.contractor_name} ${money(Number(q.amount_cents))} [${q.status}${q.includes_materials ? ', incl. materials' : ''}${q.lead_time_days != null ? `, ${q.lead_time_days}d lead` : ''}]`).join('; ') : 'no quotes';
+        return `- ${p.title} (${p.kind}, ${p.status}, ${p.priority} priority, ${p.is_diy ? 'DIY' : 'hiring'}${p.room ? `, ${p.room}` : ''}${p.owner_id ? `, owner ${who(p.owner_id)}` : ''}). Budget ${p.budget_cents == null ? 'not set' : money(Number(p.budget_cents))}${p.target_start ? `, start ${day(p.target_start)}` : ''}${p.target_end ? `, finish ${day(p.target_end)}` : ''}.${p.description ? ` Scope: ${String(p.description).slice(0, 160)}` : ''}\n  Materials: ${matLine}\n  Quotes: ${quoteLine}`;
+      }).join('\n') || 'No projects yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nProjects:\n${projects}\n\nGive: (1) for each active project the one next step and any budget or safety concern, (2) which quote to accept where there are several and why, (3) a materials sanity check (missing or over-ordered items), (4) what to do this weekend.${q(d)}`;
     },
   },
 

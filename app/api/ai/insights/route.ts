@@ -149,6 +149,16 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { moves: [mv], move_tasks: tasks.data ?? [], move_boxes: boxes.data ?? [] };
     }
+    case 'projects': {
+      const live = await eq(sb, 'home_projects', familyId).not('status', 'in', '("done","cancelled")').order('priority').order('updated_at', { ascending: false }).limit(12);
+      const ids = (live.data ?? []).map((p) => p.id);
+      if (!ids.length) return { home_projects: [], project_materials: [], project_quotes: [] };
+      const [materials, quotes] = await Promise.all([
+        eq(sb, 'project_materials', familyId).in('project_id', ids).limit(120),
+        eq(sb, 'project_quotes', familyId).in('project_id', ids).limit(60),
+      ]);
+      return { home_projects: live.data ?? [], project_materials: materials.data ?? [], project_quotes: quotes.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };

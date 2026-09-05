@@ -106,6 +106,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/playbook` | `calendar_events`, `family_facts`, `family_favorites`, `family_playbook_suggestions`, `grocery_items`, `meal_plans`, `meals`, `vacations` |
 | `/dashboard/prep-plans` | `prep_plan_steps`, `prep_plans` |
 | `/dashboard/profile` | `calendar_events`, `chore_assignments`, `family_members`, `independence_milestones` |
+| `/dashboard/projects` | `home_projects`, `project_materials`, `project_quotes` |
 | `/dashboard/readiness` | `bills`, `calendar_events`, `chore_assignments`, `documents`, `family_members`, `grocery_items`, `meal_plans`, `prep_plan_steps` +3 more |
 | `/dashboard/reasoning` | (via lib/* engines) |
 | `/dashboard/recipes` | `family_recipes`, `grocery_items`, `grocery_lists` |

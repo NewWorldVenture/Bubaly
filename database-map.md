@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **436 tables**.
+Generated from `supabase/migrations/*.sql` — **439 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -173,6 +173,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `home_briefs` | `0140_home_briefs.sql` |
 | `home_contractors` | `0036_home_maintenance.sql` |
 | `home_locations` | `0242_home_inventory.sql` |
+| `home_projects` | `0246_home_projects.sql` |
 | `home_security_events` | `0081_home_management.sql` |
 | `home_service_records` | `0036_home_maintenance.sql` |
 | `home_warranties` | `0036_home_maintenance.sql` |
@@ -287,6 +288,8 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `prep_plan_steps` | `0131_prep_plans.sql` |
 | `prep_plans` | `0131_prep_plans.sql` |
 | `profiles` | `0002_tables.sql` |
+| `project_materials` | `0246_home_projects.sql` |
+| `project_quotes` | `0246_home_projects.sql` |
 | `push_devices` | `0035_push_devices.sql` |
 | `rate_limits` | `0156_rate_limits.sql` |
 | `reasoning_snapshots` | `0149_reasoning_snapshots.sql` |
