@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Truck, Hammer, Briefcase, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, type LucideIcon,
+  Truck, Hammer, Briefcase, Languages, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -137,6 +137,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/school', label: 'School', icon: GraduationCap, minLevel: 1 },
       { href: '/dashboard/timetable', label: 'Timetable', icon: CalendarRange, minLevel: 1 },
       { href: '/dashboard/homework', label: 'Homework', icon: BookOpen, minLevel: 1 },
+      { href: '/dashboard/language', label: 'Language Practice', icon: Languages, minLevel: 0 },
       { href: '/dashboard/signups', label: 'Signups', icon: CalendarClock, minLevel: 1 },
       { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home, minLevel: 1 },
       { href: '/dashboard/inventory', label: 'Home Inventory', icon: PackageSearch, minLevel: 0 },

@@ -22,7 +22,7 @@ import {
   CreditCard, Users, Image as ImageIcon, GraduationCap, Gift, MessageCircle,
   BookHeart, PiggyBank, Receipt, RefreshCw, MapPin, NotebookPen,
   Repeat, CloudSun, Cake, Megaphone, ChefHat, ListChecks,
-  Plus, X, Check, Settings2, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, Truck, Hammer, Briefcase,
+  Plus, X, Check, Settings2, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, Truck, Hammer, Briefcase, Languages,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -58,6 +58,7 @@ export const SHORTCUT_CATALOG: Shortcut[] = [
   { key: 'moving', icon: Truck, label: 'Move', href: '/dashboard/moving', hint: 'Box or task' },
   { key: 'projects', icon: Hammer, label: 'Project', href: '/dashboard/projects', hint: 'Idea or quote' },
   { key: 'career', icon: Briefcase, label: 'Job', href: '/dashboard/career', hint: 'Application or lead' },
+  { key: 'language', icon: Languages, label: 'Language', href: '/dashboard/language', hint: 'Review or log practice' },
   { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
   { key: 'finances', icon: CreditCard, label: 'Finances', href: '/dashboard/billing', hint: 'Track money' },
   { key: 'contacts', icon: Users, label: 'Contacts', href: '/dashboard/contacts', hint: 'Add contact' },

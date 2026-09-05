@@ -81,6 +81,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('school', 'School', 'Family & Home', 'free', '/dashboard/school'),
   F('timetables', 'Time Tables', 'Family & Home', 'free', '/dashboard/timetable'),
   F('homework', 'Homework', 'Family & Home', 'free', '/dashboard/homework'),
+  F('language-practice', 'Language Practice', 'Family & Home', 'free', '/dashboard/language'),
   F('signatures', 'Signatures', 'Family & Home', 'free', '/dashboard/signups'),
   F('home-inventory', 'Home Inventory', 'Family & Home', 'plus', '/dashboard/home'),
   F('utility-tracking', 'Utility Tracking', 'Family & Home', 'basic', '/dashboard/utilities'),

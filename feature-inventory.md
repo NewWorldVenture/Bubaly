@@ -79,6 +79,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/journeys` | `journey_events` |
 | `/dashboard/kitchen` | `family_food_scores`, `family_recipes`, `grocery_items`, `leftover_inventory`, `meal_nutrition`, `meal_plans`, `pantry_items` |
 | `/dashboard/knowledge` | `family_facts` |
+| `/dashboard/language` | `language_goals`, `language_sessions`, `vocab_cards` |
 | `/dashboard/life-events` | `family_facts`, `life_event_plan_items`, `life_event_plans` |
 | `/dashboard/locator` | `family_members`, `family_places`, `location_events`, `member_locations`, `notifications` |
 | `/dashboard/meals` | `family_recipes`, `grocery_items`, `meal_plans`, `meal_vote_ballots`, `meal_vote_options`, `meal_votes`, `meals` |

@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **442 tables**.
+Generated from `supabase/migrations/*.sql` — **445 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -195,6 +195,8 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `journey_events` | `0124_journey_events.sql` |
 | `keyword_intel` | `0066_competitive_intel.sql` |
 | `kid_progress` | `0043_chore_missions.sql` |
+| `language_goals` | `0248_language_practice.sql` |
+| `language_sessions` | `0248_language_practice.sql` |
 | `leftover_inventory` | `0102_food_os.sql` |
 | `life_event_plan_items` | `0145_life_event_plans.sql` |
 | `life_event_plans` | `0145_life_event_plans.sql` |
@@ -435,6 +437,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `vehicle_inspections` | `0037_auto.sql` |
 | `vehicle_registrations` | `0037_auto.sql` |
 | `vehicles` | `0037_auto.sql` |
+| `vocab_cards` | `0248_language_practice.sql` |
 | `voice_commands` | `0121_voice_commands.sql` |
 | `wallet_audit_logs` | `0088_family_wallet.sql` |
 | `wallet_buckets` | `0088_family_wallet.sql` |

@@ -169,6 +169,16 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { career_profiles: live.data ?? [], job_applications: apps.data ?? [], resume_versions: resumes.data ?? [] };
     }
+    case 'language': {
+      const live = await eq(sb, 'language_goals', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      const ids = (live.data ?? []).map((g) => g.id);
+      if (!ids.length) return { language_goals: [], language_sessions: [], vocab_cards: [] };
+      const [sessions, cards] = await Promise.all([
+        eq(sb, 'language_sessions', familyId).in('goal_id', ids).order('practiced_on', { ascending: false }).limit(60),
+        eq(sb, 'vocab_cards', familyId).in('goal_id', ids).order('due_on').limit(300),
+      ]);
+      return { language_goals: live.data ?? [], language_sessions: sessions.data ?? [], vocab_cards: cards.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };
