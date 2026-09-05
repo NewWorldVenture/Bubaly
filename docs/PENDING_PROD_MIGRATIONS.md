@@ -167,6 +167,37 @@ script that loads 250 rows per table for the target family (idempotent, tagged
 > = true` in `supabase/config.toml`, revokes those defaults and would need explicit
 > `GRANT`s — see the comment in `config.toml`.
 
+### AI runtime core (0250–0251) — the Family OS concierge spine
+
+Additive + idempotent, verified on a Postgres 18 (PGlite) harness: the full
+ordered migration set applies clean, 0250/0251 re-apply as a no-op, `claim_ai_runs`
+never hands the same run to two callers, and a teen session is blocked from step
+injection, run-event forgery and self-approval. Guard: `tests/ai-runtime-schema.test.ts`.
+
+| # | File | Adds | Feature it unblocks |
+|---|------|------|---------------------|
+| 0250 | `0250_ai_runtime_core.sql` | `ai_requests`, `ai_request_context`, `ai_plans`, `ai_plan_steps`, `ai_run_events`, `ai_tool_calls`; extends `family_automation_runs` into the run + continuation queue (`state`, `run_type`, `request_id`/`plan_id`, lease + attempt columns, `idempotency_key`); extends `ai_conversations`/`ai_messages` (`state`, `structured_content`, `model`, `usage`, `request_id`, `sender_member_id`); `claim_ai_runs(int, int)` RPC (service-role only); realtime on `ai_run_events`, `ai_plan_steps`, `family_automation_runs` | The concierge run pipeline: request → plan → steps → executed run with a live timeline (`/dashboard/concierge`, run detail, "Working on" / "Completed by Bubaly"), the §30 duplicate guard, and per-family AI usage accounting |
+| 0251 | `0251_ai_trust_hardening.sql` | `approval_requests` run/step linkage + `consequences`, `evidence`, `edited_payload`, `payload_kind`, `reviewed_by`, `review_note`, 48h `expires_at` default (+ backfill of pending rows); widened `trust_audit_logs.decision` CHECK; manager-only UPDATE/DELETE RLS on `approval_requests`, `family_automation_runs` and `parent_approvals`, plus a requester-only self-cancel policy | Approval cards with real consequences and an Edit flow, expiring approvals, and the write-side lockdown that stops a signed-in child approving their own request or marking a run `executed` |
+
+**Read the RLS change before applying.** 0251 replaces the permissive `FOR ALL
+is_family_member` policies on `family_automation_runs` (0022) and
+`parent_approvals` (0088) with select/insert for members and update/delete for
+managers. Every app writer was checked first and each decision path is already
+manager-gated in code (the migration header lists them file by file), so no live
+UI path changes behaviour — but a custom script that PATCHes either table with a
+member's token will start failing and must move to the service client.
+
+Post-apply checks:
+
+```sql
+select to_regclass('public.ai_requests'), to_regclass('public.ai_plan_steps'),
+       to_regclass('public.ai_run_events'), to_regclass('public.ai_tool_calls');
+select has_function_privilege('service_role', 'public.claim_ai_runs(integer,integer)', 'EXECUTE');
+select polname, cmd from pg_policies
+ where tablename in ('approval_requests','family_automation_runs','parent_approvals');
+select count(*) from public.approval_requests where status = 'pending' and expires_at is null; -- 0
+```
+
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
 safe to re-run. When in doubt, **run the full push**: idempotent migrations make
