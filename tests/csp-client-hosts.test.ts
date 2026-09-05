@@ -33,7 +33,7 @@ describe('CSP connect-src covers every browser-side API', () => {
   it('allows each origin fetched by the client-side libraries', () => {
     for (const file of CLIENT_FETCHING_LIBS) {
       const src = readFileSync(file, 'utf8');
-      expect(src, `${file} should still call fetch()`).toMatch(/fetch\(/);
+      expect(src, `${file} should still call fetch()`).toMatch(/fetch(?:WithTimeout)?\(/);
       for (const origin of origins(src)) {
         if (IGNORED_ORIGINS.has(origin)) continue;
         expect(CLIENT_API_ORIGINS, `${origin} (used by ${file}) is missing from CLIENT_API_ORIGINS`).toContain(origin);
@@ -47,7 +47,7 @@ describe('CSP connect-src covers every browser-side API', () => {
     for (const file of walk('components')) {
       const src = readFileSync(file, 'utf8');
       if (!src.includes("'use client'")) continue;
-      for (const m of src.matchAll(/fetch\((['"`])(https:\/\/[^'"`)]+)/g)) {
+      for (const m of src.matchAll(/fetch(?:WithTimeout)?\((['"`])(https:\/\/[^'"`)]+)/g)) {
         const origin = new URL(m[2]).origin;
         if (!IGNORED_ORIGINS.has(origin) && !CLIENT_API_ORIGINS.includes(origin)) offenders.push(`${file}: ${origin}`);
       }
