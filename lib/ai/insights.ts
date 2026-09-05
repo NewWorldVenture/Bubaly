@@ -54,7 +54,8 @@ export type InsightKind =
   | 'rides'
   | 'votes'
   | 'closet'
-  | 'watchlist';
+  | 'watchlist'
+  | 'inventory';
 
 export type InsightMember = { id: string; name: string };
 
@@ -626,6 +627,33 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         .join('\n') || 'No movie nights logged yet.';
       const members = d.members.map((m) => m.name).join(', ') || 'the family';
       return `Family: ${d.familyName} (${members}). Now: ${d.now}.\n\nWatchlist:\n${queue}\n\nRecent movie nights:\n${recent}\n\nGive: (1) tonight's pick for the whole family with a one-line why, (2) a backup if the youngest goes to bed early, (3) two titles worth adding based on what they rated highly.${q(d)}`;
+    },
+  },
+
+  inventory: {
+    label: 'AI find it',
+    title: 'AI Home Inventory Assistant',
+    blurb: 'Where things are, what is lent out, expiring warranties and the home’s replacement value — from your own catalog.',
+    maxTokens: 650,
+    allowQuestion: true,
+    system:
+      'You are the family\'s home-inventory assistant. Work ONLY from the catalog and locations provided. ' +
+      'Answer "where is X" with the exact room › container path; flag loans out for 30+ days and warranties ending soon; ' +
+      'suggest sensible places for unlocated items based on where similar items live. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const locs = r(d, 'home_locations');
+      const byId = new Map(locs.map((l) => [String(l.id), l]));
+      const path = (id: unknown): string => {
+        const out: string[] = []; const seen = new Set<string>(); let cur = typeof id === 'string' ? byId.get(id) : undefined;
+        while (cur && !seen.has(String(cur.id))) { seen.add(String(cur.id)); out.unshift(String(cur.name)); cur = cur.parent_id ? byId.get(String(cur.parent_id)) : undefined; }
+        return out.join(' › ') || 'no location';
+      };
+      const items = cap(r(d, 'inventory_items'), 60).shown
+        .map((i) => `- ${i.name} [${i.category}] ×${i.quantity ?? 1} @ ${path(i.location_id)}${i.status !== 'in_place' ? ` (${i.status}${i.lent_to ? ` to ${i.lent_to}` : ''}${i.lent_on ? ` since ${day(i.lent_on)}` : ''})` : ''}${typeof i.value_cents === 'number' ? ` ${money(i.value_cents)}` : ''}${i.warranty_until ? `, warranty until ${day(i.warranty_until)}` : ''}`)
+        .join('\n') || 'Nothing catalogued yet.';
+      const rooms = cap(locs.filter((l) => !l.parent_id), 20).shown.map((l) => `- ${l.name} (${l.kind})`).join('\n') || 'No rooms yet.';
+      const moves = cap(r(d, 'inventory_moves'), 10).shown.map((m) => `- ${day(m.moved_at)}: item ${m.item_id} → ${path(m.to_location_id)}${m.reason ? ` (${m.reason})` : ''}`).join('\n') || 'No moves logged.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nRooms:\n${rooms}\n\nCatalog:\n${items}\n\nRecent moves:\n${moves}\n\nGive: (1) anything lent out or missing that needs chasing, (2) warranties ending in the next two months, (3) the three highest-value categories and whether the home looks under-documented for insurance, (4) where unlocated items probably belong.${q(d)}`;
     },
   },
 

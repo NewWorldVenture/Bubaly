@@ -80,7 +80,7 @@ export function locationPath(locations: LocationLike[], id: string | null | unde
 export const locationLabel = (locations: LocationLike[], id: string | null | undefined) => locationPath(locations, id).join(' › ') || 'No location yet';
 
 /** Rooms (top level) and their containers, for a tree view. */
-export function locationTree(locations: LocationLike[]): { location: LocationLike; children: LocationLike[] }[] {
+export function locationTree<T extends LocationLike>(locations: T[]): { location: T; children: T[] }[] {
   const roots = locations.filter((l) => !l.parent_id || !locations.some((p) => p.id === l.parent_id));
   return roots
     .sort((a, b) => a.name.localeCompare(b.name))

@@ -61,6 +61,7 @@ export const SERVICE_DESCRIPTIONS: Record<string, string> = {
   '/dashboard/pets': 'Everything for the four-legged family — vet dates, meds, feeding, and grooming, all tracked.',
   '/dashboard/closet': 'Every family member\'s closet in one place — today\'s outfit picked from what they own, laundry and outgrown tracking, and cost per wear.',
   '/dashboard/watchlist': 'The family watchlist with votes, age ratings and runtimes — so movie night is one pick for the people on the couch, not an hour of scrolling.',
+  '/dashboard/inventory': 'Where everything lives — rooms and containers, a searchable catalog with photos and values, loans and warranties, and an AI that answers “where is the…?”.',
   '/dashboard/locator': 'A private family map — see where everyone is, with check-ins and place alerts, on your terms.',
   '/dashboard/social': 'Coordinate the family’s social life — RSVPs, invites, and who’s doing what this weekend.',
   '/dashboard/social-feed': 'A private social feed just for your family — share updates without the whole internet watching.',
