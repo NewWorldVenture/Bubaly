@@ -6,6 +6,16 @@ project_id = "familyos"
 port = 54322
 major_version = 15
 
+[api]
+# Keep the legacy Data API default privileges (tables created by migrations are
+# granted to anon / authenticated / service_role automatically). Supabase CLI
+# 2.109+ revokes them on `supabase start` unless this is true, and the
+# production project was created under the legacy behaviour, so the isolated
+# CI stack must match it: 0002_tables.sql onwards never GRANTs explicitly.
+# The flag is removed on 2026-10-30; before then, add explicit GRANTs to every
+# migration (or one catch-up migration) and delete this line.
+auto_expose_new_tables = true
+
 [auth]
 enable_signup = true
 site_url = "http://localhost:3000"
