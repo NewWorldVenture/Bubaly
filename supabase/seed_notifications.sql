@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Notifications (500) for the partner-tone surfaces (T5).
+-- Bubaly · SEED — Notifications (500) for the partner-tone surfaces (T5).
 -- Fills the bell + /dashboard/notifications with 500 notifications across every
 -- type and read state so the partner-tone phrasing (notificationsLine / bellLabel)
 -- can be exercised at real volume — from "all caught up" up to a full inbox.

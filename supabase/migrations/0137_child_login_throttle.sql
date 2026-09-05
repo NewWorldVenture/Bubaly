@@ -1,4 +1,4 @@
--- FamilyOS :: 0137 — Child login throttle (brute-force protection)
+-- Bubaly :: 0137 — Child login throttle (brute-force protection)
 --
 -- A child signs in with a guessable username + a 4-digit PIN (only 10,000
 -- combinations). Without a durable, cross-instance limiter, a serverless

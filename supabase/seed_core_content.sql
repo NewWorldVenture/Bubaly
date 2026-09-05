@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Core content (500 records each) for the main family hubs.
+-- Bubaly · SEED — Core content (500 records each) for the main family hubs.
 -- Fills the everyday surfaces so the app can be tested at volume: Calendar,
 -- To-Dos, Groceries, Notes, Photos, Journal, Habits. Idempotent via '[seed:core]'
 -- / 'seed-core' markers (never clobbers real data). Get-or-creates the lists.

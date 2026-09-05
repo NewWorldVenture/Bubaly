@@ -1,4 +1,4 @@
--- FamilyOS :: 0149 Reasoning snapshots — the unified Family Reasoning Engine log (R7)
+-- Bubaly :: 0149 Reasoning snapshots — the unified Family Reasoning Engine log (R7)
 -- ----------------------------------------------------------------------------
 -- R7 (unify the reasoning engine): instead of ~8 engines each answering part of
 -- "what's going on with this family", a single core (lib/reasoning/engine.ts)

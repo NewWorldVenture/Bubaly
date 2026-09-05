@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Contact interactions (500 records).
+-- Bubaly · SEED — Contact interactions (500 records).
 -- Fills contact_interactions so the per-contact Relationship Timeline can be
 -- tested at volume: spreads 500 touches across up to 25 of the family's
 -- contacts (creating 8 seed contacts if the family has none), all 6 kinds

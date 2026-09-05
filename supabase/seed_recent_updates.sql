@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Recent updates bundle (the last 5 shipped seed sets).
+-- Bubaly · SEED — Recent updates bundle (the last 5 shipped seed sets).
 --
 -- ⚠️ SEED CONVENTION (new): seeds now live in focused, standalone files that are
 --    each ≤ 1000 lines — NOT appended to the monolithic supabase/SEED_ALL.sql
@@ -22,7 +22,7 @@
 
 -- ==================== seed_marketplace_price_history.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace price history + drop watch (~580 rows).
+-- Bubaly · SEED — Marketplace price history + drop watch (~580 rows).
 -- Fills the price-history surface on the item page: 130 fixed-price sale
 -- listings, each with a 2–4 step DECLINING price ladder (so the item page shows
 -- "Price dropped X%", "Lowest ever", and the history list), plus ~65 watcher
@@ -134,7 +134,7 @@ end $$;
 
 -- ==================== seed_marketplace_returns.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace rent/borrow returns (~500 rows).
+-- Bubaly · SEED — Marketplace rent/borrow returns (~500 rows).
 -- Fills the return-tracking surface on /marketplace/orders: 250 rent/borrow
 -- listings + 250 orders whose due dates span every return state. Borrower is a
 -- second existing active member of the same family.
@@ -248,7 +248,7 @@ end $$;
 
 -- ==================== seed_marketplace_reports.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace safety reports (~500 rows).
+-- Bubaly · SEED — Marketplace safety reports (~500 rows).
 -- Fills the super-admin moderation queue (/admin/marketplace/reports): up to
 -- 500 reports across all seven reasons and all four statuses, one per distinct
 -- listing (so the "one open report per listing+member" index is never

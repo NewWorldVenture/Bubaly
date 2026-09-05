@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Quick-Post comparables (500 records).
+-- Bubaly · SEED — Quick-Post comparables (500 records).
 -- Fills marketplace_listings with priced SELL comparables across all 10
 -- categories × 5 conditions with realistic per-category price bands, so the
 -- "Post in 60 seconds" AI price suggestion (lib/marketplace/quick-post.ts —

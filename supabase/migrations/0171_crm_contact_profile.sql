@@ -1,4 +1,4 @@
--- FamilyOS :: 0171 — Progressive-profiling store (visitor-intelligence gap #13)
+-- Bubaly :: 0171 — Progressive-profiling store (visitor-intelligence gap #13)
 --
 -- Progressive profiling asks a lead/contact ONE thing at a time across visits
 -- (role → priority → household → kids → interests) instead of a big form. The

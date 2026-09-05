@@ -1,4 +1,4 @@
-# FamilyOS — Friction Backlog ("Project Zero Friction")
+# Bubaly — Friction Backlog ("Project Zero Friction")
 
 A **living, prioritized list of remaining friction** — the measurable roadmap
 toward *"Less Managing Life. More Living It."* Every session should: pick the

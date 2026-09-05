@@ -1,4 +1,4 @@
--- FamilyOS :: 0128 Family connections (North Star pillar #9 — Family API)
+-- Bubaly :: 0128 Family connections (North Star pillar #9 — Family API)
 -- ----------------------------------------------------------------------------
 -- The orchestration hub: a durable, family-scoped record of the external
 -- services a family connects (calendars, email, banking, grocery, smart home).

@@ -1,6 +1,6 @@
 # `docs/agents/` — Multi-agent coordination & recovery system
 
-This directory is the **resumable operating system** for the FamilyOS
+This directory is the **resumable operating system** for the Bubaly
 production-readiness audit. It exists so that any Claude or Codex session can
 resume the audit immediately, without repeating completed work, after a usage /
 context / time limit ends the previous session.

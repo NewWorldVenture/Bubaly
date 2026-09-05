@@ -1,4 +1,4 @@
--- FamilyOS :: 0158 Concierge plan actions — deeper write-back audit
+-- Bubaly :: 0158 Concierge plan actions — deeper write-back audit
 -- ----------------------------------------------------------------------------
 -- When an accepted concierge plan is materialized into real records (a calendar
 -- event, a reminder, a prep task…), each write-back is logged here — so the flow

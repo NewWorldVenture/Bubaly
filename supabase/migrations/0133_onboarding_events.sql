@@ -1,4 +1,4 @@
--- FamilyOS :: 0133 Onboarding telemetry (pre-family funnel)
+-- Bubaly :: 0133 Onboarding telemetry (pre-family funnel)
 -- ----------------------------------------------------------------------------
 -- journey_events is family-scoped, but onboarding happens BEFORE a family exists
 -- (no family_id yet), so it can't be tracked there. This is the anonymous/pre-

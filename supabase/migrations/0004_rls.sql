@@ -1,4 +1,4 @@
--- FamilyOS :: 0004 row level security
+-- Bubaly :: 0004 row level security
 -- Hard guarantee: no row crosses a family boundary. Every household table is gated
 -- by is_family_member(family_id). Reference tables are read-only to authenticated users.
 

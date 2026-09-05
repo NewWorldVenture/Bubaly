@@ -1,4 +1,4 @@
--- FamilyOS :: 0212 atomic first-family provisioning
+-- Bubaly :: 0212 atomic first-family provisioning
 --
 -- Protected layouts can be requested concurrently (multiple tabs, refreshes,
 -- or parallel server components). Serialize the first-family decision per

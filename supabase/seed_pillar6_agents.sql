@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #6: Specialized agents (agent_activity)
+-- Bubaly · SEED — Pillar #6: Specialized agents (agent_activity)
 -- 500 activity records spread across the 10 agents so /dashboard/agents shows a
 -- rich per-agent history you can Done/Dismiss and fully test. Idempotent:
 -- clears its own '[seed:p6]' rows (matched on detail) first, then reinserts.

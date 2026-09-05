@@ -1,4 +1,4 @@
--- FamilyOS :: 0144 Experience Scorecard — measurable premium-consistency (T8)
+-- Bubaly :: 0144 Experience Scorecard — measurable premium-consistency (T8)
 -- ----------------------------------------------------------------------------
 -- The premium-consistency sweep is only real if it's measured. This persists a
 -- dated audit per surface (a module or a journey) across the six dimensions that

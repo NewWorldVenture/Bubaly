@@ -1,4 +1,4 @@
--- FamilyOS :: 0116 bills.autopay
+-- Bubaly :: 0116 bills.autopay
 -- ----------------------------------------------------------------------------
 -- Adds an autopay flag to bills so the new Finances "Auto Pay" page can list and
 -- toggle which bills are set to pay automatically. Additive + idempotent; the

@@ -1,4 +1,4 @@
--- FamilyOS :: 0135 Intelligence Network — aggregation storage
+-- Bubaly :: 0135 Intelligence Network — aggregation storage
 -- ----------------------------------------------------------------------------
 -- The cross-family aggregation the design doc (§4) specifies, built on the
 -- consent + k-anonymity foundation from 0132. TWO tables:

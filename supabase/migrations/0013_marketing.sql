@@ -6,7 +6,7 @@
 -- service-role client in the super-admin-gated admin console (which bypasses
 -- RLS). This keeps marketing data fully admin-only.
 --
--- "Customers" in FamilyOS are existing families/subscriptions/contacts — those
+-- "Customers" in Bubaly are existing families/subscriptions/contacts — those
 -- are NOT duplicated here; the marketing customer view is derived at read time
 -- from the existing tables. These tables store marketing-specific objects only.
 -- ============================================================

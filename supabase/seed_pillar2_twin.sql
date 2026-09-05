@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #2: Household Digital Twin
+-- Bubaly · SEED — Pillar #2: Household Digital Twin
 -- 500+ records. Gives the decision simulator (/dashboard/family-digital-twin) a
 -- rich linked model to reason over: a busy 60-day schedule plus teams, classes,
 -- routines and budgets. Idempotent via '[seed:p2]' markers.

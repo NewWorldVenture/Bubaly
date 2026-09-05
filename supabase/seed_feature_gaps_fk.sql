@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage for FK-parented tables that had no seed:
+-- Bubaly · SEED — feature-gap coverage for FK-parented tables that had no seed:
 --   Medication Doses (500) and Kid Investing order history (500), plus the parent
 --   rows they require (seed medications; an educational asset catalog + a child
 --   investing wallet per member + starter holdings).

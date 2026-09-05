@@ -4,7 +4,7 @@ import {
 } from '@/lib/meals/pantry-chef';
 
 // PLA-0835: "Fridge Chef" — snap the fridge → allergy-aware dinner ideas →
-// grocery list (the one competitor headline FamilyOS lacked). These lock the
+// grocery list (the one competitor headline Bubaly lacked). These lock the
 // pure engine (prompt/parse/allergen-flag) behind /api/ai/pantry-chef.
 describe('normalizeAllergies', () => {
   it('splits free-text allergy fields into distinct lowercase terms', () => {

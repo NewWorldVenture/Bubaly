@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Chores (chores 500 + chore_assignments 500).
+-- Bubaly · SEED — Chores (chores 500 + chore_assignments 500).
 -- 500 chores across priorities/recurrence + one assignment each spanning the
 -- full task_status lifecycle. Idempotent via a '[seed:chore]' description marker
 -- (assignments cascade-cleared by chore_id).

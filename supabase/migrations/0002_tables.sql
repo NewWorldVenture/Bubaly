@@ -1,4 +1,4 @@
--- FamilyOS :: 0002 tables
+-- Bubaly :: 0002 tables
 -- Convention: every household-scoped table carries family_id (uuid) for RLS isolation,
 -- created_by (uuid -> auth.users), and created_at/updated_at timestamptz.
 

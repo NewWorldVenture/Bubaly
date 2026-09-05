@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #9: Family API / Connections (family_connections)
+-- Bubaly · SEED — Pillar #9: Family API / Connections (family_connections)
 -- 500 connection records across every provider + status so /dashboard/connections
 -- and the underlying table can be fully tested. Idempotent: clears its own
 -- 'seed-p9-%' rows first (matched on external_account_id), then reinserts.

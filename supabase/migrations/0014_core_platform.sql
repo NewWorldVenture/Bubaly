@@ -1,6 +1,6 @@
 -- ============================================================
 -- 0014_core_platform.sql
--- FamilyOS Core Platform: Messenger · Photos · Contacts ·
+-- Bubaly Core Platform: Messenger · Photos · Contacts ·
 --   Reminders · Recipes · Shopping Lists
 -- ============================================================
 

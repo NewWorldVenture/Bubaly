@@ -1,4 +1,4 @@
--- FamilyOS :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
+-- Bubaly :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
 -- ----------------------------------------------------------------------------
 -- North-star pillar #3: every interaction improves understanding. Bubaly learns
 -- durable preferences/traditions from real household usage (favorite meals,

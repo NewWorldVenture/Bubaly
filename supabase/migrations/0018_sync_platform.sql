@@ -1,4 +1,4 @@
--- FamilyOS :: 0018 sync platform
+-- Bubaly :: 0018 sync platform
 -- Two-way sync hub for calendars, reminders, and notes across Google, Microsoft/
 -- Outlook, Apple (CalDAV/ICS), and Amazon/Alexa (ICS feed). This migration creates
 -- the full persistence layer: providers, accounts, connections, encrypted tokens,

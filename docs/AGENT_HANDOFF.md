@@ -1,4 +1,4 @@
-# Agent Handoff — Bubaly / FamilyOS
+# Agent Handoff — Bubaly / Bubaly
 
 > 🚨 **ACTIVE INCIDENT (2026-07-18 09:47 UTC) — CORRUPTING LEDGER PUBLISHER.**
 > The automated **"Publish operating index readiness increment"** job (origin
@@ -1534,7 +1534,7 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > ## 🧭 2026-07-03 — ANTICIPATION + DELIGHT arc + the living roadmap (READ FIRST)
 >
 > This session built the **anticipatory "Moments"** spine + a **delight** layer, and — per the "Project Zero
-> Friction" / "FamilyOS X" directives — established a **living roadmap** so world-class UX is a continuous
+> Friction" / "Bubaly X" directives — established a **living roadmap** so world-class UX is a continuous
 > process, not a one-time milestone. All shipped to `main`, each 100% Supabase-wired, tsc/eslint/1542-tests/
 > `next build` clean per commit.
 >
@@ -1577,7 +1577,7 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > Modal focus-trap, 44px coarse-pointer touch targets, safe-area-aware FABs. Family-facing wide-table overflow
 > was handled by a parallel session (already on main); ~24 internal `/admin/**` tables remain.
 >
-> **NEXT-BOT GUIDANCE (FamilyOS X — "make it obsolete by inventing what comes next"):** the highest-leverage
+> **NEXT-BOT GUIDANCE (Bubaly X — "make it obsolete by inventing what comes next"):** the highest-leverage
 > un-started items are (a) **push-notify** on an imminent moment/leave-by/birthday (the app never reaching the
 > family when they're NOT in it is the biggest remaining gap — web-push + `PushNotifications` plugin +
 > autopilot cron already exist; backlog #5); (b) **Autopilot self-completion** of ≥90%-confidence prep steps
@@ -1752,7 +1752,7 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >
 > ## 🗓️ 2026-07-03 SESSION — Anticipatory "Moments" (life-moment orchestration)
 >
-> **The vision ask:** make FamilyOS anticipatory — "one soccer tournament automatically influences calendar,
+> **The vision ask:** make Bubaly anticipatory — "one soccer tournament automatically influences calendar,
 > packing, weather, travel time, snacks, budget, photos… the user never opens multiple modules." The
 > *pending-item* anticipation spine already existed (`lib/autopilot/*` confidence-tiered `autopilot_suggestions`
 > engine + cron; `lib/home/needs-attention.ts` Home Mission Control). The **missing** piece was **life-moment
@@ -6072,7 +6072,7 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
 > - **Family Missions backlog (future PRs):** reward-store UX, allowance/wallet page, insights charts, parent AI assistant + fairness engine, gamification UI (XP ring/leaderboard/quests), video-frame validation, chore-event notifications, tier feature-flags, recurrence auto-spawn.
 
 ## Product & stack
-- **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
+- **Bubaly / Bubaly** — a family operating system. Next.js 15 App Router + TS +
   Tailwind + Supabase (Postgres/Auth/Storage/RLS) + Stripe + Anthropic/OpenAI AI.
 - Deployed on **Vercel**. **Canonical domain is `www.bubaly.com`** (brand: "Bubaly").
   `bubaly.com` 308-redirects to `www.bubaly.com`. Legacy `theagoras.com` redirects to
@@ -6111,7 +6111,7 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
   git diff --stat origin/main..HEAD   # verify ONLY your files
   git push -u origin claude/funny-darwin-gkmptm --force-with-lease
   ```
-- Then create PR via GitHub MCP tools (repo `NewWorldVenture/FamilyOS`), squash-merge.
+- Then create PR via GitHub MCP tools (repo `NewWorldVenture/Bubaly`), squash-merge.
 - Commit trailer to use:
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` and
   `Claude-Session: https://claude.ai/code/session_01BVdGmgvtEjp4ZSqcES7ThJ`.
@@ -6699,5 +6699,5 @@ right GROUP in `marketing-subnav.tsx`** (the old flat SUBNAV array is gone).
 
 ## Reference
 - Source UX/IA brief and the marketing-platform brief are in the session history.
-- GitHub: repo `NewWorldVenture/FamilyOS`, use `mcp__github__*` tools (load via ToolSearch).
+- GitHub: repo `NewWorldVenture/Bubaly`, use `mcp__github__*` tools (load via ToolSearch).
 - Tests live in `tests/`; CI runs Typecheck·Lint·Test·Build + E2E smoke on PRs.

@@ -1,4 +1,4 @@
--- FamilyOS :: 0159 Onboarding progress — durable per-account lifecycle + marketing signal
+-- Bubaly :: 0159 Onboarding progress — durable per-account lifecycle + marketing signal
 -- ----------------------------------------------------------------------------
 -- Onboarding data was, until now, scattered and partly ephemeral:
 --   • onboarding_events   — anonymous, session-keyed telemetry (funnel only)

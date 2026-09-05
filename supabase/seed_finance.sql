@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Finance hub (financial_accounts + transactions 500 +
+-- Bubaly · SEED — Finance hub (financial_accounts + transactions 500 +
 -- bills 500). A handful of accounts, 500 transactions (income/expense/transfer)
 -- and 500 bills across statuses. Idempotent via '[seed:fin]' markers.
 -- Where: Supabase → SQL Editor → paste → Run.

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Memories (family_memories 500 + trip_memories 500).
+-- Bubaly · SEED — Memories (family_memories 500 + trip_memories 500).
 -- The memory timeline + trip scrapbook at volume. Idempotent via '[seed:mem]'
 -- body marker (family_memories) / '[seed:mem]' note marker (trip_memories).
 -- Where: Supabase → SQL Editor → paste → Run.

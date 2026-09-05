@@ -1,4 +1,4 @@
--- FamilyOS :: 0151 Marketplace V2 — the AI-first marketplace
+-- Bubaly :: 0151 Marketplace V2 — the AI-first marketplace
 -- ----------------------------------------------------------------------------
 -- Upgrades the family marketplace (0120/0150) into the full AI-first design:
 -- "Buy, sell, rent, borrow, lend & more — all in one trusted community."

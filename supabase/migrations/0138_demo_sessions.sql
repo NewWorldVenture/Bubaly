@@ -1,4 +1,4 @@
--- FamilyOS :: 0138 — Ephemeral "Try it free" demo sessions
+-- Bubaly :: 0138 — Ephemeral "Try it free" demo sessions
 --
 -- Powers the pricing-page "Test Account → Login Now to Try Me" flow: one click
 -- provisions a throwaway Family+ family (seeded with data), signs the visitor

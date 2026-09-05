@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Messages (family_messages, 500) across all kinds.
+-- Bubaly · SEED — Messages (family_messages, 500) across all kinds.
 -- Get-or-creates a "Seed Chat" conversation, then 500 messages (text/image/
 -- voice/file/announcement). Idempotent via a '[seed:msg]' marker in content.
 -- Where: Supabase → SQL Editor → paste → Run.

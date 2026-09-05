@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Moment activations (500 records).
+-- Bubaly · SEED — Moment activations (500 records).
 -- Fills moment_activations so the Moments organizing layer (R12) can be tested at
 -- volume and its engagement history renders: every moment × ~50 days with a spread
 -- of statuses (active/engaged/dismissed). Idempotent via reason like '%[seed]%';

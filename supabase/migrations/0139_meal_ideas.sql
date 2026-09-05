@@ -1,4 +1,4 @@
--- FamilyOS :: 0139 Meal ideas — curated dinner catalog for the first-run briefing
+-- Bubaly :: 0139 Meal ideas — curated dinner catalog for the first-run briefing
 -- ----------------------------------------------------------------------------
 -- T2 (first-run instant briefing): a brand-new family has no recipes of its own,
 -- so the "3 dinner ideas" in the onboarding brief can't come from the meal planner

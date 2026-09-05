@@ -1,4 +1,4 @@
--- FamilyOS :: 0145 Life-event playbooks (T9)
+-- Bubaly :: 0145 Life-event playbooks (T9)
 -- ----------------------------------------------------------------------------
 -- A one-tap "Start" on a life-event template (New Baby, Moving, School Start,
 -- Vacation, New Pet, New Job) materializes a real, dated plan: a family_scoped

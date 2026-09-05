@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_planning.sql — demo data for /dashboard/planning
+-- Bubaly :: seed_planning.sql — demo data for /dashboard/planning
 --
 -- The Planning & Organization hub previews 8 domains. Calendar / Tasks /
 -- Reminders / Family-Wall photos are seeded by seed_home.sql; THIS file fills the

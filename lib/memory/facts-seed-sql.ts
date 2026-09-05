@@ -8,7 +8,7 @@
 // already-populated families. Runs in the Supabase SQL editor (service role).
 
 export const FAMILY_FACTS_SEED_SQL = String.raw`-- ============================================================================
--- FamilyOS · Family Knowledge Base seed — across ALL profiles
+-- Bubaly · Family Knowledge Base seed — across ALL profiles
 -- Where: Supabase Dashboard → SQL Editor → New query → paste → Run.
 -- Safe: seeds ONLY families that have no facts yet (never overwrites real data).
 -- Re-running is a no-op for families already populated.

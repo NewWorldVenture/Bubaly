@@ -1,4 +1,4 @@
--- FamilyOS :: 0150 Marketplace matches — supply↔demand match intelligence
+-- Bubaly :: 0150 Marketplace matches — supply↔demand match intelligence
 -- ----------------------------------------------------------------------------
 -- The next level for the family marketplace (0120): connect open "wanted"
 -- requests to the supply already on the board (sell / free / rent / borrow) so

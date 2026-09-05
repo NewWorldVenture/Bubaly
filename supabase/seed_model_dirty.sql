@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Auto-refresh / model-dirty (R3)  [seed:dirty]
+-- Bubaly · SEED — Auto-refresh / model-dirty (R3)  [seed:dirty]
 -- Exercises the R3 chain end to end: inserting into a WATCHED source table fires
 -- the 0134 `trg_mark_model_dirty` trigger → the family is marked dirty → the next
 -- time any graph surface loads (loadFamilyGraph), scheduleGraphAutoRefresh

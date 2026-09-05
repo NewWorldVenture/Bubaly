@@ -1,4 +1,4 @@
--- FamilyOS :: 0005 RPCs (callable from client via supabase.rpc)
+-- Bubaly :: 0005 RPCs (callable from client via supabase.rpc)
 
 -- Accept an invite by token: joins the caller to the family with the invited role.
 -- SECURITY DEFINER because the new member is not yet a manager of the family.

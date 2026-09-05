@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — AI Concierge Calls (500 records).
+-- Bubaly · SEED — AI Concierge Calls (500 records).
 -- Fills concierge_calls so the outbound "Bubaly calls for you" module can be
 -- tested at volume: every task_kind × category, the full status lifecycle
 -- (draft/queued/calling/completed/failed/action_needed/cancelled), an

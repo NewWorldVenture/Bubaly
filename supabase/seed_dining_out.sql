@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Dining Out (500 records).
+-- Bubaly · SEED — Dining Out (500 records).
 -- Fills dining_out so the upgraded Dining page can be tested at volume:
 -- 100 saved restaurants (cuisines, price levels, ratings, favorites) +
 -- 400 logged visits over ~2 years (spend + item counts) so the 30-day stat

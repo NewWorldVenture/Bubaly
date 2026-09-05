@@ -1,4 +1,4 @@
--- FamilyOS :: 0138 Onboarding calendar imports — the "value-first" first-run record
+-- Bubaly :: 0138 Onboarding calendar imports — the "value-first" first-run record
 -- ----------------------------------------------------------------------------
 -- T1 (TIME-TO-FIRST-VALUE): the value step imports the family's existing calendar
 -- (paste .ics or a sample week), computes an instant "first brief" (today's

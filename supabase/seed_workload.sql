@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Workload snapshots (500 records).
+-- Bubaly · SEED — Workload snapshots (500 records).
 -- Fills workload_snapshots so Workload Balance analytics can be tested at
 -- volume: up to 5 members × 100 ISO weeks of history, with a realistic drift
 -- (one member consistently heavier, slowly rebalancing toward fair).

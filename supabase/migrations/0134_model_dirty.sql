@@ -1,4 +1,4 @@
--- FamilyOS :: 0134 Model staleness flag (event-driven twin refresh)
+-- Bubaly :: 0134 Model staleness flag (event-driven twin refresh)
 -- ----------------------------------------------------------------------------
 -- Makes the Household Twin graph + Prep Plans refresh EVENT-DRIVEN, not just on a
 -- schedule. When any cross-domain source row changes (members, pets, vehicles,

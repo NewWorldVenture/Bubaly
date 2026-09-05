@@ -1,4 +1,4 @@
--- FamilyOS :: 0163 — Messages: allow audio kind + non-destructive read receipts
+-- Bubaly :: 0163 — Messages: allow audio kind + non-destructive read receipts
 --
 -- Two live Messages bugs:
 --   1. Voice notes NEVER saved: the module inserts family_messages.kind='audio'

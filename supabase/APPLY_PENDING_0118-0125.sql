@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS :: Consolidated pending-production migrations (0118 → 0125)
+-- Bubaly :: Consolidated pending-production migrations (0118 → 0125)
 -- ============================================================================
 -- WHY THIS FILE EXISTS
 --   These 8 migrations are on `main` but may not yet be applied to the PRODUCTION
@@ -238,7 +238,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0119_family_credentials.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0119 family_credentials (Wi-Fi & Passwords vault)
+-- Bubaly :: 0119 family_credentials (Wi-Fi & Passwords vault)
 -- ----------------------------------------------------------------------------
 -- Backs the Family hub's "Wi-Fi & Passwords" card with a real store: shared
 -- family credentials (Wi-Fi networks, streaming/website/app logins, door PINs,
@@ -295,7 +295,7 @@ create policy family_credentials_delete on public.family_credentials
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0120_marketplace.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
+-- Bubaly :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
 -- ----------------------------------------------------------------------------
 -- A family-scoped marketplace / lending board: post items to sell, rent out,
 -- lend ("borrow"), give away free, or request ("wanted"). Other members express
@@ -387,7 +387,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0121_voice_commands.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0121 Voice commands ("Full conversational interface")
+-- Bubaly :: 0121 Voice commands ("Full conversational interface")
 -- ----------------------------------------------------------------------------
 -- Backs the Voice Control command center (/dashboard/voice): a family-scoped log
 -- of every spoken command, how it was routed (task/note/event/shopping), what it
@@ -434,7 +434,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0122_routine_templates.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0122 recurring-routine templates
+-- Bubaly :: 0122 recurring-routine templates
 -- ----------------------------------------------------------------------------
 -- A "routine" is a reusable bundle of related calendar events that repeats on a
 -- set of weekdays — e.g. "School Morning" = wake 7:00 → breakfast 7:30 →
@@ -504,7 +504,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0123_family_facts.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0123 Family facts ("Build a persistent family knowledge graph")
+-- Bubaly :: 0123 Family facts ("Build a persistent family knowledge graph")
 -- ----------------------------------------------------------------------------
 -- The persistent store behind Family Memory: durable facts the family looks up
 -- again and again — sizes, allergies, preferences, key contacts, account
@@ -556,7 +556,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0124_journey_events.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0124 Journey events (Experience Scorecard instrumentation)
+-- Bubaly :: 0124 Journey events (Experience Scorecard instrumentation)
 -- ----------------------------------------------------------------------------
 -- Lightweight product telemetry so the Experience Scorecard uses REAL medians
 -- instead of design-time estimates. Each row is one phase of a user journey
@@ -597,7 +597,7 @@ end $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ▼ 0125_family_operating_index.sql
 -- ═══════════════════════════════════════════════════════════════════════════
--- FamilyOS :: 0125 Family Operating Index (the measurable core of the Operating Layer)
+-- Bubaly :: 0125 Family Operating Index (the measurable core of the Operating Layer)
 -- ----------------------------------------------------------------------------
 -- The Operating Layer's north-star metric is "how well is this household
 -- functioning" measured over time. This table stores one append-only SNAPSHOT

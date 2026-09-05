@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — AI Concierge (concierge_plans 500).
+-- Bubaly · SEED — AI Concierge (concierge_plans 500).
 -- Getaways, restaurants, date nights, parties, travel, services — across every
 -- kind + status — so /dashboard/concierge renders at real volume.
 -- Idempotent: seed rows carry a '[seed]' title prefix; deleted before re-insert.

@@ -1,4 +1,4 @@
--- FamilyOS :: 0182 - Serialize Stripe webhook event claims
+-- Bubaly :: 0182 - Serialize Stripe webhook event claims
 --
 -- A unique event id prevents duplicate rows but does not prevent two concurrent
 -- deliveries from both processing a row still marked as processing. Track the

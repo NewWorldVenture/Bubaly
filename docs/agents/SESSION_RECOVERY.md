@@ -3,7 +3,7 @@
 _Last updated: 2026-07-18 20:15 UTC by `CLAUDE-QA-01` (board handle `agent-02`)._
 
 ## Repository
-- `NewWorldVenture/FamilyOS`
+- `NewWorldVenture/Bubaly`
 - Integration branch: **`main`** (agents commit small validated increments and
   push directly to `main` per the existing repo policy in
   `docs/audit/COORDINATION.md §0`; each push is rebased on latest `main` first).

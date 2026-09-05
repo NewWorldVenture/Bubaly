@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Reasoning Context (R1)  [seed:reasoning]
+-- Bubaly · SEED — Reasoning Context (R1)  [seed:reasoning]
 -- Exercises lib/reasoning/context.ts::loadFamilyContext at volume. Unlike
 -- seed_graph.sql this ALSO:
 --   • mirrors real family_members as ref-linked nodes (ref_table/ref_id) so the

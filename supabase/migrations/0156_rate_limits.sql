@@ -1,4 +1,4 @@
--- FamilyOS :: 0156 Durable rate limits (AI-2)
+-- Bubaly :: 0156 Durable rate limits (AI-2)
 -- ----------------------------------------------------------------------------
 -- The public, model-backed endpoints (e.g. /api/ai/gift) were rate-limited by an
 -- in-memory fixed-window map — per serverless INSTANCE, so N cold instances = N×

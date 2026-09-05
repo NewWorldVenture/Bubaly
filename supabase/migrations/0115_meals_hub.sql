@@ -1,4 +1,4 @@
--- FamilyOS :: 0115 Meals hub extras (Family Favorites + Nutrition Tracker)
+-- Bubaly :: 0115 Meals hub extras (Family Favorites + Nutrition Tracker)
 -- ----------------------------------------------------------------------------
 -- Backs two new pages under the expandable "Meals" nav group:
 --   • family_favorites — the family's favorite recipes / restaurants / meals

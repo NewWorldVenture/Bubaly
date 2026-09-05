@@ -1,4 +1,4 @@
--- FamilyOS :: 0185 - atomic expired auction settlement
+-- Bubaly :: 0185 - atomic expired auction settlement
 --
 -- The close-auctions cron must not claim a listing before its winner order is
 -- durable. This service-role-only RPC locks and settles one auction in a

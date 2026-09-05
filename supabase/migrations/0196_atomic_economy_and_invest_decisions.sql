@@ -1,4 +1,4 @@
--- FamilyOS :: 0196 - atomic economy redemption and simulated-investment fills
+-- Bubaly :: 0196 - atomic economy redemption and simulated-investment fills
 --
 -- Approval previously performed a ledger insert followed by separate status,
 -- holding, stock, and audit writes from the application. A later failure could

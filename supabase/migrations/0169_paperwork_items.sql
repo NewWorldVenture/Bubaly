@@ -1,4 +1,4 @@
--- FamilyOS :: 0169 — Paperwork Inbox (AI handles forms & paperwork, gap #4)
+-- Bubaly :: 0169 — Paperwork Inbox (AI handles forms & paperwork, gap #4)
 --
 -- One triage inbox for the paper that floods families: permission slips, school
 -- notices, medical forms, sports packets, bills, event flyers. Text is triaged

@@ -1,4 +1,4 @@
--- FamilyOS :: 0170 — Relationship CRM: per-contact interactions (gap #5)
+-- Bubaly :: 0170 — Relationship CRM: per-contact interactions (gap #5)
 --
 -- Deepens the household relationship CRM: family_contacts holds WHO the people
 -- are; this table holds the RELATIONSHIP — every visit, call, gift, favor and

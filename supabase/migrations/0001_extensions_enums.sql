@@ -1,4 +1,4 @@
--- FamilyOS :: 0001 extensions + enums
+-- Bubaly :: 0001 extensions + enums
 -- Supabase ships pgcrypto/uuid; gen_random_uuid() is available by default.
 
 create extension if not exists "pgcrypto";

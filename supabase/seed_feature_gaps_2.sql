@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage, batch 2 (500 rows each) for more live
+-- Bubaly · SEED — feature-gap coverage, batch 2 (500 rows each) for more live
 -- family features that had NO seed and rendered empty at test time:
 --   Smart Devices · Home Warranties · Babysitters · Expense Splits · Date Nights.
 -- Each block is guarded by to_regclass (missing table = skipped, never fatal).

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Knowledge Graph (graph_entities 500 + graph_edges 500).
+-- Bubaly · SEED — Knowledge Graph (graph_entities 500 + graph_edges 500).
 -- A connected household graph so traversal, path-finding and impact propagation
 -- can be exercised at volume. Idempotent: clears its own '[seed:graph]' rows
 -- (attributes marker) first — edges cascade from entities.

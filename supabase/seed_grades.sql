@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Student grades (~528 records).
+-- Bubaly · SEED — Student grades (~528 records).
 -- Fills `grades` so the Grades section of /dashboard/family-school renders
 -- populated — the table ships in 0006 but had NO seed anywhere (LB-014). Seeds
 -- realistic gradebook rows for the family's kids: each child × 8 subjects × ~22

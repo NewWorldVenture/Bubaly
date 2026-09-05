@@ -1,4 +1,4 @@
--- FamilyOS :: 0162 — One demo per email (durable per-email demo usage ledger)
+-- Bubaly :: 0162 — One demo per email (durable per-email demo usage ledger)
 --
 -- The demo is a SINGLE shared account, so demo_sessions.email is one row the next
 -- visitor overwrites — useless for "this email already used its demo". This table

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS :: Consolidated pending-production migrations (0118 → 0135)
+-- Bubaly :: Consolidated pending-production migrations (0118 → 0135)
 -- ============================================================================
 -- Supersedes APPLY_PENDING_0118-0134.sql. All migrations additive + idempotent;
 -- re-running an already-applied one is a no-op. Apply via supabase db push or
@@ -214,7 +214,7 @@ begin
 end $$;
 
 -- ==================== 0119_family_credentials.sql ====================
--- FamilyOS :: 0119 family_credentials (Wi-Fi & Passwords vault)
+-- Bubaly :: 0119 family_credentials (Wi-Fi & Passwords vault)
 -- ----------------------------------------------------------------------------
 -- Backs the Family hub's "Wi-Fi & Passwords" card with a real store: shared
 -- family credentials (Wi-Fi networks, streaming/website/app logins, door PINs,
@@ -269,7 +269,7 @@ create policy family_credentials_delete on public.family_credentials
   for delete using (public.is_family_member(family_id));
 
 -- ==================== 0120_marketplace.sql ====================
--- FamilyOS :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
+-- Bubaly :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
 -- ----------------------------------------------------------------------------
 -- A family-scoped marketplace / lending board: post items to sell, rent out,
 -- lend ("borrow"), give away free, or request ("wanted"). Other members express
@@ -359,7 +359,7 @@ begin
 end $$;
 
 -- ==================== 0121_voice_commands.sql ====================
--- FamilyOS :: 0121 Voice commands ("Full conversational interface")
+-- Bubaly :: 0121 Voice commands ("Full conversational interface")
 -- ----------------------------------------------------------------------------
 -- Backs the Voice Control command center (/dashboard/voice): a family-scoped log
 -- of every spoken command, how it was routed (task/note/event/shopping), what it
@@ -404,7 +404,7 @@ begin
 end $$;
 
 -- ==================== 0122_routine_templates.sql ====================
--- FamilyOS :: 0122 recurring-routine templates
+-- Bubaly :: 0122 recurring-routine templates
 -- ----------------------------------------------------------------------------
 -- A "routine" is a reusable bundle of related calendar events that repeats on a
 -- set of weekdays — e.g. "School Morning" = wake 7:00 → breakfast 7:30 →
@@ -472,7 +472,7 @@ begin
 end $$;
 
 -- ==================== 0123_family_facts.sql ====================
--- FamilyOS :: 0123 Family facts ("Build a persistent family knowledge graph")
+-- Bubaly :: 0123 Family facts ("Build a persistent family knowledge graph")
 -- ----------------------------------------------------------------------------
 -- The persistent store behind Family Memory: durable facts the family looks up
 -- again and again — sizes, allergies, preferences, key contacts, account
@@ -522,7 +522,7 @@ begin
 end $$;
 
 -- ==================== 0124_journey_events.sql ====================
--- FamilyOS :: 0124 Journey events (Experience Scorecard instrumentation)
+-- Bubaly :: 0124 Journey events (Experience Scorecard instrumentation)
 -- ----------------------------------------------------------------------------
 -- Lightweight product telemetry so the Experience Scorecard uses REAL medians
 -- instead of design-time estimates. Each row is one phase of a user journey
@@ -561,7 +561,7 @@ begin
 end $$;
 
 -- ==================== 0125_family_operating_index.sql ====================
--- FamilyOS :: 0125 Family Operating Index (the measurable core of the Operating Layer)
+-- Bubaly :: 0125 Family Operating Index (the measurable core of the Operating Layer)
 -- ----------------------------------------------------------------------------
 -- The Operating Layer's north-star metric is "how well is this household
 -- functioning" measured over time. This table stores one append-only SNAPSHOT
@@ -624,7 +624,7 @@ begin
 end $$;
 
 -- ==================== 0126_family_playbook.sql ====================
--- FamilyOS :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
+-- Bubaly :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
 -- ----------------------------------------------------------------------------
 -- North-star pillar #3: every interaction improves understanding. Bubaly learns
 -- durable preferences/traditions from real household usage (favorite meals,
@@ -684,7 +684,7 @@ begin
 end $$;
 
 -- ==================== 0127_agent_activity.sql ====================
--- FamilyOS :: 0127 Agent activity (North Star pillar #6 — specialized agents)
+-- Bubaly :: 0127 Agent activity (North Star pillar #6 — specialized agents)
 -- ----------------------------------------------------------------------------
 -- The family sees one assistant; behind it a roster of domain agents (Chief of
 -- Staff, Scheduler, Meal Planner, Budget Coach, …). This table is the persistent
@@ -736,7 +736,7 @@ begin
 end $$;
 
 -- ==================== 0128_family_connections.sql ====================
--- FamilyOS :: 0128 Family connections (North Star pillar #9 — Family API)
+-- Bubaly :: 0128 Family connections (North Star pillar #9 — Family API)
 -- ----------------------------------------------------------------------------
 -- The orchestration hub: a durable, family-scoped record of the external
 -- services a family connects (calendars, email, banking, grocery, smart home).
@@ -791,7 +791,7 @@ begin
 end $$;
 
 -- ==================== 0129_family_graph.sql ====================
--- FamilyOS :: 0129 Family Knowledge Graph (the reasoning substrate)
+-- Bubaly :: 0129 Family Knowledge Graph (the reasoning substrate)
 -- ----------------------------------------------------------------------------
 -- The moat: instead of isolated tables, model the household as a graph of typed
 -- ENTITIES (people, activities, places, orgs, items, events, pets…) linked by
@@ -876,7 +876,7 @@ begin
 end $$;
 
 -- ==================== 0130_family_decisions.sql ====================
--- FamilyOS :: 0130 Family Decision Engine
+-- Bubaly :: 0130 Family Decision Engine
 -- ----------------------------------------------------------------------------
 -- Persists family trade-off decisions so they can be revisited + learned from.
 -- A decision ("Which vacation?") holds a set of options, each with the metrics
@@ -960,7 +960,7 @@ begin
 end $$;
 
 -- ==================== 0131_prep_plans.sql ====================
--- FamilyOS :: 0131 Autonomous prep plans
+-- Bubaly :: 0131 Autonomous prep plans
 -- ----------------------------------------------------------------------------
 -- "Prepare, don't notify": a coordinated preparation plan for something on the
 -- horizon (a trip, a birthday, an expiring document, school start), with ordered,
@@ -1031,7 +1031,7 @@ begin
 end $$;
 
 -- ==================== 0132_network_consent.sql ====================
--- FamilyOS :: 0132 Family Intelligence Network — consent (foundation only)
+-- Bubaly :: 0132 Family Intelligence Network — consent (foundation only)
 -- ----------------------------------------------------------------------------
 -- The opt-in privacy foundation for anonymized, aggregate cross-family insights
 -- ("families with kids this age often start passport renewals ~6 months ahead").
@@ -1075,7 +1075,7 @@ begin
 end $$;
 
 -- ==================== 0133_onboarding_events.sql ====================
--- FamilyOS :: 0133 Onboarding telemetry (pre-family funnel)
+-- Bubaly :: 0133 Onboarding telemetry (pre-family funnel)
 -- ----------------------------------------------------------------------------
 -- journey_events is family-scoped, but onboarding happens BEFORE a family exists
 -- (no family_id yet), so it can't be tracked there. This is the anonymous/pre-
@@ -1117,7 +1117,7 @@ create policy onboarding_events_select on public.onboarding_events
   for select using (user_id is not null and user_id = auth.uid());
 
 -- ==================== 0134_model_dirty.sql ====================
--- FamilyOS :: 0134 Model staleness flag (event-driven twin refresh)
+-- Bubaly :: 0134 Model staleness flag (event-driven twin refresh)
 -- ----------------------------------------------------------------------------
 -- Makes the Household Twin graph + Prep Plans refresh EVENT-DRIVEN, not just on a
 -- schedule. When any cross-domain source row changes (members, pets, vehicles,
@@ -1184,7 +1184,7 @@ begin
 end $$;
 
 -- ==================== 0135_network_aggregates.sql ====================
--- FamilyOS :: 0135 Intelligence Network — aggregation storage
+-- Bubaly :: 0135 Intelligence Network — aggregation storage
 -- ----------------------------------------------------------------------------
 -- The cross-family aggregation the design doc (§4) specifies, built on the
 -- consent + k-anonymity foundation from 0132. TWO tables:

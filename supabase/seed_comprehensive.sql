@@ -1,4 +1,4 @@
--- Comprehensive 500+ record seed file for FamilyOS
+-- Comprehensive 500+ record seed file for Bubaly
 -- Creates realistic test data across all major features
 -- Idempotent: safe to run multiple times
 -- RLS-scoped: all data properly family-scoped

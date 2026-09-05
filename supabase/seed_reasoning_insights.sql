@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Reasoning Insights (R2)  [seed:insights]
+-- Bubaly · SEED — Reasoning Insights (R2)  [seed:insights]
 -- Shapes the Knowledge Graph so lib/reasoning/insights.ts::reasoningInsights (and
 -- therefore the graph source now folded into the Calm inbox) produces every kind
 -- of relationship insight at volume:

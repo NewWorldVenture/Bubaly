@@ -1,4 +1,4 @@
--- FamilyOS :: 0142 AI-facilitated group decisions (T6)
+-- Bubaly :: 0142 AI-facilitated group decisions (T6)
 -- ----------------------------------------------------------------------------
 -- Turns Group Voting (family_polls) into AI-facilitated consensus: a poll can
 -- now carry a decision CATEGORY (meal / vacation / shopping / activity), an

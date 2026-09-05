@@ -1,4 +1,4 @@
--- FamilyOS :: 0127 Agent activity (North Star pillar #6 — specialized agents)
+-- Bubaly :: 0127 Agent activity (North Star pillar #6 — specialized agents)
 -- ----------------------------------------------------------------------------
 -- The family sees one assistant; behind it a roster of domain agents (Chief of
 -- Staff, Scheduler, Meal Planner, Budget Coach, …). This table is the persistent

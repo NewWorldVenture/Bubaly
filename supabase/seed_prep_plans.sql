@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Prep Plans (prep_plans 500 + prep_plan_steps ~2000).
+-- Bubaly · SEED — Prep Plans (prep_plans 500 + prep_plan_steps ~2000).
 -- 500 look-ahead plans across kinds/urgencies, each with a few timed steps, so
 -- /dashboard/prep-plans can be tested at volume. Idempotent: clears its own
 -- 'seed-prep-%' signal rows (steps cascade). Where: Supabase → SQL Editor → Run.

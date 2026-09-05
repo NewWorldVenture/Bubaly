@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #4: Outcomes launcher
+-- Bubaly · SEED — Pillar #4: Outcomes launcher
 -- 500 records that light up every outcome badge on /dashboard/outcomes:
 --   200 calendar events (100 today) · 150 overdue to-dos · 150 open grocery
 --   items · plus a member birthday within 2 weeks.

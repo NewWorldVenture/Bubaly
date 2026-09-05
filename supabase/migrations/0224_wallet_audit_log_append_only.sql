@@ -1,4 +1,4 @@
--- FamilyOS :: 0224 - wallet_audit_logs is append-only for clients (A-08 integrity)
+-- Bubaly :: 0224 - wallet_audit_logs is append-only for clients (A-08 integrity)
 --
 -- wallet_audit_logs is the money audit trail (wallet activation, transfers,
 -- approvals, AI-coach calls, invest decisions). It shipped (0088) with the

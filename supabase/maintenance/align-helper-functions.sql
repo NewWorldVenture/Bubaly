@@ -1,4 +1,4 @@
--- FamilyOS :: maintenance — align base helper functions
+-- Bubaly :: maintenance — align base helper functions
 --
 -- NOT a numbered migration (lives outside supabase/migrations so it never affects
 -- migration ordering). Run once against any environment whose base RLS/utility

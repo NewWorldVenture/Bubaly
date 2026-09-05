@@ -1,4 +1,4 @@
--- FamilyOS :: 0223 - chore assignment decision-status guard (A-07 defense-in-depth, sibling of 0222)
+-- Bubaly :: 0223 - chore assignment decision-status guard (A-07 defense-in-depth, sibling of 0222)
 --
 -- chore_assignments shipped (0043) with `is_family_member` FOR ALL write policies,
 -- so a child could `update chore_assignments set status='approved'` directly via

@@ -1,4 +1,4 @@
--- FamilyOS :: 0189 - Reconcile Stripe webhook claim columns
+-- Bubaly :: 0189 - Reconcile Stripe webhook claim columns
 --
 -- Some environments recorded the original 0182 migration while the ALTER TABLE
 -- did not complete. Reapply the additive shape so the webhook code and live

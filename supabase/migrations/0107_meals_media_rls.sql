@@ -1,4 +1,4 @@
--- FamilyOS :: 0107 meals media + RLS repair
+-- Bubaly :: 0107 meals media + RLS repair
 -- ----------------------------------------------------------------------------
 -- 1) Add a photo to planner meals so the Meal Plan grid can show dish images
 --    (family_recipes already has photo_url; meals did not).

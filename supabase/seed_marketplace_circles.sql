@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Community Circles (500 records).
+-- Bubaly · SEED — Community Circles (500 records).
 -- Makes the cross-family marketplace REAL for testing: 4 partner families
 -- (fixed ids, created only if missing), 6 circles (fixed ids + friendly join
 -- codes), 30 circle memberships (your family + all 4 partners in every circle),

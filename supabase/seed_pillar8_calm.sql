@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #8: Design for Calm (calm inbox sources)
+-- Bubaly · SEED — Pillar #8: Design for Calm (calm inbox sources)
 -- The calm inbox has no table of its own — it aggregates other sources. This
 -- seeds 500 reminders due in the next 24h (the "For today" stream). Combine with
 -- the #6 (agent_activity) and #7 (family_operating_index) seeds for the "Needs

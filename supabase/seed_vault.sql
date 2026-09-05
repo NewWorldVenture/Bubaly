@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Family Vault (family_credentials, 500) across all categories.
+-- Bubaly · SEED — Family Vault (family_credentials, 500) across all categories.
 -- Wi-Fi, website logins, app PINs, streaming, memberships, etc. Idempotent via a
 -- '[seed:vault]' notes marker. Secrets are obviously-fake placeholders.
 -- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0119 applied.)

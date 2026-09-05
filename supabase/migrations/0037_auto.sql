@@ -1,4 +1,4 @@
--- FamilyOS :: 0037 auto / vehicles command center
+-- Bubaly :: 0037 auto / vehicles command center
 -- A full vehicle system mirroring Home & Maintenance: vehicles, driver licenses,
 -- registrations, inspection stickers, insurance (full policy + an emergency
 -- quick-glance), rental cars, a service log, and AI logs. Every record carries a

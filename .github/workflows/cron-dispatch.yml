@@ -1,0 +1,64 @@
+name: Cron dispatch
+
+# Drives the app's /api/cron/* routes at their real cadence from GitHub
+# Actions. Vercel's Hobby plan only allows once-per-day cron jobs and FAILS
+# the deployment when vercel.json schedules anything more frequent, so
+# vercel.json now holds daily-safe schedules and this workflow supplies the
+# sub-daily ones (every 5 / 15 minutes, hourly, every 2–6 hours, 2–3×/day).
+# The route → schedule table lives in scripts/cron-dispatch.mjs.
+#
+# Requirements (repository Settings):
+#   - Secret  CRON_SECRET     — the same value as the Vercel env var CRON_SECRET
+#   - Variable CRON_BASE_URL  — optional, defaults to https://www.bubaly.com
+# Without the secret the job logs "skipping" and exits 0.
+#
+# Cost lever: the tick is every 5 minutes (~290 short runs/day). Change it to
+# '*/15 * * * *' to cut Actions minutes by two thirds; the only routes that
+# lose precision are the two five-minute ones (marketing, close-auctions).
+# On Vercel Pro, move the schedules back into vercel.json and disable this.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      route:
+        description: 'Run one route now (e.g. /api/cron/notifications); leave empty to run whatever is due'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cron-dispatch
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    # Never fire from forks or the old repository name.
+    if: github.repository == 'NewWorldVenture/Bubaly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/cron-dispatch.mjs
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Call the routes that are due
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_BASE_URL: ${{ vars.CRON_BASE_URL }}
+          ROUTE: ${{ github.event.inputs.route }}
+        run: |
+          if [ -n "$ROUTE" ]; then
+            node scripts/cron-dispatch.mjs --route "$ROUTE"
+          else
+            node scripts/cron-dispatch.mjs
+          fi

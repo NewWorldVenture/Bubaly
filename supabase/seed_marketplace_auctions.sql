@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace auctions (60 auctions + ~470 bids ≈ 530 rows).
+-- Bubaly · SEED — Marketplace auctions (60 auctions + ~470 bids ≈ 530 rows).
 -- Fills the auction surface so /marketplace/auctions and the item auction panel
 -- can be tested at volume: a spread of live/ending-soon/scheduled auctions with
 -- realistic bid ladders, reserves, and Buy-It-Now, plus bid history per lot.

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Intelligence Network aggregates (network_aggregates).
+-- Bubaly · SEED — Intelligence Network aggregates (network_aggregates).
 -- Synthetic PUBLISH-SAFE aggregates so /dashboard/intelligence can be tested when
 -- a family opts in. Every row has cohort_size >= 20 (the k-anonymity floor), so it
 -- mirrors exactly what the real cron would publish. The set is the FULL deterministic

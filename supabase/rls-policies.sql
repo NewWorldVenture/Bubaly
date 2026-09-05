@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS: Comprehensive RLS policies for all tables
+-- Bubaly: Comprehensive RLS policies for all tables
 -- Run this in the Supabase SQL Editor to fix all permission errors.
 -- Safe to re-run — uses DROP IF EXISTS before each CREATE.
 -- ============================================================

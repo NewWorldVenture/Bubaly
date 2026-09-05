@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (500 rows each) for family features that
+-- Bubaly · SEED — feature-gap coverage (500 rows each) for family features that
 -- had NO seed and therefore rendered empty at test time:
 --   Rides · Renewals · Immunizations · Health Visits · Family Dates ·
 --   Screen-time entries · Wallet goals · Reminder lists.

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Decision Engine (family_decisions 500 + decision_options ~1500).
+-- Bubaly · SEED — Decision Engine (family_decisions 500 + decision_options ~1500).
 -- 500 trade-off decisions, each with 3 options carrying real metrics so the engine
 -- can score them. Idempotent: clears its own '[seed:dec]' rows (detail marker);
 -- options cascade from decisions. Where: Supabase → SQL Editor → paste → Run.

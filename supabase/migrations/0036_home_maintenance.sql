@@ -1,4 +1,4 @@
--- FamilyOS :: 0036 home & maintenance command center
+-- Bubaly :: 0036 home & maintenance command center
 -- Turns "Home & Maintenance" into a full homeowner system: properties, enriched
 -- assets, first-class warranty management, a maintenance + AI-forecast loop,
 -- service history, and saved contractors ("find a pro"). Builds on the existing
@@ -6,7 +6,7 @@
 -- (0007); nothing here breaks those.
 --
 -- Every table is family-scoped via public.is_family_member(family_id) — the same
--- hard isolation boundary used across FamilyOS. updated_at is auto-maintained.
+-- hard isolation boundary used across Bubaly. updated_at is auto-maintained.
 
 -- ----------------------------------------------------------------------------
 -- Properties

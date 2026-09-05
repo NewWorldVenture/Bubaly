@@ -1,6 +1,6 @@
 # Marketing Platform — Coordination & Production-Readiness Handoff
 
-**Purpose:** a single authoritative coordination file for the FamilyOS (Bubaly)
+**Purpose:** a single authoritative coordination file for the Bubaly (Bubaly)
 **marketing platform**, so the Codex bot building the marketing *engine* and the
 supporting Claude agent can work **non-overlappingly**. Deliberately separate from
 `docs/agents/**` (which carries a broad, contested claim) — editing this file does

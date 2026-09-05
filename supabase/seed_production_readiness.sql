@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS | SEED | Production-readiness dataset (600 realistic records)
+-- Bubaly | SEED | Production-readiness dataset (600 realistic records)
 --
 -- Purpose: exercise the independence ladder with enough persisted data to
 -- validate filtering, aggregation, pagination, empty/loading/error recovery,

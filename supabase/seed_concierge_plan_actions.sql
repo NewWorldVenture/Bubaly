@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Concierge plan actions (500 records).
+-- Bubaly · SEED — Concierge plan actions (500 records).
 -- Fills concierge_plan_actions so the deeper write-back audit renders at volume:
 -- 500 materializations (calendar / reminder / task) across the family's concierge
 -- plans, one per (plan, kind). Requires the concierge plans seeded first

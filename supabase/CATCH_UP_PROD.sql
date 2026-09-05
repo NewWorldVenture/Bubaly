@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · CATCH_UP_PROD.sql — idempotent full-schema catch-up (0001..0159).
+-- Bubaly · CATCH_UP_PROD.sql — idempotent full-schema catch-up (0001..0159).
 -- Reconciles a prod DB behind the repo migrations. SAFE on ANY state: creates
 -- what's missing, skips what exists. Run FIRST, then SEED_ALL.sql.
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -21,7 +21,7 @@ drop function if exists public.is_family_admin(uuid) cascade;
 
 
 -- ══════════ 0001_extensions_enums.sql ══════════
--- FamilyOS :: 0001 extensions + enums
+-- Bubaly :: 0001 extensions + enums
 -- Supabase ships pgcrypto/uuid; gen_random_uuid() is available by default.
 
 create extension if not exists "pgcrypto";
@@ -83,7 +83,7 @@ exception when duplicate_object then null; end $$;
 
 
 -- ══════════ 0002_tables.sql ══════════
--- FamilyOS :: 0002 tables
+-- Bubaly :: 0002 tables
 -- Convention: every household-scoped table carries family_id (uuid) for RLS isolation,
 -- created_by (uuid -> auth.users), and created_at/updated_at timestamptz.
 
@@ -586,7 +586,7 @@ create table if not exists public.user_preferences (
 
 
 -- ══════════ 0003_functions_triggers.sql ══════════
--- FamilyOS :: 0003 functions + triggers
+-- Bubaly :: 0003 functions + triggers
 
 -- ----- RLS helper functions (SECURITY DEFINER bypasses RLS to avoid recursion) -----
 
@@ -690,7 +690,7 @@ end $$;
 
 
 -- ══════════ 0004_rls.sql ══════════
--- FamilyOS :: 0004 row level security
+-- Bubaly :: 0004 row level security
 -- Hard guarantee: no row crosses a family boundary. Every household table is gated
 -- by is_family_member(family_id). Reference tables are read-only to authenticated users.
 
@@ -870,7 +870,7 @@ create policy prefs_all on public.user_preferences for all
 
 
 -- ══════════ 0005_rpcs.sql ══════════
--- FamilyOS :: 0005 RPCs (callable from client via supabase.rpc)
+-- Bubaly :: 0005 RPCs (callable from client via supabase.rpc)
 
 -- Accept an invite by token: joins the caller to the family with the invited role.
 -- SECURITY DEFINER because the new member is not yet a manager of the family.
@@ -1500,7 +1500,7 @@ CREATE TABLE IF NOT EXISTS public.blog_posts (
   slug            text NOT NULL UNIQUE,
   title           text NOT NULL,
   excerpt         text NOT NULL DEFAULT '',
-  author          text NOT NULL DEFAULT 'The FamilyOS Team',
+  author          text NOT NULL DEFAULT 'The Bubaly Team',
   published_at    date NOT NULL DEFAULT current_date,
   reading_minutes integer NOT NULL DEFAULT 5,
   tags            text[] NOT NULL DEFAULT '{}',
@@ -1543,7 +1543,7 @@ VALUES
     'From school emails to soccer practice, see how AI can help your family stay organized, stress-free, and always one step ahead.',
     'Jessica Miller', '2024-05-12', 6, ARRAY['ai','product'], 'AI & Technology', true, '#7c5dff',
     $json$[
-      {"type":"p","text":"Chatbots answer questions. A chief of staff gets things done. That distinction is the whole idea behind the FamilyOS assistant."},
+      {"type":"p","text":"Chatbots answer questions. A chief of staff gets things done. That distinction is the whole idea behind the Bubaly assistant."},
       {"type":"h2","text":"From words to records"},
       {"type":"p","text":"Ask it to add soccer every Tuesday and it creates the recurring event. Ask it to plan dinners and build a grocery list, and it writes real rows into your family's database."}
     ]$json$::jsonb
@@ -1552,56 +1552,56 @@ VALUES
     'sync-family-schedule',
     'How to Sync Your Family''s Schedule (Without the Chaos)',
     'A practical guide to keeping everyone on the same page — from soccer practice to dentist appointments.',
-    'The FamilyOS Team', '2024-05-10', 5, ARRAY['organization'], 'Organization', false, '#3b82f6',
+    'The Bubaly Team', '2024-05-10', 5, ARRAY['organization'], 'Organization', false, '#3b82f6',
     $json$[{"type":"p","text":"Every household runs on a hidden layer of coordination. Here's how to make it visible and shared."}]$json$::jsonb
   ),
   (
     'last-day-school-checklist',
     'Last-Day-of-School Checklist: Don''t Miss a Thing',
     'Return the library books, pick up art projects, say goodbye to teachers — a complete end-of-year checklist.',
-    'The FamilyOS Team', '2024-05-09', 4, ARRAY['school'], 'School & Activities', false, '#10b981',
+    'The Bubaly Team', '2024-05-09', 4, ARRAY['school'], 'School & Activities', false, '#10b981',
     $json$[{"type":"p","text":"The last week of school is a whirlwind. Here's how to get through it without forgetting anything."}]$json$::jsonb
   ),
   (
     'healthy-family-habits',
     'Healthy Family Habits That Stick (Even on Busy Weeks)',
     'Small rituals that make a big difference — and how to actually maintain them when life gets hectic.',
-    'The FamilyOS Team', '2024-05-07', 6, ARRAY['wellness'], 'Wellness', false, '#f59e0b',
+    'The Bubaly Team', '2024-05-07', 6, ARRAY['wellness'], 'Wellness', false, '#f59e0b',
     $json$[{"type":"p","text":"The habits that stick are the ones that require the least willpower."}]$json$::jsonb
   ),
   (
     'family-budget-basics',
     'Budgeting as a Family: 5 Simple Steps to Get Started',
     'Money conversations don''t have to be stressful. Here''s a framework that actually works for busy families.',
-    'The FamilyOS Team', '2024-05-04', 5, ARRAY['finances'], 'Family Finances', false, '#ec4899',
+    'The Bubaly Team', '2024-05-04', 5, ARRAY['finances'], 'Family Finances', false, '#ec4899',
     $json$[{"type":"p","text":"Starting a family budget feels overwhelming. Break it into five simple steps."}]$json$::jsonb
   ),
   (
     'ai-family-life',
     '5 Ways AI Can Make Family Life So Much Easier',
     'From meal planning to homework help, AI is quietly transforming how modern families operate.',
-    'The FamilyOS Team', '2024-05-02', 6, ARRAY['ai'], 'AI & Technology', false, '#7c5dff',
+    'The Bubaly Team', '2024-05-02', 6, ARRAY['ai'], 'AI & Technology', false, '#7c5dff',
     $json$[{"type":"p","text":"AI isn't just for tech companies. Here are five practical ways it's changing family life."}]$json$::jsonb
   ),
   (
     'quality-time',
     'How to Create More Quality Time (Without More Time)',
     'The secret isn''t finding more hours. It''s making the hours you have count.',
-    'The FamilyOS Team', '2024-04-30', 6, ARRAY['parenting','wellness'], 'Parenting', false, '#f97316',
+    'The Bubaly Team', '2024-04-30', 6, ARRAY['parenting','wellness'], 'Parenting', false, '#f97316',
     $json$[{"type":"p","text":"Most parents already know how precious time with their kids is. The challenge is protecting it."}]$json$::jsonb
   ),
   (
     'taming-the-family-mental-load',
     'Taming the family mental load',
     'The invisible work of running a household is real. Here''s how to share it.',
-    'The FamilyOS Team', '2026-05-02', 4, ARRAY['organization','parenting'], 'Parenting', false, NULL,
+    'The Bubaly Team', '2026-05-02', 4, ARRAY['organization','parenting'], 'Parenting', false, NULL,
     $json$[{"type":"p","text":"Every household runs on a hidden layer of coordination."}]$json$::jsonb
   ),
   (
     'meal-planning-that-actually-sticks',
     'Meal planning that actually sticks',
     'A simple weekly rhythm — and how to make the grocery list build itself.',
-    'The FamilyOS Team', '2026-05-18', 3, ARRAY['meals','routines'], 'Organization', false, NULL,
+    'The Bubaly Team', '2026-05-18', 3, ARRAY['meals','routines'], 'Organization', false, NULL,
     $json$[{"type":"p","text":"Most meal-planning systems fail because they're too much work."}]$json$::jsonb
   )
 ON CONFLICT (slug) DO NOTHING;
@@ -1890,7 +1890,7 @@ ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 -- service-role client in the super-admin-gated admin console (which bypasses
 -- RLS). This keeps marketing data fully admin-only.
 --
--- "Customers" in FamilyOS are existing families/subscriptions/contacts — those
+-- "Customers" in Bubaly are existing families/subscriptions/contacts — those
 -- are NOT duplicated here; the marketing customer view is derived at read time
 -- from the existing tables. These tables store marketing-specific objects only.
 -- ============================================================
@@ -2096,7 +2096,7 @@ ALTER TABLE public.marketing_audit_logs      ENABLE ROW LEVEL SECURITY;
 -- ══════════ 0014_core_platform.sql ══════════
 -- ============================================================
 -- 0014_core_platform.sql
--- FamilyOS Core Platform: Messenger · Photos · Contacts ·
+-- Bubaly Core Platform: Messenger · Photos · Contacts ·
 --   Reminders · Recipes · Shopping Lists
 -- ============================================================
 
@@ -2453,7 +2453,7 @@ alter table public.family_conversations
 
 
 -- ══════════ 0018_sync_platform.sql ══════════
--- FamilyOS :: 0018 sync platform
+-- Bubaly :: 0018 sync platform
 -- Two-way sync hub for calendars, reminders, and notes across Google, Microsoft/
 -- Outlook, Apple (CalDAV/ICS), and Amazon/Alexa (ICS feed). This migration creates
 -- the full persistence layer: providers, accounts, connections, encrypted tokens,
@@ -3205,7 +3205,7 @@ on conflict (provider) do update set
 
 
 -- ══════════ 0019_sync_connections_unique.sql ══════════
--- FamilyOS :: 0019 sync_connections one-per-account
+-- Bubaly :: 0019 sync_connections one-per-account
 -- connectAccount() upserts a single connection row per provider account, so the
 -- account_id needs a unique constraint to back the ON CONFLICT target.
 
@@ -4388,7 +4388,7 @@ CREATE POLICY "Members can manage renewals" ON public.renewals
 
 
 -- ══════════ 0034_social_command_center.sql ══════════
--- FamilyOS :: 0034 social media command center
+-- Bubaly :: 0034 social media command center
 -- Persistence for the Social Media Command Center: connected accounts + encrypted
 -- tokens, the unified feed, drafts/variants/targets, media library, scheduling,
 -- the publish job/result pipeline, comments/messages (inbox), analytics snapshots,
@@ -4397,7 +4397,7 @@ CREATE POLICY "Members can manage renewals" ON public.renewals
 --
 -- Security model:
 --   * Every household table is family-scoped via public.is_family_member(family_id)
---     — the same hard isolation boundary used everywhere else in FamilyOS. No row
+--     — the same hard isolation boundary used everywhere else in Bubaly. No row
 --     ever crosses a family.
 --   * social_account_tokens stores ONLY ciphertext (encrypt with lib/social/crypto
 --     / the existing SYNC_TOKEN_KEY AES-256-GCM helper). RLS leaves it with NO
@@ -5192,7 +5192,7 @@ on conflict (platform) do update set
 
 
 -- ══════════ 0035_push_devices.sql ══════════
--- FamilyOS :: 0035 push devices
+-- Bubaly :: 0035 push devices
 -- Stores per-user push registrations so the notification engine can deliver
 -- pushes to the installed PWA (Web Push / VAPID) and the native iOS/iPadOS and
 -- Android apps (Capacitor → APNs/FCM tokens). One row per physical device.
@@ -5256,7 +5256,7 @@ create policy push_devices_delete on public.push_devices for delete
 
 
 -- ══════════ 0036_home_maintenance.sql ══════════
--- FamilyOS :: 0036 home & maintenance command center
+-- Bubaly :: 0036 home & maintenance command center
 -- Turns "Home & Maintenance" into a full homeowner system: properties, enriched
 -- assets, first-class warranty management, a maintenance + AI-forecast loop,
 -- service history, and saved contractors ("find a pro"). Builds on the existing
@@ -5264,7 +5264,7 @@ create policy push_devices_delete on public.push_devices for delete
 -- (0007); nothing here breaks those.
 --
 -- Every table is family-scoped via public.is_family_member(family_id) — the same
--- hard isolation boundary used across FamilyOS. updated_at is auto-maintained.
+-- hard isolation boundary used across Bubaly. updated_at is auto-maintained.
 
 -- ----------------------------------------------------------------------------
 -- Properties
@@ -5445,7 +5445,7 @@ end $$;
 
 
 -- ══════════ 0037_auto.sql ══════════
--- FamilyOS :: 0037 auto / vehicles command center
+-- Bubaly :: 0037 auto / vehicles command center
 -- A full vehicle system mirroring Home & Maintenance: vehicles, driver licenses,
 -- registrations, inspection stickers, insurance (full policy + an emergency
 -- quick-glance), rental cars, a service log, and AI logs. Every record carries a
@@ -11591,7 +11591,7 @@ CREATE POLICY "Members can manage family_food_scores" ON public.family_food_scor
 
 
 -- ══════════ 0103_enum_backfill.sql ══════════
--- FamilyOS :: 0103 — backfill enum values that drifted on long-lived databases.
+-- Bubaly :: 0103 — backfill enum values that drifted on long-lived databases.
 --
 -- Root cause: 0001 defines each enum with `create type … exception when
 -- duplicate_object then null`. On a database that already had an OLDER version
@@ -11658,7 +11658,7 @@ alter type public.transaction_type add value if not exists 'transfer';
 
 
 -- ══════════ 0104_dining_out.sql ══════════
--- FamilyOS :: 0104 — Dining Out
+-- Bubaly :: 0104 — Dining Out
 -- Backs the "Dining Out" surface of the Food & Nutrition hub: saved restaurants
 -- the family wants to try / loves, plus a log of recent dining-out visits.
 -- Follows the food-OS conventions (0102): is_family_member RLS + set_updated_at.
@@ -11707,7 +11707,7 @@ create policy "Members can manage dining_out" on public.dining_out
 
 
 -- ══════════ 0105_calendar_events_rls_repair.sql ══════════
--- FamilyOS :: 0105 calendar_events RLS repair
+-- Bubaly :: 0105 calendar_events RLS repair
 -- ----------------------------------------------------------------------------
 -- Production drift fix: some environments ended up with RLS enabled on
 -- public.calendar_events but WITHOUT the standard family-scoped SELECT policy
@@ -11744,7 +11744,7 @@ create policy calendar_events_delete on public.calendar_events
 
 
 -- ══════════ 0105_child_logins.sql ══════════
--- FamilyOS :: 0105 — Child logins (no email required)
+-- Bubaly :: 0105 — Child logins (no email required)
 --
 -- Lets a parent give a child (who has no email) a real account they can sign
 -- into with a simple username + 4-digit PIN. The child gets a Supabase Auth user
@@ -11803,7 +11803,7 @@ create policy "Managers manage child_logins" on public.child_logins
 
 
 -- ══════════ 0106_todo_rls_repair.sql ══════════
--- FamilyOS :: 0106 todo_lists / todo_items RLS repair
+-- Bubaly :: 0106 todo_lists / todo_items RLS repair
 -- ----------------------------------------------------------------------------
 -- Same production-drift safeguard as 0105 (calendar_events): re-assert the
 -- canonical family-scoped policies for the Tasks page's tables so authenticated
@@ -11832,7 +11832,7 @@ end $$;
 
 
 -- ══════════ 0107_meals_media_rls.sql ══════════
--- FamilyOS :: 0107 meals media + RLS repair
+-- Bubaly :: 0107 meals media + RLS repair
 -- ----------------------------------------------------------------------------
 -- 1) Add a photo to planner meals so the Meal Plan grid can show dish images
 --    (family_recipes already has photo_url; meals did not).
@@ -11870,7 +11870,7 @@ end $$;
 
 
 -- ══════════ 0108_album_highlight_kind.sql ══════════
--- FamilyOS :: 0108 family_albums 'highlight' kind + RLS safeguard
+-- Bubaly :: 0108 family_albums 'highlight' kind + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The redesigned Memories page distinguishes "Recent Highlights" (curated,
 -- front-and-center albums) from ordinary "Albums". Highlights are stored as
@@ -11970,7 +11970,7 @@ create index if not exists idx_family_messages_family_active
 
 
 -- ══════════ 0109_documents_favorite.sql ══════════
--- FamilyOS :: 0109 documents.is_favorite + Files indexes + RLS safeguard
+-- Bubaly :: 0109 documents.is_favorite + Files indexes + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The redesigned Files page (/dashboard/documents) adds a per-file favorite
 -- ("star") toggle and richer sorting/filtering. This migration:
@@ -12015,7 +12015,7 @@ create policy documents_delete on public.documents
 
 
 -- ══════════ 0109_finance_rls_repair.sql ══════════
--- FamilyOS :: 0109 finance RLS repair
+-- Bubaly :: 0109 finance RLS repair
 -- ----------------------------------------------------------------------------
 -- Same production-drift safeguard as 0105/0106/0107 for the Finances page's
 -- tables: re-assert the canonical family-scoped policies so authenticated
@@ -12042,7 +12042,7 @@ end $$;
 
 
 -- ══════════ 0109_user_preferences_rls_repair.sql ══════════
--- FamilyOS :: 0109 user_preferences RLS repair
+-- Bubaly :: 0109 user_preferences RLS repair
 -- ----------------------------------------------------------------------------
 -- Production-drift safeguard (same class as 0105/0106/0107). The canonical
 -- policy from 0004 (`prefs_all` FOR ALL, own-row) drifted in production, leaving
@@ -12082,7 +12082,7 @@ create policy user_preferences_delete on public.user_preferences
 
 
 -- ══════════ 0110_family_profile.sql ══════════
--- FamilyOS :: 0110 family profile fields + member contact fields + RLS safeguard
+-- Bubaly :: 0110 family profile fields + member contact fields + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The new Family hub page (/dashboard/family) shows a richer family profile
 -- (cover photo, mailing address, a shareable family code) and per-member
@@ -12165,7 +12165,7 @@ create policy fm_delete on public.family_members for delete using (public.can_ma
 
 
 -- ══════════ 0110_transactions_member.sql ══════════
--- FamilyOS :: 0110 transactions.member_id
+-- Bubaly :: 0110 transactions.member_id
 -- ----------------------------------------------------------------------------
 -- Adds a nullable per-member attribution to transactions so the Finances
 -- dashboard's "Spending by Person" card can group real spend by family member.
@@ -12236,7 +12236,7 @@ end $$;
 
 
 -- ══════════ 0113_wallet_hub.sql ══════════
--- FamilyOS :: 0113 Wallet Hub ("My Wallet")
+-- Bubaly :: 0113 Wallet Hub ("My Wallet")
 -- ----------------------------------------------------------------------------
 -- Powers the /wallet "My Wallet" hub: one place for the family's money, cards,
 -- passes/memberships and rewards. Reuses the existing finance domain for
@@ -12357,7 +12357,7 @@ end $$;
 
 
 -- ══════════ 0114_family_safety.sql ══════════
--- FamilyOS :: 0114 Family safety & play dates
+-- Bubaly :: 0114 Family safety & play dates
 -- ----------------------------------------------------------------------------
 -- Backs the new expandable "Family" nav group:
 --   • safety_check_ins — lightweight "I'm safe / on my way / need help" posts
@@ -12456,7 +12456,7 @@ end $$;
 
 
 -- ══════════ 0115_meals_hub.sql ══════════
--- FamilyOS :: 0115 Meals hub extras (Family Favorites + Nutrition Tracker)
+-- Bubaly :: 0115 Meals hub extras (Family Favorites + Nutrition Tracker)
 -- ----------------------------------------------------------------------------
 -- Backs two new pages under the expandable "Meals" nav group:
 --   • family_favorites — the family's favorite recipes / restaurants / meals
@@ -12530,7 +12530,7 @@ end $$;
 
 
 -- ══════════ 0116_bills_autopay.sql ══════════
--- FamilyOS :: 0116 bills.autopay
+-- Bubaly :: 0116 bills.autopay
 -- ----------------------------------------------------------------------------
 -- Adds an autopay flag to bills so the new Finances "Auto Pay" page can list and
 -- toggle which bills are set to pay automatically. Additive + idempotent; the
@@ -12796,7 +12796,7 @@ end $$;
 
 
 -- ══════════ 0119_family_credentials.sql ══════════
--- FamilyOS :: 0119 family_credentials (Wi-Fi & Passwords vault)
+-- Bubaly :: 0119 family_credentials (Wi-Fi & Passwords vault)
 -- ----------------------------------------------------------------------------
 -- Backs the Family hub's "Wi-Fi & Passwords" card with a real store: shared
 -- family credentials (Wi-Fi networks, streaming/website/app logins, door PINs,
@@ -12858,7 +12858,7 @@ create policy family_credentials_delete on public.family_credentials
 
 
 -- ══════════ 0120_marketplace.sql ══════════
--- FamilyOS :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
+-- Bubaly :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
 -- ----------------------------------------------------------------------------
 -- A family-scoped marketplace / lending board: post items to sell, rent out,
 -- lend ("borrow"), give away free, or request ("wanted"). Other members express
@@ -12950,7 +12950,7 @@ end $$;
 
 
 -- ══════════ 0121_voice_commands.sql ══════════
--- FamilyOS :: 0121 Voice commands ("Full conversational interface")
+-- Bubaly :: 0121 Voice commands ("Full conversational interface")
 -- ----------------------------------------------------------------------------
 -- Backs the Voice Control command center (/dashboard/voice): a family-scoped log
 -- of every spoken command, how it was routed (task/note/event/shopping), what it
@@ -12997,7 +12997,7 @@ end $$;
 
 
 -- ══════════ 0122_routine_templates.sql ══════════
--- FamilyOS :: 0122 recurring-routine templates
+-- Bubaly :: 0122 recurring-routine templates
 -- ----------------------------------------------------------------------------
 -- A "routine" is a reusable bundle of related calendar events that repeats on a
 -- set of weekdays — e.g. "School Morning" = wake 7:00 → breakfast 7:30 →
@@ -13069,7 +13069,7 @@ end $$;
 
 
 -- ══════════ 0123_family_facts.sql ══════════
--- FamilyOS :: 0123 Family facts ("Build a persistent family knowledge graph")
+-- Bubaly :: 0123 Family facts ("Build a persistent family knowledge graph")
 -- ----------------------------------------------------------------------------
 -- The persistent store behind Family Memory: durable facts the family looks up
 -- again and again — sizes, allergies, preferences, key contacts, account
@@ -13122,7 +13122,7 @@ end $$;
 
 
 -- ══════════ 0124_journey_events.sql ══════════
--- FamilyOS :: 0124 Journey events (Experience Scorecard instrumentation)
+-- Bubaly :: 0124 Journey events (Experience Scorecard instrumentation)
 -- ----------------------------------------------------------------------------
 -- Lightweight product telemetry so the Experience Scorecard uses REAL medians
 -- instead of design-time estimates. Each row is one phase of a user journey
@@ -13163,7 +13163,7 @@ end $$;
 
 
 -- ══════════ 0125_family_operating_index.sql ══════════
--- FamilyOS :: 0125 Family Operating Index (the measurable core of the Operating Layer)
+-- Bubaly :: 0125 Family Operating Index (the measurable core of the Operating Layer)
 -- ----------------------------------------------------------------------------
 -- The Operating Layer's north-star metric is "how well is this household
 -- functioning" measured over time. This table stores one append-only SNAPSHOT
@@ -13229,7 +13229,7 @@ end $$;
 
 
 -- ══════════ 0126_family_playbook.sql ══════════
--- FamilyOS :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
+-- Bubaly :: 0126 Family Playbook ("Family Intelligence Layer / Playbook")
 -- ----------------------------------------------------------------------------
 -- North-star pillar #3: every interaction improves understanding. Bubaly learns
 -- durable preferences/traditions from real household usage (favorite meals,
@@ -13292,7 +13292,7 @@ end $$;
 
 
 -- ══════════ 0127_agent_activity.sql ══════════
--- FamilyOS :: 0127 Agent activity (North Star pillar #6 — specialized agents)
+-- Bubaly :: 0127 Agent activity (North Star pillar #6 — specialized agents)
 -- ----------------------------------------------------------------------------
 -- The family sees one assistant; behind it a roster of domain agents (Chief of
 -- Staff, Scheduler, Meal Planner, Budget Coach, …). This table is the persistent
@@ -13347,7 +13347,7 @@ end $$;
 
 
 -- ══════════ 0128_family_connections.sql ══════════
--- FamilyOS :: 0128 Family connections (North Star pillar #9 — Family API)
+-- Bubaly :: 0128 Family connections (North Star pillar #9 — Family API)
 -- ----------------------------------------------------------------------------
 -- The orchestration hub: a durable, family-scoped record of the external
 -- services a family connects (calendars, email, banking, grocery, smart home).
@@ -13405,7 +13405,7 @@ end $$;
 
 
 -- ══════════ 0129_family_graph.sql ══════════
--- FamilyOS :: 0129 Family Knowledge Graph (the reasoning substrate)
+-- Bubaly :: 0129 Family Knowledge Graph (the reasoning substrate)
 -- ----------------------------------------------------------------------------
 -- The moat: instead of isolated tables, model the household as a graph of typed
 -- ENTITIES (people, activities, places, orgs, items, events, pets…) linked by
@@ -13500,7 +13500,7 @@ end $$;
 
 
 -- ══════════ 0130_family_decisions.sql ══════════
--- FamilyOS :: 0130 Family Decision Engine
+-- Bubaly :: 0130 Family Decision Engine
 -- ----------------------------------------------------------------------------
 -- Persists family trade-off decisions so they can be revisited + learned from.
 -- A decision ("Which vacation?") holds a set of options, each with the metrics
@@ -13588,7 +13588,7 @@ end $$;
 
 
 -- ══════════ 0131_prep_plans.sql ══════════
--- FamilyOS :: 0131 Autonomous prep plans
+-- Bubaly :: 0131 Autonomous prep plans
 -- ----------------------------------------------------------------------------
 -- "Prepare, don't notify": a coordinated preparation plan for something on the
 -- horizon (a trip, a birthday, an expiring document, school start), with ordered,
@@ -13663,7 +13663,7 @@ end $$;
 
 
 -- ══════════ 0132_network_consent.sql ══════════
--- FamilyOS :: 0132 Family Intelligence Network — consent (foundation only)
+-- Bubaly :: 0132 Family Intelligence Network — consent (foundation only)
 -- ----------------------------------------------------------------------------
 -- The opt-in privacy foundation for anonymized, aggregate cross-family insights
 -- ("families with kids this age often start passport renewals ~6 months ahead").
@@ -13710,7 +13710,7 @@ end $$;
 
 
 -- ══════════ 0133_onboarding_events.sql ══════════
--- FamilyOS :: 0133 Onboarding telemetry (pre-family funnel)
+-- Bubaly :: 0133 Onboarding telemetry (pre-family funnel)
 -- ----------------------------------------------------------------------------
 -- journey_events is family-scoped, but onboarding happens BEFORE a family exists
 -- (no family_id yet), so it can't be tracked there. This is the anonymous/pre-
@@ -13756,7 +13756,7 @@ create policy onboarding_events_select on public.onboarding_events
 
 
 -- ══════════ 0134_model_dirty.sql ══════════
--- FamilyOS :: 0134 Model staleness flag (event-driven twin refresh)
+-- Bubaly :: 0134 Model staleness flag (event-driven twin refresh)
 -- ----------------------------------------------------------------------------
 -- Makes the Household Twin graph + Prep Plans refresh EVENT-DRIVEN, not just on a
 -- schedule. When any cross-domain source row changes (members, pets, vehicles,
@@ -13826,7 +13826,7 @@ end $$;
 
 
 -- ══════════ 0135_network_aggregates.sql ══════════
--- FamilyOS :: 0135 Intelligence Network — aggregation storage
+-- Bubaly :: 0135 Intelligence Network — aggregation storage
 -- ----------------------------------------------------------------------------
 -- The cross-family aggregation the design doc (§4) specifies, built on the
 -- consent + k-anonymity foundation from 0132. TWO tables:
@@ -13901,7 +13901,7 @@ create policy network_aggregates_select on public.network_aggregates
 
 
 -- ══════════ 0136_accept_invite_idempotent.sql ══════════
--- FamilyOS :: 0136 accept_invite made idempotent
+-- Bubaly :: 0136 accept_invite made idempotent
 -- ----------------------------------------------------------------------------
 -- Found in a real browser smoke test of the invite journey: accepting an invite
 -- twice — a double-click, React strict-mode double-effect, or simply revisiting
@@ -14382,7 +14382,7 @@ CREATE INDEX IF NOT EXISTS guardian_audit_log_family ON public.guardian_audit_lo
 
 
 -- ══════════ 0137_child_login_throttle.sql ══════════
--- FamilyOS :: 0137 — Child login throttle (brute-force protection)
+-- Bubaly :: 0137 — Child login throttle (brute-force protection)
 --
 -- A child signs in with a guessable username + a 4-digit PIN (only 10,000
 -- combinations). Without a durable, cross-instance limiter, a serverless
@@ -14420,7 +14420,7 @@ alter table public.child_login_throttle enable row level security;
 
 
 -- ══════════ 0138_onboarding_imports.sql ══════════
--- FamilyOS :: 0138 Onboarding calendar imports — the "value-first" first-run record
+-- Bubaly :: 0138 Onboarding calendar imports — the "value-first" first-run record
 -- ----------------------------------------------------------------------------
 -- T1 (TIME-TO-FIRST-VALUE): the value step imports the family's existing calendar
 -- (paste .ics or a sample week), computes an instant "first brief" (today's
@@ -14470,7 +14470,7 @@ create policy onboarding_imports_delete on public.onboarding_imports
 
 
 -- ══════════ 0139_meal_ideas.sql ══════════
--- FamilyOS :: 0139 Meal ideas — curated dinner catalog for the first-run briefing
+-- Bubaly :: 0139 Meal ideas — curated dinner catalog for the first-run briefing
 -- ----------------------------------------------------------------------------
 -- T2 (first-run instant briefing): a brand-new family has no recipes of its own,
 -- so the "3 dinner ideas" in the onboarding brief can't come from the meal planner
@@ -14508,7 +14508,7 @@ create policy meal_ideas_select on public.meal_ideas
 
 
 -- ══════════ 0140_home_briefs.sql ══════════
--- FamilyOS :: 0140 Home briefs — "outcome, never empty" daily home snapshot
+-- Bubaly :: 0140 Home briefs — "outcome, never empty" daily home snapshot
 -- ----------------------------------------------------------------------------
 -- T3 (TIME-TO-FIRST-VALUE): a brand-new or quiet family should land on an OUTCOME,
 -- not empty widgets. The AI home now computes a first-run outcome brief — how ready
@@ -14566,7 +14566,7 @@ create policy home_briefs_update on public.home_briefs
 
 
 -- ══════════ 0141_daily_insights.sql ══════════
--- FamilyOS :: 0141 Daily insights — the one proactive "insight of the day" (T4)
+-- Bubaly :: 0141 Daily insights — the one proactive "insight of the day" (T4)
 -- ----------------------------------------------------------------------------
 -- T4 (TIME-TO-FIRST-VALUE): instead of many small reminders, the home surfaces ONE
 -- ranked, proactive insight above the fold ("leave 20 min earlier", "2 assignments
@@ -14623,7 +14623,7 @@ create policy daily_insights_update on public.daily_insights
 
 
 -- ══════════ 0142_family_signals.sql ══════════
--- FamilyOS :: 0142 Family signals — the "hard signal" family-intelligence store (R10)
+-- Bubaly :: 0142 Family signals — the "hard signal" family-intelligence store (R10)
 -- ----------------------------------------------------------------------------
 -- R10 (MOATS / Family Intelligence): the harder-to-copy behavioral signals the
 -- strategy calls out — which reminders keep getting ignored, when the family is
@@ -14690,7 +14690,7 @@ create policy family_signals_delete on public.family_signals
 
 
 -- ══════════ 0142_poll_facilitation.sql ══════════
--- FamilyOS :: 0142 AI-facilitated group decisions (T6)
+-- Bubaly :: 0142 AI-facilitated group decisions (T6)
 -- ----------------------------------------------------------------------------
 -- Turns Group Voting (family_polls) into AI-facilitated consensus: a poll can
 -- now carry a decision CATEGORY (meal / vacation / shopping / activity), an
@@ -14736,7 +14736,7 @@ alter table public.family_poll_options
 
 
 -- ══════════ 0143_ai_feedback.sql ══════════
--- FamilyOS :: 0143 AI feedback — the "Why this?" learning loop (T7)
+-- Bubaly :: 0143 AI feedback — the "Why this?" learning loop (T7)
 -- ----------------------------------------------------------------------------
 -- The "Why this?" affordance shows a recommendation's reason + inputs and lets
 -- the family respond: Helpful / Not helpful, dismiss, undo, or adjust. Those
@@ -14781,7 +14781,7 @@ end $$;
 
 
 -- ══════════ 0144_experience_audits.sql ══════════
--- FamilyOS :: 0144 Experience Scorecard — measurable premium-consistency (T8)
+-- Bubaly :: 0144 Experience Scorecard — measurable premium-consistency (T8)
 -- ----------------------------------------------------------------------------
 -- The premium-consistency sweep is only real if it's measured. This persists a
 -- dated audit per surface (a module or a journey) across the six dimensions that
@@ -14840,7 +14840,7 @@ end $$;
 
 
 -- ══════════ 0145_life_event_plans.sql ══════════
--- FamilyOS :: 0145 Life-event playbooks (T9)
+-- Bubaly :: 0145 Life-event playbooks (T9)
 -- ----------------------------------------------------------------------------
 -- A one-tap "Start" on a life-event template (New Baby, Moving, School Start,
 -- Vacation, New Pet, New Job) materializes a real, dated plan: a family_scoped
@@ -14912,7 +14912,7 @@ end $$;
 
 
 -- ══════════ 0146_activation_events.sql ══════════
--- FamilyOS :: 0146 Activation telemetry — TTFV / time-to-first-value (T10)
+-- Bubaly :: 0146 Activation telemetry — TTFV / time-to-first-value (T10)
 -- ----------------------------------------------------------------------------
 -- The onboarding funnel (0133) measures getting THROUGH sign-up. This measures
 -- getting to VALUE: one row per activation milestone a new family reaches
@@ -14960,7 +14960,7 @@ create policy activation_events_select on public.activation_events
 
 
 -- ══════════ 0147_twin_simulations.sql ══════════
--- FamilyOS :: 0147 Twin simulations — saved "what-if" activity projections (R8)
+-- Bubaly :: 0147 Twin simulations — saved "what-if" activity projections (R8)
 -- ----------------------------------------------------------------------------
 -- R8 (Digital Twin depth): the full "if Emma joins travel soccer, what has to
 -- move?" projection reasons across schedule · travel · cost · family time ·
@@ -15011,7 +15011,7 @@ create policy twin_simulations_delete on public.twin_simulations
 
 
 -- ══════════ 0148_moment_activations.sql ══════════
--- FamilyOS :: 0148 Moment activations — the Moments organizing-layer log (R12)
+-- Bubaly :: 0148 Moment activations — the Moments organizing-layer log (R12)
 -- ----------------------------------------------------------------------------
 -- R12 (Moments as an organizing layer): the home/moments surface leads with the
 -- life moment the family is in right now (Morning · School · Dinner · Weekend) or
@@ -15065,7 +15065,7 @@ create policy moment_activations_update on public.moment_activations
 
 
 -- ══════════ 0149_reasoning_snapshots.sql ══════════
--- FamilyOS :: 0149 Reasoning snapshots — the unified Family Reasoning Engine log (R7)
+-- Bubaly :: 0149 Reasoning snapshots — the unified Family Reasoning Engine log (R7)
 -- ----------------------------------------------------------------------------
 -- R7 (unify the reasoning engine): instead of ~8 engines each answering part of
 -- "what's going on with this family", a single core (lib/reasoning/engine.ts)
@@ -15122,7 +15122,7 @@ create policy reasoning_snapshots_update on public.reasoning_snapshots
 
 
 -- ══════════ 0150_marketplace_matches.sql ══════════
--- FamilyOS :: 0150 Marketplace matches — supply↔demand match intelligence
+-- Bubaly :: 0150 Marketplace matches — supply↔demand match intelligence
 -- ----------------------------------------------------------------------------
 -- The next level for the family marketplace (0120): connect open "wanted"
 -- requests to the supply already on the board (sell / free / rent / borrow) so
@@ -15181,7 +15181,7 @@ create policy marketplace_matches_delete on public.marketplace_matches
 
 
 -- ══════════ 0151_marketplace_v2.sql ══════════
--- FamilyOS :: 0151 Marketplace V2 — the AI-first marketplace
+-- Bubaly :: 0151 Marketplace V2 — the AI-first marketplace
 -- ----------------------------------------------------------------------------
 -- Upgrades the family marketplace (0120/0150) into the full AI-first design:
 -- "Buy, sell, rent, borrow, lend & more — all in one trusted community."
@@ -15352,7 +15352,7 @@ end $$;
 
 
 -- ══════════ 0152_marketplace_saved_searches.sql ══════════
--- FamilyOS :: 0152 Marketplace saved searches / alerts
+-- Bubaly :: 0152 Marketplace saved searches / alerts
 -- ----------------------------------------------------------------------------
 -- "Alert me when someone lists X." A member saves a standing search (keyword +
 -- optional kind / category / price ceiling); the Alerts page matches it against
@@ -15401,7 +15401,7 @@ end $$;
 
 
 -- ══════════ 0153_marketplace_questions.sql ══════════
--- FamilyOS :: 0153 Marketplace listing Q&A
+-- Bubaly :: 0153 Marketplace listing Q&A
 -- ----------------------------------------------------------------------------
 -- "Ask a question" on any listing — public within the family. The asker posts a
 -- question; the listing owner answers. Shown inline on the listing and gathered
@@ -15776,7 +15776,7 @@ grant execute on function public.wallet_reserve_card_auth(uuid, uuid, bigint, te
 
 
 -- ══════════ 0156_rate_limits.sql ══════════
--- FamilyOS :: 0156 Durable rate limits (AI-2)
+-- Bubaly :: 0156 Durable rate limits (AI-2)
 -- ----------------------------------------------------------------------------
 -- The public, model-backed endpoints (e.g. /api/ai/gift) were rate-limited by an
 -- in-memory fixed-window map — per serverless INSTANCE, so N cold instances = N×
@@ -15841,7 +15841,7 @@ $$;
 
 
 -- ══════════ 0157_family_signals_budget_drift.sql ══════════
--- FamilyOS :: 0157 Family signals — add the budget-drift kind (R10)
+-- Bubaly :: 0157 Family signals — add the budget-drift kind (R10)
 -- ----------------------------------------------------------------------------
 -- Widens family_signals.kind (0142) to include 'budget_drift' — the 5th hard
 -- signal: a budget category over its cap for the current period (a stronger,
@@ -15857,7 +15857,7 @@ alter table public.family_signals
 
 
 -- ══════════ 0158_concierge_plan_actions.sql ══════════
--- FamilyOS :: 0158 Concierge plan actions — deeper write-back audit
+-- Bubaly :: 0158 Concierge plan actions — deeper write-back audit
 -- ----------------------------------------------------------------------------
 -- When an accepted concierge plan is materialized into real records (a calendar
 -- event, a reminder, a prep task…), each write-back is logged here — so the flow
@@ -15913,7 +15913,7 @@ create policy concierge_plan_actions_delete on public.concierge_plan_actions
 
 
 -- ══════════ 0159_onboarding_progress.sql ══════════
--- FamilyOS :: 0159 Onboarding progress — durable per-account lifecycle + marketing signal
+-- Bubaly :: 0159 Onboarding progress — durable per-account lifecycle + marketing signal
 -- ----------------------------------------------------------------------------
 -- Onboarding data was, until now, scattered and partly ephemeral:
 --   • onboarding_events   — anonymous, session-keyed telemetry (funnel only)
@@ -16009,7 +16009,7 @@ create policy onboarding_progress_update on public.onboarding_progress
 
 
 -- ══════════ 0138_demo_sessions.sql ══════════
--- FamilyOS :: 0138 — Ephemeral "Try it free" demo sessions
+-- Bubaly :: 0138 — Ephemeral "Try it free" demo sessions
 --
 -- Powers the pricing-page "Test Account → Login Now to Try Me" flow: one click
 -- provisions a throwaway Family+ family (seeded with data), signs the visitor
@@ -16082,7 +16082,7 @@ ALTER TABLE public.mkt_consent_events ENABLE ROW LEVEL SECURITY;
 
 
 -- ══════════ 0161_demo_session_email_gate.sql ══════════
--- FamilyOS :: 0161 — Email-gate the demo + defer the countdown
+-- Bubaly :: 0161 — Email-gate the demo + defer the countdown
 --
 -- The "Test Account" demo now opens behind a blurred email-capture pop-up: one
 -- click provisions the demo and signs the visitor in, but the 5-minute clock does
@@ -16101,7 +16101,7 @@ create index if not exists idx_demo_sessions_created on public.demo_sessions (cr
 
 
 -- ══════════ 0162_demo_email_uses.sql ══════════
--- FamilyOS :: 0162 — One demo per email (durable per-email demo usage ledger)
+-- Bubaly :: 0162 — One demo per email (durable per-email demo usage ledger)
 --
 -- The demo is a SINGLE shared account, so demo_sessions.email is one row the next
 -- visitor overwrites — useless for "this email already used its demo". This table
@@ -16131,7 +16131,7 @@ alter table public.demo_email_uses enable row level security;
 
 
 -- ══════════ 0163_messages_audio_read_fix.sql ══════════
--- FamilyOS :: 0163 — Messages: allow audio kind + non-destructive read receipts
+-- Bubaly :: 0163 — Messages: allow audio kind + non-destructive read receipts
 --
 -- Two live Messages bugs:
 --   1. Voice notes NEVER saved: the module inserts family_messages.kind='audio'

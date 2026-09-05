@@ -1,4 +1,4 @@
--- FamilyOS :: 0130 Family Decision Engine
+-- Bubaly :: 0130 Family Decision Engine
 -- ----------------------------------------------------------------------------
 -- Persists family trade-off decisions so they can be revisited + learned from.
 -- A decision ("Which vacation?") holds a set of options, each with the metrics

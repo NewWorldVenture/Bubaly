@@ -1,4 +1,4 @@
--- FamilyOS :: 0132 Family Intelligence Network — consent (foundation only)
+-- Bubaly :: 0132 Family Intelligence Network — consent (foundation only)
 -- ----------------------------------------------------------------------------
 -- The opt-in privacy foundation for anonymized, aggregate cross-family insights
 -- ("families with kids this age often start passport renewals ~6 months ahead").

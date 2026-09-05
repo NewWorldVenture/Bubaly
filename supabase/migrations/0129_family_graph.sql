@@ -1,4 +1,4 @@
--- FamilyOS :: 0129 Family Knowledge Graph (the reasoning substrate)
+-- Bubaly :: 0129 Family Knowledge Graph (the reasoning substrate)
 -- ----------------------------------------------------------------------------
 -- The moat: instead of isolated tables, model the household as a graph of typed
 -- ENTITIES (people, activities, places, orgs, items, events, pets…) linked by

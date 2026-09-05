@@ -1,4 +1,4 @@
--- FamilyOS | SEED | Marketplace pickup and hand-off (~520 rows)
+-- Bubaly | SEED | Marketplace pickup and hand-off (~520 rows)
 --
 -- Creates 160 deterministic listings, orders, hand-offs, and about 40 calendar
 -- events for volume testing. Requires migrations 0151 and 0190.

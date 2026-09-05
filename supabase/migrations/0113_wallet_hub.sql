@@ -1,4 +1,4 @@
--- FamilyOS :: 0113 Wallet Hub ("My Wallet")
+-- Bubaly :: 0113 Wallet Hub ("My Wallet")
 -- ----------------------------------------------------------------------------
 -- Powers the /wallet "My Wallet" hub: one place for the family's money, cards,
 -- passes/memberships and rewards. Reuses the existing finance domain for

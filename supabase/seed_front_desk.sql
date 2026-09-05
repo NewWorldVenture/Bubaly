@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — AI Front Desk / Phone Concierge (call_logs 500).
+-- Bubaly · SEED — AI Front Desk / Phone Concierge (call_logs 500).
 -- Enables Front Desk for the family and fills the screened-call log with 500
 -- calls spanning every status + classification, so /dashboard/front-desk renders
 -- at real volume.
