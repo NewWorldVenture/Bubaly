@@ -166,12 +166,13 @@ describe('runAction → tool registry', () => {
   it('still runs the hand-written branch for a name the registry does not cover', async () => {
     const { ctx, calls } = ctxWith();
 
-    const result = await runAction(ctx, { name: 'create_meal_plan_entry', args: { meal_name: 'Tacos', plan_date: '2026-09-06' } });
+    // add_note has no registry tool yet, so it must keep hitting the switch.
+    const result = await runAction(ctx, { name: 'add_note', args: { title: 'Lunch idea', body: 'Try the new taco place' } });
 
     expect(result.ok).toBe(true);
-    expect(result.summary).toBe('Planned "Tacos" for 2026-09-06.');
+    expect(result.summary).toBe('Saved a family note.');
     expect(executeTool).not.toHaveBeenCalled();
-    expect(calls.filter((c) => c.kind === 'insert').map((c) => c.table)).toEqual(['meals', 'meal_plans']);
+    expect(calls.filter((c) => c.kind === 'insert').map((c) => c.table)).toEqual(['notes']);
   });
 
   it('refuses an unknown name rather than delegating it', async () => {
@@ -201,8 +202,9 @@ describe('legacy payload shapes still parse', () => {
     // AI_TOOLS is what Magic Import sends the model, so each of its names must
     // either resolve in the registry or have a branch in the switch. This pins
     // the split so a tool added to one side is not silently unroutable.
-    const registryCovered = ['create_calendar_event', 'create_chore', 'create_reminder', 'add_grocery_item'];
+    const registryCovered = ['create_calendar_event', 'create_chore', 'create_reminder', 'add_grocery_item', 'create_meal_plan_entry', 'create_announcement'];
     for (const name of registryCovered) expect(getTool(name), name).toBeTruthy();
-    expect(getTool('create_meal_plan_entry')).toBeNull();
+    // Still hand-written in lib/ai/actions.ts until notes/goals get services.
+    for (const name of ['add_note', 'add_goal']) expect(getTool(name), name).toBeNull();
   });
 });
