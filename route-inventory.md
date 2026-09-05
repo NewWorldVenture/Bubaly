@@ -167,6 +167,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/independence` | `app/(app)/dashboard/independence` | auth |  |
 | `/dashboard/insurance` | `app/(app)/dashboard/insurance` | auth |  |
 | `/dashboard/intelligence` | `app/(app)/dashboard/intelligence` | auth |  |
+| `/dashboard/inventory` | `app/(app)/dashboard/inventory` | auth |  |
 | `/dashboard/journal` | `app/(app)/dashboard/journal` | auth | plan-gated |
 | `/dashboard/journeys` | `app/(app)/dashboard/journeys` | auth |  |
 | `/dashboard/kitchen` | `app/(app)/dashboard/kitchen` | auth |  |

@@ -115,6 +115,14 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { watchlist_titles: titles.data ?? [], watchlist_votes: votes.data ?? [], watch_sessions: sessions.data ?? [] };
     }
+    case 'inventory': {
+      const [locations, items, moves] = await Promise.all([
+        eq(sb, 'home_locations', familyId).limit(200),
+        eq(sb, 'inventory_items', familyId).neq('status', 'disposed').order('updated_at', { ascending: false }).limit(200),
+        eq(sb, 'inventory_moves', familyId).order('moved_at', { ascending: false }).limit(20),
+      ]);
+      return { home_locations: locations.data ?? [], inventory_items: items.data ?? [], inventory_moves: moves.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };

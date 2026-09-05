@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **424 tables**.
+Generated from `supabase/migrations/*.sql` — **427 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -168,6 +168,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `home_assets` | `0002_tables.sql` |
 | `home_briefs` | `0140_home_briefs.sql` |
 | `home_contractors` | `0036_home_maintenance.sql` |
+| `home_locations` | `0242_home_inventory.sql` |
 | `home_security_events` | `0081_home_management.sql` |
 | `home_service_records` | `0036_home_maintenance.sql` |
 | `home_warranties` | `0036_home_maintenance.sql` |
@@ -177,6 +178,8 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `immunizations` | `0069_immunizations.sql` |
 | `independence_milestones` | `0167_independence_milestones.sql` |
 | `insurance_policies` | `0009_medical_dental.sql` |
+| `inventory_items` | `0242_home_inventory.sql` |
+| `inventory_moves` | `0242_home_inventory.sql` |
 | `invest_assets` | `0097_kid_investing.sql` |
 | `invest_holdings` | `0097_kid_investing.sql` |
 | `invest_orders` | `0097_kid_investing.sql` |

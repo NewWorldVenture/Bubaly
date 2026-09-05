@@ -72,6 +72,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/independence` | `family_members`, `independence_milestones` |
 | `/dashboard/insurance` | `family_insurance_policies` |
 | `/dashboard/intelligence` | `family_members`, `meal_plans`, `network_aggregates`, `network_consent`, `school_classes`, `teams` |
+| `/dashboard/inventory` | `home_locations`, `inventory_items`, `inventory_moves` |
 | `/dashboard/journal` | `journal_entries` |
 | `/dashboard/journeys` | `journey_events` |
 | `/dashboard/kitchen` | `family_food_scores`, `family_recipes`, `grocery_items`, `leftover_inventory`, `meal_nutrition`, `meal_plans`, `pantry_items` |
