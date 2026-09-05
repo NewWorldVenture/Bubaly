@@ -26,6 +26,8 @@ export type HomeLocationKind = 'room' | 'closet' | 'garage' | 'attic' | 'basemen
 export type InventoryCategory = 'electronics' | 'tools' | 'sports' | 'toys' | 'documents' | 'kitchen' | 'furniture' | 'seasonal' | 'clothing' | 'outdoor' | 'medical' | 'keys' | 'jewelry' | 'other';
 export type InventoryStatus = 'in_place' | 'lent' | 'lost' | 'disposed' | 'in_repair';
 export type SleepSource = 'manual' | 'wearable' | 'estimate';
+export type DeclutterZoneKind = 'surface' | 'closet' | 'drawer' | 'floor' | 'shelf' | 'fridge' | 'garage' | 'entryway' | 'desk' | 'toys' | 'digital' | 'other';
+export type DeclutterMissionStatus = 'planned' | 'done' | 'skipped';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2457,6 +2459,21 @@ export interface Database {
         { id: string; family_id: string; member_id: string; checkin_date: string; energy: number; mood: number; caffeine_after_2pm: boolean; screens_in_bed: boolean; exercised: boolean; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; checkin_date?: string; energy?: number; mood?: number; caffeine_after_2pm?: boolean; screens_in_bed?: boolean; exercised?: boolean; notes?: string | null; created_by?: string | null },
         Partial<{ member_id: string; checkin_date: string; energy: number; mood: number; caffeine_after_2pm: boolean; screens_in_bed: boolean; exercised: boolean; notes: string | null }>
+      >;
+      declutter_zones: T<
+        { id: string; family_id: string; name: string; room: string | null; kind: DeclutterZoneKind; clutter_score: number; last_reset_at: string | null; photo_path: string | null; target_state: string | null; is_active: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; room?: string | null; kind?: DeclutterZoneKind; clutter_score?: number; last_reset_at?: string | null; photo_path?: string | null; target_state?: string | null; is_active?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; room: string | null; kind: DeclutterZoneKind; clutter_score: number; last_reset_at: string | null; photo_path: string | null; target_state: string | null; is_active: boolean; notes: string | null }>
+      >;
+      declutter_missions: T<
+        { id: string; family_id: string; zone_id: string | null; title: string; minutes: number; assignee_id: string | null; status: DeclutterMissionStatus; scheduled_for: string | null; completed_at: string | null; items_removed: number; before_photo_path: string | null; after_photo_path: string | null; points: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; zone_id?: string | null; title: string; minutes?: number; assignee_id?: string | null; status?: DeclutterMissionStatus; scheduled_for?: string | null; completed_at?: string | null; items_removed?: number; before_photo_path?: string | null; after_photo_path?: string | null; points?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ zone_id: string | null; title: string; minutes: number; assignee_id: string | null; status: DeclutterMissionStatus; scheduled_for: string | null; completed_at: string | null; items_removed: number; before_photo_path: string | null; after_photo_path: string | null; points: number; notes: string | null }>
+      >;
+      declutter_sessions: T<
+        { id: string; family_id: string; zone_id: string | null; member_id: string | null; started_at: string; minutes: number; missions_done: number; items_removed: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; zone_id?: string | null; member_id?: string | null; started_at?: string; minutes?: number; missions_done?: number; items_removed?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ zone_id: string | null; member_id: string | null; started_at: string; minutes: number; missions_done: number; items_removed: number; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };

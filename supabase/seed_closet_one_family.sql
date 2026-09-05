@@ -28,7 +28,7 @@ declare
   tops      text[] := array['White tee','Navy polo','Striped long-sleeve','Grey hoodie','Denim shirt','Black turtleneck','Linen button-up','Graphic tee','Cream sweater','Flannel shirt','Cardigan','Henley'];
   bottoms   text[] := array['Blue jeans','Black joggers','Khaki chinos','Denim shorts','Grey trousers','Corduroys','Cargo pants','Leggings','Pleated skirt','Track pants'];
   dresses   text[] := array['Sundress','Wrap dress','School jumper','Knit dress','Party dress','Romper'];
-  outer     text[] := array['Rain jacket','Puffer coat','Denim jacket','Wool coat','Fleece zip-up','Windbreaker','Trench coat'];
+  outerw    text[] := array['Rain jacket','Puffer coat','Denim jacket','Wool coat','Fleece zip-up','Windbreaker','Trench coat'];
   shoes     text[] := array['White sneakers','Rain boots','Sandals','Leather loafers','Running shoes','Winter boots','Ballet flats','Hiking shoes'];
   accs      text[] := array['Beanie','Baseball cap','Scarf','Sunglasses','Belt','Backpack','Mittens'];
   active_w  text[] := array['Soccer jersey','Yoga top','Swim shorts','Training tee','Cycling jersey'];
@@ -80,7 +80,7 @@ begin
       when 'top' then tops[1 + (i % array_length(tops, 1))]
       when 'bottom' then bottoms[1 + (i % array_length(bottoms, 1))]
       when 'dress' then dresses[1 + (i % array_length(dresses, 1))]
-      when 'outerwear' then outer[1 + (i % array_length(outer, 1))]
+      when 'outerwear' then outerw[1 + (i % array_length(outerw, 1))]
       when 'shoes' then shoes[1 + (i % array_length(shoes, 1))]
       when 'accessory' then accs[1 + (i % array_length(accs, 1))]
       when 'activewear' then active_w[1 + (i % array_length(active_w, 1))]
