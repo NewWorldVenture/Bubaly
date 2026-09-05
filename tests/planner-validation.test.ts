@@ -14,9 +14,10 @@ import type { ContextBundle } from '@/lib/ai/context/builder';
 import type { AIProvider } from '@/lib/ai/provider';
 import type { Policy } from '@/lib/trust/engine';
 import type { ServiceScope } from '@/lib/services/types';
+import { buildRepairMessage, toolsForIntent } from '@/lib/ai/planner/prompts';
 import { encodeStepInput, type Plan, type PlanStep } from '@/lib/ai/planner/schema';
-import { autonomyBehaviorFor, dominantBehavior, dryRunGate, maxRisk, resolveFollowupAt, validatePlan, type ValidationInputs } from '@/lib/ai/planner/validate';
-import { getTool } from '@/lib/ai/tools/registry';
+import { autonomyBehaviorFor, catalogueNames, dominantBehavior, dryRunGate, maxRisk, resolveFollowupAt, validatePlan, type ValidationInputs } from '@/lib/ai/planner/validate';
+import { getTool, listTools } from '@/lib/ai/tools/registry';
 import { loadScripts, ScriptedProvider } from '@/lib/ai/provider-stub';
 
 const ledgerHolder = vi.hoisted(() => ({ client: null as SupabaseClient<Database> | null }));
@@ -31,8 +32,14 @@ const { planRequest, PLANNER_PROMPT_VERSION } = await import('@/lib/ai/planner/i
 
 const NOW = new Date('2026-09-05T16:00:00Z');
 
+/** The whole registry is the catalogue unless a case narrows it: these tests are about everything else the validator does. */
 function inputsWith(extra: Partial<ValidationInputs> = {}): ValidationInputs {
-  return { policies: [], grants: [], delegations: [], emergencyDomains: [], role: 'parent', now: NOW, tz: 'America/New_York', ...extra };
+  return { policies: [], grants: [], delegations: [], emergencyDomains: [], role: 'parent', now: NOW, tz: 'America/New_York', allowedTools: catalogueNames(listTools()), ...extra };
+}
+
+/** The catalogue the planner offers an intent — the set the validator must enforce. */
+function catalogueFor(intent: Parameters<typeof toolsForIntent>[0]): ReadonlySet<string> {
+  return catalogueNames(toolsForIntent(intent, listTools()));
 }
 
 function step(partial: Partial<PlanStep> & { key: string }): PlanStep {
@@ -117,6 +124,42 @@ describe('validatePlan: tools and inputs', () => {
     ]), inputsWith());
     expect(result.ok && result.steps).toHaveLength(1);
     expect(result.issues[0].code).toBe('duplicate_key');
+  });
+});
+
+describe('validatePlan: the intent catalogue', () => {
+  it('drops a real tool that is outside the intent\'s catalogue, and its dependents, as off_catalogue', () => {
+    // documents.readDocument exists, but a meal plan is never offered it (prompts.ts INTENT_TOOL_DOMAINS).
+    expect(getTool('documents.readDocument')).not.toBeNull();
+    expect(catalogueFor('plan_meals').has('documents.readDocument')).toBe(false);
+    const steps = [
+      step({ key: 'a', step_type: 'retrieve', tool_name: 'documents.readDocument', input: '{"document_id":"doc-1"}' }),
+      step({ key: 'b', step_type: 'notify', input: '{"recipients":"family","type":"system","title":"Done"}', depends_on: ['a'] }),
+      step({ key: 'c', step_type: 'retrieve', tool_name: 'family.listMembers' }),
+    ];
+    const narrowed = validatePlan(plan(steps), inputsWith({ allowedTools: catalogueFor('plan_meals') }));
+    expect(narrowed.ok && narrowed.steps.map((s) => s.key)).toEqual(['c']);
+    expect(narrowed.issues.map((i) => i.code)).toEqual(['off_catalogue', 'dependency_dropped']);
+    expect(narrowed.issues[0].message).toContain('documents.readDocument');
+    expect(narrowed.issues[0].message).toMatch(/catalogue/);
+    // The same plan under an intent that offers documents keeps the step: the catalogue, not the registry, decides.
+    const offered = validatePlan(plan(steps), inputsWith({ allowedTools: catalogueFor('prepare_vacation') }));
+    expect(offered.ok && offered.steps.map((s) => s.key)).toEqual(['a', 'b', 'c']);
+    expect(offered.issues.map((i) => i.code)).not.toContain('off_catalogue');
+  });
+
+  it('resolves an alias to its canonical tool before checking the catalogue', () => {
+    const steps = [step({ key: 'a', step_type: 'act', tool_name: 'create_calendar_event', input: '{"title":"Dentist","starts_at":"2026-09-07T09:00:00"}' })];
+    // spending_review is not offered the calendar; plan_meals is.
+    const refused = validatePlan(plan(steps), inputsWith({ allowedTools: catalogueFor('spending_review') }));
+    expect(refused.ok).toBe(false);
+    expect(refused.issues.map((i) => i.code)).toEqual(['off_catalogue', 'empty']);
+    const kept = validatePlan(plan(steps), inputsWith({ allowedTools: catalogueFor('plan_meals') }));
+    expect(kept.ok && kept.steps.map((s) => s.toolName)).toEqual(['calendar.createEvent']);
+  });
+
+  it('the repair turn tells the model the catalogue is a boundary', () => {
+    expect(buildRepairMessage(['Step "a" names documents.readDocument, which is not in the catalogue for this request.'])).toMatch(/off-catalogue .* will be dropped/);
   });
 });
 
@@ -513,6 +556,36 @@ describe('planRequest with the scripted provider', () => {
     expect(calls).toBe(2);
     expect(result.ok).toBe(false);
     expect(ledger.calls.filter((c) => c.table === 'ai_requests' && c.kind === 'update').map((c) => (c.payload as Row).status).filter(Boolean)).toEqual(['planning', 'failed']);
+  });
+
+  it('validates against the catalogue it offered: an off-catalogue step is dropped from the persisted plan and noted on the timeline', async () => {
+    const reply = plan([
+      step({ key: 'peek', step_type: 'retrieve', tool_name: 'documents.readDocument', input: '{"document_id":"doc-1"}' }),
+      step({ key: 'who', step_type: 'retrieve', tool_name: 'family.listMembers' }),
+      step({ key: 'tell', step_type: 'notify', input: '{"recipients":"family","type":"system","title":"Dinner is planned","body":"See the meal plan."}', depends_on: ['who'] }),
+    ]);
+    let system = '';
+    const provider = {
+      id: 'fake', model: 'gpt-4.1',
+      complete: async () => { throw new Error('unused'); },
+      runTools: async () => { throw new Error('unused'); },
+      runToolsStream: async function* () { throw new Error('unused'); },
+      structuredCompletion: async (input: { system: string }) => {
+        system = input.system;
+        return { text: JSON.stringify(reply), refusal: null, usage: null };
+      },
+    } as unknown as AIProvider;
+    const ledger = makeLedger({ ai_requests: [{ id: 'req-8', prompt_tokens: 0, completion_tokens: 0, latency_ms: 0, clarifications: [] }] });
+    const result = await planRequest(scopeWith(makeLedger().db), {
+      requestId: 'req-8', requestText: 'Plan our meals', intent: 'plan_meals', context: bundle(),
+    }, { provider, db: ledger.db, now: NOW });
+    expect(result.ok && result.data.kind).toBe('plan');
+    // The prompt never offered the tool, and the validator did not accept it either.
+    expect(system).not.toContain('documents.readDocument');
+    const rows = ledger.calls.find((c) => c.table === 'ai_plan_steps' && c.kind === 'insert')!.payload as Row[];
+    expect(rows.map((r) => r.tool_name)).toEqual(['family.listMembers', null]);
+    const planned = ledger.calls.find((c) => c.table === 'ai_run_events' && c.kind === 'insert')!.payload as { payload: { adjustments: string[] } };
+    expect(planned.payload.adjustments).toContain('off_catalogue');
   });
 
   it('feeds earlier answers into the prompt and stamps the intent on the prompt so the stub can match it', async () => {

@@ -1,7 +1,10 @@
 // app/api/ai/requests/route.ts — the Ask Bubaly entry (§1, §4.3, §52).
 //
-//   POST /api/ai/requests  { text, conversationId?, context?, answers? }
+//   POST /api/ai/requests  { text, conversationId?, context?, answers?, clientRequestId? }
 //     → 202 { requestId, runId, planId, outcome, summary, redirect, question? }
+//     → 200 with the same body when the `Idempotency-Key` header (or
+//       `clientRequestId`) names a request this family already filed: a
+//       retried POST gets the first answer back, never a second plan.
 //
 // The response is sent once the plan is persisted and BEFORE any step runs:
 // execution starts in `after()` with whatever is left of this invocation, and
@@ -32,6 +35,7 @@ const PARSE_ERRORS = {
   text_required: 'Tell Bubaly what you need.',
   text_too_long: 'That request is too long. Try a shorter one.',
   conversation_invalid: 'conversationId must be a valid UUID',
+  client_request_id_invalid: 'Idempotency-Key / clientRequestId must be 8–128 characters of letters, digits, ".", "_", ":" or "-"',
 } as const;
 
 export async function POST(req: NextRequest) {
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
       if (body.reason === 'too_large') return NextResponse.json({ error: 'Request body is too large.', code: 'too_large' }, { status: 413 });
       return NextResponse.json({ error: 'Invalid request body', code: 'invalid_body' }, { status: 400 });
     }
-    const parsed = parseAIRequestIntake(body.value);
+    const parsed = parseAIRequestIntake(body.value, { idempotencyKey: req.headers.get('idempotency-key') });
     if (!parsed.ok) return NextResponse.json({ error: PARSE_ERRORS[parsed.error], code: parsed.error }, { status: 400 });
 
     const access = await assertAIAccess(ctx, { db: supabase });
@@ -70,7 +74,10 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code ?? 'request_failed' }, { status: statusForServiceCode(result.code, result.retryable) });
     }
-    return NextResponse.json(result.data, { status: 202 });
+    // A replay is not "accepted for planning": it is the answer the first
+    // submission already produced, so it is a plain 200.
+    const { replayed, ...response } = result.data;
+    return NextResponse.json(response, { status: replayed ? 200 : 202 });
   } catch (error) {
     console.error('[api/ai/requests] request intake failed', error);
     return NextResponse.json({ error: 'Bubaly could not take that request right now.', code: 'unknown' }, { status: 500 });

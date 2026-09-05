@@ -5,10 +5,13 @@
 // request row is written) or below the tier (403), files the request under the
 // caller's family, answers 202 with the plan-derived body BEFORE any execution
 // (the continuation is a mocked `kickRun` that is handed the run id and an
-// explicit budget), parks a clarification as an `awaiting_context` run, and
-// answers 429 with Retry-After from the durable guard.
+// explicit budget), parks a clarification as an `awaiting_context` run,
+// answers 429 with Retry-After from the durable guard, and — under an
+// `Idempotency-Key` header or `clientRequestId` — files a request once and
+// replays its answer (200) to a retry instead of planning it again.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { makeKey } from '@/lib/services/idempotency';
 
 const getUserContext = vi.fn();
 const getBearerUserContext = vi.fn();
@@ -52,14 +55,30 @@ function makeDb(respond: (call: Call) => Reply) {
   return { from, calls, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } };
 }
 
-const state: { conversation: Record<string, unknown> | null } = { conversation: { id: 'conv-1' } };
+const state: {
+  conversation: Record<string, unknown> | null;
+  /** A client request id the family already filed: an insert under it answers 23505, like 0252's unique index. */
+  filedKey: string | null;
+  filedRequest: Record<string, unknown>;
+  filedRuns: Record<string, unknown>[];
+} = { conversation: { id: 'conv-1' }, filedKey: null, filedRequest: { id: 'req-0', status: 'ready', error: null, requested_by: 'user-1' }, filedRuns: [] };
 let cookieDb: ReturnType<typeof makeDb>;
 let ledgerDb: ReturnType<typeof makeDb>;
 
 function respond(call: Call): Reply {
-  if (call.table === 'ai_requests' && call.kind === 'insert') return { data: { id: 'req-1' }, error: null };
-  if (call.table === 'ai_requests' && call.kind === 'select') return { data: { id: 'req-1', clarifications: [] }, error: null };
+  if (call.table === 'ai_requests' && call.kind === 'insert') {
+    if (state.filedKey && (call.payload as Record<string, unknown>).client_request_id === state.filedKey) {
+      return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "ai_requests_family_client_request_id_key"' } };
+    }
+    return { data: { id: 'req-1' }, error: null };
+  }
+  if (call.table === 'ai_requests' && call.kind === 'select') {
+    if ('client_request_id' in call.filters) return { data: call.filters.client_request_id === state.filedKey ? { id: 'req-0' } : null, error: null };
+    if (call.filters.id === 'req-0') return { data: state.filedRequest, error: null };
+    return { data: { id: 'req-1', clarifications: [] }, error: null };
+  }
   if (call.table === 'family_automation_runs' && call.kind === 'insert') return { data: { id: 'run-park' }, error: null };
+  if (call.table === 'family_automation_runs' && call.kind === 'select') return { data: call.filters.request_id === 'req-0' ? state.filedRuns : [], error: null };
   if (call.table === 'ai_conversations') return { data: state.conversation, error: null };
   return { data: null, error: null };
 }
@@ -105,6 +124,9 @@ beforeEach(() => {
   cookieDb = makeDb(respond);
   ledgerDb = makeDb(respond);
   state.conversation = { id: 'conv-1' };
+  state.filedKey = null;
+  state.filedRequest = { id: 'req-0', status: 'ready', error: null, requested_by: 'user-1' };
+  state.filedRuns = [];
   getUserContext.mockResolvedValue(ctx);
   getBearerUserContext.mockResolvedValue({ ok: false, reason: 'invalid_token' });
   isAIConfigured.mockResolvedValue(true);
@@ -300,6 +322,104 @@ describe('POST /api/ai/requests — intake', () => {
     expect(planRequest).not.toHaveBeenCalled();
     const failed = ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'update' && (c.payload as Record<string, unknown>).status === 'failed');
     expect(failed?.payload).toMatchObject({ error: 'Could not load the calendar.' });
+  });
+});
+
+describe('POST /api/ai/requests — idempotency', () => {
+  const KEY = '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+
+  it('stores the Idempotency-Key on the request and keys the run from it; without one, nothing is deduplicated', async () => {
+    const { POST } = await import('@/app/api/ai/requests/route');
+    expect((await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }))).status).toBe(202);
+    const insert = cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ family_id: 'fam-1', client_request_id: KEY });
+    // The run row gets a key derived from the same id, so a retry that reached the planner would re-find the run (0250's index).
+    expect(planRequest.mock.calls[0][1]).toMatchObject({ requestId: 'req-1', runIdempotencyKey: makeKey(['fam-1', 'request', KEY]) });
+
+    vi.clearAllMocks();
+    cookieDb = makeDb(respond);
+    expect((await POST(post({ text: 'Plan our week' }))).status).toBe(202);
+    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: null });
+    expect(planRequest.mock.calls[0][1]).toMatchObject({ runIdempotencyKey: null });
+  });
+
+  it('accepts clientRequestId in the body, prefers the header, and 400s an id it cannot store', async () => {
+    const { POST } = await import('@/app/api/ai/requests/route');
+    expect((await POST(post({ text: 'Plan our week', clientRequestId: 'phone-7:000042' }))).status).toBe(202);
+    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: 'phone-7:000042' });
+
+    cookieDb = makeDb(respond);
+    expect((await POST(post({ text: 'Plan our week', clientRequestId: 'phone-7:000042' }, { 'idempotency-key': KEY }))).status).toBe(202);
+    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: KEY });
+
+    for (const bad of [{ body: { text: 'Plan our week', clientRequestId: 'short' } }, { body: { text: 'Plan our week' }, headers: { 'idempotency-key': 'has spaces in it' } }, { body: { text: 'Plan our week', clientRequestId: 'x'.repeat(129) } }]) {
+      cookieDb = makeDb(respond);
+      const res = await POST(post(bad.body, bad.headers ?? {}));
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('client_request_id_invalid');
+      expect(cookieDb.calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    }
+  });
+
+  it('replays the first answer to a retried key — 200, the same run — instead of planning again', async () => {
+    state.filedKey = KEY;
+    state.filedRuns = [{ id: 'run-0', plan_id: 'plan-0', state: 'ready', summary: 'Planned the week.' }];
+    const { POST } = await import('@/app/api/ai/requests/route');
+    const res = await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      requestId: 'req-0', runId: 'run-0', planId: 'plan-0', outcome: 'plan', summary: 'Planned the week.', redirect: '/dashboard/concierge/runs/run-0',
+    });
+    // The insert was attempted (the index decides the race), the loser read the winner back, and nothing else happened.
+    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'select')?.filters).toMatchObject({ family_id: 'fam-1', client_request_id: KEY });
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(buildContext).not.toHaveBeenCalled();
+    expect(planRequest).not.toHaveBeenCalled();
+    expect(kickRun).not.toHaveBeenCalled();
+    expect(ledgerDb.calls.filter((c) => c.kind !== 'select')).toHaveLength(0);
+    for (const call of ledgerDb.calls) expect(call.filters.family_id).toBe('fam-1');
+  });
+
+  it('replays a parked question as the clarification it was, and an inline answer as an answer', async () => {
+    state.filedKey = KEY;
+    state.filedRuns = [{ id: 'run-0', plan_id: null, state: 'awaiting_context', summary: 'Which weekend — this one or next?' }];
+    const { POST } = await import('@/app/api/ai/requests/route');
+    let res = await POST(post({ text: 'Organize our weekend' }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ requestId: 'req-0', runId: 'run-0', planId: null, outcome: 'clarification', question: 'Which weekend — this one or next?', redirect: '/dashboard/concierge/runs/run-0' });
+
+    state.filedRuns = [];
+    state.filedRequest = { id: 'req-0', status: 'completed', error: null, requested_by: 'user-1' };
+    res = await POST(post({ text: "Who's free Saturday?" }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ requestId: 'req-0', runId: null, planId: null, outcome: 'answer', redirect: null });
+    expect(planRequest).not.toHaveBeenCalled();
+  });
+
+  it('409s a key another member of the family already used, instead of replaying their request', async () => {
+    state.filedKey = KEY;
+    state.filedRequest = { id: 'req-0', status: 'ready', error: null, requested_by: 'user-2' };
+    state.filedRuns = [{ id: 'run-0', plan_id: 'plan-0', state: 'ready', summary: 'Planned the week.' }];
+    const { POST } = await import('@/app/api/ai/requests/route');
+    const res = await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(409);
+    expect(planRequest).not.toHaveBeenCalled();
+    expect(kickRun).not.toHaveBeenCalled();
+  });
+
+  it('409s a retry whose first submission is still being planned, and reports a failed one as failed', async () => {
+    state.filedKey = KEY;
+    state.filedRequest = { id: 'req-0', status: 'planning', error: null, requested_by: 'user-1' };
+    const { POST } = await import('@/app/api/ai/requests/route');
+    let res = await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('request_in_progress');
+
+    state.filedRequest = { id: 'req-0', status: 'failed', error: 'planner_timeout', requested_by: 'user-1' };
+    res = await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe('planner_failed');
+    expect(planRequest).not.toHaveBeenCalled();
   });
 });
 

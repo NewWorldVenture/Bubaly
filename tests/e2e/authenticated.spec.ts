@@ -109,7 +109,9 @@ test.describe('authenticated first-value journey', () => {
 
     await page.getByRole('button', { name: 'Quick capture' }).click();
     await page.getByLabel('Task').fill('Pack lunches for tomorrow');
-    await page.getByRole('button', { name: 'Save' }).click();
+    // Exact: the Ask Bubaly chips now include "Help us save money", whose
+    // accessible name would otherwise match a substring search for Save.
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Task saved')).toBeVisible();
 
     if (!admin || !testUser) throw new Error('E2E account was not initialized.');

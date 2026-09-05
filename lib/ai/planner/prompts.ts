@@ -208,5 +208,6 @@ export function buildRepairMessage(issues: string[]): string {
   return [
     'Your plan had problems the executor cannot run. Fix every one and reply with the complete corrected plan:',
     ...issues.slice(0, 12).map((issue) => `- ${issue}`),
+    'Name only tools from the catalogue you were given; a tool that exists elsewhere in Bubaly but is not listed there is off-catalogue for this request and its step will be dropped.',
   ].join('\n');
 }

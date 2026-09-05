@@ -167,7 +167,7 @@ script that loads 250 rows per table for the target family (idempotent, tagged
 > = true` in `supabase/config.toml`, revokes those defaults and would need explicit
 > `GRANT`s — see the comment in `config.toml`.
 
-### AI runtime core (0250–0251) — the Family OS concierge spine
+### AI runtime core (0250–0252) — the Family OS concierge spine
 
 Additive + idempotent, verified on a Postgres 18 (PGlite) harness: the full
 ordered migration set applies clean, 0250/0251 re-apply as a no-op, `claim_ai_runs`
@@ -178,6 +178,7 @@ injection, run-event forgery and self-approval. Guard: `tests/ai-runtime-schema.
 |---|------|------|---------------------|
 | 0250 | `0250_ai_runtime_core.sql` | `ai_requests`, `ai_request_context`, `ai_plans`, `ai_plan_steps`, `ai_run_events`, `ai_tool_calls`; extends `family_automation_runs` into the run + continuation queue (`state`, `run_type`, `request_id`/`plan_id`, lease + attempt columns, `idempotency_key`); extends `ai_conversations`/`ai_messages` (`state`, `structured_content`, `model`, `usage`, `request_id`, `sender_member_id`); `claim_ai_runs(int, int)` RPC (service-role only); realtime on `ai_run_events`, `ai_plan_steps`, `family_automation_runs` | The concierge run pipeline: request → plan → steps → executed run with a live timeline (`/dashboard/concierge`, run detail, "Working on" / "Completed by Bubaly"), the §30 duplicate guard, and per-family AI usage accounting |
 | 0251 | `0251_ai_trust_hardening.sql` | `approval_requests` run/step linkage + `consequences`, `evidence`, `edited_payload`, `payload_kind`, `reviewed_by`, `review_note`, 48h `expires_at` default (+ backfill of pending rows); widened `trust_audit_logs.decision` CHECK; manager-only UPDATE/DELETE RLS on `approval_requests`, `family_automation_runs` and `parent_approvals`, plus a requester-only self-cancel policy | Approval cards with real consequences and an Edit flow, expiring approvals, and the write-side lockdown that stops a signed-in child approving their own request or marking a run `executed` |
+| 0252 | `0252_ai_runtime_lockdown.sql` | Tightens the member INSERT policies on `family_automation_runs` (own, unplanned, queued rows only), `approval_requests` (own member-kind rows with no run/step/payload linkage) and `ai_requests` (own fresh concierge rows); adds `ai_requests.client_request_id` + unique `(family_id, client_request_id)`; replaces the 0004 family-wide loop policies on `ai_conversations`/`ai_messages` with owner-only policies | Closes the write paths a signed-in member could use to enqueue a run or file an approval that executes tools under a parent's authority, stops a child reading or planting turns in a parent's assistant conversation, and makes a retried `POST /api/ai/requests` idempotent. **Behaviour change:** conversations become private to their owner (managers do not see a child's thread) |
 
 **Read the RLS change before applying.** 0251 replaces the permissive `FOR ALL
 is_family_member` policies on `family_automation_runs` (0022) and

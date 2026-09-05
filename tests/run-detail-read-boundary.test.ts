@@ -1,12 +1,16 @@
-// The run page (§17) is the only reader behind the run detail UI, and what it
-// hands the browser is a view model: step descriptions, event messages, the
-// plan's user-facing reasoning_summary. This pins the boundary as a source
-// contract — the raw columns that carry model reasoning, step inputs/results
-// and event payloads must never reach a component — and unit-tests the pure
-// timeline derivation the client renders from.
+// The run detail leaves the server through three readers — the page, GET
+// /api/ai/runs/[id], and the page's refresh action — and every one of them
+// hands out the same view model built by `toRunView` in lib/ai/runs/detail.ts:
+// step descriptions, event messages, the plan's user-facing reasoning_summary.
+// This pins the boundary as a source contract — the raw columns that carry
+// model reasoning, step inputs/results, event payloads, the run's lease and
+// result, and the request's clarification log must never reach a component
+// or a JSON client — exercises `toRunView` against rows carrying all of them,
+// and unit-tests the pure timeline derivation the client renders from.
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import { glyphFor, timelineRows, type RunEventView, type RunStepView } from '@/components/concierge/run-timeline';
+import { toRunView, type RunDetailView } from '@/lib/ai/runs/detail';
 import { RUN_STATES } from '@/lib/ai/runs/states';
 import { statusLabel, statusTone } from '@/components/concierge/status-badge';
 
@@ -19,6 +23,9 @@ function code(path: string): string {
 }
 
 const page = code('app/(app)/dashboard/concierge/runs/[id]/page.tsx');
+const detail = code('lib/ai/runs/detail.ts');
+const route = code('app/api/ai/runs/[id]/route.ts');
+const actions = code('app/(app)/dashboard/concierge/run-actions.ts');
 const timeline = code('components/concierge/run-timeline.tsx');
 const controls = code('components/concierge/run-controls.tsx');
 const clarification = code('components/concierge/clarification-card.tsx');
@@ -40,40 +47,108 @@ function countOutsideFunction(source: string, fnName: string, needle: string): n
 
 describe('run detail read boundary', () => {
   it('loads through the family-scoped loader with the caller client and 404s on a miss', () => {
-    expect(page).toContain("import { loadRunDetail, type RunDetailView } from '@/lib/ai/runs/detail';");
+    expect(page).toContain("import { loadRunDetail, toRunView } from '@/lib/ai/runs/detail';");
     expect(page).toContain('loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role })');
     expect(page).toContain('if (!detail.data) notFound();');
     expect(page).toContain('if (!detail.ok) return <RunUnavailable message={detail.error} />;');
+    expect(page).toContain('const view = toRunView(detail.data, familyId, manager);');
     // Never the service client: a cross-family id must be "not found", not data.
     expect(page).not.toContain('createServiceClient');
   });
 
   it('renders the plan reasoning_summary only, never the model reasoning chain', () => {
-    expect(page).toContain('reasoningSummary: plan?.reasoning_summary?.trim() || null');
-    // Any other `reasoning` reference would be the model's chain (approval_requests.reasoning, ai_request_context…).
-    const reasoningRefs = page.match(/\breasoning\b(?!_summary)/g) ?? [];
-    expect(reasoningRefs.filter((m) => !m.includes('_summary'))).toHaveLength(0);
-    expect(page).not.toMatch(/chain[_-]of[_-]thought/i);
-    expect(page).not.toContain('ai_request_context');
-    expect(page).not.toContain('snapshot');
-    expect(page).not.toContain('evidence');
+    expect(detail).toContain('reasoningSummary: plan?.reasoning_summary?.trim() || null');
+    for (const source of [page, detail, route, actions]) {
+      // Any other `reasoning` reference would be the model's chain (approval_requests.reasoning, ai_request_context…).
+      expect(source.match(/\breasoning\b(?!_summary)/g) ?? []).toHaveLength(0);
+      expect(source).not.toMatch(/chain[_-]of[_-]thought/i);
+      expect(source).not.toContain('ai_request_context');
+      expect(source).not.toContain('snapshot');
+      expect(source).not.toContain('evidence');
+    }
   });
 
-  it('never forwards step results or event payloads to the browser', () => {
-    expect(page).not.toContain('result_json');
-    // The only payload read is the metrics-only helper for model_call events.
-    expect(countOutsideFunction(page, 'modelCallMetrics', 'payload')).toBe(1); // the single call site: modelCallMetrics(e.payload)
-    expect(page).toContain("metrics: e.event_type === 'model_call' ? modelCallMetrics(e.payload) : null");
-    expect(page).toContain('latency_ms');
-    expect(page).toContain('total_tokens');
-    // Step inputs reach the browser only as the scalar editable fields, and only for managers.
-    expect(page).toContain('if (manager && EDITABLE_STEP_STATES.includes(');
-    expect(page).toContain('editableFieldsFor(input)');
+  it('never forwards step results or event payloads to a reader', () => {
+    for (const source of [page, detail, route, actions]) expect(source).not.toContain('result_json');
+    // The only payload read is the metrics-only helper for model_call events, in the one boundary module.
+    expect(countOutsideFunction(detail, 'modelCallMetrics', 'payload')).toBe(1); // the single call site: modelCallMetrics(e.payload)
+    expect(detail).toContain("metrics: e.event_type === 'model_call' ? modelCallMetrics(e.payload) : null");
+    expect(detail).toContain('latency_ms');
+    expect(detail).toContain('total_tokens');
+    // Step inputs reach a reader only as the scalar editable fields, and only for managers.
+    expect(detail).toContain('if (manager && EDITABLE_STEP_STATES.includes(');
+    expect(detail).toContain('editableFieldsFor(input)');
+    for (const source of [page, route, actions]) {
+      expect(source).not.toContain('payload');
+      expect(source).not.toContain('lease_owner');
+      expect(source).not.toContain('prompt_tokens');
+      expect(source).not.toContain('clarifications');
+    }
     for (const source of [timeline, controls, clarification]) {
       expect(source).not.toContain('input_json');
       expect(source).not.toContain('result_json');
       expect(source).not.toContain('payload');
       expect(source).not.toContain('reasoning_summary');
+    }
+  });
+
+  it('the JSON route and the refresh action answer the same view as the page, never the rows', () => {
+    expect(route).toContain("import { loadRunDetail, toRunView } from '@/lib/ai/runs/detail';");
+    expect(route).toContain('NextResponse.json(toRunView(detail.data, ctx.active.familyId, isManager(ctx.active.role)))');
+    expect(route).not.toContain('NextResponse.json(detail.data)');
+    expect(actions).toContain("import { loadRunDetail, toRunView, type RunView } from '@/lib/ai/runs/detail';");
+    expect(actions).toContain('Promise<RunActionResult<RunView | null>>');
+    expect(actions).toContain('toRunView(detail.data, ctx.active.familyId, isManager(ctx.active.role))');
+    expect(actions).not.toContain('RunDetailView');
+    // The view types have one home; the client component only re-exports them.
+    expect(timeline).toContain("export type { RunEventView, RunProgressView, RunStepView, RunView } from '@/lib/ai/runs/detail';");
+  });
+
+  it('toRunView strips every raw column a row carries, and offers step inputs only as a manager\'s editable fields', () => {
+    const rows = {
+      run: {
+        id: 'run-1', family_id: 'fam-1', plan_id: 'plan-1', request_id: 'req-1', requested_by_member_id: 'member-1', state: 'executing', status: 'approved',
+        summary: 'Sort the weekend', error: null, created_at: '2026-09-05T10:00:00Z', completed_at: null, lease_owner: 'worker-7', lease_expires_at: '2026-09-05T10:02:00Z',
+        progress: { internal: 'counter' }, result: { raw: 'output' }, metadata: { trace: 'id' }, cancel_requested_at: null, paused_at: null,
+      },
+      request: { id: 'req-1', request_text: 'Organize our weekend', clarifications: [{ question: 'Which weekend?', answer: 'This one' }, { question: 'Morning?', answer: null }], model: 'gpt-x', prompt_tokens: 1234, completion_tokens: 56 },
+      plan: { id: 'plan-1', objective: 'Weekend', reasoning_summary: 'Two free slots.', risk_level: 'medium' },
+      steps: [
+        { id: 'step-1', sequence: 0, step_type: 'act', description: 'Book the pool', status: 'queued', error: null, dependency_ids: [], input_json: { title: 'Pool', notes: 'secret-note' }, result_json: { raw: 'output' } },
+        { id: 'step-2', sequence: 1, step_type: 'retrieve', description: null, status: 'completed', error: null, dependency_ids: ['step-1'], input_json: { prompt: 'model prompt text' }, result_json: { rows: [1, 2] } },
+      ],
+      events: [
+        { id: 'ev-1', event_type: 'model_call', message: 'Thinking about the weekend', created_at: '2026-09-05T10:00:01Z', step_id: null, actor_kind: 'ai', payload: { latency_ms: 1234, total_tokens: 850, prompt: 'the whole prompt' } },
+        { id: 'ev-2', event_type: 'step_completed', message: 'Booked.', created_at: '2026-09-05T10:00:02Z', step_id: 'step-1', actor_kind: 'ai', payload: { output: 'raw tool output' } },
+      ],
+      approvals: [],
+    } as unknown as RunDetailView;
+
+    const managerView = toRunView(rows, 'fam-1', true);
+    expect(managerView).toMatchObject({
+      id: 'run-1', familyId: 'fam-1', planId: 'plan-1', requestId: 'req-1', state: 'executing', objective: 'Weekend', requestText: 'Organize our weekend',
+      reasoningSummary: 'Two free slots.', riskLevel: 'medium', error: null, question: null, answered: [{ question: 'Which weekend?', answer: 'This one' }],
+      progress: { done: 1, total: 2, failed: 0, blocked: 0, awaitingApproval: 0 },
+    });
+    expect(managerView.steps.map((s) => s.description)).toEqual(['Book the pool', 'A step Bubaly planned']);
+    expect(managerView.events.map((e) => e.metrics)).toEqual(['1.2s · 850 tokens', null]);
+    // A manager may edit the queued act step's scalar inputs — that is the whole of what the inputs become.
+    expect(managerView.steps[0].editableFields?.map((f) => f.key)).toEqual(['title', 'notes']);
+    expect(managerView.steps[1].editableFields).toBeUndefined();
+    const memberView = toRunView(rows, 'fam-1', false);
+    expect(memberView.steps.every((s) => s.editableFields === undefined)).toBe(true);
+
+    for (const view of [managerView, memberView]) {
+      expect(Object.keys(view).sort()).toEqual([
+        'answered', 'approvals', 'completedAt', 'createdAt', 'error', 'events', 'familyId', 'id', 'objective', 'planId', 'progress',
+        'question', 'reasoningSummary', 'requestId', 'requestText', 'requestedBy', 'riskLevel', 'state', 'steps',
+      ]);
+      expect(Object.keys(view.events[0]).sort()).toEqual(['actor', 'at', 'id', 'message', 'metrics', 'stepId', 'type']);
+      expect(Object.keys(view.steps[1]).sort()).toEqual(['description', 'error', 'id', 'sequence', 'status']);
+    }
+    const memberJson = JSON.stringify(memberView);
+    for (const leak of ['worker-7', 'lease', 'counter', 'raw', 'trace', 'gpt-x', 1234, 'prompt', 'secret-note', 'Morning?', 'input_json', 'result_json', 'payload', 'clarifications']) {
+      expect(memberJson, String(leak)).not.toContain(String(leak));
     }
   });
 

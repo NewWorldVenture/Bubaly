@@ -18,69 +18,16 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, Circle, Loader2, MinusCircle, PauseCircle, Clock } from 'lucide-react';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import type { RunState, StepState } from '@/lib/ai/runs/states';
-import type { ApprovalCardData } from '@/lib/approvals/card-data';
-import type { EditableField } from '@/lib/approvals/card-data';
+import type { RunEventView, RunProgressView, RunStepView, RunView } from '@/lib/ai/runs/detail';
+import type { StepState } from '@/lib/ai/runs/states';
 import { cn } from '@/lib/utils/cn';
 
 // ─── The read model ──────────────────────────────────────────────────────────
-
-export type RunStepView = {
-  id: string;
-  sequence: number;
-  description: string;
-  status: StepState;
-  /** The executor's user-facing failure line, when the step failed. */
-  error: string | null;
-  /** Managers only: the scalar inputs the Edit modal may change. */
-  editableFields?: EditableField[];
-};
-
-export type RunEventView = {
-  id: string;
-  type: string;
-  message: string;
-  at: string;
-  stepId: string | null;
-  actor: 'ai' | 'member' | 'system';
-  /** For `model_call` events only: "1.2s · 850 tokens". Never the prompt or the reply. */
-  metrics: string | null;
-};
-
-export type RunProgressView = {
-  done: number;
-  total: number;
-  failed: number;
-  blocked: number;
-  awaitingApproval: number;
-  /** "12 of 18 steps completed." */
-  label: string;
-};
-
-export type RunView = {
-  id: string;
-  familyId: string;
-  planId: string | null;
-  requestId: string | null;
-  state: RunState;
-  objective: string;
-  requestText: string | null;
-  requestedBy: string | null;
-  /** The plan's user-facing "why" — `ai_plans.reasoning_summary`, never chain-of-thought. */
-  reasoningSummary: string | null;
-  riskLevel: 'low' | 'medium' | 'high';
-  progress: RunProgressView;
-  /** The run's own failure line (`family_automation_runs.error`), when it failed or blocked. */
-  error: string | null;
-  createdAt: string;
-  completedAt: string | null;
-  steps: RunStepView[];
-  events: RunEventView[];
-  approvals: ApprovalCardData[];
-  /** The question Bubaly is waiting on, when the run is `awaiting_context`. */
-  question: string | null;
-  answered: { question: string; answer: string }[];
-};
+//
+// The view types live beside `toRunView` in lib/ai/runs/detail.ts, the one
+// boundary the page, the GET route and the refresh action all build from.
+// Type-only, so nothing server-side is bundled here.
+export type { RunEventView, RunProgressView, RunStepView, RunView } from '@/lib/ai/runs/detail';
 
 // ─── Pure timeline derivation ────────────────────────────────────────────────
 

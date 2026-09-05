@@ -45,7 +45,7 @@ import type { AutonomyBehavior, TrustRole } from '@/lib/trust/engine';
 import { buildPlannerSystemPrompt, buildPlannerUserMessage, buildRepairMessage, PLANNER_PROMPT_VERSION, toolsForIntent } from './prompts';
 import { PLAN_SCHEMA_NAME, PlanSchema, type Plan } from './schema';
 import { instantiateTemplate, templateContextFrom, templateFor, type TemplateContext, type WorkflowTemplate } from './templates/index';
-import { autonomyBehaviorFor, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
+import { autonomyBehaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
 
 export { PLANNER_PROMPT_VERSION } from './prompts';
 export { PlanSchema, type Plan, type PlanStep } from './schema';
@@ -68,6 +68,12 @@ export type PlanRequestInput = {
   /** Entities the classifier read from the request (day, person, trade…); optional. */
   entities?: Record<string, string> | null;
   pageContext?: { module?: string; entityIds?: string[] } | null;
+  /**
+   * §30 run-level dedupe key for the run this plan creates, derived by the
+   * intake from the caller's client request id. A retry that reaches this far
+   * re-finds the run instead of starting a second one over the same plan.
+   */
+  runIdempotencyKey?: string | null;
 };
 
 export type PlanRequestOptions = {
@@ -212,6 +218,11 @@ export async function planRequest(
     console.error('[planner] trust inputs could not be loaded; nothing was planned', error);
     return fail(describeDbError(error, 'Bubaly could not check what it is allowed to do, so it did not plan anything.'), { code: SERVICE_CODES.db, retryable: true });
   }
+  // The intent's catalogue is what the prompt offers AND what the validator
+  // accepts: a step naming a real tool from another intent's catalogue is
+  // dropped (`off_catalogue`), so the narrowing in `toolsForIntent` is a
+  // boundary, not a suggestion.
+  const tools = toolsForIntent(intent, listTools());
   const inputs: ValidationInputs = {
     policies: trust.policies,
     grants: trust.grants,
@@ -220,12 +231,12 @@ export async function planRequest(
     role: plannerTrustRole(scope.role),
     now,
     tz: input.context.header.tz,
+    allowedTools: catalogueNames(tools),
   };
 
   const template = templateFor(intent);
   const ctx = templateContextFor(input, scope, now);
   const skeleton = template ? instantiateTemplate(template, ctx) : null;
-  const tools = toolsForIntent(intent, listTools());
   const behaviorHint = dominantBehavior(
     tools.filter((t) => !t.readOnly).map((t) => autonomyBehaviorFor(inputs.policies, t.domain)),
   );
@@ -309,6 +320,7 @@ export async function planRequest(
     summary: validation.objective,
     state: 'ready',
     runAfter: now.toISOString(),
+    idempotencyKey: input.runIdempotencyKey ?? null,
   }, { db: ledger });
   if (!run.ok) {
     await updateRequest(scope, requestId, { status: 'failed', error: run.error, completed_at: now.toISOString() }, { db: ledger });
@@ -522,9 +534,10 @@ export async function replanRun(
     console.error('[planner] trust inputs could not be loaded for a re-plan', error);
     return fail(describeDbError(error, 'Bubaly could not check what it is allowed to do.'), { code: SERVICE_CODES.db, retryable: true });
   }
+  const tools = toolsForIntent(intent, listTools());
   const inputs: ValidationInputs = {
     policies: trust.policies, grants: trust.grants, delegations: trust.delegations, emergencyDomains: trust.emergencyDomains,
-    role: plannerTrustRole(scope.role), now, tz: context.data.header.tz,
+    role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
   const finished = steps.filter((s) => s.id !== step.id && (s.status === 'completed' || s.status === 'skipped'));
@@ -538,7 +551,6 @@ export async function replanRun(
     ? String((step.input_json as Record<string, unknown>).prompt)
     : (step.description ?? 'Plan the rest of this request.');
 
-  const tools = toolsForIntent(intent, listTools());
   const system = buildPlannerSystemPrompt({
     intent, template: null, tools, viewerRole: scope.role,
     behavior: dominantBehavior(tools.filter((t) => !t.readOnly).map((t) => autonomyBehaviorFor(inputs.policies, t.domain))),

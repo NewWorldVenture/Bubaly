@@ -112,6 +112,20 @@ test.describe('Ask Bubaly concierge loop', () => {
     await page.getByRole('button', { name: 'Start exploring' }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
 
+    // The scripted plan assigns a to-do to "Maya" — the same child the
+    // in-memory loop test seeds. Onboarding skipped "Add your family", so add
+    // her here; without her `tasks.createTodo` fails ("nobody called Maya")
+    // and the run settles partially_completed.
+    if (!admin || !testUser) throw new Error('E2E account was not initialized.');
+    const { data: membership, error: membershipError } = await admin
+      .from('family_members').select('family_id').eq('user_id', testUser.id).single();
+    if (membershipError) throw membershipError;
+    const familyId = String(membership.family_id);
+    const { error: childError } = await admin.from('family_members').insert({
+      family_id: familyId, user_id: null, display_name: 'Maya', role: 'child', is_active: true, birthday: '2016-03-02',
+    });
+    if (childError) throw childError;
+
     // The hero Ask bar on the dashboard files the request; the 202 carries the
     // run page to navigate to.
     const ask = page.getByRole('textbox', { name: 'How can I help your family?' });
@@ -131,11 +145,6 @@ test.describe('Ask Bubaly concierge loop', () => {
     await expect(page.getByRole('heading', { level: 1, name: PLAN_OBJECTIVE })).toBeVisible();
     await expect(page.getByText('You asked: “Plan our week”')).toBeVisible();
 
-    if (!admin || !testUser) throw new Error('E2E account was not initialized.');
-    const { data: membership, error: membershipError } = await admin
-      .from('family_members').select('family_id').eq('user_id', testUser.id).single();
-    if (membershipError) throw membershipError;
-    const familyId = String(membership.family_id);
     const runId = runUrl.slice(runUrl.lastIndexOf('/') + 1);
 
     const { data: run, error: runError } = await admin
@@ -154,11 +163,23 @@ test.describe('Ask Bubaly concierge loop', () => {
     // executor to settle the run — the scripted plan ends in a mid-week
     // follow-up, so `scheduled_followup` is its finished state — and check the
     // household rows it leaves: three planned dinners.
-    await expect.poll(async () => {
+    const TERMINAL = ['scheduled_followup', 'completed', 'partially_completed', 'failed', 'blocked', 'cancelled'];
+    const deadline = Date.now() + 90_000;
+    let state = '';
+    while (Date.now() < deadline) {
       const { data, error } = await admin!.from('family_automation_runs').select('state').eq('id', runId).single();
       if (error) throw error;
-      return data.state;
-    }, { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }).toMatch(/^(scheduled_followup|completed)$/);
+      state = data.state;
+      if (TERMINAL.includes(state)) break;
+      await page.waitForTimeout(1_500);
+    }
+    if (!/^(scheduled_followup|completed)$/.test(state)) {
+      // Say what went wrong, not just that it did: the failing step's tool and
+      // error are the whole diagnosis when this only reproduces in CI.
+      const { data: steps } = await admin!.from('ai_plan_steps').select('sequence, tool_name, status, error').eq('plan_id', run.plan_id).order('sequence');
+      const { data: events } = await admin!.from('ai_run_events').select('event_type, message').eq('run_id', runId).order('created_at');
+      throw new Error(`run ${runId} settled in "${state}"\nsteps: ${JSON.stringify(steps)}\nevents: ${JSON.stringify(events)}`);
+    }
 
     await expect.poll(async () => {
       const { count, error } = await admin!

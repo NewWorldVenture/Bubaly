@@ -53,6 +53,31 @@ import { parseVerificationSpec, runVerification, type VerificationOutcome } from
 type RunPatch = Database['public']['Tables']['family_automation_runs']['Update'];
 type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
 
+/**
+ * A run must be the run of its own request: same family, the plan it names was
+ * planned for that request, and the member it acts for is the member who
+ * filed the request. Anything else is a forged or corrupted row.
+ */
+async function runMatchesRequest(db: SupabaseClient<Database>, run: RunSnapshot): Promise<ServiceResult<null>> {
+  if (!run.plan_id) return ok(null);
+  if (!run.request_id) return fail('This run names a plan but no request, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
+  const [{ data: plan, error: planError }, { data: request, error: requestError }] = await Promise.all([
+    db.from('ai_plans').select('id, request_id, family_id').eq('id', run.plan_id).eq('family_id', run.family_id).maybeSingle(),
+    db.from('ai_requests').select('id, requested_by_member_id, family_id').eq('id', run.request_id).eq('family_id', run.family_id).maybeSingle(),
+  ]);
+  if (planError || requestError) {
+    console.error('[ai/runs] could not verify the run against its request', planError ?? requestError);
+    return fail('Bubaly could not verify this run.', { code: SERVICE_CODES.db, retryable: true });
+  }
+  if (!plan || !request || plan.request_id !== request.id) {
+    return fail('This run does not belong to the request it names, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
+  }
+  if ((request.requested_by_member_id ?? null) !== (run.requested_by_member_id ?? null)) {
+    return fail('This run would act for someone other than the person who asked, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
+  }
+  return ok(null);
+}
+
 /** The run fields the graph reasons about. A `Pick` of the real row so the two can never drift. */
 export type RunSnapshot = Pick<
   RunRow,
@@ -1029,6 +1054,12 @@ export function createExecutorPort(db: SupabaseClient<Database>): ExecutorPort {
       if (cached) return ok(cached);
       const actor = await loadRunActor(db, run.family_id, run.requested_by_member_id);
       if (!actor.ok) return actor;
+      // Defense in depth behind the 0252 INSERT policy: a run that names a
+      // plan must be the run of that plan's request, and must act for the
+      // member who filed that request. A row that points at someone else's
+      // plan (or at a plan with no request) is blocked before any tool runs.
+      const consistent = await runMatchesRequest(db, run);
+      if (!consistent.ok) return consistent;
       const scope: ServiceScope = {
         db,
         familyId: run.family_id,

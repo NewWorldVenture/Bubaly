@@ -273,6 +273,42 @@ describe('decide — tool payloads', () => {
     expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['approved', 'approved_execution']);
   });
 
+  it('re-evaluates the trust gate for a tool payload on a row a member filed themselves', async () => {
+    // A member can file their own approval row (0252 keeps that open, pinned to
+    // them); it must not become a way to run any tool with the gate skipped.
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(executed.calls).toHaveLength(1);
+    expect(executed.calls[0].opts.skipTrust).toBe(false);
+  });
+
+  it('releases only the steps already pointing at a member-filed plan_steps row, never the ids it names', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-9',
+        payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1', 'step-2'] }, payload_kind: 'plan_steps', run_id: 'run-1', plan_step_ids: ['step-1', 'step-2'],
+      })],
+      family_automation_runs: [runRow({ state: 'blocked' })],
+      ai_plan_steps: [
+        stepRow({ id: 'step-1', approval_id: 'appr-1' }),
+        // A parent's declined step, blocked, never pointed at this row.
+        stepRow({ id: 'step-2', status: 'blocked', approval_id: null, approval_required: false }),
+      ],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: true });
+    expect(store.tables.ai_plan_steps.find((s) => s.id === 'step-1')?.status).toBe('ready');
+    expect(store.tables.ai_plan_steps.find((s) => s.id === 'step-2')?.status).toBe('blocked');
+  });
+
   it('hands a gate-opened tool approval back to its run step instead of executing it twice', async () => {
     // The tool gate inside a run opened this row: {name,args}, no run_id, but a
     // step carries approval_id = appr-1. The step must run it, not decide().

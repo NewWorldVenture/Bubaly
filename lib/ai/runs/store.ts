@@ -63,6 +63,12 @@ export type CreateRequestInput = {
   interpretedIntent?: string | null;
   contextSnapshot?: unknown;
   priority?: string;
+  /**
+   * The caller's own id for this submission (`Idempotency-Key` /
+   * `clientRequestId`). Unique per family (0252's partial index), so a retried
+   * POST finds the request it already filed instead of filing a second one.
+   */
+  clientRequestId?: string | null;
 };
 
 const REQUEST_KINDS: readonly AiRequestKind[] = ['concierge', 'feature', 'routine', 'trigger', 'handle_it'];
@@ -75,12 +81,18 @@ const REQUEST_KINDS: readonly AiRequestKind[] = ['concierge', 'feature', 'routin
  * `contextSnapshot` is written to `ai_request_context`, never to `ai_requests`:
  * the snapshot can carry finance rows and another member's medical detail, and
  * only that table's policy restricts reads to the requester and managers.
+ *
+ * `clientRequestId` is honoured against the unique index rather than by a
+ * read-then-write, for the same reason `createRun` honours its key that way:
+ * two retries of one POST can reach the INSERT together, and exactly one may
+ * win. The loser reads the winner's row back and reports `existing: true`, so
+ * the intake replays that request's answer instead of planning it again.
  */
 export async function createRequest(
   scope: ServiceScope,
   input: CreateRequestInput,
   opts?: StoreOpts,
-): Promise<ServiceResult<{ id: string }>> {
+): Promise<ServiceResult<{ id: string; existing?: boolean }>> {
   const text = input.requestText.trim();
   if (!text) return fail('Tell Bubaly what you need.', { code: SERVICE_CODES.invalidInput });
 
@@ -99,9 +111,21 @@ export async function createRequest(
       interpreted_intent: input.interpretedIntent ?? null,
       status: 'queued',
       priority: priorityToSmallint(input.priority),
+      client_request_id: input.clientRequestId ?? null,
     })
     .select('id')
     .single();
+
+  if (error?.code === '23505' && input.clientRequestId) {
+    const { data: existing, error: readError } = await db
+      .from('ai_requests')
+      .select('id')
+      .eq('family_id', scope.familyId)
+      .eq('client_request_id', input.clientRequestId)
+      .maybeSingle();
+    if (existing) return ok({ id: existing.id, existing: true });
+    console.error('[ai/runs] duplicate client request id with no matching row', readError);
+  }
 
   if (error || !data) {
     console.error('[ai/runs] failed to create the request', error);
@@ -486,6 +510,35 @@ export async function updateRun(
     return fail(describeDbError(error, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
   }
   return ok(null);
+}
+
+/**
+ * Compare-and-set on the run's state: `true` when the row was in
+ * `expectedState` and is now patched, `false` when someone else moved it
+ * first. The answer path claims a parked run with this so a double-submitted
+ * answer (two tabs, a retried POST) re-plans the request exactly once — the
+ * loser sees `false` and stops, instead of planning a second version and
+ * repointing a run that may already be executing the first.
+ */
+export async function updateRunWhereState(
+  scope: ServiceScope,
+  runId: string,
+  expectedState: RunState,
+  patch: Database['public']['Tables']['family_automation_runs']['Update'],
+  opts?: StoreOpts,
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await ledgerClient(scope, opts)
+    .from('family_automation_runs')
+    .update(patch)
+    .eq('id', runId)
+    .eq('family_id', scope.familyId)
+    .eq('state', expectedState)
+    .select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the run conditionally', error);
+    return fail(describeDbError(error, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
 }
 
 // ─── Leases ─────────────────────────────────────────────────────────────────

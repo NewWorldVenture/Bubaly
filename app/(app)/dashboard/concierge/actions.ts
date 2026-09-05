@@ -16,7 +16,7 @@
 // family always sees what Bubaly did and why. No new schema.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
@@ -130,8 +130,11 @@ export async function planAcceptedAction(
   if (mode === 'auto') {
     const applied = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
     const summary = runSummary(plan.title, applied);
-    await sb.from('family_automation_runs').insert({
-      family_id: familyId, trigger_type: 'plan_accepted', status: 'executed',
+    // Written by the server: 0252 only lets a member file their own unplanned
+    // queued run, and this row records work Bubaly already did.
+    await createServiceClient().from('family_automation_runs').insert({
+      family_id: familyId, trigger_type: 'plan_accepted', status: 'executed', state: 'completed',
+      requested_by_member_id: ctx.active.member.id,
       summary, result: { steps: applied } as never,
       metadata: { plan_id: planId, basis: decision.basis, reason: decision.reason } as never,
       created_by: ctx.user.id,
@@ -142,8 +145,9 @@ export async function planAcceptedAction(
 
   if (mode === 'ask') {
     const summary = `Waiting for approval: ${approvalTitle(plan.title)}`;
-    await sb.from('family_automation_runs').insert({
-      family_id: familyId, trigger_type: 'plan_accepted', status: 'pending',
+    await createServiceClient().from('family_automation_runs').insert({
+      family_id: familyId, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
+      requested_by_member_id: ctx.active.member.id,
       summary,
       result: {} as never,
       metadata: {

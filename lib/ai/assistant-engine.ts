@@ -330,7 +330,9 @@ export async function persistAssistantTurn(
     {
       family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent, model,
       tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as MessageInsert['tool_calls']) : null,
-      tool_results: actions.length ? (actions.map((a) => a.result) as unknown as MessageInsert['tool_results']) : null,
+      // Summaries only: raw results can carry transaction rows or a signed
+      // document URL, and a conversation row outlives the moment it was shown.
+      tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as MessageInsert['tool_results']) : null,
       structured_content: args.structured ? (args.structured as unknown as MessageInsert['structured_content']) : null,
     },
   ];

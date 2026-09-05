@@ -64,8 +64,17 @@ describe('parseAIRequestIntake', () => {
         text: 'Plan our week', conversationId: '123e4567-e89b-12d3-a456-426614174000',
         context: { module: 'calendar', entityIds: ['123e4567-e89b-12d3-a456-426614174000'] },
         answers: { 'Which weekend?': 'this one' },
+        clientRequestId: null,
       },
     });
+  });
+
+  it('carries the client request id from the body or the Idempotency-Key header, header first', () => {
+    expect(parseAIRequestIntake({ text: 'hi', clientRequestId: ' phone-7:000042 ' }).ok && parseAIRequestIntake({ text: 'hi', clientRequestId: ' phone-7:000042 ' })).toMatchObject({ value: { clientRequestId: 'phone-7:000042' } });
+    expect(parseAIRequestIntake({ text: 'hi', clientRequestId: 'phone-7:000042' }, { idempotencyKey: '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b' })).toMatchObject({ value: { clientRequestId: '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b' } });
+    expect(parseAIRequestIntake({ text: 'hi', clientRequestId: 'short' })).toEqual({ ok: false, error: 'client_request_id_invalid' });
+    expect(parseAIRequestIntake({ text: 'hi' }, { idempotencyKey: 'has spaces in it' })).toEqual({ ok: false, error: 'client_request_id_invalid' });
+    expect(parseAIRequestIntake({ text: 'hi', clientRequestId: 'x'.repeat(129) })).toEqual({ ok: false, error: 'client_request_id_invalid' });
   });
 
   it('rejects the invalid shapes with stable codes', () => {
@@ -78,7 +87,7 @@ describe('parseAIRequestIntake', () => {
 
   it('treats an absent or empty context/answers as null', () => {
     const parsed = parseAIRequestIntake({ text: 'hi', context: {}, answers: {} });
-    expect(parsed).toEqual({ ok: true, value: { text: 'hi', conversationId: null, context: null, answers: null } });
+    expect(parsed).toEqual({ ok: true, value: { text: 'hi', conversationId: null, context: null, answers: null, clientRequestId: null } });
   });
 });
 

@@ -8,8 +8,11 @@
 //   1. Shape — keys are unique, counts are bounded, descriptions are trimmed to
 //      the lengths strict mode could not enforce.
 //   2. Tools — an act/retrieve step must name a registry tool (`getTool`
-//      resolves aliases and case); its `input` string must parse to an object
-//      that satisfies that tool's zod input schema (after `conformNulls`, the
+//      resolves aliases and case) that is ALSO in the intent's catalogue
+//      (`allowedTools`, the set the prompt offered: a real tool from another
+//      intent's catalogue is dropped as `off_catalogue`, so the narrowing in
+//      prompts.ts is a boundary, not advice); its `input` string must parse
+//      to an object that satisfies that tool's zod input schema (after `conformNulls`, the
 //      same bridge the executor applies). A step that fails either is DROPPED
 //      — the executor would only refuse it later, and a plan the family
 //      approves must be a plan that can actually run. A step whose type
@@ -52,7 +55,7 @@ import {
 } from './schema';
 
 export type PlanIssueCode =
-  | 'duplicate_key' | 'too_many_steps' | 'missing_tool' | 'unknown_tool' | 'type_coerced' | 'invalid_input'
+  | 'duplicate_key' | 'too_many_steps' | 'missing_tool' | 'unknown_tool' | 'off_catalogue' | 'type_coerced' | 'invalid_input'
   | 'invalid_condition' | 'unknown_dependency' | 'dependency_dropped' | 'invalid_verify' | 'invalid_notify'
   | 'invalid_followup' | 'past_followup' | 'denied' | 'recommend_only' | 'cycle' | 'empty';
 
@@ -88,7 +91,18 @@ export type ValidationInputs = {
   confidence?: number;
   now: Date;
   tz: string;
+  /**
+   * Canonical names of the tools offered for this request (`catalogueNames`
+   * over `toolsForIntent`). A step's name is resolved through `getTool` first,
+   * so aliases and casing match; the resolved tool must be in this set.
+   */
+  allowedTools: ReadonlySet<string>;
 };
+
+/** The canonical names of a catalogue, for `ValidationInputs.allowedTools`. */
+export function catalogueNames(tools: readonly Pick<ToolDefinition, 'name'>[]): Set<string> {
+  return new Set(tools.map((tool) => tool.name));
+}
 
 export type ValidationResult =
   | {
@@ -411,6 +425,13 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
       const tool = getTool(name);
       if (!tool) {
         issues.push({ code: 'unknown_tool', step: key, message: `Step "${key}" names a tool that does not exist ("${name}"); use only tools from the catalogue.` });
+        return null;
+      }
+      if (!inputs.allowedTools.has(tool.name)) {
+        // The tool is real, but not one this request was offered: the
+        // catalogue is the boundary of what a meal plan may touch, and a
+        // model that reaches past it must not get the executor's authority.
+        issues.push({ code: 'off_catalogue', step: key, message: `Step "${key}" names ${tool.name}, which is not in the catalogue for this request; use only the tools listed in the catalogue.` });
         return null;
       }
       const conformed = conformNulls(tool.input, parsedInput.value);

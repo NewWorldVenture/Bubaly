@@ -3,13 +3,14 @@
 // controls — rendered on the server first so a refresh never loses state
 // (§45 Persistence), then kept live by the timeline's Realtime subscription.
 //
-// This page is the ONLY reader for the run detail UI, and it reads through the
-// family-scoped `loadRunDetail` with the caller's own client: a run from
-// another family is `null` and becomes a 404, never a 403 that confirms the id
-// exists. What crosses to the browser is the `RunView` built by `toRunView`
-// below — step descriptions, event messages, the plan's reasoning_summary —
-// never the model's reasoning, step inputs/results or event payloads
-// (tests/run-detail-read-boundary.test.ts pins this).
+// This page reads through the family-scoped `loadRunDetail` with the caller's
+// own client: a run from another family is `null` and becomes a 404, never a
+// 403 that confirms the id exists. What crosses to the browser is the
+// `RunView` built by `toRunView` in lib/ai/runs/detail.ts — the same boundary
+// the GET route and the refresh action use — step descriptions, event
+// messages, the plan's reasoning_summary; never the model's reasoning, step
+// inputs/results or event payloads (tests/run-detail-read-boundary.test.ts
+// pins this).
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -20,112 +21,24 @@ import { createServer } from '@/lib/supabase/server';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { isManager } from '@/lib/constants/roles';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { loadRunDetail, type RunDetailView } from '@/lib/ai/runs/detail';
+import { loadRunDetail, toRunView } from '@/lib/ai/runs/detail';
 import { editStepInput } from '@/lib/ai/runs/controls';
 import { kickRun } from '@/lib/ai/runs/continue';
-import { describeProgress, displayRunState, summarizeSteps, type StepState } from '@/lib/ai/runs/states';
+import type { StepState } from '@/lib/ai/runs/states';
 import { runPagePath } from '@/lib/ai/chat-request';
 import { editableFieldsFor } from '@/lib/approvals/card-data';
 import type { RunActionResult } from '@/app/(app)/dashboard/concierge/run-actions';
 import { ErrorState } from '@/components/ui/states';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { StatusBadge } from '@/components/concierge/status-badge';
-import { RunTimeline, type RunEventView, type RunStepView, type RunView } from '@/components/concierge/run-timeline';
+import { RunTimeline } from '@/components/concierge/run-timeline';
 import { RunControls, type EditableStep, type FailedStep } from '@/components/concierge/run-controls';
 import { ClarificationCard } from '@/components/concierge/clarification-card';
 
 export const metadata: Metadata = { title: 'Bubaly is on it' };
 export const dynamic = 'force-dynamic';
 
-/** Step states a manager may still change before they run (or run again). */
-const EDITABLE_STEP_STATES: readonly StepState[] = ['queued', 'ready', 'awaiting_approval', 'failed', 'blocked', 'cancelled'];
 const RERUNNABLE_STEP_STATES: readonly StepState[] = ['failed', 'blocked', 'cancelled'];
-
-/** "1.2s · 850 tokens" — the only fields of a `model_call` payload the page reads. */
-function modelCallMetrics(payload: unknown): string | null {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const rec = payload as Record<string, unknown>;
-  const parts: string[] = [];
-  if (typeof rec.latency_ms === 'number' && Number.isFinite(rec.latency_ms)) parts.push(`${(rec.latency_ms / 1000).toFixed(1)}s`);
-  if (typeof rec.total_tokens === 'number' && Number.isFinite(rec.total_tokens)) parts.push(`${rec.total_tokens} tokens`);
-  return parts.length ? parts.join(' · ') : null;
-}
-
-type Clarification = { question: string; answer: string | null };
-
-function clarificationsOf(raw: unknown): Clarification[] {
-  if (!Array.isArray(raw)) return [];
-  const out: Clarification[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const rec = item as Record<string, unknown>;
-    if (typeof rec.question !== 'string' || !rec.question.trim()) continue;
-    out.push({ question: rec.question, answer: typeof rec.answer === 'string' && rec.answer.trim() ? rec.answer : null });
-  }
-  return out;
-}
-
-function stepDescription(step: RunDetailView['steps'][number]): string {
-  return step.description?.trim() || 'A step Bubaly planned';
-}
-
-/** The read boundary: everything the browser gets to see about a run. */
-function toRunView(detail: RunDetailView, familyId: string, manager: boolean): RunView {
-  const { run, request, plan, steps, events, approvals } = detail;
-  const state = displayRunState(run);
-  const counts = summarizeSteps(steps.map((s) => ({ id: s.id, status: s.status as StepState, dependency_ids: s.dependency_ids, sequence: s.sequence })));
-  const clarifications = clarificationsOf(request?.clarifications);
-  const open = state === 'awaiting_context' ? clarifications.find((c) => !c.answer) ?? null : null;
-
-  const stepViews: RunStepView[] = steps.map((s) => {
-    const view: RunStepView = { id: s.id, sequence: s.sequence, description: stepDescription(s), status: s.status as StepState, error: s.error };
-    if (manager && EDITABLE_STEP_STATES.includes(s.status as StepState) && (s.step_type === 'act' || s.step_type === 'notify')) {
-      const input = s.input_json && typeof s.input_json === 'object' && !Array.isArray(s.input_json) ? (s.input_json as Record<string, unknown>) : null;
-      const fields = editableFieldsFor(input);
-      if (fields.length) view.editableFields = fields;
-    }
-    return view;
-  });
-
-  const eventViews: RunEventView[] = events.map((e) => ({
-    id: e.id,
-    type: e.event_type,
-    message: e.message,
-    at: e.created_at,
-    stepId: e.step_id,
-    actor: e.actor_kind as RunEventView['actor'],
-    metrics: e.event_type === 'model_call' ? modelCallMetrics(e.payload) : null,
-  }));
-
-  return {
-    id: run.id,
-    familyId,
-    planId: run.plan_id,
-    requestId: run.request_id,
-    state,
-    objective: plan?.objective?.trim() || run.summary?.trim() || request?.request_text?.trim() || 'Your request',
-    requestText: request?.request_text?.trim() || null,
-    requestedBy: null,
-    reasoningSummary: plan?.reasoning_summary?.trim() || null,
-    riskLevel: (plan?.risk_level as RunView['riskLevel']) ?? 'low',
-    progress: {
-      done: counts.completed + counts.skipped,
-      total: counts.total,
-      failed: counts.failed,
-      blocked: counts.blocked,
-      awaitingApproval: counts.awaitingApproval,
-      label: describeProgress(counts),
-    },
-    error: state === 'failed' || state === 'blocked' ? run.error : null,
-    createdAt: run.created_at,
-    completedAt: run.completed_at,
-    steps: stepViews,
-    events: eventViews,
-    approvals,
-    question: open?.question ?? null,
-    answered: clarifications.filter((c): c is { question: string; answer: string } => !!c.answer),
-  };
-}
 
 function RunUnavailable({ message }: { message: string }) {
   return (

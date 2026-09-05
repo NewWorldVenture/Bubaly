@@ -288,6 +288,30 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     if (foreign.ok) expect(foreign.data).toBeNull();
   });
 
+  it('blocks a run that names a plan without its request, or acts for someone other than the requester', async () => {
+    // 0252 stops a member from filing such a row through PostgREST; the
+    // executor refuses it anyway (defense in depth), before any tool runs.
+    const { continueRun } = await import('@/lib/ai/runs/continue');
+    const ledgerBefore = db.table('ai_tool_calls').length;
+    const forged = '00000000-0000-4000-8000-00000000f0e9';
+    await client.from('family_automation_runs').insert({
+      id: forged, family_id: FAMILY, plan_id: planId, request_id: null, requested_by_member_id: PARENT,
+      run_type: 'concierge', state: 'ready', status: 'ready', created_by: USER, run_after: NOW.toISOString(),
+    });
+    const first = await continueRun(forged, { budgetMs: 60_000, db: client });
+    expect(first.status).not.toBe('completed');
+    expect(['blocked', 'failed']).toContain(db.table('family_automation_runs').find((r) => r.id === forged)?.state);
+
+    const mismatched = '00000000-0000-4000-8000-00000000f0ea';
+    await client.from('family_automation_runs').insert({
+      id: mismatched, family_id: FAMILY, plan_id: planId, request_id: requestId, requested_by_member_id: CHILD,
+      run_type: 'concierge', state: 'ready', status: 'ready', created_by: USER, run_after: NOW.toISOString(),
+    });
+    await continueRun(mismatched, { budgetMs: 60_000, db: client });
+    expect(['blocked', 'failed']).toContain(db.table('family_automation_runs').find((r) => r.id === mismatched)?.state);
+    expect(db.table('ai_tool_calls')).toHaveLength(ledgerBefore);
+  });
+
   it('never runs a plan for a request the intake already gave up on (the planner-deadline race)', async () => {
     // The intake marks a request failed at its planner deadline and tells the
     // person to try again. If the model was still thinking, its late plan must

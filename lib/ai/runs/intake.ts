@@ -30,12 +30,13 @@ import { planRequest, type PlanOutcome } from '@/lib/ai/planner';
 import { runPagePath, type AIRequestContext, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
+import { makeKey } from '@/lib/services/idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { cancelRun, pauseRun, rerunStep, resumeRun } from './controls';
 import { kickRun } from './continue';
 import { legacyStatusFor } from './states';
 import {
-  appendEvent, createRequest, createRun, ledgerClient, loadRun, updateRequest, updateRun, type RequestRow,
+  appendEvent, createRequest, createRun, ledgerClient, loadRun, updateRequest, updateRun, updateRunWhereState, type RequestRow,
 } from './store';
 
 type DB = SupabaseClient<Database>;
@@ -53,6 +54,8 @@ export const INTAKE_CODES = {
   timeout: 'planner_timeout',
   planner: 'planner_failed',
   context: 'context_failed',
+  /** A retry arrived under a key whose first submission is still being planned. */
+  inProgress: 'request_in_progress',
 } as const;
 
 export type IntakeOptions = {
@@ -66,7 +69,10 @@ export type IntakeOptions = {
   now?: Date;
 };
 
-export type IntakeResult = AIRequestResponse;
+export type IntakeResult = AIRequestResponse & {
+  /** True when the answer was rebuilt from a request that already existed under the caller's key (nothing was planned). */
+  replayed?: boolean;
+};
 
 /**
  * One entry of `ai_requests.clarifications`, in the shape the planner writes
@@ -166,7 +172,7 @@ function runStatusCard(outcome: Extract<PlanOutcome, { kind: 'plan' | 'clarifica
  */
 export async function submitRequest(
   scope: ServiceScope,
-  input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null },
+  input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null; clientRequestId?: string | null },
   opts: IntakeOptions = {},
 ): Promise<ServiceResult<IntakeResult>> {
   const text = input.text.trim();
@@ -189,10 +195,18 @@ export async function submitRequest(
 
   // Through the caller's OWN client on purpose: 0250 gives members INSERT on
   // ai_requests with `requested_by = auth.uid()`, so RLS proves the requester.
-  const created = await createRequest(scope, { requestText: text, kind: 'concierge', conversationId });
+  const clientRequestId = input.clientRequestId ?? null;
+  const created = await createRequest(scope, { requestText: text, kind: 'concierge', conversationId, clientRequestId });
   if (!created.ok) return created;
+  // A retried POST (a dropped connection, a double tap) lands here: the key
+  // already names a request, so the answer is the one that request got —
+  // never a second plan and a second run over the same words.
+  if (created.data.existing) return replayRequest(scope, db, created.data.id);
   const requestId = created.data.id;
   const requestScope: ServiceScope = { ...scope, requestId };
+  // The run row gets the same key, so even a retry that somehow reached the
+  // planner would re-find this run instead of creating another (0250's index).
+  const runIdempotencyKey = clientRequestId ? makeKey([scope.familyId, 'request', clientRequestId]) : null;
 
   const planning = await updateRequest(requestScope, requestId, { status: 'planning', started_at: new Date().toISOString() }, { db });
   if (!planning.ok) return planning;
@@ -216,7 +230,7 @@ export async function submitRequest(
   const planned = settlePlanner(await withDeadline(
     planRequest(requestScope, {
       requestId, requestText: text, intent, context: context.data, conversationId,
-      answers: input.answers ?? null, entities: classified.entities, pageContext: input.context ?? null,
+      answers: input.answers ?? null, entities: classified.entities, pageContext: input.context ?? null, runIdempotencyKey,
     }),
     opts.plannerBudgetMs ?? DEFAULT_PLANNER_BUDGET_MS,
   ));
@@ -226,6 +240,56 @@ export async function submitRequest(
   }
 
   return finalizeOutcome(requestScope, db, { requestId, conversationId, outcome: planned.data, kick, startedAt });
+}
+
+/**
+ * The response for a request that already exists under the caller's key,
+ * rebuilt from the rows the first submission left behind: its latest run
+ * (plan attached → 'plan'; parked → 'clarification'; closed without a plan →
+ * 'answer') or, with no run, the request's own status. A key whose first
+ * submission is still planning is reported as such rather than planned again.
+ */
+async function replayRequest(scope: ServiceScope, db: DB, requestId: string): Promise<ServiceResult<IntakeResult>> {
+  const { data: request, error: requestError } = await db
+    .from('ai_requests').select('id, status, error, requested_by').eq('id', requestId).eq('family_id', scope.familyId).maybeSingle();
+  if (requestError) {
+    console.error('[ai/intake] could not re-read a request for replay', requestError);
+    return fail(describeDbError(requestError, 'Bubaly could not open that request.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  if (!request) return fail('That request could not be found.', { code: SERVICE_CODES.notFound });
+  // The key is unique per family, but a replay is only ever the requester's
+  // own: another member reusing the same key gets a conflict, not a redirect
+  // to somebody else's request.
+  if (request.requested_by !== scope.userId) {
+    return fail('That request id was already used by someone else in your family.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  const { data: runs, error: runError } = await db
+    .from('family_automation_runs').select('id, plan_id, state, summary')
+    .eq('family_id', scope.familyId).eq('request_id', requestId)
+    .order('created_at', { ascending: false }).limit(1);
+  if (runError) {
+    console.error('[ai/intake] could not read the run for a replayed request', runError);
+    return fail(describeDbError(runError, 'Bubaly could not open that request.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  const run = runs?.[0] ?? null;
+  if (run) {
+    const summary = run.summary ?? '';
+    const outcome: IntakeResult['outcome'] = run.plan_id ? 'plan' : run.state === 'awaiting_context' ? 'clarification' : 'answer';
+    return ok({
+      requestId, runId: run.id, planId: run.plan_id, outcome, summary, redirect: runPagePath(run.id),
+      ...(outcome === 'clarification' ? { question: summary } : {}), replayed: true,
+    });
+  }
+  switch (request.status) {
+    case 'completed':
+      // Answered or recommended inline; the text lives in the conversation, not on the request.
+      return ok({ requestId, runId: null, planId: null, outcome: 'answer', summary: '', redirect: null, replayed: true });
+    case 'failed':
+      return fail(request.error || 'Bubaly could not plan that request.', { code: INTAKE_CODES.planner, retryable: true });
+    default:
+      return fail('Bubaly is still working on that request. Check back in a moment.', { code: INTAKE_CODES.inProgress, retryable: true });
+  }
 }
 
 async function finalizeOutcome(
@@ -332,6 +396,15 @@ export async function answerClarification(
   const request = requestRow as RequestRow | null;
   if (!request) return fail('That request could not be found.', { code: SERVICE_CODES.notFound });
 
+  // Claim the run BEFORE anything is written, by compare-and-set from
+  // `awaiting_context`. The state check above was a plain read: two answers
+  // submitted together (two tabs, a retried POST) both pass it, and without
+  // this claim both would record an answer, both would re-plan, and the
+  // second would repoint a run the first had already started executing.
+  const claimed = await updateRunWhereState(requestScope, runId, 'awaiting_context', { state: 'planning', status: legacyStatusFor('planning') }, { db });
+  if (!claimed.ok) return claimed;
+  if (!claimed.data) return fail('That answer is already being handled.', { code: SERVICE_CODES.invalidInput });
+
   const nowIso = new Date().toISOString();
   const clarifications = parseClarifications(request.clarifications);
   const open = [...clarifications].reverse().find((c) => !c.answer);
@@ -339,9 +412,10 @@ export async function answerClarification(
   else clarifications.push({ question: run.summary ?? '', reason: null, asked_at: nowIso, answer: reply, answered_at: nowIso });
 
   const recorded = await updateRequest(requestScope, requestId, { clarifications: clarifications as unknown as Json, status: 'planning' }, { db });
-  if (!recorded.ok) return recorded;
-  const toPlanning = await updateRun(requestScope, runId, { state: 'planning', status: legacyStatusFor('planning') }, { db });
-  if (!toPlanning.ok) return toPlanning;
+  if (!recorded.ok) {
+    await parkAgain(requestScope, db, runId, requestId, run.summary ?? '');
+    return recorded;
+  }
   await appendEvent(requestScope, runId, { eventType: 'clarification_answered', message: reply, requestId }, { db });
   if (request.conversation_id) await recordConversationTurn(requestScope, db, request.conversation_id, requestId, { role: 'user', content: reply });
 
@@ -369,8 +443,10 @@ export async function answerClarification(
       const continued = await adoptPlannedRun(requestScope, db, { placeholderRunId: runId, plannerRunId: outcome.runId, planId: outcome.planId, summary: outcome.summary });
       if (!continued.ok) return continued;
       const liveRunId = continued.data.runId;
-      if (conversationId) await recordConversationTurn(requestScope, db, conversationId, requestId, { role: 'assistant', content: outcome.summary, card: runStatusCard(outcome, liveRunId) });
-      kick(liveRunId, { budgetMs: executionBudgetMs(startedAt) });
+      if (continued.data.live) {
+        if (conversationId) await recordConversationTurn(requestScope, db, conversationId, requestId, { role: 'assistant', content: outcome.summary, card: runStatusCard(outcome, liveRunId) });
+        kick(liveRunId, { budgetMs: executionBudgetMs(startedAt) });
+      }
       return ok({ requestId, runId: liveRunId, planId: outcome.planId, outcome: 'plan', summary: outcome.summary, redirect: runPagePath(liveRunId) });
     }
     case 'clarification': {
@@ -411,12 +487,17 @@ async function parkAgain(scope: ServiceScope, db: DB, runId: string, requestId: 
  * Attach the planner's plan to the run the person is on, retiring the run the
  * planner created for it. Falls back to the planner's run when it has already
  * been claimed (or when the planner reused the same id).
+ *
+ * `live` is false when the placeholder left `planning` while the model was
+ * thinking (a cancel from another tab is the realistic case): the plan is
+ * left unattached and nothing is kicked, because attaching it would revive a
+ * run the person already stopped.
  */
 async function adoptPlannedRun(
   scope: ServiceScope,
   db: DB,
   args: { placeholderRunId: string; plannerRunId: string; planId: string; summary: string },
-): Promise<ServiceResult<{ runId: string }>> {
+): Promise<ServiceResult<{ runId: string; live: boolean }>> {
   const { placeholderRunId, plannerRunId, planId, summary } = args;
   const nowIso = new Date().toISOString();
 
@@ -438,16 +519,22 @@ async function adoptPlannedRun(
       const closed = await updateRun(scope, placeholderRunId, { state: 'completed', status: legacyStatusFor('completed'), summary: 'Answered — Bubaly continued the work in a new run.', completed_at: nowIso }, { db });
       if (!closed.ok) return closed;
       await appendEvent(scope, placeholderRunId, { eventType: 'run_completed', message: 'Continued in a new run.', payload: { continuedAs: plannerRunId } }, { db });
-      return ok({ runId: plannerRunId });
+      return ok({ runId: plannerRunId, live: true });
     }
   }
 
-  const attached = await updateRun(scope, placeholderRunId, {
+  // Compare-and-set from `planning` — the state `answerClarification` claimed
+  // — so the plan is attached only to the run that is still ours to repoint.
+  const attached = await updateRunWhereState(scope, placeholderRunId, 'planning', {
     plan_id: planId, state: 'ready', status: legacyStatusFor('ready'), summary, run_after: nowIso, error: null, lease_owner: null, lease_expires_at: null,
   }, { db });
   if (!attached.ok) return attached;
+  if (!attached.data) {
+    console.warn('[ai/intake] the run left planning before its plan was attached; nothing will run', { runId: placeholderRunId, planId });
+    return ok({ runId: placeholderRunId, live: false });
+  }
   await appendEvent(scope, placeholderRunId, { eventType: 'planned', message: summary, payload: { planId } }, { db });
-  return ok({ runId: placeholderRunId });
+  return ok({ runId: placeholderRunId, live: true });
 }
 
 // ─── Controls ───────────────────────────────────────────────────────────────
@@ -509,6 +596,7 @@ export function statusForServiceCode(code: string | undefined, retryable?: boole
     case SERVICE_CODES.notFound: return 404;
     case SERVICE_CODES.denied: return 403;
     case SERVICE_CODES.invalidInput: return 409;
+    case INTAKE_CODES.inProgress: return 409;
     case INTAKE_CODES.timeout: return 504;
     case 'unconfigured': return 503;
     case SERVICE_CODES.db: return retryable ? 503 : 500;

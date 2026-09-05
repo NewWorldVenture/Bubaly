@@ -1,18 +1,23 @@
 // The scripted provider is what CI and Playwright talk to instead of OpenAI.
-// Three things must hold: it can never be selected in production, it picks
-// the same script for the same call every time, and every script it ships is
-// a reply the real pipeline accepts (a plan the schema parses, an intent the
-// classifier's enum accepts). The routing tests prove the branch is taken
-// only under the guard.
+// Four things must hold: it can never be selected in production — a
+// production BUILD needs the e2e flag plus proof it is a CI or local run, a
+// Vercel production deployment refuses it outright, and enabling it is never
+// quiet — it only reads scripts from under tests/, it picks the same script
+// for the same call every time, and every script it ships is a reply the real
+// pipeline accepts (a plan the schema parses, an intent the classifier's enum
+// accepts). The routing tests prove the branch is taken only under the guard.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
+import fs from 'node:fs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { INTENT_KEYS } from '@/lib/ai/context/intents';
 import { PlanSchema } from '@/lib/ai/planner/schema';
-import { validatePlan } from '@/lib/ai/planner/validate';
+import { catalogueNames, validatePlan } from '@/lib/ai/planner/validate';
 import { conformNulls } from '@/lib/ai/schema-to-json';
+import { listTools } from '@/lib/ai/tools/registry';
 import {
-  intentFromSystem, isProviderStubEnabled, loadScripts, ScriptedProvider, scriptedProvider, selectScript, STUB_MODEL_ID, type ProviderScript,
+  DEFAULT_SCRIPT_DIR, intentFromSystem, isProviderStubEnabled, loadScripts, resetProviderStubWarning, resolveScriptDir, ScriptedProvider, scriptedProvider, selectScript, STUB_MODEL_ID, type ProviderScript,
 } from '@/lib/ai/provider-stub';
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,9 +44,78 @@ describe('the guard', () => {
 
   it('needs the explicit e2e flag under a production build, and never runs on a Vercel production deployment', () => {
     expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production' })).toBe(false);
-    expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1' })).toBe(true);
-    expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1', VERCEL_ENV: 'production' })).toBe(false);
+    expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1', CI: 'true' })).toBe(true);
+    expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1', CI: 'true', VERCEL_ENV: 'production' })).toBe(false);
+    expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1', NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321', VERCEL_ENV: 'production' })).toBe(false);
     expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'test', VERCEL_ENV: 'production' })).toBe(false);
+  });
+
+  it('under a production build the e2e flag alone is not enough: the run must be CI or point at a local Supabase', () => {
+    const base = { AI_PROVIDER_STUB: '1', NODE_ENV: 'production', E2E_PROVIDER_STUB: '1' };
+    // A self-hosted or staging production build with the two flags set.
+    expect(isProviderStubEnabled(base)).toBe(false);
+    expect(isProviderStubEnabled({ ...base, NEXT_PUBLIC_SUPABASE_URL: 'https://abcdefgh.supabase.co' })).toBe(false);
+    expect(isProviderStubEnabled({ ...base, NEXT_PUBLIC_SUPABASE_URL: 'https://localhost.evil.example' })).toBe(false);
+    expect(isProviderStubEnabled({ ...base, CI: 'false' })).toBe(false);
+    // A local e2e run against `supabase start`, and a GitHub Actions job.
+    expect(isProviderStubEnabled({ ...base, NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321' })).toBe(true);
+    expect(isProviderStubEnabled({ ...base, NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321' })).toBe(true);
+    expect(isProviderStubEnabled({ ...base, CI: 'true' })).toBe(true);
+    expect(isProviderStubEnabled({ ...base, CI: '1' })).toBe(true);
+    // Exactly what .github/workflows/ci.yml runs the Playwright job with: GitHub's CI=true, the isolated Supabase on 127.0.0.1.
+    expect(isProviderStubEnabled({ ...base, CI: 'true', NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321' })).toBe(true);
+    const workflow = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
+    expect(workflow).toContain("AI_PROVIDER_STUB: '1'");
+    expect(workflow).toContain("E2E_PROVIDER_STUB: '1'");
+  });
+
+  it('warns once, loudly, the first time it is enabled in a process — and not when it is off', () => {
+    resetProviderStubWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'production', VERCEL_ENV: 'production' })).toBe(false);
+      expect(isProviderStubEnabled({})).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+      expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'test' })).toBe(true);
+      expect(isProviderStubEnabled({ AI_PROVIDER_STUB: '1', NODE_ENV: 'test' })).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/scripted provider/);
+      expect(String(warn.mock.calls[0][0])).toMatch(/never reach production/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe('the script directory', () => {
+  const cwd = path.resolve('/repo');
+  const fallback = path.resolve(cwd, DEFAULT_SCRIPT_DIR);
+
+  it('accepts a directory under tests/ and falls back to the default for anything else', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(resolveScriptDir(undefined, cwd)).toBe(fallback);
+      expect(resolveScriptDir('   ', cwd)).toBe(fallback);
+      expect(resolveScriptDir('tests/ai-eval/fixtures', cwd)).toBe(path.resolve(cwd, 'tests/ai-eval/fixtures'));
+      expect(resolveScriptDir(path.resolve(cwd, 'tests/other'), cwd)).toBe(path.resolve(cwd, 'tests/other'));
+      expect(resolveScriptDir('tests', cwd)).toBe(path.resolve(cwd, 'tests'));
+      expect(warn).not.toHaveBeenCalled();
+      // Outside the tree, by absolute path, by `..`, by a prefix that only looks like tests/, and by escaping through it.
+      for (const outside of ['/etc/bubaly', '../elsewhere/tests', 'tests-not-really/scripts', 'tests/../lib/ai', 'lib/ai']) {
+        expect(resolveScriptDir(outside, cwd), outside).toBe(fallback);
+      }
+      expect(warn).toHaveBeenCalledTimes(5);
+      expect(String(warn.mock.calls[0][0])).toMatch(/outside/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('is the only way the shared provider reads AI_PROVIDER_STUB_DIR', () => {
+    const source = fs.readFileSync('lib/ai/provider-stub.ts', 'utf8');
+    expect(source).toContain('new ScriptedProvider(resolveScriptDir(process.env.AI_PROVIDER_STUB_DIR))');
+    expect(source.match(/AI_PROVIDER_STUB_DIR/g)?.length).toBeGreaterThan(0);
+    expect(source).not.toContain('process.env.AI_PROVIDER_STUB_DIR ||');
   });
 });
 
@@ -111,7 +185,7 @@ describe('the shipped scripts', () => {
 
   it('every plan reply parses with PlanSchema and validates to runnable steps', async () => {
     const scripts = await loadScripts(SCRIPT_DIR);
-    const inputs = { policies: [], grants: [], delegations: [], emergencyDomains: [], role: 'parent' as const, now: new Date('2026-09-05T16:00:00Z'), tz: 'America/New_York' };
+    const inputs = { policies: [], grants: [], delegations: [], emergencyDomains: [], role: 'parent' as const, now: new Date('2026-09-05T16:00:00Z'), tz: 'America/New_York', allowedTools: catalogueNames(listTools()) };
     for (const script of scripts) {
       const raw = script.structured?.family_plan;
       expect(raw, script.id).toBeDefined();

@@ -536,7 +536,12 @@ async function performApproved(
 ): Promise<ServiceResult<DecideResult>> {
   switch (classified.kind) {
     case 'plan_steps': {
-      const folded = await foldIntoRun(scope, row, classified.stepIds, 'approved');
+      // Only a row Bubaly filed (server-side, requested_by_kind = 'ai') may name
+      // extra steps to release. A member-filed row releases nothing beyond the
+      // steps already pointing at it, so a forged {kind:'plan_steps'} payload
+      // cannot un-block a parent's declined work.
+      const releasable = row.requested_by_kind === 'ai' ? classified.stepIds : [];
+      const folded = await foldIntoRun(scope, row, releasable, 'approved');
       if (!folded.ok) return folded;
       const summary = folded.data.released
         ? 'Approved — Bubaly is picking this up now.'
@@ -579,9 +584,11 @@ async function performApproved(
         classified.name,
         args,
         {
-          // The approval IS the gate: re-evaluating would open a second row for
-          // work this parent just said yes to, and the action would never run.
-          skipTrust: true,
+          // The approval IS the gate — when Bubaly filed it. A row a member
+          // filed themselves (requested_by_kind = 'member') is not a decision
+          // Bubaly made, so the tool is evaluated again under the approver's
+          // role rather than executed on the strength of the row's contents.
+          skipTrust: row.requested_by_kind === 'ai',
           requestId: row.request_id ?? null,
           runId: row.run_id ?? null,
           // A retried decision (network blip after the flip) must not write twice.

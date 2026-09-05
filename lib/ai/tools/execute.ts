@@ -343,7 +343,7 @@ async function gate(
   } else if (approvalId && consequences.length > 0) {
     // The trust bridge opens approvals without knowing what the tool would do;
     // the card (§31) needs the consequences, so they are attached here.
-    const { error } = await scope.db.from('approval_requests').update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId);
+    const { error } = await (await trustWriter(scope)).from('approval_requests').update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId);
     if (error) console.error('[tool-exec] could not attach consequences to the approval', error);
   }
 
@@ -376,6 +376,23 @@ type GateMeta = {
  * about (`payload_kind`, `consequences`), so both kinds of approval render and
  * execute identically.
  */
+/**
+ * The client that files approval requests and audit rows on Bubaly's behalf.
+ * 0252 lets a member INSERT only their own member-kind approval row, so the
+ * AI-filed rows this module writes must go through the service client; a
+ * system scope already holds it, and when no service credentials exist (unit
+ * tests) the caller's client is used, which is what the recorder tests see.
+ */
+async function trustWriter(scope: ServiceScope): Promise<ServiceScope['db']> {
+  if (scope.actorKind === 'system') return scope.db;
+  try {
+    const { createServiceClient } = await import('@/lib/supabase/server');
+    return createServiceClient();
+  } catch {
+    return scope.db;
+  }
+}
+
 async function openApproval(
   scope: ServiceScope,
   tool: ToolDefinition,
@@ -383,7 +400,7 @@ async function openApproval(
   decision: Decision,
   meta: GateMeta,
 ): Promise<string | null> {
-  const { data, error } = await scope.db
+  const { data, error } = await (await trustWriter(scope))
     .from('approval_requests')
     .insert({
       family_id: scope.familyId,
@@ -425,7 +442,7 @@ async function recordRiskAudit(
   approvalId: string | null,
   meta: GateMeta,
 ): Promise<void> {
-  const { error } = await scope.db.from('trust_audit_logs').insert({
+  const { error } = await (await trustWriter(scope)).from('trust_audit_logs').insert({
     family_id: scope.familyId,
     actor_kind: meta.actorKind,
     actor_id: meta.actorId,

@@ -44,25 +44,52 @@ const MAX_MODULE_CHARS = 60;
 
 export type AIRequestContext = { module?: string; entityIds?: string[] };
 
+/**
+ * A client-supplied id for one submission: a UUID, a ULID, `<device>:<n>`…
+ * Bounded and character-limited because it is stored verbatim and indexed
+ * per family; anything else is a 400, never silently dropped (a dropped key
+ * would turn a retry back into a second request).
+ */
+export const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+
+export function isClientRequestId(value: unknown): value is string {
+  return typeof value === 'string' && CLIENT_REQUEST_ID_PATTERN.test(value);
+}
+
 export type AIRequestIntake = {
   text: string;
   conversationId: string | null;
   context: AIRequestContext | null;
   answers: Record<string, string> | null;
+  /** The submission's idempotency key, when the client sent one. */
+  clientRequestId: string | null;
 };
 
 export type AIRequestIntakeParse =
   | { ok: true; value: AIRequestIntake }
-  | { ok: false; error: 'invalid_body' | 'text_required' | 'text_too_long' | 'conversation_invalid' };
+  | { ok: false; error: 'invalid_body' | 'text_required' | 'text_too_long' | 'conversation_invalid' | 'client_request_id_invalid' };
+
+export type AIRequestIntakeParseOptions = {
+  /** The `Idempotency-Key` request header; it wins over a `clientRequestId` in the body. */
+  idempotencyKey?: string | null;
+};
 
 /** Validate and normalize the body of `POST /api/ai/requests`. */
-export function parseAIRequestIntake(value: unknown): AIRequestIntakeParse {
+export function parseAIRequestIntake(value: unknown, opts: AIRequestIntakeParseOptions = {}): AIRequestIntakeParse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'invalid_body' };
   const body = value as Record<string, unknown>;
 
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) return { ok: false, error: 'text_required' };
   if (text.length > MAX_AI_REQUEST_TEXT_CHARS) return { ok: false, error: 'text_too_long' };
+
+  let clientRequestId: string | null = null;
+  const rawKey = typeof opts.idempotencyKey === 'string' && opts.idempotencyKey.trim() ? opts.idempotencyKey : body.clientRequestId;
+  if (rawKey !== undefined && rawKey !== null) {
+    const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+    if (!isClientRequestId(key)) return { ok: false, error: 'client_request_id_invalid' };
+    clientRequestId = key;
+  }
 
   let conversationId: string | null = null;
   if (body.conversationId !== undefined && body.conversationId !== null) {
@@ -91,7 +118,7 @@ export function parseAIRequestIntake(value: unknown): AIRequestIntakeParse {
     if (Object.keys(clean).length) answers = clean;
   }
 
-  return { ok: true, value: { text, conversationId, context, answers } };
+  return { ok: true, value: { text, conversationId, context, answers, clientRequestId } };
 }
 
 export type AIRequestOutcomeKind = 'plan' | 'recommendation' | 'clarification' | 'answer';
@@ -136,20 +163,25 @@ async function readResult(res: Response): Promise<AIRequestSubmitResult> {
 /**
  * File a request from the browser. Never throws: a network failure is a
  * result the caller renders, the same as a 4xx from the route.
+ *
+ * `clientRequestId` is optional but worth sending from any caller that
+ * retries: the route answers a retry with the request it already filed
+ * instead of planning (and executing) it a second time.
  */
 export async function submitAIRequest(
-  input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null },
+  input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null; clientRequestId?: string | null },
   fetchImpl: typeof fetch = fetch,
 ): Promise<AIRequestSubmitResult> {
   try {
     const res = await fetchImpl('/api/ai/requests', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(input.clientRequestId ? { 'idempotency-key': input.clientRequestId } : {}) },
       body: JSON.stringify({
         text: input.text,
         ...(input.conversationId ? { conversationId: input.conversationId } : {}),
         ...(input.context ? { context: input.context } : {}),
         ...(input.answers ? { answers: input.answers } : {}),
+        ...(input.clientRequestId ? { clientRequestId: input.clientRequestId } : {}),
       }),
     });
     return await readResult(res);

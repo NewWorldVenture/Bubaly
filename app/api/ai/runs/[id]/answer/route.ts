@@ -3,12 +3,15 @@
 // planned again (next plan version) and the run continues; the response is
 // the same shape as POST /api/ai/requests so the Ask bar handles both.
 //
-// The planner runs here, so this route carries the same duration as intake and
-// the same durable rate limit (an answer is a model call, not a status poke).
+// The planner runs here, so this route carries the same duration as intake,
+// the same durable rate limit (an answer is a model call, not a status poke)
+// and the same feature/plan/allowance gate: an answer re-plans and then
+// executes with the run's authority, exactly what a family whose concierge is
+// off or lapsed must not be able to start from a parked run.
 import { NextRequest, NextResponse } from 'next/server';
 import { MAX_AI_ANSWER_CHARS } from '@/lib/ai/chat-request';
 import { answerClarification, statusForServiceCode } from '@/lib/ai/runs/intake';
-import { authenticateAI } from '@/lib/server/ai-access';
+import { accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -44,6 +47,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const answer = typeof record.answer === 'string' ? record.answer.trim() : '';
     if (!answer) return NextResponse.json({ error: 'Type an answer for Bubaly.', code: 'answer_required' }, { status: 400 });
     if (answer.length > MAX_AI_ANSWER_CHARS) return NextResponse.json({ error: 'That answer is too long.', code: 'answer_too_long' }, { status: 400 });
+
+    const access = await assertAIAccess(ctx, { db: supabase });
+    if (!access.ok) return accessDeniedResponse(access);
 
     const scope = scopeFromUserContext(ctx, supabase);
     const result = await answerClarification(scope, id, answer, { startedAtMs: startedAt });

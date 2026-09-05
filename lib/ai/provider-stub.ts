@@ -10,12 +10,22 @@
 // WHEN IT IS USED — and, more importantly, when it can never be:
 //   `resolveProviderForTask` (lib/ai/routing.ts) and `resolveProvider`
 //   (lib/ai/provider.ts) return it only when `isProviderStubEnabled()` says so:
-//   `AI_PROVIDER_STUB=1` AND (`NODE_ENV !== 'production'` OR
-//   `E2E_PROVIDER_STUB=1`), AND never when `VERCEL_ENV === 'production'`.
-//   The second flag exists because Playwright runs against `next build && next
-//   start`, where NODE_ENV is 'production'; it must be set deliberately, and
-//   the Vercel guard is the hard floor: a production deployment cannot enable
-//   the stub by any combination of variables.
+//   `AI_PROVIDER_STUB=1`, never when `VERCEL_ENV === 'production'`, AND either
+//   `NODE_ENV !== 'production'` OR an e2e run that proves it is one:
+//   `E2E_PROVIDER_STUB=1` together with `CI=true` (what GitHub Actions sets)
+//   or a `NEXT_PUBLIC_SUPABASE_URL` on localhost. The e2e flag exists because
+//   Playwright runs against `next build && next start`, where NODE_ENV is
+//   'production'; the CI/localhost proof exists because a production build
+//   that is not on Vercel (a self-hosted container, a staging box) must not be
+//   able to script its model with two environment variables. The Vercel guard
+//   stays the hard floor. The first time the stub is enabled in a process it
+//   says so on the console, loudly, so it can never be on quietly.
+//
+// WHERE THE SCRIPTS COME FROM: `AI_PROVIDER_STUB_DIR` may point at a fixture
+// directory, but only one under the repository's tests/ tree; a path outside
+// it is ignored (with a warning) in favour of the default. The stub replays
+// whatever JSON it finds, so an arbitrary path would let a mis-set variable
+// feed a server replies from anywhere on disk.
 //
 // HOW A SCRIPT IS CHOSEN: the planner's system prompt carries an `Intent:
 // <key>` line and the classifier's carries the request; a script matches on
@@ -61,14 +71,63 @@ export type ProviderScript = {
   chat?: { text: string; toolCalls?: ScriptedToolCall[] };
 };
 
+/** The only place the env may point the stub at: fixtures under the repo's tests/ tree. */
+export const SCRIPT_ROOT = 'tests';
+
+function isLocalSupabase(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** GitHub Actions sets `CI=true`; some steps in this repository set `CI=1`. Both are a CI run. */
+function isCi(env: Record<string, string | undefined>): boolean {
+  return env.CI === 'true' || env.CI === '1';
+}
+
+let warned = false;
+
 /**
  * The stub may only be selected in a non-production runtime, or in an e2e run
- * that opted in explicitly — and never on a Vercel production deployment.
+ * that opted in explicitly AND can show it is one (CI, or a local Supabase) —
+ * and never on a Vercel production deployment. Warns once per process when it
+ * is enabled: a scripted model must never be a quiet configuration.
  */
 export function isProviderStubEnabled(env: Record<string, string | undefined> = process.env): boolean {
   if (env.AI_PROVIDER_STUB !== '1') return false;
   if (env.VERCEL_ENV === 'production') return false;
-  return env.NODE_ENV !== 'production' || env.E2E_PROVIDER_STUB === '1';
+  const e2eOptIn = env.E2E_PROVIDER_STUB === '1' && (isCi(env) || isLocalSupabase(env.NEXT_PUBLIC_SUPABASE_URL));
+  const enabled = env.NODE_ENV !== 'production' || e2eOptIn;
+  if (enabled && !warned) {
+    warned = true;
+    console.warn('[provider-stub] AI_PROVIDER_STUB=1: every model call in this process is answered by the scripted provider (tests/ai-eval/scripts), not by a real model. This is a test configuration and must never reach production.');
+  }
+  return enabled;
+}
+
+/** Test-only: let a test observe the one-time warning again. */
+export function resetProviderStubWarning(): void {
+  warned = false;
+}
+
+/**
+ * The script directory the env may select. Anything outside `tests/` (after
+ * resolving `..` segments) is refused and the default is used instead, so the
+ * variable can choose a fixture set but never an arbitrary directory.
+ */
+export function resolveScriptDir(raw: string | undefined, cwd: string = process.cwd()): string {
+  const fallback = path.resolve(cwd, DEFAULT_SCRIPT_DIR);
+  const wanted = raw?.trim();
+  if (!wanted) return fallback;
+  const root = path.resolve(cwd, SCRIPT_ROOT);
+  const resolved = path.resolve(cwd, wanted);
+  if (resolved === root || resolved.startsWith(root + path.sep)) return resolved;
+  console.warn(`[provider-stub] AI_PROVIDER_STUB_DIR="${raw}" is outside ${root}; using the default script directory.`);
+  return fallback;
 }
 
 function lastUserText(messages: AIMessage[]): string {
@@ -191,6 +250,6 @@ let shared: ScriptedProvider | null = null;
 
 /** The process-wide stub, so scripts are read once. Tests construct their own with a fixture directory. */
 export function scriptedProvider(): ScriptedProvider {
-  if (!shared) shared = new ScriptedProvider(process.env.AI_PROVIDER_STUB_DIR || DEFAULT_SCRIPT_DIR);
+  if (!shared) shared = new ScriptedProvider(resolveScriptDir(process.env.AI_PROVIDER_STUB_DIR));
   return shared;
 }
