@@ -17,6 +17,8 @@ describe('Content-Security-Policy composition', () => {
     expect(prod['connect-src']).toContain('wss://abc.supabase.co');
     expect(prod['connect-src']).toContain('https://*.supabase.co');
     expect(prod['connect-src']).toContain('https://api.stripe.com');
+    expect(prod['connect-src']).toContain('https://api.open-meteo.com');
+    expect(prod['connect-src']).toContain('https://router.project-osrm.org');
     expect(prod['connect-src']).not.toContain('http://localhost:*');
     expect(prod['connect-src']).not.toContain('*');
   });
@@ -45,7 +47,7 @@ describe('Content-Security-Policy composition', () => {
   it('mirrors X-Frame-Options per route and survives a missing/invalid Supabase URL', () => {
     const blog = parseContentSecurityPolicy(buildContentSecurityPolicy({ supabaseUrl: undefined, frameAncestors: "'self'" }));
     expect(blog['frame-ancestors']).toEqual(["'self'"]);
-    expect(blog['connect-src']).toEqual(["'self'", 'https://*.supabase.co', 'wss://*.supabase.co', 'https://api.stripe.com', 'https://r.stripe.com', 'https://m.stripe.network']);
+    expect(blog['connect-src']).toEqual(["'self'", 'https://*.supabase.co', 'wss://*.supabase.co', 'https://api.stripe.com', 'https://r.stripe.com', 'https://m.stripe.network', 'https://api.open-meteo.com', 'https://geocoding-api.open-meteo.com', 'https://api.bigdatacloud.net', 'https://router.project-osrm.org']);
     const bad = buildContentSecurityPolicy({ supabaseUrl: 'not a url' });
     expect(bad).not.toContain('null');
   });
