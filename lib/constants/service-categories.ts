@@ -46,7 +46,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     countLabel: 'tools',
     hrefs: [
       '/dashboard/memories', '/dashboard/family-tree', '/dashboard/grandparent-portal',
-      '/dashboard/pets', '/dashboard/celebrations', '/dashboard/relationship',
+      '/dashboard/pets', '/dashboard/closet', '/dashboard/watchlist', '/dashboard/celebrations', '/dashboard/relationship',
       '/dashboard/journal', '/dashboard/photos', '/dashboard/wishlists',
       '/dashboard/activity', '/dashboard/voting',
       '/dashboard/family-digital-twin',

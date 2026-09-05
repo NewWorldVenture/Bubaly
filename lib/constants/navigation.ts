@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -110,6 +110,8 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-tree', label: 'Family Tree', icon: GitBranch, minLevel: 0 },
       { href: '/dashboard/grandparent-portal', label: 'Grandparent Portal', icon: Heart, minLevel: 0 },
       { href: '/dashboard/pets', label: 'Pets', icon: PawPrint, minLevel: 0 },
+      { href: '/dashboard/closet', label: 'Closet & Outfits', icon: Shirt, minLevel: 0 },
+      { href: '/dashboard/watchlist', label: 'Family Watchlist', icon: Clapperboard, minLevel: 0 },
       { href: '/dashboard/locator', label: 'Family Map', icon: MapPin, minLevel: 1 },
       { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 1 },
       { href: '/dashboard/social-feed', label: 'Social Feed', icon: Rss, minLevel: 0 },

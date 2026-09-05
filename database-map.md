@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **418 tables**.
+Generated from `supabase/migrations/*.sql` — **424 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -263,6 +263,8 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `onboarding_imports` | `0138_onboarding_imports.sql` |
 | `onboarding_progress` | `0159_onboarding_progress.sql` |
 | `opportunities` | `0031_opportunities.sql` |
+| `outfit_logs` | `0240_closet_outfits.sql` |
+| `outfits` | `0240_closet_outfits.sql` |
 | `pantry_items` | `0080_food_household.sql` |
 | `paperwork_items` | `0169_paperwork_items.sql` |
 | `parent_approvals` | `0088_family_wallet.sql` |
@@ -424,6 +426,10 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `wallet_rewards` | `0113_wallet_hub.sql` |
 | `wallet_rules` | `0088_family_wallet.sql` |
 | `wallet_transactions` | `0088_family_wallet.sql` |
+| `wardrobe_items` | `0240_closet_outfits.sql` |
+| `watch_sessions` | `0241_family_watchlist.sql` |
+| `watchlist_titles` | `0241_family_watchlist.sql` |
+| `watchlist_votes` | `0241_family_watchlist.sql` |
 | `weather_locations` | `0024_weather_locations.sql` |
 | `weekend_events` | `0071_weekend_planner.sql` |
 | `weekend_feeds` | `0072_weekend_feeds.sql` |

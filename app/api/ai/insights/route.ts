@@ -100,6 +100,21 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { chores: chores.data ?? [], chore_assignments: asg.data ?? [] };
     }
+    case 'closet': {
+      const [items, logs] = await Promise.all([
+        eq(sb, 'wardrobe_items', familyId).in('status', ['active', 'laundry', 'outgrown']).order('member_id').limit(160),
+        eq(sb, 'outfit_logs', familyId).gte('worn_on', since(30).slice(0, 10)).order('worn_on', { ascending: false }).limit(60),
+      ]);
+      return { wardrobe_items: items.data ?? [], outfit_logs: logs.data ?? [] };
+    }
+    case 'watchlist': {
+      const [titles, votes, sessions] = await Promise.all([
+        eq(sb, 'watchlist_titles', familyId).in('status', ['want', 'watching']).order('priority').limit(120),
+        eq(sb, 'watchlist_votes', familyId).limit(300),
+        eq(sb, 'watch_sessions', familyId).order('watched_on', { ascending: false }).limit(30),
+      ]);
+      return { watchlist_titles: titles.data ?? [], watchlist_votes: votes.data ?? [], watch_sessions: sessions.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };

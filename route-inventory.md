@@ -105,6 +105,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/care` | `app/(app)/dashboard/care` | auth | plan-gated |
 | `/dashboard/celebrations` | `app/(app)/dashboard/celebrations` | auth |  |
 | `/dashboard/chores` | `app/(app)/dashboard/chores` | auth | plan-gated |
+| `/dashboard/closet` | `app/(app)/dashboard/closet` | auth |  |
 | `/dashboard/command-center` | `app/(app)/dashboard/command-center` | auth | plan-gated |
 | `/dashboard/concierge-calls` | `app/(app)/dashboard/concierge-calls` | auth |  |
 | `/dashboard/concierge` | `app/(app)/dashboard/concierge` | auth |  |
@@ -269,6 +270,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/vacations/reports` | `app/(app)/dashboard/vacations/reports` | auth | plan-gated |
 | `/dashboard/voice` | `app/(app)/dashboard/voice` | auth |  |
 | `/dashboard/voting` | `app/(app)/dashboard/voting` | auth | plan-gated |
+| `/dashboard/watchlist` | `app/(app)/dashboard/watchlist` | auth |  |
 | `/dashboard/weather` | `app/(app)/dashboard/weather` | auth |  |
 | `/dashboard/weekend` | `app/(app)/dashboard/weekend` | auth | plan-gated |
 | `/dashboard/weekly-briefing` | `app/(app)/dashboard/weekly-briefing` | auth | plan-gated |

@@ -52,7 +52,9 @@ export type InsightKind =
   | 'tax'
   | 'utilities'
   | 'rides'
-  | 'votes';
+  | 'votes'
+  | 'closet'
+  | 'watchlist';
 
 export type InsightMember = { id: string; name: string };
 
@@ -570,6 +572,60 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const pets = r(d, 'pets').slice(0, 8);
       const list = pets.map((p) => `- ${p.name || 'Pet'} (${p.species || '?'}, ${p.breed || 'mixed'})`).join('\n') || 'No pets logged.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
+    },
+  },
+
+  closet: {
+    label: 'AI stylist',
+    title: 'AI Closet Stylist',
+    blurb: 'Outfits for today from what each person actually owns, plus gaps and items to retire.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a practical family stylist. Work ONLY from the closet inventory and recent outfit logs provided. ' +
+      'Suggest outfits by combining real items (name them exactly), respect each member\'s items only, prefer pieces not worn recently, ' +
+      'and keep advice age-appropriate and budget-aware. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const items = r(d, 'wardrobe_items');
+      const byMember = new Map<string, string[]>();
+      for (const i of items) {
+        const key = who(i.member_id);
+        const line = `${i.name} [${i.category}${i.color ? `, ${i.color}` : ''}, warmth ${i.warmth}/5, formality ${i.formality}/5${i.status !== 'active' ? `, ${i.status}` : ''}${i.last_worn_on ? `, last worn ${day(i.last_worn_on)}` : ', never worn'}]`;
+        byMember.set(key, [...(byMember.get(key) ?? []), line]);
+      }
+      const closet = [...byMember.entries()].map(([name, lines]) => {
+        const c = cap(lines, 30);
+        return `${name}:\n${c.shown.map((l) => `- ${l}`).join('\n')}${c.extra ? `\n- …and ${c.extra} more` : ''}`;
+      }).join('\n\n') || 'No items in the closet yet.';
+      const logs = cap(r(d, 'outfit_logs'), 20).shown
+        .map((l) => `- ${day(l.worn_on)} ${who(l.member_id)}: ${l.occasion || 'everyday'}${typeof l.temp_c === 'number' ? ` at ${l.temp_c}°C` : ''}`)
+        .join('\n') || 'No outfits logged yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nCloset by member:\n${closet}\n\nRecent outfit logs:\n${logs}\n\nGive: (1) one outfit for today per member using only their items (assume mild weather unless told otherwise), (2) the two most useful gaps to buy next, (3) items to retire, donate, or move to storage, with a reason each.${q(d)}`;
+    },
+  },
+
+  watchlist: {
+    label: 'AI movie night',
+    title: 'AI Movie Night Picker',
+    blurb: 'Tonight’s pick for the people on the couch, from the family’s own watchlist and votes.',
+    maxTokens: 650,
+    allowQuestion: true,
+    system:
+      'You are the family\'s movie-night host. Work ONLY from the watchlist, votes and recent sessions provided. ' +
+      'Respect age ratings for the youngest viewer, keep runtimes realistic for a school night, and never recommend a title that is not on the list. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const votes = r(d, 'watchlist_votes');
+      const votesFor = (id: unknown) => votes.filter((v) => v.title_id === id).map((v) => `${who(v.member_id)} ${v.vote === 'love' ? '❤️' : v.vote === 'up' ? '👍' : '👎'}`).join(', ');
+      const queue = cap(r(d, 'watchlist_titles'), 40).shown
+        .map((t) => `- ${t.title} (${t.kind}${t.year ? ` ${t.year}` : ''}, ${t.age_rating || 'NR'} / ${t.min_age}+, ${t.runtime_min ?? '?'} min, ${t.service}, priority ${t.priority}${t.status === 'watching' ? ', in progress' : ''})${votesFor(t.id) ? ` — votes: ${votesFor(t.id)}` : ''}`)
+        .join('\n') || 'Nothing on the watchlist yet.';
+      const recent = cap(r(d, 'watch_sessions'), 12).shown
+        .map((s) => `- ${day(s.watched_on)}: ${s.title_name}${typeof s.rating === 'number' ? ` (${s.rating}/5)` : ''}`)
+        .join('\n') || 'No movie nights logged yet.';
+      const members = d.members.map((m) => m.name).join(', ') || 'the family';
+      return `Family: ${d.familyName} (${members}). Now: ${d.now}.\n\nWatchlist:\n${queue}\n\nRecent movie nights:\n${recent}\n\nGive: (1) tonight's pick for the whole family with a one-line why, (2) a backup if the youngest goes to bed early, (3) two titles worth adding based on what they rated highly.${q(d)}`;
     },
   },
 

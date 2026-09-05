@@ -62,6 +62,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('family-tree', 'Family Tree', 'Daily Life', 'free', '/dashboard/family-tree'),
   F('grandparent-portal', 'Grandparent Portal', 'Daily Life', 'free', '/dashboard/grandparent-portal'),
   F('pets', 'Pets', 'Daily Life', 'basic', '/dashboard/pets'),
+  F('closet', 'Closet & Outfits', 'Daily Life', 'basic', '/dashboard/closet'),
+  F('watchlist', 'Family Watchlist', 'Daily Life', 'free', '/dashboard/watchlist'),
   F('celebrations', 'Celebrations', 'Daily Life', 'free', '/dashboard/celebrations'),
   F('recipes', 'Recipes', 'Daily Life', 'free', '/dashboard/recipes'),
   F('pantry', 'Pantry', 'Daily Life', 'free', '/dashboard/pantry'),

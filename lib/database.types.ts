@@ -15,6 +15,13 @@ export type EventCategory =
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type PetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'reptile' | 'small_mammal' | 'horse' | 'other';
 export type PetCareKind = 'vaccination' | 'vet_visit' | 'medication' | 'grooming' | 'weight' | 'other';
+export type WardrobeCategory = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'uniform' | 'sleepwear' | 'activewear' | 'swim';
+export type WardrobeStatus = 'active' | 'laundry' | 'storage' | 'outgrown' | 'donated' | 'lost';
+export type OutfitOccasion = 'everyday' | 'school' | 'work' | 'sport' | 'dressy' | 'party' | 'outdoor' | 'sleep';
+export type WatchKind = 'movie' | 'show' | 'documentary' | 'kids' | 'special';
+export type WatchService = 'netflix' | 'disney' | 'prime' | 'hulu' | 'max' | 'apple' | 'peacock' | 'paramount' | 'youtube' | 'library' | 'theater' | 'other';
+export type WatchStatus = 'want' | 'watching' | 'watched' | 'skipped';
+export type WatchVote = 'love' | 'up' | 'down';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2386,6 +2393,36 @@ export interface Database {
         { id: string; family_id: string; label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; label: string; url: string; kind?: WeekendFeedKind; is_active?: boolean; last_fetched_at?: string | null; last_status?: string | null; last_count?: number; created_by?: string | null },
         Partial<{ label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number }>
+      >;
+      wardrobe_items: T<
+        { id: string; family_id: string; member_id: string; name: string; category: WardrobeCategory; color: string | null; size: string | null; brand: string | null; warmth: number; formality: number; seasons: string[]; status: WardrobeStatus; photo_path: string | null; purchased_on: string | null; price_cents: number | null; wear_count: number; last_worn_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; name: string; category?: WardrobeCategory; color?: string | null; size?: string | null; brand?: string | null; warmth?: number; formality?: number; seasons?: string[]; status?: WardrobeStatus; photo_path?: string | null; purchased_on?: string | null; price_cents?: number | null; wear_count?: number; last_worn_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; name: string; category: WardrobeCategory; color: string | null; size: string | null; brand: string | null; warmth: number; formality: number; seasons: string[]; status: WardrobeStatus; photo_path: string | null; purchased_on: string | null; price_cents: number | null; wear_count: number; last_worn_on: string | null; notes: string | null }>
+      >;
+      outfits: T<
+        { id: string; family_id: string; member_id: string; name: string; occasion: OutfitOccasion; item_ids: string[]; temp_min_c: number | null; temp_max_c: number | null; rating: number | null; is_favorite: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; name: string; occasion?: OutfitOccasion; item_ids?: string[]; temp_min_c?: number | null; temp_max_c?: number | null; rating?: number | null; is_favorite?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; name: string; occasion: OutfitOccasion; item_ids: string[]; temp_min_c: number | null; temp_max_c: number | null; rating: number | null; is_favorite: boolean; notes: string | null }>
+      >;
+      outfit_logs: T<
+        { id: string; family_id: string; member_id: string; outfit_id: string | null; worn_on: string; item_ids: string[]; occasion: string | null; temp_c: number | null; weather: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; outfit_id?: string | null; worn_on?: string; item_ids?: string[]; occasion?: string | null; temp_c?: number | null; weather?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; outfit_id: string | null; worn_on: string; item_ids: string[]; occasion: string | null; temp_c: number | null; weather: string | null; notes: string | null }>
+      >;
+      watchlist_titles: T<
+        { id: string; family_id: string; title: string; kind: WatchKind; year: number | null; genres: string[]; age_rating: string | null; min_age: number; runtime_min: number | null; service: WatchService; status: WatchStatus; priority: number; added_by: string | null; external_url: string | null; poster_path: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; kind?: WatchKind; year?: number | null; genres?: string[]; age_rating?: string | null; min_age?: number; runtime_min?: number | null; service?: WatchService; status?: WatchStatus; priority?: number; added_by?: string | null; external_url?: string | null; poster_path?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; kind: WatchKind; year: number | null; genres: string[]; age_rating: string | null; min_age: number; runtime_min: number | null; service: WatchService; status: WatchStatus; priority: number; added_by: string | null; external_url: string | null; poster_path: string | null; notes: string | null }>
+      >;
+      watchlist_votes: T<
+        { id: string; family_id: string; title_id: string; member_id: string; vote: WatchVote; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title_id: string; member_id: string; vote?: WatchVote; created_by?: string | null },
+        Partial<{ vote: WatchVote }>
+      >;
+      watch_sessions: T<
+        { id: string; family_id: string; title_id: string | null; title_name: string; watched_on: string; member_ids: string[]; rating: number | null; minutes: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title_id?: string | null; title_name: string; watched_on?: string; member_ids?: string[]; rating?: number | null; minutes?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title_id: string | null; title_name: string; watched_on: string; member_ids: string[]; rating: number | null; minutes: number | null; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };
