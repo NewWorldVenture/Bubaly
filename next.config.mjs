@@ -1,3 +1,5 @@
+import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -64,6 +66,17 @@ const nextConfig = {
       // list irreversibly, which we don't want to assert blindly.
       { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
     ];
+    // Content-Security-Policy (composed in lib/security/csp.mjs, unit + e2e
+    // tested). frame-ancestors mirrors the X-Frame-Options split below so the
+    // two headers never disagree about who may frame a page.
+    const csp = (frameAncestors) => ({
+      key: 'Content-Security-Policy',
+      value: buildContentSecurityPolicy({
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        isProduction: process.env.NODE_ENV === 'production',
+        frameAncestors,
+      }),
+    });
     return [
       { source: '/(.*)', headers: commonSecurity },
       // Clickjacking protection. DENY everywhere EXCEPT the PUBLIC marketing
@@ -73,9 +86,9 @@ const nextConfig = {
       // threat); it only permits our own origin to frame our own public blog.
       // No sensitive actions or data live on /blog, so this is a negligible,
       // standard relaxation scoped to public content only.
-      { source: '/((?!blog).*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }] },
-      { source: '/blog', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }] },
-      { source: '/blog/:path*', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }] },
+      { source: '/((?!blog).*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }, csp("'none'")] },
+      { source: '/blog', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }, csp("'self'")] },
+      { source: '/blog/:path*', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }, csp("'self'")] },
       {
         source: '/sw.js',
         headers: [
