@@ -19,9 +19,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
-import {
-  availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
-} from '@/lib/concierge/apply';
+import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
+import { materializeConciergePlan } from '@/lib/services/approvals';
 import {
   AUTOPILOT_AGENT, AUTOPILOT_CAPABILITY, AUTOPILOT_DOMAIN, AUTOPILOT_POLICY_NAME,
   approvalTitle, autonomyMode, dialEffect, isAcceptance, runSummary,
@@ -41,71 +40,15 @@ type PlanRow = {
 type DB = Awaited<ReturnType<typeof createServer>>;
 
 /**
- * Shared materializer: create the real records for `kinds`, skipping anything
- * already applied (concierge_plan_actions is the idempotence ledger). Used by
- * both the manual buttons and the autonomous loop.
+ * Shared materializer. The insert logic lives in the approvals service
+ * (`materializeConciergePlan`) because an approved `concierge_plan` payload
+ * must create exactly the same records the manual buttons do — one ledger
+ * (`concierge_plan_actions`), one set of rules, no drift between the two paths.
  */
 async function materializePlan(
   sb: DB, familyId: string, userId: string, plan: PlanRow, kinds: WriteBackKind[],
 ): Promise<WriteBackKind[]> {
-  const doable = new Set(availableWriteBackKinds(plan));
-  const targets = kinds.filter((k) => doable.has(k));
-
-  const { data: existing } = await sb
-    .from('concierge_plan_actions')
-    .select('action_kind')
-    .eq('family_id', familyId)
-    .eq('plan_id', plan.id);
-  const already = new Set((existing ?? []).map((r) => r.action_kind));
-
-  const applied: WriteBackKind[] = [];
-  for (const kind of targets) {
-    if (already.has(kind)) continue;
-    try {
-      let targetTable = '';
-      let targetId: string | null = null;
-
-      if (kind === 'calendar' && plan.planned_for) {
-        const descParts = [plan.description, plan.location ? `Location: ${plan.location}` : null].filter(Boolean);
-        const { data: ev, error: evErr } = await sb.from('calendar_events').insert({
-          family_id: familyId, created_by: userId, title: plan.title,
-          description: descParts.length ? descParts.join('\n') : null,
-          location: plan.location, category: 'general',
-          starts_at: new Date(`${plan.planned_for}T00:00:00.000Z`).toISOString(), all_day: true,
-        }).select('id').single();
-        // Don't claim a write-back that didn't land — a failed insert must not be
-        // reported as applied (which would also skip it on the idempotent re-run).
-        if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); continue; }
-        targetTable = 'calendar_events'; targetId = ev?.id ?? null;
-      } else if (kind === 'reminder' || kind === 'task') {
-        const { data: rem, error: remErr } = await sb.from('family_reminders').insert({
-          family_id: familyId, created_by: userId,
-          title: writeBackTitle(kind, plan.title),
-          notes: plan.description ?? null,
-          kind: kind === 'task' ? 'task' : 'reminder',
-          remind_at: reminderLeadAt(plan.planned_for),
-          ai_suggested: true,
-        }).select('id').single();
-        if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); continue; }
-        targetTable = 'family_reminders'; targetId = rem?.id ?? null;
-      } else {
-        continue;
-      }
-
-      const { error: logErr } = await sb.from('concierge_plan_actions').insert({
-        family_id: familyId, plan_id: plan.id, action_kind: kind,
-        target_table: targetTable, target_id: targetId,
-        detail: writeBackTitle(kind, plan.title), created_by: userId,
-      });
-      // The real record was created above; if only the idempotency-log write fails,
-      // log it (a re-run could then duplicate this write-back) but still count it.
-      if (logErr) console.error('[concierge] concierge_plan_actions log failed', { planId: plan.id, familyId, kind, error: logErr });
-      applied.push(kind);
-    } catch {
-      /* one failed write-back shouldn't abort the rest */
-    }
-  }
-  return applied;
+  return materializeConciergePlan(sb, familyId, userId, plan, kinds);
 }
 
 /**

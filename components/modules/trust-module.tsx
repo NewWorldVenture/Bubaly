@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Scale, Inbox, Users, Share2, Siren, ScrollText, Plus, Check, X,
-  Trash2, Loader2, Lock, ChevronRight, AlertTriangle, Sparkles, Clock, Power,
+  Trash2, Loader2, Lock, ChevronRight, Clock, Power,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -12,7 +12,9 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
+import { ApprovalCard } from '@/components/approvals/approval-card';
 import { cn } from '@/lib/utils/cn';
+import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
 import {
   TRUST_DOMAINS, CAPABILITIES, DOMAIN_LABELS, CAPABILITY_LABELS,
   ROLE_DEFAULTS, type Capability, type TrustRole,
@@ -32,12 +34,7 @@ type Policy = {
 };
 type Grant = { id: string; member_id: string; domain: string; capability: string; effect: string };
 type Delegation = { id: string; from_member_id: string; to_member_id: string; domains: string[]; reason: string | null; starts_at: string; expires_at: string };
-type Approval = {
-  id: string; domain: string; capability: string; requested_by_kind: string; agent: string | null;
-  title: string; summary: string | null; amount_cents: number | null; confidence: number | null;
-  reasoning: string | null; required_approvals: number; approvals: { member_id: string; decision: string }[];
-  status: string; priority: string; created_at: string;
-};
+type Approval = TrustApproval;
 type Emergency = { id: string; kind: string; reason: string | null; elevated_domains: string[]; activated_at: string };
 type Audit = { id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; confidence: number | null; created_at: string };
 
@@ -140,7 +137,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
         ))}
       </div>
 
-      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} canManage={canManage} />}
+      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} />}
       {tab === 'policies' && <PoliciesTab policies={data.policies} members={data.members} canManage={canManage} />}
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
@@ -151,70 +148,31 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 }
 
 // ─── Approvals inbox ──────────────────────────────────────────────────────────
-function ApprovalsTab({ approvals, canManage }: { approvals: Approval[]; canManage: boolean }) {
+function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]; members: Member[]; canManage: boolean }) {
   const router = useRouter();
-  const { success, error: toastError } = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
-  const pending = approvals.filter(a => a.status === 'pending');
+  // Optimistic: a decided card leaves the inbox at once; router.refresh()
+  // re-syncs the counts and the "Recently decided" list from the server.
+  const [gone, setGone] = useState<Set<string>>(() => new Set());
+  const nameById = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  const pending = approvals.filter(a => a.status === 'pending' && !gone.has(a.id));
   const decided = approvals.filter(a => a.status !== 'pending').slice(0, 12);
-
-  async function decide(id: string, decision: 'approved' | 'rejected') {
-    if (busy) return;
-    setBusy(id);
-    const res = await decideApprovalAction({ id, decision });
-    setBusy(null);
-    if (!res.ok) return toastError(res.error ?? 'Could not record decision');
-    success(decision === 'approved' ? 'Approved' : 'Rejected');
-    router.refresh();
-  }
 
   return (
     <div className="space-y-4">
       {pending.length === 0 ? (
-        <EmptyCard icon={Check} title="No approvals waiting" sub="When the AI or a family member proposes something that needs sign-off, it shows up here." />
+        <EmptyCard icon={Check} title="No approvals waiting" sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
       ) : (
         <div className="space-y-2.5">
           {pending.map(a => (
-            <div key={a.id} className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
-              <div className="flex items-start gap-3">
-                <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-amber-500/15">
-                  {a.requested_by_kind === 'ai' ? <Sparkles className="h-4 w-4 text-amber-400" /> : <Users className="h-4 w-4 text-amber-400" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold">{a.title}</p>
-                    {a.amount_cents != null && <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-semibold">{fmtAmount(a.amount_cents)}</span>}
-                    <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium capitalize">{DOMAIN_LABELS[a.domain] ?? a.domain}</span>
-                  </div>
-                  {a.summary && <p className="mt-0.5 text-xs text-fg/80">{a.summary}</p>}
-                  {a.reasoning && (
-                    <p className="mt-1.5 flex items-start gap-1 text-[11px] text-muted">
-                      <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0 text-amber-400" /> {a.reasoning}
-                    </p>
-                  )}
-                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted">
-                    <span>{a.requested_by_kind === 'ai' ? `AI · ${a.agent ?? 'agent'}` : 'Member'}</span>
-                    {a.confidence != null && <span>· {Math.round(a.confidence * 100)}% confidence</span>}
-                    <span>· {fmtWhen(a.created_at)}</span>
-                    {a.required_approvals > 1 && <span>· needs {a.required_approvals} approvals ({a.approvals.filter(x => x.decision === 'approved').length}/{a.required_approvals})</span>}
-                  </div>
-                </div>
-              </div>
-              {canManage ? (
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button onClick={() => decide(a.id, 'rejected')} disabled={!!busy}
-                    className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:text-red-400 hover:border-red-400/40 transition">
-                    {busy === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Reject
-                  </button>
-                  <button onClick={() => decide(a.id, 'approved')} disabled={!!busy}
-                    className="flex items-center gap-1 rounded-lg bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/30 transition">
-                    {busy === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Approve
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-3 text-right text-[11px] text-muted">Awaiting a parent or adult.</p>
-              )}
-            </div>
+            <ApprovalCard
+              key={a.id}
+              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage })}
+              canDecide={canManage}
+              onResult={(result) => {
+                if (result.decision !== 'pending') setGone((g) => new Set(g).add(a.id));
+                router.refresh();
+              }}
+            />
           ))}
         </div>
       )}

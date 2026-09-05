@@ -59,3 +59,91 @@ export function approvalReminders(approvals: ApprovalInput[], managers: ManagerL
   }
   return out;
 }
+
+// ─── AI approvals (approval_requests) ───────────────────────────────────────
+//
+// The block above is the wallet inbox (`parent_approvals`). The rows below are
+// the trust-engine inbox (`approval_requests`, 0093/0251): Bubaly proposing an
+// action that a household policy or the risk tier said needs a person. The two
+// stay separate builders because they differ in exactly the ways that matter
+// for the wording — an AI approval has a title the planner wrote and an expiry
+// after which the run blocks, while a wallet approval has a kind and an amount.
+
+export interface AiApprovalInput {
+  id: string;
+  title: string;
+  amount_cents: number | null;
+  created_at: string;
+  expires_at: string | null;
+  agent: string | null;
+}
+
+export interface AiApprovalReminder {
+  approval_id: string;
+  /** `family_members.id` of the manager to notify. */
+  member_id: string;
+  user_id: string;
+  /** Stored as `notifications.related_id`; the natural key the sweep dedupes on. */
+  dedupe_key: string;
+  type: 'system';
+  related_type: 'approval_requests';
+  related_id: string;
+  title: string;
+  body: string;
+}
+
+/**
+ * One notification per (approval, manager). `notifications` has no dedupe
+ * column, so the key IS `related_id`: the notify service refuses a second
+ * unread row with the same `(type, related_id, user_id)`, and the reminder
+ * sweep additionally checks the key against every row ever written, which is
+ * what makes "one reminder per pending AI approval" hold across cron ticks and
+ * after the manager has read it.
+ */
+export function aiApprovalDedupeKey(approvalId: string, memberId: string): string {
+  return `ai-approval:${approvalId}:${memberId}`;
+}
+
+function expiryPhrase(expiresAt: string | null, now: Date): string | null {
+  if (!expiresAt) return null;
+  const ms = Date.parse(expiresAt) - now.getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const hours = ms / 3_600_000;
+  if (hours < 1) return 'Expires within the hour';
+  if (hours < 36) return `Expires in ${Math.round(hours)}h`;
+  return `Expires in ${Math.round(hours / 24)} days`;
+}
+
+/**
+ * The reminder rows for a family's pending AI approvals. Managers with no
+ * login (managed profiles) are skipped rather than folded into a family-wide
+ * row: a family-wide reminder would reach the children too, and a pending
+ * approval is precisely the thing they should not be nagged about.
+ */
+export function aiApprovalReminders(approvals: AiApprovalInput[], managers: ManagerLite[], now: Date = new Date()): AiApprovalReminder[] {
+  const out: AiApprovalReminder[] = [];
+  for (const a of approvals ?? []) {
+    const amount = a.amount_cents != null && a.amount_cents > 0 ? ` · ${usd(a.amount_cents)}` : '';
+    const expiry = expiryPhrase(a.expires_at, now);
+    const body = [
+      `Bubaly is waiting for your OK before it goes ahead${a.agent ? ` (${a.agent})` : ''}.`,
+      expiry,
+    ].filter(Boolean).join(' ');
+    for (const m of managers ?? []) {
+      if (!m.user_id) continue;
+      const key = aiApprovalDedupeKey(a.id, m.id);
+      out.push({
+        approval_id: a.id,
+        member_id: m.id,
+        user_id: m.user_id,
+        dedupe_key: key,
+        type: 'system',
+        related_type: 'approval_requests',
+        related_id: key,
+        title: `Needs your OK: ${a.title}${amount}`,
+        body,
+      });
+    }
+  }
+  return out;
+}
