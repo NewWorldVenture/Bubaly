@@ -2,13 +2,13 @@
 
 **Run your family like a calm, connected team.** An AI chief of staff for the household — calendar, chores, meals, grocery, school, sports, health, home maintenance, documents, notes, goals, and an AI assistant that takes real action.
 
-> Build status: this repo currently ships **Phase 1–2 complete** (architecture + full database). The web app, marketing site, mobile app, and notification workers are scaffolded and being built on top of this foundation. See "Roadmap" below for exactly what is wired vs. pending — no guesswork.
+> Build status: **every roadmap phase (1–14) is implemented** — architecture + database, the marketing site and web app shell, auth/onboarding/dashboard, all module UIs, the streaming AI assistant, native mobile (Capacitor shell **and** an Expo app on shared design tokens), notification workers, tests, CI, Vercel config, and hardening. See "Roadmap" below for where each phase lives — no guesswork.
 
 ## Stack
 Next.js 15 (App Router) · TypeScript · Tailwind · Supabase (Postgres + Auth + Storage + Realtime) · provider-agnostic AI (Anthropic/OpenAI/Gemini) · Vercel · **Capacitor** native shells for iOS/iPadOS/Android.
 
 ## Mobile apps (iOS, iPadOS, Android)
-Bubaly ships natively via **Capacitor** (one codebase, wrapping the hosted, Supabase-wired app) plus an installable **PWA** — no feature drift between web and mobile. Push notifications are fully wired to Supabase (`push_devices` + `lib/server/push.ts`, delivered through the notification engine). See **[docs/mobile.md](docs/mobile.md)** for setup, build, and release. Building the `.ipa`/`.aab` requires a Mac with Xcode / Android Studio; native push requires Firebase/APNs credentials.
+Bubaly ships natively via **Capacitor** (one codebase, wrapping the hosted, Supabase-wired app) plus an installable **PWA** — no feature drift between web and mobile. Alongside the shell, **`mobile/` is a native Expo app** (expo-router, Supabase auth in the Keychain/Keystore, the family's daily loop — Today, Calendar, Chores, Grocery, Assistant) built on the **same design tokens as the web** (`design/tokens.json`, dark default + light toggle) and talking to the assistant through `/api/ai` with a bearer token. Push notifications are fully wired to Supabase (`push_devices` + `lib/server/push.ts`, delivered through the notification engine). See **[docs/mobile.md](docs/mobile.md)** for setup, build, and release. Building the `.ipa`/`.aab` requires a Mac with Xcode / Android Studio; native push requires Firebase/APNs credentials.
 
 ## What's in here now
 ```
@@ -26,9 +26,15 @@ supabase/
 lib/
   supabase/client.ts            browser client (RLS as user)
   supabase/server.ts            server + service-role clients
+  supabase/bearer.ts            bearer-token client + context (mobile / scripts)
   ai/provider.ts                swappable LLM interface (Anthropic impl included)
   ai/actions.ts                 AI tool calls -> real Supabase writes (family-scoped)
+  ai/assistant-engine.ts        the agentic assistant: context + tools + SSE/JSON transports
+  security/csp.mjs              Content-Security-Policy composition (next.config.mjs)
   database.types.ts             typed schema (regenerate with `npm run db:types`)
+app/api/ai/route.ts             canonical assistant endpoint (SSE + JSON, cookie or bearer)
+design/tokens.json              shared design tokens (web CSS/Tailwind + Expo), typed by design/tokens.ts
+mobile/                         Expo app (expo-router) on the shared tokens — see docs/mobile.md
 middleware.ts                   session refresh + protected-route guard
 ```
 
@@ -57,11 +63,18 @@ npm run dev
 5. Add all `.env.example` variables to Vercel project settings.
 6. Set Supabase Auth redirect URLs to your Vercel domain.
 
-## Roadmap (remaining phases)
-- **3–4** Web app shell + marketing site (Home, Features, Pricing, Security, FAQ, etc.)
-- **5–6** Auth + onboarding + family dashboard (glassmorphism, dark-default + light toggle)
-- **7** Module UIs: calendar, chores, meals, grocery, health, home, documents, notes
-- **8** AI assistant route (`/api/ai`) streaming + executing `lib/ai/actions.ts`
-- **9** Expo mobile app (shared design tokens)
-- **10** Notification workers (push + email) for due chores/meds/events/expiring docs
-- **11–14** Tests (Vitest + Playwright), GitHub Actions CI, Vercel config, hardening
+## Roadmap (all phases shipped)
+Every phase below is implemented and gated by CI. Where each one lives:
+
+| Phase | Scope | Where it lives |
+| --- | --- | --- |
+| **1–2** | Architecture + full database (RLS on every table) | `supabase/migrations`, `SCHEMA_tables.sql`, `lib/database.types.ts` |
+| **3–4** | Web app shell + marketing site (Home, Features, Pricing, Security, FAQ, blog, guides, compare…) | `app/(marketing)/*`, `app/(app)/layout.tsx` |
+| **5–6** | Auth + onboarding + family dashboard (glassmorphism, dark default + light toggle) | `app/(auth)/*`, `app/onboarding`, `app/(app)/dashboard`, `components/theme/*` |
+| **7** | Module UIs: calendar, chores, meals, grocery, health, home, documents, notes (and many more) | `app/(app)/dashboard/{calendar,chores,meals,grocery,health,home,documents,notes}` |
+| **8** | AI assistant route — `/api/ai` streams SSE (or returns JSON) and executes `lib/ai/actions.ts` plus the assistant toolbox, trust-wrapped per role | `app/api/ai/route.ts`, `lib/ai/assistant-engine.ts`, `lib/ai/action-tools.ts` (`/api/ai/chat` remains the web client's original endpoint) |
+| **9** | Expo mobile app on shared design tokens (Supabase auth in secure storage, Today/Calendar/Chores/Grocery/Assistant, bearer-authenticated `/api/ai`) — plus the Capacitor shell + PWA | `mobile/`, `design/tokens.json`, `docs/mobile.md` |
+| **10** | Notification workers (push + email) for due chores, medications, events, expiring documents/renewals | `app/api/cron/notifications`, `lib/server/notifications.ts`, `lib/server/push.ts`, `lib/server/notification-emails.ts` |
+| **11–12** | Tests: Vitest unit suite (700+ files) + Playwright e2e (public, a11y, authenticated, mobile device matrix, CSP) | `tests/`, `tests/e2e/`, `vitest.config.ts`, `playwright.config.ts` |
+| **13** | GitHub Actions CI (typecheck · lint · test · build · isolated-Supabase e2e · Expo typecheck) + Vercel config (crons, headers) | `.github/workflows/ci.yml`, `vercel.json`, `next.config.mjs` |
+| **14** | Hardening: RLS everywhere, rate limits, bounded request bodies, HSTS, X-Frame-Options, Content-Security-Policy, cron auth, super-admin allowlist | `lib/security/csp.mjs`, `middleware.ts`, `lib/server/*`, `PRODUCTION_READINESS_REPORT.md` |

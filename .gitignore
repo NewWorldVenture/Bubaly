@@ -21,3 +21,11 @@ client_secret*.json
 
 # Local agent settings are machine-specific and may contain private paths.
 /.claude/
+
+# Expo mobile app (mobile/) — generated per-machine
+/mobile/node_modules
+/mobile/.expo
+/mobile/ios
+/mobile/android
+/mobile/dist
+/mobile/web-build

@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Bubaly",
+    "slug": "bubaly",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "bubaly",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "com.bubaly.bubaly",
+      "supportsTablet": true,
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "com.bubaly.bubaly",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#03090f" }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        { "image": "./assets/splash-icon.png", "imageWidth": 160, "resizeMode": "contain", "backgroundColor": "#03090f" }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://www.bubaly.com"
+    }
+  }
+}

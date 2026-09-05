@@ -1,10 +1,56 @@
 # Bubaly Mobile (iOS, iPadOS, Android)
 
-Bubaly ships to the App Store and Google Play as **native apps built with
-[Capacitor](https://capacitorjs.com)**, plus an installable **PWA**. The native
-shells wrap the same hosted, Supabase‑wired Next.js app — so there is **one
-codebase, one data layer, and zero feature drift** between web and mobile. iPad
-is covered by the iOS target (universal app).
+Bubaly has two mobile tracks that share one data layer (Supabase, RLS as the
+signed-in user) and one visual language (`design/tokens.json`):
+
+1. **The Capacitor shell + PWA** (below) — the full web app, wrapped natively.
+   100% feature parity, zero drift.
+2. **The Expo app in [`mobile/`](../mobile)** — a native React Native app
+   (expo-router) for the family's daily loop: Today, Calendar, Chores, Grocery
+   and the AI Assistant. Built on the **same design tokens as the web** (dark
+   default + light toggle, glass surfaces, brand palette) and talking to the
+   assistant through the canonical `/api/ai` route with a bearer token.
+
+## Expo app (`mobile/`)
+
+| Layer | Files |
+| --- | --- |
+| Shared design tokens (web ⇄ mobile) | `design/tokens.json`, `design/tokens.ts`, `mobile/src/theme/*` (`tests/design-tokens.test.ts` keeps `app/globals.css` in sync) |
+| Routes (expo-router) | `mobile/app/_layout.tsx` (protected routes), `mobile/app/(auth)/sign-in.tsx`, `mobile/app/(tabs)/{index,calendar,chores,grocery,assistant}.tsx`, `mobile/app/settings.tsx` |
+| Supabase auth + data | `mobile/src/lib/supabase.ts` (session in Keychain/Keystore via `chunked-storage.ts`), `family.ts`, `queries.ts` |
+| Assistant (`/api/ai`, JSON transport) | `mobile/src/lib/api.ts`, `assistant-core.ts` → `app/api/ai/route.ts` (`lib/supabase/bearer.ts` authenticates the token) |
+| Unit tests (pure modules, run from the repo root) | `tests/mobile-core.test.ts` |
+| CI | `.github/workflows/ci.yml` → job `mobile` (`npm ci`, `tsc --noEmit`, `expo config`) |
+
+```bash
+cd mobile
+npm install
+cp .env.example .env            # EXPO_PUBLIC_SUPABASE_URL / _ANON_KEY / _API_URL
+npx expo start                  # Expo Go or a dev client; press i / a for simulators
+npm run typecheck
+```
+
+- **Auth**: email + password against the same Supabase project as the web. The
+  session is stored in secure storage (chunked to stay under the 2 KB Keychain
+  guidance). Sign-up, password reset and family setup deep-link to the web app.
+- **Data**: every query runs under the user's JWT, so RLS is identical to the
+  web. Chores are *submitted* from the app; approval and payouts remain
+  manager/server decisions (migration 0223), exactly as on the web.
+- **Assistant**: `POST /api/ai?mode=json` with `Authorization: Bearer <jwt>`.
+  The web keeps using the SSE transport of the same route.
+- **Theme**: dark by default, light toggle, or match the device — persisted in
+  AsyncStorage under the same key the web uses in localStorage.
+- **Release**: `npx eas build -p ios|android` (EAS) or `npx expo prebuild` +
+  Xcode/Android Studio. `ios/`, `android/`, `.expo/` are git-ignored.
+- **Monorepo note**: `metro.config.js` watches `../design` and pins module
+  resolution to `mobile/node_modules` so the web app's React version is never
+  picked up.
+
+## Capacitor shell + PWA
+
+The native shells wrap the same hosted, Supabase‑wired Next.js app — so there is
+**one codebase, one data layer, and zero feature drift** between web and mobile.
+iPad is covered by the iOS target (universal app).
 
 > Why a Capacitor shell over the hosted app (not a static export)? Bubaly is a
 > dynamic app: SSR, server actions, and Supabase auth over cookies. A static
