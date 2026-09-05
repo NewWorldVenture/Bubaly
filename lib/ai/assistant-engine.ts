@@ -2,9 +2,10 @@
 // engine behind the canonical /api/ai route.
 //
 // One turn = load the family snapshot + conversation history, build the tool
-// set (the assistant toolbox + every lib/ai/actions.ts action, trust-wrapped
-// for the caller's role), run the provider's tool loop, then persist both
-// turns. Two transports share the exact same preparation and persistence:
+// set (the assistant toolbox, the lib/ai/actions.ts bridge, and the rest of the
+// `lib/ai/tools` registry — trust-wrapped for the caller's role), run the
+// provider's tool loop, then persist both turns. Two transports share the exact
+// same preparation and persistence:
 //   - SSE stream (web): `action` chips as tools fire, `delta` text chunks, `done`.
 //   - JSON (mobile, scripts): one response with the final text + action summaries.
 import 'server-only';
@@ -14,6 +15,10 @@ import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import { buildActionTools, mergeToolSets } from '@/lib/ai/action-tools';
+import { toToolSpecs } from '@/lib/ai/tools/legacy-adapter';
+import { getTool, toolNames } from '@/lib/ai/tools/registry';
+import type { MemberRole } from '@/lib/constants/roles';
+import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
@@ -119,6 +124,7 @@ export function buildAssistantSystemPrompt(snapshot: FamilySnapshot): string {
   return [
     "You are Bubaly's family assistant — a warm, sharp, proactive chief of staff for this household.",
     'You can take real actions with the provided tools (calendar, chores, grocery list, to-dos, reminders, notes, goals, meal plan).',
+    'Some tools are named `domain_action` (for example `calendar_updateEvent`, `tasks_assignTodo`, `groceries_checkItem`). They are ordinary tools — use them the same way, and prefer the one that matches the request exactly over a close-enough alternative.',
     'Guidelines:',
     "- When the user asks you to schedule, add, remind, or plan something, USE the tools to actually do it — don't just describe it.",
     '- Resolve relative dates ("tomorrow", "next Friday at 3pm") against the current local date/time and pass ISO 8601 datetimes in the family time zone.',
@@ -148,7 +154,10 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
     { data: meals, error: mealsError },
   ] = await Promise.all([
     supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
-    supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
+    // `user_id` is selected so the acting member can be picked out of the roster
+    // the snapshot already needs — the tool registry scopes writes by
+    // `family_members.id`, not by the auth user id.
+    supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),
     supabase.from('chore_assignments').select('status').eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('meals').select('name, meal_type').eq('family_id', familyId).limit(5),
@@ -174,12 +183,56 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
     { role: 'user' as const, content: message },
   ];
 
-  // The assistant toolbox first (it resolves member names, checks availability,
-  // RSVPs…), then every lib/ai/actions.ts action the toolbox doesn't already
-  // cover (meal planning today) — all behind the same trust wrapper.
+  // Three sets, in precedence order, merged by name — earlier wins.
+  //
+  //   1. The assistant toolbox: the tools with chat-specific behaviour the
+  //      registry has no equivalent for (member-name resolution, RSVP, pending
+  //      decisions, announcements).
+  //   2. `lib/ai/actions.ts`: what neither of the others covers — meal planning.
+  //      Its registry-covered names now run through `executeTool` inside
+  //      `runAction`, so this set is a name bridge, not a second implementation.
+  //   3. Everything else in the registry. Without this the 20-odd tools the
+  //      registry added over the old toolbox (change or cancel an event, find a
+  //      conflict, assign a task or chore, check something off the shopping
+  //      list, notify one person) would be reachable only from the run
+  //      executor — built, tested, and unreachable from the one surface a
+  //      family actually talks to. They arrive already gated and ledgered,
+  //      because `executeTool` does both.
+  //
+  // A registry tool whose canonical name is ALREADY covered by set 1 or 2 is
+  // excluded rather than merged: the two spellings (`create_calendar_event` and
+  // `calendar_createEvent`) are different strings, so `mergeToolSets` could not
+  // see them as one tool, and the model would be offered the same capability
+  // twice under two names.
   const assistantTools = buildAssistantTools(supabase, { familyId, userId, members: memberRows, tz: input.tz });
   const actionTools = buildActionTools({ supabase, familyId, userId });
-  const tools = wrapToolsWithTrust(mergeToolSets(assistantTools, actionTools), supabase, familyId, input.role);
+  const covered = new Set(
+    [...assistantTools, ...actionTools]
+      .map((tool) => getTool(tool.name)?.name)
+      .filter((name): name is string => Boolean(name)),
+  );
+  const acting = (members ?? []).find((m) => m.user_id === userId) ?? null;
+  if (!acting) {
+    // The route resolves the caller through `requireUserContext` before getting
+    // here, so this means the roster and the session disagree. The turn still
+    // runs — refusing to answer would be a worse failure than an unattributed
+    // write — but the services will record no `created_by`, so say so.
+    console.error('[assistant-engine] no active family_members row for the caller', { familyId, userId });
+  }
+  const scope: ServiceScope = {
+    db: supabase,
+    familyId,
+    userId,
+    memberId: acting?.id ?? null,
+    role: (acting?.role ?? input.role ?? 'adult') as MemberRole,
+    actorKind: 'ai',
+    tz: input.tz,
+  };
+  const registryTools = toToolSpecs(scope, { names: toolNames().filter((name) => !covered.has(name)) });
+  const tools = wrapToolsWithTrust(
+    mergeToolSets(assistantTools, actionTools, registryTools),
+    supabase, familyId, input.role,
+  );
 
   const provider = await resolveProvider();
   return { ok: true, turn: { system, messages, tools, provider } };
