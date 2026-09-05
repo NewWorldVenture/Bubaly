@@ -46,6 +46,11 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          # `next build` type-checks every route plus the generated .next/types
+          # in one worker; the 435-table types file pushes that past Node's
+          # default ~2 GB heap on the runner (OOM at "checking validity of
+          # types"). 4 GB fits the 7 GB runner with room for webpack.
+          NODE_OPTIONS: --max-old-space-size=4096
           # Dummy values so static generation doesn't crash on missing config.
           # Real data is fetched at runtime; build-time fetches fail closed
           # (e.g. getPublicStats() returns zeros), so these are safe placeholders.
@@ -130,16 +135,26 @@ jobs:
           source <(supabase status -o env \
             --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
             --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_ANON_KEY \
-            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY)
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            --override-name auth.publishable_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            --override-name auth.secret_key=SUPABASE_SECRET_KEY)
           set +a
           echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
+          echo "::add-mask::$SUPABASE_SECRET_KEY"
           echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY" >> "$GITHUB_ENV"
           echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SECRET_KEY=$SUPABASE_SECRET_KEY" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3107" >> "$GITHUB_ENV"
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+
+      # Diagnostic only (never fails): key shapes + PostgREST status/body for
+      # every header combination, so a red schema audit explains itself here.
+      - name: Probe isolated REST auth
+        run: node scripts/probe-supabase-rest.mjs
 
       - name: Verify isolated Auth APIs
         run: npm run db:audit:auth
@@ -156,6 +171,8 @@ jobs:
       - name: Run E2E smoke tests
         run: npm run test:e2e
         env:
+          # run-e2e.mjs runs `next build` first — same heap need as the Build step.
+          NODE_OPTIONS: --max-old-space-size=4096
           E2E_AUTHENTICATED: '1'
           E2E_AUTH_EMAIL: familyos-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
