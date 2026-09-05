@@ -23,6 +23,7 @@ import type { IntentKey } from '@/lib/ai/context/intents';
 import { encodeStepInput, type Plan, type PlanStep, type PlanStepType } from '../schema';
 import { findVendorTemplate } from './find-vendor';
 import { organizeWeekendTemplate } from './organize-weekend';
+import { dailyBriefTemplate } from './daily-brief';
 import { planMealsTemplate } from './plan-meals';
 import { planWeekTemplate } from './plan-week';
 import { prepareVacationTemplate } from './prepare-vacation';
@@ -103,6 +104,7 @@ export type WorkflowTemplate = {
 };
 
 const TEMPLATES: Partial<Record<IntentKey, WorkflowTemplate>> = {
+  daily_brief: dailyBriefTemplate,
   plan_meals: planMealsTemplate,
   plan_week: planWeekTemplate,
   organize_weekend: organizeWeekendTemplate,

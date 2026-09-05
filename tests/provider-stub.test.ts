@@ -32,7 +32,7 @@ const { resolveProvider, OpenAIProvider } = await import('@/lib/ai/provider');
 afterEach(() => vi.unstubAllEnvs());
 
 const SCRIPT_DIR = 'tests/ai-eval/scripts';
-const EXPECTED_SCRIPTS = ['answer_question', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'prompt_injection', 'remind_everyone', 'spending_review'];
+const EXPECTED_SCRIPTS = ['answer_question', 'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'prompt_injection', 'remind_everyone', 'spending_review'];
 
 describe('the guard', () => {
   it('is off unless AI_PROVIDER_STUB=1', () => {

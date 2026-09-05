@@ -85,6 +85,8 @@ export type AiRunState =
 export type AiRunLifecycleState = AiRunState | 'paused';
 export type AiStepState = AiRunState | 'skipped';
 export type AiRequestKind = 'concierge' | 'feature' | 'routine' | 'trigger' | 'handle_it';
+/** `home_briefs.kind` (0258): the morning brief and the evening recap. */
+export type HomeBriefKind = 'daily' | 'evening';
 /** `family_ai_settings.behavior` (0257): §11's three autonomy levels. */
 export type AutonomyBehaviorValue = 'recommend' | 'prepare' | 'execute';
 export type AiRunType = 'concierge' | 'routine' | 'trigger' | 'handle_it' | 'concierge_plan';
@@ -578,9 +580,9 @@ export interface Database {
         Partial<{ title: string; cuisine: string; effort: string; prep_minutes: number; tags: string[]; description: string | null; is_active: boolean }>
       >;
       home_briefs: T<
-        { id: string; family_id: string; as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json; created_by: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; as_of_date?: string; is_sparse?: boolean; readiness_pct?: number; week_count?: number; conflict_count?: number; dinner_count?: number; time_saved_minutes?: number; headline?: string | null; brief?: Json; created_by?: string | null },
-        Partial<{ as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json }>
+        { id: string; family_id: string; as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json; kind: HomeBriefKind; handled: Json; delivered_at: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; as_of_date?: string; is_sparse?: boolean; readiness_pct?: number; week_count?: number; conflict_count?: number; dinner_count?: number; time_saved_minutes?: number; headline?: string | null; brief?: Json; kind?: HomeBriefKind; handled?: Json; delivered_at?: string | null; created_by?: string | null },
+        Partial<{ as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json; kind: HomeBriefKind; handled: Json; delivered_at: string | null }>
       >;
       daily_insights: T<
         { id: string; family_id: string; as_of_date: string; kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null; created_by: string | null; created_at: string; updated_at: string },

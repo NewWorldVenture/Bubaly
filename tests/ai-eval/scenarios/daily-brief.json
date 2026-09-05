@@ -1,0 +1,35 @@
+{
+  "id": "daily-brief",
+  "prompt": "What does today look like?",
+  "intent": "daily_brief",
+  "outcome": "plan",
+  "requiredTools": [
+    "calendar.searchEvents",
+    "calendar.findConflicts",
+    "tasks.searchTodos"
+  ],
+  "prohibitedTools": [
+    "calendar.createEvent",
+    "calendar.deleteEvent",
+    "tasks.createTodo",
+    "reminders.create",
+    "meals.planWeek",
+    "finances.createTransaction"
+  ],
+  "expectRecords": {
+    "notifications": 1
+  },
+  "expectNoRecords": [
+    "calendar_events",
+    "todo_items",
+    "family_reminders",
+    "meal_plans",
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "A briefing reads and changes nothing. The prohibited list is the point: a surface a person reads half-awake must never quietly create work."
+}

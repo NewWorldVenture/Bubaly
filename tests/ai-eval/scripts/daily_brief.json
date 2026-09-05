@@ -1,0 +1,133 @@
+{
+  "id": "daily_brief",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "daily_brief"
+    ],
+    "text": [
+      "what does today look like",
+      "daily brief",
+      "morning brief",
+      "brief me",
+      "what's on today"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "daily_brief",
+      "confidence": 0.95,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Say what today holds, what needs a person, and what Bubaly has already handled.",
+      "reasoning_summary": "Today has the dentist at 10 and Maya's practice at 4 \u2014 they do not clash. Two to-dos are due and the recycling chore is overdue. Dinner is planned. Nothing needs you before 10.",
+      "risk_level": "low",
+      "steps": [
+        {
+          "key": "today",
+          "step_type": "retrieve",
+          "tool_name": "calendar.searchEvents",
+          "description": "Read today's calendar",
+          "input": "{\"from\": \"2026-09-05T00:00:00\", \"to\": \"2026-09-05T23:59:00\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tomorrow",
+          "step_type": "retrieve",
+          "tool_name": "calendar.searchEvents",
+          "description": "Look at tomorrow",
+          "input": "{\"from\": \"2026-09-06T00:00:00\", \"to\": \"2026-09-06T23:59:00\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "conflicts",
+          "step_type": "retrieve",
+          "tool_name": "calendar.findConflicts",
+          "description": "Check today for clashes",
+          "input": "{\"from\": \"2026-09-05T00:00:00\", \"to\": \"2026-09-05T23:59:00\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "todos",
+          "step_type": "retrieve",
+          "tool_name": "tasks.searchTodos",
+          "description": "Read what is due",
+          "input": "{\"done\": false, \"due_before\": \"2026-09-06\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "chores",
+          "step_type": "retrieve",
+          "tool_name": "tasks.listOpenChores",
+          "description": "Read the chore board",
+          "input": "{\"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "reminders",
+          "step_type": "retrieve",
+          "tool_name": "reminders.listDue",
+          "description": "See what reminders cover today",
+          "input": "{\"before\": \"2026-09-05T23:59:00\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "meals",
+          "step_type": "retrieve",
+          "tool_name": "meals.getMealPlan",
+          "description": "See what dinner is",
+          "input": "{\"week_start\": \"2026-08-31\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_asker",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Deliver the brief",
+          "input": "{\"recipients\": \"family\", \"type\": \"system\", \"title\": \"Your day\", \"body\": \"Dentist at 10 and Maya's practice at 4 \\u2014 they do not clash. Two to-dos are due today and the recycling chore is overdue. Dinner is planned. Nothing needs you before 10.\"}",
+          "depends_on": [
+            "today",
+            "tomorrow",
+            "conflicts",
+            "todos",
+            "chores",
+            "reminders",
+            "meals"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "Dentist at 10, Maya's practice at 4, and they do not clash. Two to-dos are due and the recycling chore is overdue. Dinner is planned.",
+    "toolCalls": []
+  }
+}
