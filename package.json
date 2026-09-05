@@ -44,6 +44,7 @@
     "db:seed:watchlist": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_watchlist_one_family.sql",
     "db:seed:inventory": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_inventory_one_family.sql",
     "db:seed:sleep": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_sleep_one_family.sql",
+    "db:seed:moving": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_moving_one_family.sql",
     "db:seed:declutter": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_declutter_one_family.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
     "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",

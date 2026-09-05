@@ -28,6 +28,11 @@ export type InventoryStatus = 'in_place' | 'lent' | 'lost' | 'disposed' | 'in_re
 export type SleepSource = 'manual' | 'wearable' | 'estimate';
 export type DeclutterZoneKind = 'surface' | 'closet' | 'drawer' | 'floor' | 'shelf' | 'fridge' | 'garage' | 'entryway' | 'desk' | 'toys' | 'digital' | 'other';
 export type DeclutterMissionStatus = 'planned' | 'done' | 'skipped';
+export type MoveStatus = 'planning' | 'packing' | 'moving_day' | 'settling' | 'done' | 'cancelled';
+export type MoveKind = 'local' | 'long_distance' | 'international' | 'within_building';
+export type MoveTaskCategory = 'admin' | 'address' | 'utilities' | 'movers' | 'packing' | 'school' | 'medical' | 'pets' | 'finance' | 'cleaning' | 'settling' | 'other';
+export type MoveTaskStatus = 'todo' | 'doing' | 'done' | 'skipped';
+export type MoveBoxStatus = 'empty' | 'packed' | 'loaded' | 'delivered' | 'unpacked';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2474,6 +2479,21 @@ export interface Database {
         { id: string; family_id: string; zone_id: string | null; member_id: string | null; started_at: string; minutes: number; missions_done: number; items_removed: number; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; zone_id?: string | null; member_id?: string | null; started_at?: string; minutes?: number; missions_done?: number; items_removed?: number; notes?: string | null; created_by?: string | null },
         Partial<{ zone_id: string | null; member_id: string | null; started_at: string; minutes: number; missions_done: number; items_removed: number; notes: string | null }>
+      >;
+      moves: T<
+        { id: string; family_id: string; title: string; from_address: string | null; to_address: string | null; move_date: string; status: MoveStatus; move_kind: MoveKind; budget_cents: number | null; spent_cents: number; mover_name: string | null; mover_phone: string | null; mover_quote_cents: number | null; has_kids: boolean; has_pets: boolean; is_renting_out: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; from_address?: string | null; to_address?: string | null; move_date: string; status?: MoveStatus; move_kind?: MoveKind; budget_cents?: number | null; spent_cents?: number; mover_name?: string | null; mover_phone?: string | null; mover_quote_cents?: number | null; has_kids?: boolean; has_pets?: boolean; is_renting_out?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; from_address: string | null; to_address: string | null; move_date: string; status: MoveStatus; move_kind: MoveKind; budget_cents: number | null; spent_cents: number; mover_name: string | null; mover_phone: string | null; mover_quote_cents: number | null; has_kids: boolean; has_pets: boolean; is_renting_out: boolean; notes: string | null }>
+      >;
+      move_tasks: T<
+        { id: string; family_id: string; move_id: string; title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; completed_at: string | null; template_key: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; move_id: string; title: string; category?: MoveTaskCategory; offset_days?: number; due_date?: string | null; assignee_id?: string | null; status?: MoveTaskStatus; completed_at?: string | null; template_key?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; completed_at: string | null; template_key: string | null; notes: string | null }>
+      >;
+      move_boxes: T<
+        { id: string; family_id: string; move_id: string; box_number: number; label: string; from_room: string | null; to_room: string | null; contents: string[]; is_fragile: boolean; is_essential: boolean; status: MoveBoxStatus; packed_by: string | null; photo_path: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; move_id: string; box_number: number; label: string; from_room?: string | null; to_room?: string | null; contents?: string[]; is_fragile?: boolean; is_essential?: boolean; status?: MoveBoxStatus; packed_by?: string | null; photo_path?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ box_number: number; label: string; from_room: string | null; to_room: string | null; contents: string[]; is_fragile: boolean; is_essential: boolean; status: MoveBoxStatus; packed_by: string | null; photo_path: string | null; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };

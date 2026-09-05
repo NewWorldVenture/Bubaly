@@ -63,6 +63,7 @@ export const SERVICE_DESCRIPTIONS: Record<string, string> = {
   '/dashboard/watchlist': 'The family watchlist with votes, age ratings and runtimes — so movie night is one pick for the people on the couch, not an hour of scrolling.',
   '/dashboard/inventory': 'Where everything lives — rooms and containers, a searchable catalog with photos and values, loans and warranties, and an AI that answers “where is the…?”.',
   '/dashboard/sleep': 'Age-aware sleep targets for every family member, bedtime routines, a 2-minute check-in, and an AI coach that builds a 7-day program from your own nights.',
+  '/dashboard/moving': 'One workflow from “we’re moving” to “settled”: an eight-week checklist tailored to kids, pets and rentals, a searchable numbered box inventory, budget health and an AI move planner.',
   '/dashboard/declutter': 'Turn “clean the house” into 10–15 minute missions per zone, spread across the family for the week, with streaks, before/after photos and an AI coach.',
   '/dashboard/locator': 'A private family map — see where everyone is, with check-ins and place alerts, on your terms.',
   '/dashboard/social': 'Coordinate the family’s social life — RSVPs, invites, and who’s doing what this weekend.',

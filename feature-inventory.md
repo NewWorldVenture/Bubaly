@@ -89,6 +89,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/moments` | `calendar_events`, `family_members`, `homework_assignments`, `moment_activations`, `vacations` |
 | `/dashboard/money-timeline` | `money_timeline_insights` |
 | `/dashboard/more` | (via lib/* engines) |
+| `/dashboard/moving` | `move_boxes`, `move_tasks`, `moves` |
 | `/dashboard/next-best-actions` | `calendar_events`, `opportunities`, `todo_items` |
 | `/dashboard/notes` | `notes` |
 | `/dashboard/notifications` | `notifications` |
