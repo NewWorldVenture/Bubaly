@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/feedback-github-sync",
-      "schedule": "15 * * * *"
+      "schedule": "15 6 * * *"
     },
     {
       "path": "/api/cron/chore-reminders",
@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/push-scan",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/calendar-feeds",
@@ -30,19 +30,19 @@
     },
     {
       "path": "/api/cron/marketing",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/marketing-providers",
-      "schedule": "15 */6 * * *"
+      "schedule": "15 7 * * *"
     },
     {
       "path": "/api/cron/checkout-abandoned",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/autopilot-scan",
-      "schedule": "30 6,18 * * *"
+      "schedule": "30 6 * * *"
     },
     {
       "path": "/api/cron/wallet-allowance",
@@ -50,7 +50,7 @@
     },
     {
       "path": "/api/cron/model-refresh",
-      "schedule": "0 4,16 * * *"
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/network-aggregate",
@@ -62,19 +62,19 @@
     },
     {
       "path": "/api/cron/demo-cleanup",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/cron/provider-sync",
-      "schedule": "15 */4 * * *"
+      "schedule": "15 8 * * *"
     },
     {
       "path": "/api/cron/journey-recovery",
-      "schedule": "0 9,15,21 * * *"
+      "schedule": "0 15 * * *"
     },
     {
       "path": "/api/cron/close-auctions",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/cron/return-reminders",

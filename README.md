@@ -63,6 +63,20 @@ npm run dev
 5. Add all `.env.example` variables to Vercel project settings.
 6. Set Supabase Auth redirect URLs to your Vercel domain.
 
+
+**Cron jobs.** `vercel.json` only declares once-a-day schedules, because Vercel's
+Hobby plan rejects any deployment whose crons run more often ("Hobby accounts
+are limited to daily cron jobs"). The real cadences (every 5/15 min, hourly,
+every 2–6 h) are driven by `.github/workflows/cron-dispatch.yml` →
+`scripts/cron-dispatch.mjs`, which needs the repository secret `CRON_SECRET`
+(same value as the Vercel env var) and optionally the variable
+`CRON_BASE_URL`. On Vercel Pro you can copy the schedules from
+`scripts/cron-dispatch.mjs` back into `vercel.json` and disable the workflow.
+
+**Build memory.** `npm run build` runs Next with a 4 GB heap (`node
+--max-old-space-size=4096`); the type check of the generated route types needs
+more than Node's default on 7–8 GB builders.
+
 ## Roadmap (all phases shipped)
 Every phase below is implemented and gated by CI. Where each one lives:
 
