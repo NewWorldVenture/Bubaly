@@ -66,7 +66,7 @@ export function FaqTabs({ sections }: { sections: FaqSection[] }) {
               )}
             >
               {section.label}
-              <span className={cn('text-xs tabular-nums', selected ? 'text-brand-fg/80' : 'text-muted/70')}>
+              <span className={cn('text-xs tabular-nums', selected ? 'text-brand-fg/80' : 'text-muted')}>
                 {section.items.length}
               </span>
             </button>
