@@ -6,6 +6,7 @@
 // invented; every pick is something the family already added.
 
 import type { WatchKind, WatchService, WatchStatus, WatchVote } from '@/lib/database.types';
+import { ageOn as memberAgeOn } from '@/lib/members/age';
 
 export const WATCH_KINDS: { value: WatchKind; label: string; emoji: string }[] = [
   { value: 'movie', label: 'Movie', emoji: '🎬' },
@@ -54,7 +55,54 @@ export type TitleLike = {
 export type VoteLike = { title_id: string; member_id: string; vote: WatchVote };
 export type SessionLike = { title_id: string | null; title_name: string; watched_on: string; rating: number | null; member_ids: string[] };
 
-export { ageOn } from '@/lib/members/age';
+/** Watchlist ages require an actual, non-future calendar birthday. */
+export function ageOn(birthday: string | null | undefined, today: Date): number | null {
+  if (typeof birthday !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(birthday) || Number.isNaN(today.getTime())) return null;
+  const birthDate = new Date(`${birthday}T00:00:00`);
+  const year = Number(birthday.slice(0, 4));
+  const month = Number(birthday.slice(5, 7));
+  const day = Number(birthday.slice(8, 10));
+  if (year < 1 || Number.isNaN(birthDate.getTime()) || birthDate.getFullYear() !== year
+    || birthDate.getMonth() + 1 !== month || birthDate.getDate() !== day || birthDate > today) return null;
+  return memberAgeOn(birthday, today);
+}
+
+/** Preserve a slot for every selected person, including missing household members. */
+export function watchlistAudienceAges(
+  audienceIds: readonly string[],
+  members: readonly { id: string; birthday?: string | null }[],
+  today: Date,
+): (number | null)[] {
+  return audienceIds.map((id) => ageOn(members.find((member) => member.id === id)?.birthday, today));
+}
+
+export type AudienceEligibility = {
+  eligible: boolean;
+  youngest: number | null;
+  unresolvedIds: string[];
+  blocker: string | null;
+};
+
+/** A recommendation needs a valid whole-year age for every selected person. */
+export function getAudienceEligibility(
+  audienceIds: readonly string[],
+  audienceAges: readonly (number | null | undefined)[],
+): AudienceEligibility {
+  const aligned = audienceIds.length === audienceAges.length;
+  const unresolvedIds = audienceIds.filter((_, index) => {
+    const age = audienceAges[index];
+    return !aligned || typeof age !== 'number' || !Number.isInteger(age) || age < 0;
+  });
+  const eligible = audienceIds.length > 0 && aligned && unresolvedIds.length === 0;
+  return {
+    eligible,
+    youngest: eligible ? Math.min(...audienceAges as number[]) : null,
+    unresolvedIds,
+    blocker: eligible ? null : audienceIds.length === 0
+      ? 'Select who is watching before getting recommendations.'
+      : 'Confirm ages for everyone watching before getting recommendations.',
+  };
+}
 
 /** Sum of the audience's votes for a title (members not voting count 0). */
 export function voteScore(titleId: string, votes: VoteLike[], audienceIds?: string[]): number {
@@ -66,8 +114,8 @@ export function voteScore(titleId: string, votes: VoteLike[], audienceIds?: stri
 export type PickContext = {
   /** Member ids on the couch tonight. */
   audienceIds: string[];
-  /** Ages of the audience (unknown ages are ignored; if none known, no age filter). */
-  audienceAges: number[];
+  /** One age per audienceIds entry, in the same order. Unknown ages must retain their slot. */
+  audienceAges: (number | null | undefined)[];
   availableMinutes: number;
   service?: WatchService | 'any';
   kind?: WatchKind | 'any';
@@ -76,14 +124,16 @@ export type PickContext = {
 export type Pick<T extends TitleLike = TitleLike> = { title: T; score: number; reasons: string[]; blockers: string[] };
 
 /** Rank the watchlist for tonight. Unsuitable titles are returned with `blockers` so the UI can explain. */
-export function pickTonight<T extends TitleLike>(titles: T[], votes: VoteLike[], ctx: PickContext): { picks: Pick<T>[]; excluded: Pick<T>[] } {
-  const youngest = ctx.audienceAges.length ? Math.min(...ctx.audienceAges) : null;
+export function pickTonight<T extends TitleLike>(titles: T[], votes: VoteLike[], ctx: PickContext): { picks: Pick<T>[]; excluded: Pick<T>[]; audienceEligibility: AudienceEligibility } {
+  const audienceEligibility = getAudienceEligibility(ctx.audienceIds, ctx.audienceAges);
+  const { youngest } = audienceEligibility;
   const picks: Pick<T>[] = [];
   const excluded: Pick<T>[] = [];
   for (const t of titles) {
     if (t.status !== 'want' && t.status !== 'watching') continue;
     const reasons: string[] = [];
     const blockers: string[] = [];
+    if (audienceEligibility.blocker) blockers.push(audienceEligibility.blocker);
     if (youngest !== null && t.min_age > youngest) blockers.push(`rated ${t.min_age}+, youngest tonight is ${youngest}`);
     if (t.runtime_min && t.runtime_min > ctx.availableMinutes) blockers.push(`${t.runtime_min} min, you have ${ctx.availableMinutes}`);
     if (ctx.service && ctx.service !== 'any' && t.service !== ctx.service) blockers.push(`on ${serviceLabel(t.service)}`);
@@ -105,7 +155,7 @@ export function pickTonight<T extends TitleLike>(titles: T[], votes: VoteLike[],
   }
   picks.sort((a, b) => b.score - a.score || a.title.title.localeCompare(b.title.title));
   excluded.sort((a, b) => b.score - a.score);
-  return { picks, excluded };
+  return { picks, excluded, audienceEligibility };
 }
 
 export type WatchlistSummary = {

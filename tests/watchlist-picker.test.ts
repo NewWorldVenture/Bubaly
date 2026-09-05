@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGE_RATINGS, TIME_PRESETS, WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, ageOn, kindMeta, pickTonight, ratingMinAge,
-  serviceLabel, voteScore, watchlistSummary, type TitleLike, type VoteLike,
+  getAudienceEligibility, serviceLabel, voteScore, watchlistAudienceAges, watchlistSummary, type TitleLike, type VoteLike,
 } from '@/lib/watchlist/picker';
 
 const TODAY = new Date('2026-09-05T20:00:00');
@@ -31,6 +31,37 @@ describe('ageOn', () => {
     expect(ageOn('2016-09-05', TODAY)).toBe(10);
     expect(ageOn(null, TODAY)).toBeNull();
     expect(ageOn('nope', TODAY)).toBeNull();
+  });
+
+  it.each([
+    undefined, '', 'not-a-date', '2025-02-29', '2026-04-31', '2026-13-01', '2026-01-00',
+    '0000-01-01', '2016-09-05junk', '2026-09-06', '2030-01-01',
+  ])('rejects a missing, invalid or future birthday: %s', (birthday) => {
+    expect(ageOn(birthday, TODAY)).toBeNull();
+  });
+
+  it('keeps valid leap-day and newborn ages and rejects an invalid reference date', () => {
+    expect(ageOn('2024-02-29', TODAY)).toBe(2);
+    expect(ageOn('2026-09-05', TODAY)).toBe(0);
+    expect(ageOn('2016-09-05', new Date('invalid'))).toBeNull();
+  });
+});
+
+describe('watchlistAudienceAges', () => {
+  it('preserves selected order and unknown or stale participants instead of dropping them', () => {
+    const audienceIds = ['known-child', 'unknown-child', 'adult', 'stale-member'];
+    const members = [
+      { id: 'adult', birthday: '1985-09-05' },
+      { id: 'unknown-child', birthday: null },
+      { id: 'known-child', birthday: '2016-09-06' },
+      { id: 'unselected-member', birthday: null },
+    ];
+    const ages = watchlistAudienceAges(audienceIds, members, TODAY);
+    expect(ages).toEqual([9, null, 41, null]);
+    expect(getAudienceEligibility(audienceIds, ages)).toMatchObject({
+      eligible: false, youngest: null, unresolvedIds: ['unknown-child', 'stale-member'],
+    });
+    expect(audienceIds).toEqual(['known-child', 'unknown-child', 'adult', 'stale-member']);
   });
 });
 
@@ -66,16 +97,103 @@ describe('pickTonight', () => {
     const { picks, excluded } = pickTonight(titles, votes, { audienceIds: ['kid'], audienceAges: [14], availableMinutes: 200, service: 'disney' });
     expect(picks.map((p) => p.title.id)).toEqual(['d']);
     expect(excluded.find((p) => p.title.id === 'a')?.blockers).toEqual(['on Netflix']);
-    const kids = pickTonight(titles, votes, { audienceIds: [], audienceAges: [], availableMinutes: 200, kind: 'kids' });
+    const kids = pickTonight(titles, votes, { audienceIds: ['kid'], audienceAges: [14], availableMinutes: 200, kind: 'kids' });
     expect(kids.picks.map((p) => p.title.id)).toEqual(['d']);
   });
 
-  it('ignores the age filter when no ages are known', () => {
+  it('preserves known-adult ranking and only counts that adult\'s votes', () => {
     // Only mom is on the couch: the kid's love for 'b' does not count, so the
     // in-progress cartoon outranks it, and mom's down-vote sinks the epic.
-    const { picks } = pickTonight(titles, votes, { audienceIds: ['mom'], audienceAges: [], availableMinutes: 200 });
+    const { picks } = pickTonight(titles, votes, { audienceIds: ['mom'], audienceAges: [41], availableMinutes: 200 });
     expect(picks.map((p) => p.title.id)).toEqual(['a', 'd', 'b', 'c']);
     expect(picks[3].reasons).toContain('1 would rather not');
+  });
+
+  it('excludes every queued title when all selected ages are unknown, including all-ages titles', () => {
+    const audienceIds = ['mom', 'kid'];
+    const audienceAges = watchlistAudienceAges(audienceIds, [
+      { id: 'mom', birthday: null }, { id: 'kid', birthday: null },
+    ], TODAY);
+    const result = pickTonight(titles, votes, { audienceIds, audienceAges, availableMinutes: 200 });
+    expect(result.picks).toEqual([]);
+    expect(result.audienceEligibility).toEqual(getAudienceEligibility(audienceIds, audienceAges));
+    expect(result.audienceEligibility).toMatchObject({ eligible: false, youngest: null, unresolvedIds: ['mom', 'kid'] });
+    expect(result.excluded.map((p) => p.title.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+    for (const excluded of result.excluded) {
+      expect(excluded.blockers).toContain(result.audienceEligibility.blocker);
+      expect(excluded.reasons).not.toContain('fine for everyone');
+    }
+  });
+
+  it.each([null, '', 'not-a-date', '2025-02-29', '2026-04-31', '2026-09-06', '2030-01-01'])(
+    'blocks a known adult with a child whose birthday needs clarification: %s', (birthday) => {
+      const audienceIds = ['mom', 'kid'];
+      const audienceAges = watchlistAudienceAges(audienceIds, [
+        { id: 'mom', birthday: '1985-09-05' }, { id: 'kid', birthday },
+      ], TODAY);
+      const result = pickTonight(titles, votes, { audienceIds, audienceAges, availableMinutes: 200 });
+      expect(audienceAges).toEqual([41, null]);
+      expect(result.picks).toEqual([]);
+      expect(result.audienceEligibility).toMatchObject({ eligible: false, youngest: null, unresolvedIds: ['kid'] });
+      expect(result.excluded).toHaveLength(4);
+    },
+  );
+
+  it('does not let an unselected member with an unknown age block an explicit known audience', () => {
+    const audienceIds = ['mom'];
+    const audienceAges = watchlistAudienceAges(audienceIds, [
+      { id: 'kid', birthday: null }, { id: 'mom', birthday: '1985-09-05' },
+    ], TODAY);
+    const result = pickTonight(titles, votes, { audienceIds, audienceAges, availableMinutes: 200 });
+    expect(audienceAges).toEqual([41]);
+    expect(result.audienceEligibility).toMatchObject({ eligible: true, youngest: 41, unresolvedIds: [], blocker: null });
+    expect(result.picks.map((p) => p.title.id)).toEqual(['a', 'd', 'b', 'c']);
+  });
+
+  it('blocks stale selected participants even when every current member has a known age', () => {
+    const audienceIds = ['mom', 'removed-child'];
+    const audienceAges = watchlistAudienceAges(audienceIds, [{ id: 'mom', birthday: '1985-09-05' }], TODAY);
+    const result = pickTonight(titles, votes, { audienceIds, audienceAges, availableMinutes: 200 });
+    expect(audienceAges).toEqual([41, null]);
+    expect(result.picks).toEqual([]);
+    expect(result.audienceEligibility.unresolvedIds).toEqual(['removed-child']);
+  });
+
+  it.each([null, undefined, NaN, Infinity, -Infinity, -1, 9.5])('blocks invalid or missing numeric ages: %s', (age) => {
+    const result = pickTonight(titles, votes, { audienceIds: ['mom', 'kid'], audienceAges: [41, age], availableMinutes: 200 });
+    expect(result.picks).toEqual([]);
+    expect(result.audienceEligibility).toMatchObject({ eligible: false, youngest: null, unresolvedIds: ['kid'] });
+  });
+
+  it.each([
+    { audienceIds: ['mom'], audienceAges: [] },
+    { audienceIds: ['mom', 'kid'], audienceAges: [41] },
+    { audienceIds: ['mom'], audienceAges: [41, 9] },
+    { audienceIds: [], audienceAges: [] },
+    { audienceIds: [], audienceAges: [41] },
+  ])('blocks missing or mismatched audience ages: %j', (audience) => {
+    const result = pickTonight(titles, votes, { ...audience, availableMinutes: 200 });
+    expect(result.picks).toEqual([]);
+    expect(result.audienceEligibility.eligible).toBe(false);
+    expect(result.excluded).toHaveLength(4);
+  });
+
+  it('preserves known family filtering, scoring and explanations when resolving member birthdays', () => {
+    const audienceIds = ['mom', 'kid'];
+    const audienceAges = watchlistAudienceAges(audienceIds, [
+      { id: 'kid', birthday: '2016-09-06' }, { id: 'mom', birthday: '1985-09-05' },
+    ], TODAY);
+    const result = pickTonight(titles, votes, { audienceIds, audienceAges, availableMinutes: 120 });
+    expect(result).toEqual(pickTonight(titles, votes, { audienceIds, audienceAges: [41, 9], availableMinutes: 120 }));
+    expect(result.picks.map((p) => p.title.id)).toEqual(['a', 'd']);
+    expect(result.audienceEligibility).toMatchObject({ eligible: true, youngest: 9, unresolvedIds: [], blocker: null });
+  });
+
+  it('accepts a known newborn age without treating zero as unknown', () => {
+    const result = pickTonight(titles, votes, { audienceIds: ['baby'], audienceAges: [0], availableMinutes: 200 });
+    expect(result.picks.map((p) => p.title.id)).toEqual(['d']);
+    expect(result.audienceEligibility).toMatchObject({ eligible: true, youngest: 0, blocker: null });
+    expect(result.picks[0].reasons).toContain('fine for everyone');
   });
 });
 

@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, WatchKind, WatchService, WatchStatus, WatchVote } from '@/lib/database.types';
 import {
   WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, AGE_RATINGS, TIME_PRESETS, kindMeta, serviceLabel, ratingMinAge,
-  ageOn, pickTonight, watchlistSummary,
+  ageOn, pickTonight, watchlistAudienceAges, watchlistSummary,
 } from '@/lib/watchlist/picker';
 
 type Title = Tables<'watchlist_titles'>;
@@ -60,7 +60,7 @@ export function WatchlistModule() {
 
   const today = useMemo(() => new Date(), []);
   const myMemberId = selfMember?.id ?? null;
-  const ages = useMemo(() => members.filter((m) => audience.includes(m.id)).map((m) => ageOn(m.birthday, today)).filter((a): a is number => a !== null), [members, audience, today]);
+  const ages = useMemo(() => watchlistAudienceAges(audience, members, today), [members, audience, today]);
   const tonight = useMemo(() => pickTonight(titles.data, votes.data, { audienceIds: audience, audienceAges: ages, availableMinutes: minutes, service }), [titles.data, votes.data, audience, ages, minutes, service]);
   const summary = useMemo(() => watchlistSummary(titles.data, sessions.data, today), [titles.data, sessions.data, today]);
   const filtered = useMemo(
@@ -111,6 +111,8 @@ export function WatchlistModule() {
   if (error) return <ErrorState message="Could not load the watchlist. Refresh and try again." onRetry={refresh} />;
 
   const topPicks = tonight.picks.slice(0, 3);
+  const ageClarificationNames = members.filter((m) => tonight.audienceEligibility.unresolvedIds.includes(m.id)).map((m) => m.display_name);
+  const unavailableAudience = audience.filter((id) => !members.some((m) => m.id === id));
 
   return (
     <div className="space-y-6">
@@ -127,13 +129,21 @@ export function WatchlistModule() {
             <span className="text-xs text-muted">Who’s watching:</span>
             {members.map((m) => {
               const on = audience.includes(m.id);
+              const age = ageOn(m.birthday, today);
               return (
                 <button key={m.id} aria-pressed={on} onClick={() => setAudience(on ? audience.filter((x) => x !== m.id) : [...audience, m.id])}
                   className={cn('rounded-full border px-3 py-1 text-xs coarse:min-h-11', on ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>
-                  {m.display_name}{ageOn(m.birthday, today) !== null ? ` · ${ageOn(m.birthday, today)}` : ''}
+                  {m.display_name}{age !== null ? ` · ${age}` : on ? ' · age needed' : ''}
                 </button>
               );
             })}
+            {unavailableAudience.map((id, index) => (
+              <button key={id} type="button" aria-pressed={true} aria-label={`Remove unavailable participant ${index + 1} from tonight`}
+                onClick={() => setAudience(audience.filter((selectedId) => selectedId !== id))}
+                className="rounded-full border border-brand bg-brand/15 px-3 py-1 text-xs text-brand-text coarse:min-h-11">
+                Unavailable participant {index + 1}: remove from tonight
+              </button>
+            ))}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Clock className="h-4 w-4 text-muted" />
@@ -146,7 +156,18 @@ export function WatchlistModule() {
             </Select>
           </div>
 
-          {topPicks.length === 0 ? (
+          {!tonight.audienceEligibility.eligible ? (
+            <div role="status" className="mt-4 space-y-1 text-sm text-brand-text">
+              <p className="font-medium">{tonight.audienceEligibility.blocker}</p>
+              {ageClarificationNames.length > 0 && (
+                <p>Age needs clarification for {ageClarificationNames.join(', ')}. Add or correct each date of birth in their member profile.</p>
+              )}
+              {unavailableAudience.length > 0 && (
+                <p>Some selected participants are no longer available in the household. Restore their member profiles, or remove them above if they are not watching.</p>
+              )}
+              <p>Select everyone who is watching. Only deselect someone if they will not be watching.</p>
+            </div>
+          ) : topPicks.length === 0 ? (
             <p className="mt-4 text-sm text-muted">
               {titles.data.some((t) => t.status === 'want' || t.status === 'watching')
                 ? `Nothing fits tonight’s crowd and time${tonight.excluded[0] ? ` — closest: ${tonight.excluded[0].title.title} (${tonight.excluded[0].blockers.join('; ')})` : ''}.`
