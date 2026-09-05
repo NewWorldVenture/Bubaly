@@ -517,9 +517,18 @@ export async function claimRun(
 
   const now = Date.now();
   const leaseHeld = !!run.lease_expires_at && new Date(run.lease_expires_at).getTime() > now;
+  // `run_after` is honoured here for the same reason `claim_ai_runs` filters on
+  // it: a run parked at `scheduled_followup` carries the follow-up's due time,
+  // and an interactive continuation (a resume, a re-run of another step, the
+  // kick after an answer) must not run "check back in three days" today. A
+  // `run_after` the row cannot parse counts as due, so a bad timestamp can
+  // never strand a run.
+  const dueAt = run.run_after ? Date.parse(run.run_after) : Number.NaN;
+  const due = !Number.isFinite(dueAt) || dueAt <= now;
   const claimable = (run.state === 'ready' || run.state === 'scheduled_followup')
     && !run.cancel_requested_at
     && !leaseHeld
+    && due
     && run.attempt < run.max_attempts;
   if (!claimable) return ok({ claimed: false, run, leaseOwner: null });
 

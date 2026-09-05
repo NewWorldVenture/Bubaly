@@ -65,11 +65,21 @@ export async function middleware(req: NextRequest) {
   }
 
   const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+  // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
+  // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
+  // handlers verify the token themselves (`authenticateAI` /
+  // `getBearerUserContext`) and answer 401 when it is bad; every other route
+  // under /api/ai calls `requireUserContext`, which fails closed without a
+  // session. So a bearer request there must reach its handler: a 307 to the
+  // HTML login page is not an answer a JSON client can act on. Only a
+  // well-formed bearer header opts out, and only under /api/ai.
+  const bearerApi = (path === '/api/ai' || path.startsWith('/api/ai/'))
+    && /^Bearer\s+\S+$/i.test((req.headers.get('authorization') ?? '').trim());
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isPublic) return res;
+    if (isPublic || bearerApi) return res;
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
@@ -89,7 +99,7 @@ export async function middleware(req: NextRequest) {
     },
   );
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user && !isPublic) {
+  if (!user && !isPublic && !bearerApi) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
