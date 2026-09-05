@@ -41,6 +41,14 @@ export function SiteHeader() {
           {/* Header controls stay compact on desktop-with-a-mouse but grow to the
               44px minimum tap target on touch (coarse pointer) — WCAG 2.5.5 / Apple HIG. */}
           <ThemeToggle className="h-8 w-8 border border-border/80 bg-surface/70 text-fg hover:bg-elevated coarse:min-h-11 coarse:min-w-11" />
+          {/* Phones (< sm) hide the Log in / Get Started pills below, leaving the
+              primary CTA buried inside the closed drawer. Surface a compact
+              "Get started" pill next to the menu button so the homepage always
+              has a visible primary action without opening a menu. Placed before
+              the desktop pill so it is the first "Get started" link in DOM order. */}
+          <Link href="/welcome" className="inline-flex h-8 items-center whitespace-nowrap rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-3 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 coarse:min-h-11 sm:hidden">
+            Get started
+          </Link>
           <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg coarse:min-h-11 sm:inline-flex">
             Log in
           </Link>

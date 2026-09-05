@@ -47,7 +47,7 @@ export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
       <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition focus-within:border-violet-400/50">
         <Search className="h-4 w-4 shrink-0 text-white/40" />
         <input
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/40"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/40 sm:text-base"
           placeholder="Search articles..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
