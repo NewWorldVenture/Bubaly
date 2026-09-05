@@ -162,6 +162,13 @@ jobs:
       - name: Verify isolated schema capabilities
         run: npm run db:audit:schema
 
+      # The isolated database has the migrations' blog / landing / SEO rows but
+      # no canonical marketing_pages — production got those from
+      # `marketing:backfill:pages --apply`. Run the same offline backfill so the
+      # verification below checks the same state as production.
+      - name: Backfill canonical marketing pages
+        run: npm run marketing:backfill:pages -- --apply
+
       - name: Verify marketing platform schema
         run: npm run marketing:verify:remote
 
