@@ -150,6 +150,12 @@ export function parseDueDate(input: string, now: Date = new Date()): ParsedTask 
   const raw = input.trim();
   const day = parseDay(raw, now);
   if (!day) return { title: raw, dueDate: null };
+  // "Pack lunches for tomorrow" / "Prep slides for monday": a day introduced by
+  // "for" says what the task is about, not just when it is due — stripping it
+  // would leave a dangling "for" and change the meaning, so the title stays as
+  // typed while the due date is still inferred.
+  const dayAt = raw.toLowerCase().indexOf(day.match.toLowerCase());
+  if (dayAt > 0 && /\bfor\s+$/i.test(raw.slice(0, dayAt))) return { title: raw, dueDate: toYMD(day.date) };
   const time = parseTime(raw);
   let title = stripPhrase(raw, day.match);
   if (time) title = stripPhrase(title, time.match);

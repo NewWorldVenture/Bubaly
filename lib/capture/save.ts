@@ -42,13 +42,14 @@ export type CaptureSaveInput = {
   memberId?: string | null;
 };
 
-/** Get-or-create the family's default to-do list. */
-async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, userId: string): Promise<string | null> {
+/** Get-or-create the family's default to-do list. `todo_lists.created_by`
+ *  references family_members(id), not auth.users, so it takes the member id. */
+async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, memberId: string | null): Promise<string | null> {
   const { data: existing } = await supabase.from('todo_lists').select('id')
     .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
   if (existing) return existing.id;
   const { data: created } = await supabase.from('todo_lists')
-    .insert({ family_id: familyId, name: 'To-Do', created_by: userId }).select('id').maybeSingle();
+    .insert({ family_id: familyId, name: 'To-Do', created_by: memberId }).select('id').maybeSingle();
   return created?.id ?? null;
 }
 
@@ -90,11 +91,13 @@ export async function saveCapture(supabase: SupabaseBrowser, input: CaptureSaveI
   }
 
   if (kind === 'task') {
-    const listId = await defaultTodoListId(supabase, familyId, userId);
+    // todo_lists/todo_items.created_by reference family_members(id) (migration
+    // 0015) — the auth user id violates that FK and the task never saves.
+    const listId = await defaultTodoListId(supabase, familyId, memberId ?? null);
     if (!listId) throw new Error('Could not find a to-do list');
     const { title, dueDate } = parseDueDate(value);
     const { data, error } = await supabase.from('todo_items').insert({
-      family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: userId,
+      family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: memberId ?? null,
       assigned_to_id: memberId ?? null,
     }).select('id');
     if (error) throw error;

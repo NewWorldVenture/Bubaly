@@ -57,6 +57,33 @@ describe('saveCapture', () => {
     expect(row.title).toBe('Pay rent');
     expect(row.due_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(row.assigned_to_id).toBe('member-1');
+    // todo_items.created_by references family_members(id), not auth.users
+    // (migration 0015): the auth user id would violate the FK and the first
+    // task of the onboarding journey would never save.
+    expect(row.created_by).toBe('member-1');
+  });
+
+  it('creates the default to-do list with the member id, not the auth user id', async () => {
+    const inserts: { table: string; payload: unknown }[] = [];
+    function builder(table: string) {
+      const b: Record<string, unknown> = {};
+      const chain = () => b;
+      Object.assign(b, {
+        select: chain, eq: chain, is: chain, order: chain, limit: chain,
+        insert: (payload: unknown) => { inserts.push({ table, payload }); return b; },
+        // No existing list → exercise the list-creation path.
+        maybeSingle: () => Promise.resolve(table === 'todo_lists' && inserts.some((i) => i.table === 'todo_lists')
+          ? { data: { id: 'todo_lists-new' }, error: null }
+          : { data: null, error: null }),
+        then: (resolve: (v: { data: null; error: null }) => void) => resolve({ data: null, error: null }),
+      });
+      return b;
+    }
+    const client = { from: (table: string) => builder(table) } as unknown as SupabaseBrowser;
+    await saveCapture(client, { ...BASE, kind: 'task', text: 'Pack lunches for tomorrow' });
+    expect(inserts.find((i) => i.table === 'todo_lists')!.payload).toEqual({ family_id: 'fam-1', name: 'To-Do', created_by: 'member-1' });
+    const item = inserts.find((i) => i.table === 'todo_items')!.payload as Record<string, unknown>;
+    expect(item).toMatchObject({ list_id: 'todo_lists-new', title: 'Pack lunches for tomorrow', created_by: 'member-1', assigned_to_id: 'member-1' });
   });
 
   it('splits a shopping list into multiple rows', async () => {
