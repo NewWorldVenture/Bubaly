@@ -141,3 +141,9 @@ global CSS helper and app sidebar are unchanged.
 - Forward migration `0252_ai_insert_authority.sql` constrains those inserts without removing the legacy pending/executed concierge records. Approval inserts must start undecided, and request inserts cannot invent executor status, usage counters, or another member's identity.
 - The isolated authenticated journey now exercises rejected forged rows, ordinary request creation, legacy automatic-completion records, and trusted service writes against the real database. Its existing remote-host safeguard and test-family cleanup remain in place.
 - The zero-row production schema audit now covers 48 requirements, including all six AI runtime tables and the extensions to existing run, conversation, message, and approval tables. This availability check remains separate from authenticated CRUD/RLS verification.
+
+### Production migration-history reconciliation
+
+- GitHub credentials now connect successfully. Run `33986150675` exposed missing baseline history: the CLI scheduled the historical migration set, replayed 0001 through 0003, and stopped when 0004 encountered the existing `profiles_insert_self` policy.
+- Do not repeat that historical push or blindly mark all versions applied. A read-only catalog/history audit and a pre-push replay guard now support an evidence-based reconciliation. Audit artifacts contain schema metadata, not household rows or credentials.
+- The read-only audit is independently dispatchable. It cannot apply migrations, repair history, or reset the database. The production workflow retains its diagnostic artifact even when the replay guard stops it.

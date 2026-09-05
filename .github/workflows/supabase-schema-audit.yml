@@ -1,0 +1,34 @@
+name: Supabase read-only schema audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-read-only-schema-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read catalog metadata and migration history
+        run: node scripts/audit-production-migration-state.mjs
+      - name: Upload metadata-only audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-schema-audit
+          path: .next/production-schema-audit.json
+          retention-days: 3
+          if-no-files-found: error
