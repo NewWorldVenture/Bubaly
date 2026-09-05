@@ -27,11 +27,22 @@ function throwContextUnavailable(scope: string, error: unknown): never {
   throw new Error('Account context is temporarily unavailable.');
 }
 
+/**
+ * Supabase reports an anonymous visitor as an AuthSessionMissingError from
+ * `auth.getUser()`. That is the normal signed-out state on every public page,
+ * not a failure, so it must not be logged as one.
+ */
+function isSessionMissing(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { name?: unknown; message?: unknown; code?: unknown };
+  return e.name === 'AuthSessionMissingError' || e.code === 'session_missing' || (typeof e.message === 'string' && /auth session missing/i.test(e.message));
+}
+
 /** Returns the signed-in user or null. */
 export async function getUser() {
   const supabase = await createServer();
   const { data, error } = await supabase.auth.getUser();
-  if (error) console.error('[auth] user lookup failed', error);
+  if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);
   return data.user;
 }
 
@@ -44,7 +55,7 @@ export async function isSuperAdmin(): Promise<boolean> {
   const supabase = await createServer();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) {
-    console.error('[auth] super-admin user lookup failed', authError);
+    if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);
     return false;
   }
   if (!auth.user) return false;
