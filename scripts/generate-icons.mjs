@@ -98,14 +98,14 @@ async function renderLaunchScreen({ width, height, ratio }) {
 const run = async () => {
   await Promise.all(standard.map(renderStandard));
   await Promise.all(maskable.map(renderMaskable));
-  // iOS falls back to scanning /apple-touch-icon.png at the document root when a
-  // page ships no <link rel="apple-touch-icon">; keep one there so a bare route
-  // still gets the real mark rather than a screenshot of the page.
-  await sharp(await composeIcon(180, 0.06)).toFile(join(root, 'public/apple-touch-icon.png'));
+  // No root /apple-touch-icon.png is written: it would be a byte-identical copy of
+  // icons/icon-180.png, and scripts/audit-marketing-assets.mjs fails the build on
+  // duplicate shipped image content. iOS only scans the document root when a page
+  // ships no <link rel="apple-touch-icon"> — app/layout.tsx emits that link on
+  // every route via metadata.icons.apple, so the root file would never be read.
   await Promise.all(LAUNCH_SCREENS.map(renderLaunchScreen));
   console.log(`Generated ${standard.length + maskable.length} unique icons in public/icons`);
   console.log(`Generated ${LAUNCH_SCREENS.length} iOS launch screens in public/launch`);
-  console.log('Generated public/apple-touch-icon.png');
 };
 
 run().catch((e) => { console.error(e); process.exit(1); });

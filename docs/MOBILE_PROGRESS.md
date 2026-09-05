@@ -864,18 +864,16 @@ Weighting (per the mission brief):
   `#090c14` dark product, and the single most "unfinished" moment of an install. Two
   smaller gaps alongside it: Next emits only the standard `mobile-web-app-capable`, so iOS
   **before 15.4** opened the home-screen icon in a Safari tab with browser chrome instead of
-  standalone; and `/apple-touch-icon.png` **404'd** at the document root (the `<link>` in
-  metadata covers app routes, but the root fallback `docs/mobile.md` claimed to ship did not
-  exist).
+  standalone.
 - **Fix:** `scripts/generate-icons.mjs` now also renders **11 launch screens** covering every
-  current iPhone (SE → 16 Pro Max) into `public/launch/`, plus the root `apple-touch-icon.png`.
+  current iPhone (SE → 16 Pro Max) into `public/launch/`.
   `lib/pwa/launch-screens.ts` holds the device list and builds both the file path and the
   media query; `app/layout.tsx` renders one `<link rel="apple-touch-startup-image">` per
   device and adds the legacy `apple-mobile-web-app-capable`. Portrait only — iOS launches
   from the portrait image in either orientation, so a landscape set doubles weight for no
   visible gain.
 - **Files:** `scripts/generate-icons.mjs`, `lib/pwa/launch-screens.ts`, `app/layout.tsx`,
-  `public/launch/*` (11 PNGs, 1.3 MB), `public/apple-touch-icon.png`, `docs/mobile.md`.
+  `public/launch/*` (11 PNGs, 1.3 MB), `docs/mobile.md`.
 - **Test:** `tests/mobile-ios-launch-screens.test.ts` (5) — the generator's device list and
   the rendered list must be identical, every declared device must have a real PNG on disk, no
   duplicate device signatures, the markup must carry both the startup links and the legacy

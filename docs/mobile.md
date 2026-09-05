@@ -74,7 +74,7 @@ iPad is covered by the iOS target (universal app).
 | Push registration (web + native) | `components/native/push-registrar.tsx`, `components/native/enable-push-button.tsx`, `lib/push/web-client.ts` |
 | Push storage + delivery | `supabase/migrations/0035_push_devices.sql`, `app/api/push/{subscribe,unsubscribe}/route.ts`, `lib/server/push.ts` |
 | Push fan‑out wired into notifications | `app/api/cron/notifications/route.ts`, `app/api/notifications/generate/route.ts` |
-| PWA install assets | `app/manifest.ts`, `public/icons/*`, `public/apple-touch-icon.png`, `scripts/generate-icons.mjs` |
+| PWA install assets | `app/manifest.ts`, `public/icons/*`, `scripts/generate-icons.mjs`. The iOS home-screen icon is `icons/icon-180.png`, served via `metadata.icons.apple` in `app/layout.tsx` — there is deliberately **no** root `apple-touch-icon.png`, since a copy of the same bytes fails the duplicate-image guard in `scripts/audit-marketing-assets.mjs` and iOS only scans the root when a page ships no `<link rel="apple-touch-icon">` |
 | iOS launch screens (per-device) | `public/launch/*`, `lib/pwa/launch-screens.ts` (media queries rendered in `app/layout.tsx`), guard `tests/mobile-ios-launch-screens.test.ts` |
 | Service worker (offline + web push) | `public/sw.js` |
 
@@ -87,7 +87,7 @@ Native compilation requires platform SDKs that aren't in CI:
 
 ```bash
 npm install
-npm run icons                 # (re)generate icons, iOS launch screens and apple-touch-icon
+npm run icons                 # (re)generate the icon set and the iOS launch screens
                               # from public/brand/bubaly-mark.png
 npm run cap:add:ios           # creates the ios/ Xcode project
 npm run cap:add:android       # creates the android/ Studio project
