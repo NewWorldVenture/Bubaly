@@ -110,6 +110,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/command-center` | `app/(app)/dashboard/command-center` | auth | plan-gated |
 | `/dashboard/concierge-calls` | `app/(app)/dashboard/concierge-calls` | auth |  |
 | `/dashboard/concierge` | `app/(app)/dashboard/concierge` | auth |  |
+| `/dashboard/concierge/runs/[id]` | `app/(app)/dashboard/concierge/runs/[id]` | auth | Run detail (§17): objective, reasoning summary, timeline, controls, approval and clarification cards; cross-family ids 404. Reached from Ask Bubaly, the home sections and the assistant's run cards — not the sidebar |
 | `/dashboard/conflicts` | `app/(app)/dashboard/conflicts` | auth | plan-gated |
 | `/dashboard/connections` | `app/(app)/dashboard/connections` | auth |  |
 | `/dashboard/contacts/[id]` | `app/(app)/dashboard/contacts/[id]` | auth |  |
@@ -364,4 +365,4 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/reviews` | `app/reviews` | public |  |
 | `/s/[slug]` | `app/s/[slug]` | public |  |
 
-**348 page routes.** API routes: see `app/api/**/route.ts` (95+ routes; auth audit + fixes recorded in todo.md "Full stone-turn pass").
+**349 page routes.** API routes: see `app/api/**/route.ts` (100+ routes; auth audit + fixes recorded in todo.md "Full stone-turn pass"). The Ask Bubaly edge added in Phase 2: `POST /api/ai/requests` (file a request → 202 with the run page), `GET /api/ai/runs/[id]` (run detail) and `POST /api/ai/runs/[id]/{pause,resume,cancel,rerun,answer}` (controls and clarification answers) — cookie or bearer auth, `ai-requests` feature gate, durable rate limit.

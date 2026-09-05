@@ -186,6 +186,14 @@ jobs:
           E2E_AUTHENTICATED: '1'
           E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
+          # tests/e2e/concierge.spec.ts drives "Plan our week" through the real
+          # request → plan → run path with the scripted model
+          # (lib/ai/provider-stub.ts, scripts under tests/ai-eval/scripts). The
+          # server runs with NODE_ENV=production under `next start`, so the
+          # stub needs the explicit e2e opt-in as well; a Vercel production
+          # deployment ignores both.
+          AI_PROVIDER_STUB: '1'
+          E2E_PROVIDER_STUB: '1'
 
       - name: Stop isolated Supabase
         if: always()
