@@ -38,6 +38,17 @@ order automatically.
 
 ## How to apply (pick one)
 
+- **GitHub Actions (automated, once secrets exist):** the `Supabase production
+  migrations` workflow (`.github/workflows/supabase-production-migrations.yml`)
+  runs `supabase db push` on every push to `main` that touches
+  `supabase/migrations/**` and can be started by hand from the Actions tab
+  (`workflow_dispatch`). **It has failed at its first step on every run so far**
+  (latest: the two `main` merges on 2026-09-05) because the GitHub `production`
+  environment has none of the four secrets it validates: `SUPABASE_ACCESS_TOKEN`,
+  `SUPABASE_PROJECT_REF`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
+  (see `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`). Add them, re-run the
+  workflow, and the whole pending ledger below (currently through `0249`) lands
+  in one ordered push, followed by the marketing backfills and remote verifies.
 - **Supabase CLI (recommended):** `supabase db push` — applies every pending
   migration in order. Safe: every migration below is **additive + idempotent**
   (guarded with `IF NOT EXISTS` / `EXCEPTION WHEN duplicate_object` / drift-safe
