@@ -85,8 +85,27 @@ describe('prepareAssistantTurn', () => {
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
     const names = prepared.turn.tools.map((t) => t.name);
-    expect(names).toEqual(['add_chore', 'create_calendar_event', 'create_meal_plan_entry']);
+    // The toolbox is three sets now, not two: the assistant toolbox, the
+    // lib/ai/actions.ts bridge, and the rest of the lib/ai/tools registry, which
+    // the engine started offering so the ~20 tools the registry added over the
+    // old toolbox are reachable from chat instead of only from the run executor.
+    //
+    // The legacy-named tools still come first, in the same precedence order, and
+    // `create_calendar_event` still resolves to the toolbox's richer version.
+    expect(names.slice(0, 3)).toEqual(['add_chore', 'create_calendar_event', 'create_meal_plan_entry']);
     expect(prepared.turn.tools.find((t) => t.name === 'create_calendar_event')?.description).toBe('rich event');
+    // Everything after them is the registry, under its underscored canonical
+    // spelling. A capability the first two sets already cover is excluded rather
+    // than merged, because the two spellings are different strings that
+    // `mergeToolSets` cannot see as one tool — so the registry knows `add_chore`
+    // as `tasks.createChore` and `create_calendar_event` as
+    // `calendar.createEvent`, and offers neither a second time.
+    expect(names).toContain('calendar_updateEvent');
+    expect(names).toContain('tasks_assignTodo');
+    expect(names).toContain('groceries_checkItem');
+    expect(names).not.toContain('calendar_createEvent');
+    expect(names).not.toContain('tasks_createChore');
+    expect(new Set(names).size).toBe(names.length);
     expect(wrapSpy).toHaveBeenCalledWith('fam-1', 'parent');
     expect(prepared.turn.messages).toEqual([
       { role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }, { role: 'user', content: 'Plan tacos for Saturday' },

@@ -210,9 +210,13 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
   if (status === 'approved') {
     const payload = appr.payload as { name?: string; args?: Record<string, unknown> } | null;
     if (payload?.name) {
+      // `alreadyAuthorized`: this IS the approval. Letting the tool registry
+      // re-evaluate the same decision would open a second approval request for
+      // work this parent just said yes to, and the action would never run.
       const result = await runAction(
         { supabase, familyId: ctx.active.familyId, userId: ctx.user.id },
         { name: payload.name, args: (payload.args ?? {}) as Record<string, any> },
+        { alreadyAuthorized: true },
       );
       const { error: stampErr } = await supabase.from('approval_requests').update({
         executed_at: new Date().toISOString(),

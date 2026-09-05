@@ -86,7 +86,13 @@ export async function POST(req: NextRequest) {
           if (decision.effect === 'require_approval') {
             return { summary: item.summary, ok: false, pendingApproval: true, error: decision.reason };
           }
-          const res = await runAction({ supabase, familyId, userId }, { name: item.name, args: item.args });
+          // Trust was just evaluated for this exact item a few lines up, so the
+          // registry does not evaluate it a second time.
+          const res = await runAction(
+            { supabase, familyId, userId },
+            { name: item.name, args: item.args },
+            { alreadyAuthorized: true },
+          );
           return { summary: item.summary, ok: res.ok, error: res.error };
         }),
       );
