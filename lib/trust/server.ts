@@ -87,8 +87,29 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
  * approval request when required. Never throws on a normal "deny" — callers
  * branch on `outcome.decision.effect`.
  */
+/**
+ * The client that files approval requests and audit rows.
+ *
+ * 0252 restricts a member's own INSERT on approval_requests to rows that name
+ * that member and carry no run/step/payload linkage, so a family member can no
+ * longer file a row that looks like Bubaly asking for something and have a
+ * parent execute it. The rows this function writes on Bubaly's behalf therefore
+ * go through the service client; when no service credentials exist (unit
+ * tests, a misconfigured environment) the caller's client is used, which is
+ * exactly what happened before and what the recorder-based tests observe.
+ */
+async function ledgerWriter(fallback: DB): Promise<DB> {
+  try {
+    const { createServiceClient } = await import('@/lib/supabase/server');
+    return createServiceClient();
+  } catch {
+    return fallback;
+  }
+}
+
 export async function evaluateTrust(supabase: DB, familyId: string, req: EvaluateRequest): Promise<EvaluateOutcome> {
   const inputs = await loadTrustInputs(supabase, familyId);
+  const writer = await ledgerWriter(supabase);
   const decision = evaluateAction({
     actor: req.actor, domain: req.domain, capability: req.capability, context: req.context,
     policies: inputs.policies, grants: inputs.grants, delegations: inputs.delegations,
@@ -97,7 +118,7 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
 
   let approvalId: string | undefined;
   if (decision.effect === 'require_approval' && (req.openApproval ?? true)) {
-    const { data: appr } = await supabase.from('approval_requests').insert({
+    const { data: appr } = await writer.from('approval_requests').insert({
       family_id: familyId,
       domain: req.domain,
       capability: req.capability,
@@ -120,7 +141,7 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
   }
 
   // Explainable audit trail — always recorded.
-  await supabase.from('trust_audit_logs').insert({
+  await writer.from('trust_audit_logs').insert({
     family_id: familyId,
     actor_kind: req.actor.kind === 'ai_agent' ? 'ai_agent' : 'member',
     actor_id: req.actor.id,

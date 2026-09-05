@@ -5,9 +5,10 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
-import { runAction } from '@/lib/ai/actions';
 import type { Json } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { decide } from '@/lib/services/approvals';
 
 type Result = { ok: boolean; error?: string };
 
@@ -165,77 +166,22 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
 }
 
 // ─── Approval decisions ──────────────────────────────────────────────────────
+/**
+ * Kept for the surfaces that still import it; the decision itself lives in
+ * `lib/services/approvals.decide`, which is the one place an approval turns
+ * into work (tool call, released run steps, or concierge write-backs). The
+ * manager check here is only the early, friendly refusal — the service and
+ * 0251's RLS both enforce it again.
+ */
 export async function decideApprovalAction(input: { id: string; decision: 'approved' | 'rejected'; note?: string }): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent or adult can decide approvals.' };
-  const supabase = await createServer();
-
-  const { data: appr } = await supabase.from('approval_requests')
-    .select('id, status, required_approvals, approvals, domain, capability, policy_id, payload')
-    .eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!appr) return { ok: false, error: 'Approval request not found.' };
-  if (appr.status !== 'pending') return { ok: false, error: 'This request was already decided.' };
-
-  const memberId = ctx.active.member.id;
-  type ApprovalEntry = { member_id: string; decision: 'approved' | 'rejected'; note: string | null; at: string };
-  const prior: ApprovalEntry[] = Array.isArray(appr.approvals) ? (appr.approvals as unknown as ApprovalEntry[]) : [];
-  if (prior.some((a) => a.member_id === memberId)) return { ok: false, error: 'You already responded to this request.' };
-
-  const approvals: ApprovalEntry[] = [...prior, { member_id: memberId, decision: input.decision, note: input.note ?? null, at: new Date().toISOString() }];
-
-  let status: 'pending' | 'approved' | 'rejected' = 'pending';
-  if (input.decision === 'rejected') {
-    status = 'rejected';
-  } else {
-    const approvedCount = approvals.filter((a) => a.decision === 'approved').length;
-    if (approvedCount >= (appr.required_approvals ?? 1)) status = 'approved';
-  }
-
-  const { error: e } = await supabase.from('approval_requests').update(
-    status === 'pending'
-      ? { approvals: approvals as unknown as Json }
-      : { approvals: approvals as unknown as Json, status, decided_by: memberId, decided_at: new Date().toISOString() },
-  ).eq('id', input.id);
-  if (e) return actionFailure(e, 'Could not record that approval decision.');
-
-  await supabase.from('trust_audit_logs').insert({
-    family_id: ctx.active.familyId, actor_kind: 'member', actor_id: memberId,
-    domain: appr.domain, capability: appr.capability,
-    decision: input.decision === 'approved' ? 'approved' : 'rejected',
-    reason: input.note?.trim() || `Approval ${input.decision} by ${ctx.active.member.display_name}`,
-    policy_id: appr.policy_id ?? null, approval_id: appr.id,
-  });
-
-  // Auto-execute the stored payload when the request reaches fully approved.
-  if (status === 'approved') {
-    const payload = appr.payload as { name?: string; args?: Record<string, unknown> } | null;
-    if (payload?.name) {
-      // `alreadyAuthorized`: this IS the approval. Letting the tool registry
-      // re-evaluate the same decision would open a second approval request for
-      // work this parent just said yes to, and the action would never run.
-      const result = await runAction(
-        { supabase, familyId: ctx.active.familyId, userId: ctx.user.id },
-        { name: payload.name, args: (payload.args ?? {}) as Record<string, any> },
-        { alreadyAuthorized: true },
-      );
-      const { error: stampErr } = await supabase.from('approval_requests').update({
-        executed_at: new Date().toISOString(),
-        execution_result: result.ok ? 'executed' : `error: ${result.error ?? 'unknown'}`,
-      }).eq('id', input.id);
-      // The action already ran; if this stamp is silently lost the request looks
-      // un-executed and could be re-run, so make the failure observable.
-      if (stampErr) console.error('[trust] execution-result stamp failed', { approvalId: input.id, error: stampErr });
-      await supabase.from('trust_audit_logs').insert({
-        family_id: ctx.active.familyId, actor_kind: 'ai_agent', actor_id: 'system',
-        domain: appr.domain, capability: appr.capability,
-        decision: result.ok ? 'executed' : 'deny',
-        reason: result.ok ? `Executed approved action: ${payload.name}` : `Execution failed: ${result.error}`,
-        approval_id: appr.id,
-      });
-    }
-  }
-
+  const scope = scopeFromUserContext(ctx, await createServer());
+  const result = await decide(scope, input.id, input.decision, input.note ?? null);
+  if (!result.ok) return { ok: false, error: result.error };
   revalidatePath('/dashboard/trust');
+  revalidatePath('/home');
+  revalidatePath('/dashboard');
   return { ok: true };
 }
 

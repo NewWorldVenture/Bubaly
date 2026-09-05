@@ -12,6 +12,20 @@ Bubaly ships natively via **Capacitor** (one codebase, wrapping the hosted, Supa
 
 ## What's in here now
 
+**Ask Bubaly and the run page (AI Family OS, Phase 2):** one entry —
+`POST /api/ai/requests`, the hero Ask bar on the dashboard and the assistant —
+files a request, classifies the intent, builds a policy-filtered household
+context, asks the planner for a validated plan and answers with a run page
+(`/dashboard/concierge/runs/[id]`) before any step executes. The executor then
+runs the plan's steps through the typed tool registry under the trust engine,
+opening approval cards where a yes is needed, and the page shows progress,
+the plan's reasoning summary, controls and the timeline; it survives a reload
+because everything lives in `ai_requests` → `ai_plans` → `ai_plan_steps` →
+`family_automation_runs` → `ai_run_events`. `AI_PROVIDER_STUB=1` swaps the
+model for the scripted replies under `tests/ai-eval/scripts`, which is how
+`tests/ai-loop-end-to-end.test.ts` and `tests/e2e/concierge.spec.ts` prove the
+loop without a model. Map: `docs/AI_FAMILY_OS_IMPLEMENTATION_MAP.md`.
+
 **Newest (Top-50 everyday problems → product):** nine modules built end to end
 against the "everyday problems → electronic business" table — Closet & Outfits,
 Family Watchlist, Home Inventory, Sleep Coach, Declutter Missions, Move Planner,

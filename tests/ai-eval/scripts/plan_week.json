@@ -1,0 +1,153 @@
+{
+  "id": "plan_week",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "plan_week"
+    ],
+    "text": [
+      "plan our week",
+      "plan the week",
+      "plan my week"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "plan_week",
+      "confidence": 0.92,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Plan the week: conflicts, meals, prep, priorities and reminders.",
+      "reasoning_summary": "I checked the calendar, school and practices, planned dinners for the empty evenings around soccer, added the prep the week needs and set one reminder for the thing most likely to slip. Nothing overlaps this week.",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "key": "events",
+          "step_type": "retrieve",
+          "tool_name": "calendar.searchEvents",
+          "description": "Read the week's calendar",
+          "input": "{\"from\": \"2026-09-14T00:00:00\", \"to\": \"2026-09-20T23:59:00\", \"limit\": 100}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "conflicts",
+          "step_type": "retrieve",
+          "tool_name": "calendar.findConflicts",
+          "description": "Look for overlapping commitments",
+          "input": "{\"from\": \"2026-09-14T00:00:00\", \"to\": \"2026-09-20T23:59:00\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "todos",
+          "step_type": "retrieve",
+          "tool_name": "tasks.searchTodos",
+          "description": "Read the open to-dos",
+          "input": "{\"done\": false, \"due_before\": \"2026-09-20\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "meal_plan",
+          "step_type": "retrieve",
+          "tool_name": "meals.getMealPlan",
+          "description": "See which dinners are already planned",
+          "input": "{\"week_start\": \"2026-09-14\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "plan_dinners",
+          "step_type": "act",
+          "tool_name": "meals.planWeek",
+          "description": "Plan dinners for the empty evenings",
+          "input": "{\"entries\": [{\"date\": \"2026-09-14\", \"meal_type\": \"dinner\", \"meal_name\": \"Sheet-pan chicken and veg\", \"ingredients\": [{\"name\": \"chicken thighs\", \"quantity\": \"1 kg\"}, {\"name\": \"broccoli\"}]}, {\"date\": \"2026-09-15\", \"meal_type\": \"dinner\", \"meal_name\": \"Taco night\", \"ingredients\": [{\"name\": \"tortillas\"}, {\"name\": \"ground beef\", \"quantity\": \"500 g\"}]}, {\"date\": \"2026-09-16\", \"meal_type\": \"dinner\", \"meal_name\": \"Pasta with pesto\", \"ingredients\": [{\"name\": \"pasta\"}, {\"name\": \"pesto\"}]}]}",
+          "depends_on": [
+            "meal_plan",
+            "events"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": "{\"checks\": [{\"kind\": \"count_at_least\", \"table\": \"meal_plans\", \"min\": 3, \"label\": \"Three dinners are saved\"}]}"
+        },
+        {
+          "key": "grocery_list",
+          "step_type": "act",
+          "tool_name": "groceries.addFromMealPlan",
+          "description": "Add what the dinners need to the shopping list",
+          "input": "{\"week_start\": \"2026-09-14\"}",
+          "depends_on": [
+            "plan_dinners"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "prep_task",
+          "step_type": "act",
+          "tool_name": "tasks.createTodo",
+          "description": "Pack the soccer kit for Wednesday practice",
+          "input": "{\"title\": \"Pack the soccer kit for practice\", \"due_date\": \"2026-09-15\", \"priority\": \"medium\", \"assignee\": \"Maya\"}",
+          "depends_on": [
+            "events",
+            "todos"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "key_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Remind everyone about Thursday's early pickup",
+          "input": "{\"title\": \"Early pickup Thursday at 2:30\", \"remind_at\": \"2026-09-17T13:30:00\", \"kind\": \"time\"}",
+          "depends_on": [
+            "events"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "family_summary",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Send the family the week at a glance",
+          "input": "{\"recipients\": \"family\", \"type\": \"system\", \"title\": \"Your week of Sep 14 is planned\", \"body\": \"No clashes this week. Dinners are planned Monday to Wednesday, Maya packs her soccer kit Tuesday, and there is an early pickup Thursday at 2:30.\"}",
+          "depends_on": [
+            "plan_dinners",
+            "prep_task",
+            "key_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [
+        {
+          "after": "3d",
+          "prompt": "Mid-week check: are the prep tasks done and has anything new landed on the calendar?"
+        }
+      ],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "I've planned the week: dinners Monday to Wednesday, Maya packs her soccer kit Tuesday, and I set a reminder for Thursday's early pickup. Nothing overlaps.",
+    "toolCalls": []
+  }
+}

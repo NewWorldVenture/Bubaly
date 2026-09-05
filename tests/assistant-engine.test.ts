@@ -9,10 +9,15 @@ const updates: { table: string; patch: unknown }[] = [];
 function chain(table: string) {
   const t = tables[table] ?? {};
   const c: Record<string, unknown> = {
-    select: () => c, eq: () => c, in: () => c, gte: () => c, order: () => c, limit: () => c,
+    // The context builder (lib/ai/context) reads through the domain services,
+    // which use the full filter vocabulary — every filter is a no-op here and
+    // the table's fixture decides what comes back.
+    select: () => c, eq: () => c, neq: () => c, in: () => c, is: () => c, not: () => c, or: () => c, ilike: () => c,
+    gte: () => c, gt: () => c, lte: () => c, lt: () => c, order: () => c, limit: () => c, range: () => c,
     insert: (rows: unknown) => { inserts.push({ table, rows }); return { then: (onF: (v: { error: unknown }) => unknown) => Promise.resolve({ error: t.error ?? null }).then(onF) }; },
     update: (patch: unknown) => { updates.push({ table, patch }); return { eq: () => Promise.resolve({ error: null }) }; },
-    maybeSingle: () => Promise.resolve({ data: t.single ?? null, error: null }),
+    maybeSingle: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
+    single: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
     then: (onF: (v: { data: Row[] | null; error: unknown }) => unknown) => Promise.resolve({ data: t.error ? null : (t.rows ?? []), error: t.error ?? null }).then(onF),
   };
   return c;
@@ -70,7 +75,10 @@ beforeEach(() => {
   for (const k of Object.keys(tables)) delete tables[k];
   inserts.length = 0; updates.length = 0;
   tables.ai_messages = { rows: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }] };
-  tables.family_members = { rows: [{ id: 'm1', display_name: 'Dan', role: 'parent' }] };
+  // The context builder fails closed on the family header, so the fake must
+  // serve `families` (name + zone) and a roster row that belongs to the caller.
+  tables.families = { single: { id: 'fam-1', name: 'The Hughens', timezone: 'America/New_York' } };
+  tables.family_members = { rows: [{ id: 'm1', user_id: 'user-1', display_name: 'Dan', role: 'parent', is_active: true }] };
   tables.calendar_events = { rows: [{ title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', category: 'sports' }] };
   tables.chore_assignments = { rows: [{ status: 'todo' }, { status: 'in_progress' }] };
   tables.meals = { rows: [{ name: 'Tacos', meal_type: 'dinner' }] };
@@ -111,8 +119,15 @@ describe('prepareAssistantTurn', () => {
       { role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }, { role: 'user', content: 'Plan tacos for Saturday' },
     ]);
     expect(prepared.turn.system).toContain('Family: The Hughens');
-    expect(prepared.turn.system).toContain('Open chores: 2');
-    expect(prepared.turn.system).toContain('meal plan');
+    // The system prompt is now the context builder's rendering (lib/ai/context),
+    // chosen by intent: "Plan tacos for Saturday" is a capture, which carries the
+    // roster, schedule, tasks and shopping slices, and every row-derived string
+    // is fenced as untrusted. The old flat "Open chores: N" / "meal plan" lines
+    // are gone by design; the same facts appear in the tasks section, and the
+    // event title from the fixture must be fenced rather than pasted raw.
+    expect(prepared.turn.system).toContain('0 open to-dos, 2 open chores');
+    expect(prepared.turn.system).toMatch(/<<<UNTRUSTED_EVENT_TITLE_[A-Za-z0-9_-]+>>>Soccer<<<END_EVENT_TITLE_/);
+    expect(prepared.turn.system).toContain('Asking: Dan (parent).');
     expect(prepared.turn.provider).toBe(provider);
 
     runAction.mockResolvedValueOnce({ ok: true, summary: 'Planned "Tacos" for 2026-09-06.' });

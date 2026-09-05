@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { CATALOG_QUERY, readProductionMigrationState } from './audit-production-migration-state.mjs';
 
@@ -25,6 +25,17 @@ export function readReleaseFiles(manifest, read = (file) => readFileSync(file, '
     }
     return { file, sql, version: file.slice(0, 4), name: file.slice(5, -4) };
   }).sort((a, b) => a.version.localeCompare(b.version));
+}
+
+export function assertNoNewerMigrations(migrationNames) {
+  const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));
+  const newer = migrationNames.filter((file) => {
+    const match = /^(\d+)_.*\.sql$/i.exec(file);
+    return match && Number(match[1]) > latestReviewedVersion;
+  }).sort();
+  if (newer.length) {
+    throw new Error('Production forward release is held: repository migrations outside the pinned 0240-0254 release: ' + newer.join(', '));
+  }
 }
 
 export function releaseLedger(manifest) {
@@ -168,7 +179,12 @@ export function buildReleaseSql(manifest, files) {
   return sections.join('\n');
 }
 
-export async function runForwardRelease({ manifest, files, projectRef, token, apply = false, fetchImpl = fetch }) {
+export async function runForwardRelease({
+  manifest, files, projectRef, token, apply = false, fetchImpl = fetch,
+  listMigrationFiles = () => readdirSync(new URL('../supabase/migrations/', import.meta.url)),
+}) {
+  // Preview and already-applied results must not conceal a newer unreviewed migration.
+  assertNoNewerMigrations(listMigrationFiles());
   if (projectRef !== PROJECT || projectRef !== manifest.projectRef || !token) {
     throw new Error('This release requires the audited Bubaly production project and access token.');
   }

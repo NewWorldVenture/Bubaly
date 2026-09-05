@@ -1,0 +1,124 @@
+{
+  "id": "plan_meals",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "plan_meals"
+    ],
+    "text": [
+      "plan meals",
+      "plan our meals",
+      "plan dinners",
+      "meal plan"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "plan_meals",
+      "confidence": 0.92,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Plan dinners for next week and get the shopping ready.",
+      "reasoning_summary": "I planned seven dinners around the busy evenings, kept Friday as pizza night and avoided mushrooms for Maya. The shopping list has everything the meals need, and a reminder is set for the Sunday grocery run.",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "key": "food_profile",
+          "step_type": "retrieve",
+          "tool_name": "meals.foodProfile",
+          "description": "Check everyone's food rules and favourites",
+          "input": "{}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "busy_evenings",
+          "step_type": "retrieve",
+          "tool_name": "calendar.busyEvenings",
+          "description": "See which evenings are busy",
+          "input": "{\"from\": \"2026-09-14T00:00:00\", \"to\": \"2026-09-20T23:59:00\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "pantry",
+          "step_type": "retrieve",
+          "tool_name": "groceries.listOpen",
+          "description": "See what is already on the shopping list",
+          "input": "{}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "plan_dinners",
+          "step_type": "act",
+          "tool_name": "meals.planWeek",
+          "description": "Plan seven dinners around the week",
+          "input": "{\"entries\": [{\"date\": \"2026-09-14\", \"meal_type\": \"dinner\", \"meal_name\": \"Sheet-pan chicken and veg\", \"ingredients\": [{\"name\": \"chicken thighs\", \"quantity\": \"1 kg\"}, {\"name\": \"broccoli\"}, {\"name\": \"potatoes\", \"quantity\": \"1 kg\"}]}, {\"date\": \"2026-09-15\", \"meal_type\": \"dinner\", \"meal_name\": \"Taco night\", \"ingredients\": [{\"name\": \"tortillas\"}, {\"name\": \"ground beef\", \"quantity\": \"500 g\"}, {\"name\": \"salsa\"}]}, {\"date\": \"2026-09-16\", \"meal_type\": \"dinner\", \"meal_name\": \"Quick stir-fry\", \"ingredients\": [{\"name\": \"rice\"}, {\"name\": \"mixed vegetables\"}, {\"name\": \"soy sauce\"}]}, {\"date\": \"2026-09-17\", \"meal_type\": \"dinner\", \"meal_name\": \"Pasta with pesto\", \"ingredients\": [{\"name\": \"pasta\"}, {\"name\": \"pesto\"}, {\"name\": \"parmesan\"}]}, {\"date\": \"2026-09-18\", \"meal_type\": \"dinner\", \"meal_name\": \"Pizza night\", \"ingredients\": [{\"name\": \"pizza dough\"}, {\"name\": \"mozzarella\"}, {\"name\": \"tomato sauce\"}]}, {\"date\": \"2026-09-19\", \"meal_type\": \"dinner\", \"meal_name\": \"Grilled salmon and rice\", \"ingredients\": [{\"name\": \"salmon\", \"quantity\": \"4 fillets\"}, {\"name\": \"rice\"}]}, {\"date\": \"2026-09-20\", \"meal_type\": \"dinner\", \"meal_name\": \"Roast chicken\", \"ingredients\": [{\"name\": \"whole chicken\"}, {\"name\": \"carrots\"}]}]}",
+          "depends_on": [
+            "food_profile",
+            "busy_evenings",
+            "pantry"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": "{\"checks\": [{\"kind\": \"count_at_least\", \"table\": \"meal_plans\", \"min\": 5, \"label\": \"At least five dinners are saved\"}]}"
+        },
+        {
+          "key": "grocery_list",
+          "step_type": "act",
+          "tool_name": "groceries.addFromMealPlan",
+          "description": "Add what the meals need to the shopping list",
+          "input": "{\"week_start\": \"2026-09-14\"}",
+          "depends_on": [
+            "plan_dinners"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "grocery_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Remind the family to shop on Sunday",
+          "input": "{\"title\": \"Grocery run for this week's dinners\", \"remind_at\": \"2026-09-13T10:00:00\", \"kind\": \"time\"}",
+          "depends_on": [
+            "grocery_list"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_family",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Let the family know the week's dinners are set",
+          "input": "{\"recipients\": \"family\", \"type\": \"grocery_reminder\", \"title\": \"This week's dinners are planned\", \"body\": \"Seven dinners are on the plan, Friday is pizza night, and the shopping list is ready for Sunday.\"}",
+          "depends_on": [
+            "grocery_list",
+            "grocery_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "I've planned seven dinners around your busy evenings, kept Friday as pizza night, and built the grocery list.",
+    "toolCalls": []
+  }
+}

@@ -4,6 +4,7 @@
 // the simple count-based signals (reminders, chores) are built inline by the reader.
 
 import type { NeedItem, NeedUrgency } from './needs-attention';
+import { runPagePath } from '@/lib/ai/chat-request';
 
 /** Compact USD from integer cents: $12 or $12.50. */
 export function usdFromCents(cents: number): string {
@@ -83,5 +84,61 @@ export function renewalToNeed(r: RenewalRow, now: Date): NeedItem | null {
     href: '/dashboard/renewals',
     urgency,
     createdAt: r.created_at ?? r.expires_at,
+  };
+}
+
+// ─── Bubaly's own asks (§16 "Needs Your Attention") ──────────────────────────
+
+/** The columns of an `approval_requests` row the Home card needs — a subset of `ApprovalCardData`. */
+export type AiApprovalRow = { id: string; title: string; runId: string | null; priority?: string | null; requestedAt: string; expiresAt?: string | null };
+
+/**
+ * A pending AI approval → an urgent decision. It deep-links to the run page
+ * when the approval gates a run (the page shows the approval inline with the
+ * steps it would release) and to the trust inbox otherwise.
+ */
+export function aiApprovalToNeed(r: AiApprovalRow): NeedItem {
+  return {
+    id: `ai_approval:${r.id}`,
+    kind: 'ai_approval',
+    title: r.title,
+    href: r.runId ? runPagePath(r.runId) : '/dashboard/trust',
+    urgency: r.priority === 'high' || r.priority === 'urgent' ? 'emergency' : 'urgent',
+    createdAt: r.requestedAt,
+  };
+}
+
+export type AwaitingRunRow = { id: string; summary: string | null; state: string; updated_at: string; created_at?: string };
+
+/**
+ * A run parked on a person → a "needs you" item: `awaiting_approval` when
+ * Bubaly is waiting for an OK, `awaiting_context` when it asked a question.
+ * Any other state returns null — a run that is executing needs nobody.
+ */
+export function awaitingRunToNeed(r: AwaitingRunRow): NeedItem | null {
+  const title = r.summary?.trim() || 'A request from your family';
+  if (r.state === 'awaiting_approval') {
+    return { id: `run:${r.id}`, kind: 'run_awaiting_approval', title: `${title} — waiting for your OK`, href: runPagePath(r.id), urgency: 'urgent', createdAt: r.updated_at };
+  }
+  if (r.state === 'awaiting_context') {
+    return { id: `run:${r.id}`, kind: 'run_awaiting_answer', title: `${title} — Bubaly has a question`, href: runPagePath(r.id), urgency: 'urgent', createdAt: r.updated_at };
+  }
+  return null;
+}
+
+export type RecommendationRow = { id: string; title: string; priority?: string | null; cta_href?: string | null; created_at: string };
+
+/**
+ * A pending `family_ai_recommendations` row (the household chose "recommend,
+ * don't act" — §11 level 1) → a normal-urgency item with one-tap accept/dismiss.
+ */
+export function recommendationToNeed(r: RecommendationRow): NeedItem {
+  return {
+    id: `recommendation:${r.id}`,
+    kind: 'recommendation',
+    title: r.title,
+    href: r.cta_href?.trim() || '/dashboard/autonomous-family-management',
+    urgency: r.priority === 'high' ? 'urgent' : 'normal',
+    createdAt: r.created_at,
   };
 }

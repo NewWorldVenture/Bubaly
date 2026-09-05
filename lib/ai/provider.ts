@@ -1,6 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
 import { modelCapabilities } from '@/lib/ai/models';
+import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
@@ -514,6 +515,9 @@ export function getProvider(): AIProvider {
  * model for the job instead of the one global default.
  */
 export async function resolveProvider(): Promise<AIProvider> {
+  // Same scripted-provider branch as `resolveProviderForTask`, so the chat
+  // surface and the planner are stubbed together or not at all.
+  if (isProviderStubEnabled()) return scriptedProvider();
   try {
     const { getAIConfig } = await import('@/lib/ai/settings');
     const { createServiceClient } = await import('@/lib/supabase/server');
@@ -529,6 +533,13 @@ export async function resolveProvider(): Promise<AIProvider> {
  * fast-fail with an honest 503 before doing any work.
  */
 export async function isAIConfigured(): Promise<boolean> {
+  // The scripted provider (tests, CI e2e, local development only — it refuses
+  // to enable itself in a Vercel production deploy) counts as configured, so
+  // every surface that gates on this agrees with the routing layer.
+  try {
+    const { isProviderStubEnabled } = await import('@/lib/ai/provider-stub');
+    if (isProviderStubEnabled()) return true;
+  } catch { /* the stub module is optional */ }
   if (process.env.OPENAI_API_KEY) return true;
   try {
     const { getAIConfig } = await import('@/lib/ai/settings');
