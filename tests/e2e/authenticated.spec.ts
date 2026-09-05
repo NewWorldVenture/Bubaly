@@ -109,7 +109,9 @@ test.describe('authenticated first-value journey', () => {
 
     await page.getByRole('button', { name: 'Quick capture' }).click();
     await page.getByLabel('Task').fill('Pack lunches for tomorrow');
-    await page.getByRole('button', { name: 'Save' }).click();
+    // Exact: the Ask Bubaly chips now include "Help us save money", whose
+    // accessible name would otherwise match a substring search for Save.
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Task saved')).toBeVisible();
 
     if (!admin || !testUser) throw new Error('E2E account was not initialized.');
@@ -152,14 +154,25 @@ test.describe('authenticated first-value journey', () => {
         .insert({ family_id: familyId, objective: 'Isolated permission probe' }).select('id').single();
       if (planError) throw planError;
       const run = { family_id: familyId, trigger_type: 'plan_accepted', created_by: user.id, summary: 'Isolated permission probe' };
+      const { data: otherMember, error: otherMemberError } = await service.from('family_members')
+        .insert({ family_id: familyId, user_id: null, display_name: 'Probe child', role: 'child' }).select('id').single();
+      if (otherMemberError) throw otherMemberError;
+      const otherMemberId = otherMember.id;
       const approval = { family_id: familyId, domain: 'calendar', title: 'Isolated permission probe' };
       const request = { family_id: familyId, requested_by: user.id, requested_by_member_id: membership.id };
       const forbidden: Array<[string, Record<string, unknown>]> = [
         ['family_automation_runs', { ...run, state: 'ready', status: 'approved' }],
         ['family_automation_runs', { ...run, state: 'queued', plan_id: plan.id }],
         ['family_automation_runs', { ...run, state: 'queued', requested_by_member_id: membership.id }],
+        ['family_automation_runs', { ...run, created_by: null }],
         ['approval_requests', { ...approval, status: 'approved' }],
         ['approval_requests', { ...approval, approvals: [{ member_id: membership.id, decision: 'approved' }] }],
+        // 0255: a member cannot file a request as Bubaly (the column default),
+        // about somebody else, or one that carries the fields decide() executes.
+        ['approval_requests', approval],
+        ['approval_requests', { ...approval, requested_by_kind: 'member', requested_by_member_id: otherMemberId }],
+        ['approval_requests', { ...approval, requested_by_kind: 'member', run_id: null, plan_step_ids: [plan.id] }],
+        ['approval_requests', { ...approval, requested_by_kind: 'member', payload_kind: 'tool' }],
         ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id, status: 'approved' }],
         ['ai_requests', { ...request, status: 'completed' }],
         ['ai_requests', { ...request, prompt_tokens: -100 }],
@@ -172,7 +185,7 @@ test.describe('authenticated first-value journey', () => {
       const allowed: Array<[string, Record<string, unknown>]> = [
         ['family_automation_runs', { ...run, status: 'pending' }],
         ['family_automation_runs', { ...run, status: 'executed' }],
-        ['approval_requests', approval],
+        ['approval_requests', { ...approval, requested_by_kind: 'member', requested_by_member_id: membership.id }],
         ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id }],
         ['ai_requests', request],
       ];

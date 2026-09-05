@@ -208,21 +208,6 @@ export async function runAction(
 
   try {
     switch (call.name) {
-      // ── Meal plan ───────────────────────────────────────────────────────────
-      case 'create_meal_plan_entry': {
-        const { data: meal, error: mealError } = await supabase.from('meals').insert({
-          family_id: familyId, created_by: userId, name: call.args.meal_name,
-          meal_type: call.args.meal_type ?? 'dinner',
-        }).select().single();
-        if (mealError || !meal?.id) return actionFailure('create the meal plan entry', mealError ?? new Error('Meal was not created'));
-        const { data, error } = await supabase.from('meal_plans').insert({
-          family_id: familyId, created_by: userId, meal_id: meal?.id,
-          plan_date: call.args.plan_date, meal_type: call.args.meal_type ?? 'dinner',
-        }).select().single();
-        if (error) return actionFailure('create the meal plan entry', error);
-        return { ok: true, data, summary: `Planned "${call.args.meal_name}" for ${call.args.plan_date}.` };
-      }
-
       // ── Notes ──────────────────────────────────────────────────────────────
       case 'add_note': {
         const body: string = call.args.body ?? '';
@@ -245,23 +230,6 @@ export async function runAction(
         }).select().single();
         if (error) return actionFailure('create the goal', error);
         return { ok: true, data, summary: `Created goal "${title}".` };
-      }
-
-      // ── Announcements ───────────────────────────────────────────────────────
-      case 'create_announcement': {
-        const title: string = call.args.title ?? '';
-        if (!title) return { ok: false, error: 'announcement title is required' };
-        const { data: members } = await supabase.from('family_members')
-          .select('id').eq('family_id', familyId).eq('user_id', userId).maybeSingle();
-        const { data, error } = await supabase.from('family_announcements').insert({
-          family_id: familyId,
-          title,
-          body: call.args.body ?? null,
-          is_pinned: Boolean(call.args.pinned),
-          author_member_id: members?.id ?? null,
-        }).select().single();
-        if (error) return actionFailure('post the announcement', error);
-        return { ok: true, data, summary: `Posted announcement: "${title}".` };
       }
 
       default:

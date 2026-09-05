@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
+import { summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
@@ -189,7 +190,7 @@ export async function POST(req: NextRequest) {
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
-              tool_results: actions.length ? (actions.map((a) => a.result) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
+              tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
             },
         ]);
         if (messageInsertError) {

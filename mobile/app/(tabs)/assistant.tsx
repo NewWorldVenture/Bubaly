@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../src/components/AppText';
@@ -8,11 +8,12 @@ import { GlassCard } from '../../src/components/GlassCard';
 import { Pill } from '../../src/components/Pill';
 import { Screen } from '../../src/components/Screen';
 import { askAssistant, AssistantError } from '../../src/lib/api';
-import type { AssistantAction } from '../../src/lib/assistant-core';
+import { cardSections, type AssistantAction, type AssistantCard, type CardSection } from '../../src/lib/assistant-core';
 import { useAuth } from '../../src/lib/auth';
+import { webUrl } from '../../src/lib/config';
 import { useTheme } from '../../src/theme/theme';
 
-type Message = { id: string; role: 'user' | 'assistant' | 'error'; content: string; actions?: AssistantAction[] };
+type Message = { id: string; role: 'user' | 'assistant' | 'error'; content: string; actions?: AssistantAction[]; cards?: AssistantCard[] };
 
 const SUGGESTIONS = ['What’s on this week?', 'Add milk and eggs to the list', 'Plan tacos for Friday dinner', 'Remind me to change the HVAC filter next month'];
 
@@ -37,7 +38,7 @@ export default function AssistantScreen() {
     setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'user', content: message }]);
     try {
       const reply = await askAssistant({ token: accessToken, conversationId, message });
-      setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'assistant', content: reply.content, actions: reply.actions }]);
+      setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'assistant', content: reply.content, actions: reply.actions, cards: reply.cards }]);
     } catch (e) {
       const content = e instanceof AssistantError ? e.message : 'Bubaly hit a snag. Try again in a moment.';
       setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'error', content }]);
@@ -129,9 +130,33 @@ function Bubble({ message }: { message: Message }) {
       </View>
       {message.actions?.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] }}>
-          {message.actions.map((a, i) => <Pill key={`${a.name}-${i}`} label={`${a.ok ? '✓' : '!'} ${a.summary || a.name}`} tone={a.ok ? 'success' : 'danger'} />)}
+          {message.actions.map((a, i) => <Pill key={`${a.summary}-${i}`} label={`${a.ok ? '✓' : '!'} ${a.summary || 'Done'}`} tone={a.ok ? 'success' : 'danger'} />)}
         </View>
       ) : null}
+      {message.cards?.map((card, i) => <CardSectionView key={`${card.kind}-${i}`} section={cardSections(card)} />)}
     </View>
+  );
+}
+
+/**
+ * One card as a simple section (§53 on a phone): a heading, an optional
+ * subheading, a few lines, and — for a run or a trip — a way to open it on
+ * the web. The full card components live in the web app; this is the same
+ * outcome at a glance.
+ */
+function CardSectionView({ section }: { section: CardSection }) {
+  const { colors, spacing } = useTheme();
+  const accent = { brand: colors.brandText, success: colors.success, warning: colors.warning, danger: colors.danger, muted: colors.muted }[section.tone];
+  const open = section.href ? () => { Linking.openURL(webUrl(section.href as string)).catch(() => undefined); } : undefined;
+  return (
+    <GlassCard style={{ gap: spacing[1], borderLeftWidth: 3, borderLeftColor: accent }} accessibilityRole={open ? 'button' : undefined} accessibilityLabel={section.title}>
+      <Pressable onPress={open} disabled={!open} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, gap: spacing[1] })}>
+        <AppText variant="heading">{section.title}</AppText>
+        {section.subtitle ? <AppText variant="muted">{section.subtitle}</AppText> : null}
+        {section.lines.map((line, i) => <AppText key={`${line}-${i}`}>{line}</AppText>)}
+        {section.more > 0 ? <AppText variant="caption">+{section.more} more</AppText> : null}
+        {open ? <AppText variant="caption" color={colors.brandText}>Open on the web</AppText> : null}
+      </Pressable>
+    </GlassCard>
   );
 }

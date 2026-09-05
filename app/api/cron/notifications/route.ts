@@ -4,6 +4,7 @@ import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { expireStale, remindPendingApprovals } from '@/lib/services/approvals';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // AI approvals (0251): expire the ones nobody answered so their runs stop
+  // honestly, then remind each manager once about the ones still open. Both
+  // run before push dispatch so the reminders ride the same tick's pushes.
+  // A sweep failure counts as a generation failure: the reminders it would
+  // have produced are notifications this tick did not generate.
+  let approvals = { expired: 0, blockedRuns: 0, reminded: 0, remindedFamilies: 0 };
+  try {
+    const swept = await expireStale(supabase);
+    const reminded = await remindPendingApprovals(supabase);
+    approvals = { ...swept, reminded: reminded.reminded, remindedFamilies: reminded.families };
+  } catch (e) {
+    generationFailures += 1;
+    console.error('Approval expiry/reminder sweep failed:', e);
+  }
+
   // Deliver pushes for any un-pushed notifications across all families.
   let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
   let pushDispatchFailures = 0;
@@ -60,7 +76,7 @@ export async function GET(req: NextRequest) {
   const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures + emailed.failed;
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, families: families?.length ?? 0, created: total, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
+    { ok, families: families?.length ?? 0, created: total, approvals, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
     { status: ok ? 200 : 502 },
   );
 }

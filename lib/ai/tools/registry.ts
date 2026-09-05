@@ -21,9 +21,18 @@
 import { calendarTools } from './calendar';
 import { familyTools } from './family';
 import { groceryTools } from './groceries';
+import { mealTools } from './meals';
+import { memoryTools } from './memory';
+import { messageTools } from './messages';
 import { notificationTools } from './notifications';
 import { reminderTools } from './reminders';
 import { taskTools } from './tasks';
+import { financeTools } from './finances';
+import { tripTools } from './trips';
+import { homeTools } from './home';
+import { documentTools } from './documents';
+import { schoolTools } from './school';
+import { sportsTools } from './sports';
 import type { ToolDefinition } from './types';
 
 const REGISTRY = new Map<string, ToolDefinition>();
@@ -53,7 +62,7 @@ function register(tool: ToolDefinition): void {
   for (const alias of tool.aliases ?? []) index(alias, tool.name);
 }
 
-for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...reminderTools, ...familyTools, ...notificationTools]) {
+for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...homeTools, ...documentTools, ...schoolTools, ...sportsTools]) {
   register(tool);
 }
 

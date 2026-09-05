@@ -1,19 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+// The Family AI page: a conversation with Bubaly whose outcomes are cards, not
+// chat bubbles (§53), laid out as a workspace (§54) — conversation on the
+// left, plan and results in the centre, household context on the right; on a
+// phone, Chat | Plan | Context.
+//
+// Transport: `POST /api/ai` (SSE). The event contract is
+// `AssistantStreamEvent` in `lib/ai/result-cards.ts`: `delta` text, `action`
+// lines (the family-readable summary only — never a tool name), `card` and
+// `run` for the outcomes worth a card, then `done`. Reopening a conversation
+// rehydrates its cards from `ai_messages.structured_content`.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks, Mic,
   Plus, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
-  MessageSquare, Trash2, Pencil, Square, Volume2, VolumeX, Loader2,
-  ShieldCheck,
+  Square, Volume2, VolumeX, Loader2, ShieldCheck, LayoutList,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { AssistantWorkspace, useDesktop, type WorkspacePane } from '@/components/assistant/workspace';
+import { ConversationPane } from '@/components/assistant/conversation-pane';
+import { ResultPane, cardId, type ConversationMessage } from '@/components/assistant/result-pane';
+import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { isManager } from '@/lib/constants/roles';
 import { useVoice } from '@/lib/hooks/use-voice';
 import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
 import { parsePrefillQuery } from '@/lib/ai/prefill';
+import { parseAssistantStreamEvent, runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
 
 // Quick-suggestion chips shown above an active conversation.
 const CHIPS = [
@@ -33,18 +49,15 @@ const POPULAR: { icon: React.ComponentType<{ className?: string }>; title: strin
   { icon: Bell, title: 'Set a reminder', sub: 'so nothing slips', prompt: 'Remind me to order the camp forms' },
 ];
 
-const TRY_PROMPTS = [
-  'What do we have going on this week?',
-  'Create a grocery list from our meal plan',
-  'Remind me to order camp forms',
-  "What are my kids' activities today?",
+const TRY_ASKING = [
+  { icon: CalendarDays, text: "What's on our schedule today?" },
+  { icon: UtensilsCrossed, text: 'Plan dinners for this week' },
+  { icon: ShoppingCart, text: 'Build a grocery list from our meal plan' },
+  { icon: ListChecks, text: 'What chores are due this week?' },
 ];
 
 type ChatAction = { name: string; ok: boolean; summary: string };
-type Message = { role: 'user' | 'assistant'; content: string; id: string; actions?: ChatAction[] };
-type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
-type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
-type ActivityItem = { icon: React.ComponentType<{ className?: string }>; text: string; time: string; color: string };
+type Message = ConversationMessage & { actions?: ChatAction[]; runIds?: string[] };
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -57,9 +70,33 @@ function newConversationId() {
   });
 }
 
+/** One-line label for the outcome chip in the thread that points at the card in the plan pane. */
+export function cardChipLabel(card: ResultCard): string {
+  switch (card.kind) {
+    case 'meal_plan': return `Meal plan · ${card.days.length} ${card.days.length === 1 ? 'day' : 'days'}`;
+    case 'calendar_conflict': return card.conflicts.length ? `${card.conflicts.length} ${card.conflicts.length === 1 ? 'conflict' : 'conflicts'}` : 'No conflicts';
+    case 'budget_analysis': return 'Spending';
+    case 'vacation_prep': return 'Trip prep';
+    case 'task_group': return `${card.tasks.length} ${card.tasks.length === 1 ? 'task' : 'tasks'}`;
+    case 'grocery_list': return `Grocery list · ${card.items.length}`;
+    case 'readiness': return `Readiness ${Math.round(card.score)}`;
+    case 'approval': return 'Needs your approval';
+    case 'run_status': return card.title;
+    default: return card.title;
+  }
+}
+
+/** Run ids without a card of their own become run cards, so a reopened conversation still links to its runs. */
+export function withRunCards(cards: ResultCard[], runIds: string[]): ResultCard[] {
+  const seen = new Set(cards.filter((c): c is Extract<ResultCard, { kind: 'run_status' }> => c.kind === 'run_status').map((c) => c.run_id));
+  return [...cards, ...runIds.filter((id) => !seen.has(id)).map((id) => runStatusCard({ runId: id }))];
+}
+
 export function AssistantModule() {
-  const { family, selfMember } = useApp();
+  const { family, selfMember, role } = useApp();
   const firstName = (selfMember?.display_name || 'there').split(' ')[0];
+  const canDecide = isManager(role);
+  const desktop = useDesktop();
 
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const voice = useVoice({ onError: setVoiceError });
@@ -85,32 +122,44 @@ export function AssistantModule() {
     return newConversationId();
   });
   const [conversations, setConversations] = useState<{ id: string; title: string; updated_at: string }[]>([]);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
+  const [threadError, setThreadError] = useState<string | null>(null);
 
-  // Sidebar data
+  // Workspace state: which pane a phone shows, which card the thread pointed at,
+  // and how many cards arrived since the plan pane was last looked at.
+  const [pane, setPane] = useState<WorkspacePane>('chat');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [unseenCards, setUnseenCards] = useState(0);
+
+  // Context rail data
   const [glance, setGlance] = useState<GlanceItem[]>([
-    { icon: CalendarDays, value: '—', label: 'Events Today' },
-    { icon: CheckCircle2, value: '—', label: 'Tasks Due' },
-    { icon: Bell, value: '—', label: 'Reminders Due' },
-    { icon: Pill, value: '—', label: 'Active Meds' },
+    { icon: CalendarDays, value: '—', label: 'Events today' },
+    { icon: CheckCircle2, value: '—', label: 'Tasks due' },
+    { icon: Bell, value: '—', label: 'Reminders due' },
+    { icon: Pill, value: '—', label: 'Active meds' },
   ]);
   const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [railLoading, setRailLoading] = useState(true);
+  const [railError, setRailError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // True once the user has sent at least one message → switch hero → chat thread.
   const hasConversation = messages.some((m) => m.role === 'user');
 
-  // Load sidebar data
-  useEffect(() => {
+  // Load the context rail. Every read captures its error: a failed count is
+  // shown as an error the person can retry, never as a confident zero.
+  const loadRail = useCallback(async () => {
     if (!family?.id) return;
     const supabase = createClient();
     const now = new Date();
     const start = new Date(now); start.setHours(0, 0, 0, 0);
     const end = new Date(start); end.setDate(end.getDate() + 1);
     const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
+    setRailLoading(true);
 
-    Promise.all([
+    const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await Promise.all([
       supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
         .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
@@ -122,26 +171,39 @@ export function AssistantModule() {
         .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()),
       supabase.from('medications').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).eq('is_active', true),
-    ]).then(([{ data: todayEvts }, { count: openChores }, { data: upEvts }, { count: remindersDue }, { count: activeMeds }]) => {
-      setGlance([
-        { icon: CalendarDays, value: String(todayEvts?.length ?? 0), label: 'Events Today' },
-        { icon: CheckCircle2, value: String(openChores ?? 0), label: 'Tasks Due' },
-        { icon: Bell, value: String(remindersDue ?? 0), label: 'Reminders Due' },
-        { icon: Pill, value: String(activeMeds ?? 0), label: 'Active Meds' },
-      ]);
-      setUpcoming(upEvts ?? []);
-      setActivity((todayEvts ?? []).slice(0, 3).map((e, i) => ({
-        icon: CalendarDays,
-        text: `${e.title} added to calendar`,
-        time: fmtRelative(e.created_at),
-        color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
-      })));
-    });
-  }, [family?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    ]);
+    setRailLoading(false);
+    const failed = [todayRes.error, choresRes.error, upcomingRes.error, remindersRes.error, medsRes.error].find(Boolean);
+    if (failed) {
+      console.error('[assistant] context rail load failed', failed);
+      setRailError(describeDbError(failed, 'Could not load today’s context.'));
+      return;
+    }
+    setRailError(null);
+    const todayEvts = todayRes.data ?? [];
+    setGlance([
+      { icon: CalendarDays, value: String(todayEvts.length), label: 'Events today' },
+      { icon: CheckCircle2, value: String(choresRes.count ?? 0), label: 'Tasks due' },
+      { icon: Bell, value: String(remindersRes.count ?? 0), label: 'Reminders due' },
+      { icon: Pill, value: String(medsRes.count ?? 0), label: 'Active meds' },
+    ]);
+    setUpcoming(upcomingRes.data ?? []);
+    setActivity(todayEvts.slice(0, 3).map((e, i) => ({
+      icon: CalendarDays,
+      text: `${e.title} added to calendar`,
+      time: fmtRelative(e.created_at),
+      color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
+    })));
+  }, [family?.id]);
+
+  useEffect(() => { void loadRail(); }, [loadRail]);
 
   useEffect(() => {
     if (hasConversation) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, hasConversation]);
+
+  // The plan pane, once looked at, has no unseen cards.
+  useEffect(() => { if (pane === 'plan' || desktop) setUnseenCards(0); }, [pane, desktop, messages]);
 
   // Deep link: arriving with "?q=…" (e.g. routed here from Quick Capture) sends
   // that question immediately, then strips it from the URL so a refresh/back
@@ -167,6 +229,7 @@ export function AssistantModule() {
       .order('updated_at', { ascending: false }).limit(25);
     // Keep the prior conversation history on a transient read failure instead of
     // clobbering the sidebar to an empty "no conversations" list.
+    setConversationsError(error ? describeDbError(error, 'Could not load your conversations.') : null);
     if (error) return;
     setConversations(data ?? []);
   }, [family?.id]);
@@ -174,23 +237,29 @@ export function AssistantModule() {
   const loadConversation = useCallback(async (id: string) => {
     const supabase = createClient();
     const { data, error } = await supabase.from('ai_messages')
-      .select('role, content, tool_results').eq('conversation_id', id)
+      .select('role, content, tool_results, structured_content').eq('conversation_id', id)
       .order('created_at', { ascending: true }).limit(200);
     // A failed message read must not masquerade as an empty conversation (a fresh
     // greeting) — that hides real history. Leave the current view intact so the
     // user can retry rather than switching into a misleading blank thread.
+    setThreadError(error ? describeDbError(error, 'Could not open that conversation.') : null);
     if (error) return;
     setConvId(id);
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
     if (!data || data.length === 0) { setMessages(greeting()); return; }
-    setMessages(data.map((m) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content,
-      id: generateId(),
-      actions: Array.isArray(m.tool_results)
-        ? (m.tool_results as { ok?: boolean; summary?: string; error?: string }[]).map((r) => ({ name: '', ok: r?.ok !== false, summary: r?.summary ?? r?.error ?? 'Done' }))
-        : undefined,
-    } as Message)));
+    setMessages(data.map((m) => {
+      const structured = structuredContentFrom(m.structured_content);
+      return {
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+        id: generateId(),
+        actions: Array.isArray(m.tool_results)
+          ? (m.tool_results as { ok?: boolean; summary?: string; error?: string }[]).map((r) => ({ name: '', ok: r?.ok !== false, summary: r?.summary ?? r?.error ?? 'Done' }))
+          : undefined,
+        cards: m.role === 'assistant' ? withRunCards(structured.cards, structured.runIds) : undefined,
+        runIds: structured.runIds,
+      } as Message;
+    }));
   }, [firstName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function newChat() {
@@ -199,11 +268,18 @@ export function AssistantModule() {
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
     setMessages(greeting());
     setInput('');
+    setHighlightId(null);
+    setPane('chat');
   }
 
   async function deleteConversation(id: string) {
     if (!confirm('Delete this conversation?')) return;
-    await createClient().from('ai_conversations').delete().eq('id', id);
+    const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
+    if (error) {
+      console.error('[assistant] conversation delete failed', error);
+      setConversationsError(describeDbError(error, 'Could not delete that conversation.'));
+      return;
+    }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     if (id === convId) newChat();
   }
@@ -211,7 +287,12 @@ export function AssistantModule() {
   async function renameConversation(id: string, current: string) {
     const title = window.prompt('Rename conversation', current || '')?.trim();
     if (!title || title === current) return;
-    await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
+    const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
+    if (error) {
+      console.error('[assistant] conversation rename failed', error);
+      setConversationsError(describeDbError(error, 'Could not rename that conversation.'));
+      return;
+    }
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }
 
@@ -227,20 +308,25 @@ export function AssistantModule() {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
     setInput('');
+    setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
     const replyId = generateId();
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
-    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [] }]);
+    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [], cards: [], runIds: [] }]);
     setLoading(true);
 
     const patchReply = (fn: (m: Message) => Message) =>
       setMessages((prev) => prev.map((m) => (m.id === replyId ? fn(m) : m)));
+    const addCard = (card: ResultCard) => {
+      patchReply((m) => ({ ...m, cards: [...(m.cards ?? []), card] }));
+      setUnseenCards((n) => n + 1);
+    };
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
       if (!res.ok || !res.body) {
@@ -248,7 +334,7 @@ export function AssistantModule() {
         patchReply((m) => ({ ...m, content: err.error ?? 'Sorry, I had trouble with that.' }));
         return;
       }
-      // Parse the SSE stream: delta (text), action (chip), error, done.
+      // Parse the SSE stream: delta (text), action (line), card, run, error, done.
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -262,17 +348,25 @@ export function AssistantModule() {
         for (const part of parts) {
           const line = part.split('\n').find((l) => l.startsWith('data:'));
           if (!line) continue;
-          let ev: { type: string; text?: string; name?: string; ok?: boolean; summary?: string; content?: string; error?: string };
-          try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          let raw: unknown;
+          try { raw = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          const ev = parseAssistantStreamEvent(raw);
+          if (!ev) continue;
           if (ev.type === 'delta' && ev.text) { finalText += ev.text; patchReply((m) => ({ ...m, content: m.content + ev.text })); }
-          else if (ev.type === 'action') patchReply((m) => ({ ...m, actions: [...(m.actions ?? []), { name: ev.name ?? '', ok: ev.ok !== false, summary: ev.summary ?? 'Done' }] }));
-          else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || (ev.error ?? 'Something went wrong.') }));
-          else if (ev.type === 'done') { finalText = ev.content || finalText; patchReply((m) => ({ ...m, content: m.content || (ev.content ?? 'Done.') })); }
+          else if (ev.type === 'action') patchReply((m) => ({ ...m, actions: [...(m.actions ?? []), { name: ev.name, ok: ev.ok, summary: ev.summary }] }));
+          else if (ev.type === 'card') addCard(ev.card);
+          else if (ev.type === 'run') {
+            patchReply((m) => ({ ...m, runIds: [...new Set([...(m.runIds ?? []), ev.runId])] }));
+            addCard(runStatusCard({ runId: ev.runId, status: ev.status, summary: ev.summary }));
+          }
+          else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || ev.error }));
+          else if (ev.type === 'done') { finalText = ev.content || finalText; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
         }
       }
       // Speak the reply aloud when voice output is enabled on this device.
       if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
-    } catch {
+    } catch (error) {
+      console.error('[assistant] request failed', error);
       patchReply((m) => ({ ...m, content: m.content || 'Something went wrong. Please try again.' }));
     } finally {
       setLoading(false);
@@ -291,7 +385,15 @@ export function AssistantModule() {
     }
   }
 
-  const ACCENT_COLORS = ['bg-emerald-500', 'bg-indigo-500', 'bg-orange-500', 'bg-rose-500'];
+  /** A chip in the thread points at its card: on a phone that means the Plan tab. */
+  function openCard(id: string) {
+    setHighlightId(id);
+    if (!desktop) setPane('plan');
+  }
+
+  const ask = (text: string) => { setPane('chat'); void send(text); };
+
+  const planCount = useMemo(() => messages.reduce((n, m) => n + (m.cards?.length ?? 0), 0), [messages]);
 
   // Shared composer props (used by both the hero and the docked input bar).
   const composerProps = {
@@ -301,279 +403,245 @@ export function AssistantModule() {
     dismissVoiceError: () => setVoiceError(null),
   };
 
-  return (
-    <div className="flex flex-col gap-7 lg:flex-row">
-      {/* Main column */}
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {/* Top controls — voice mode + new chat. Title shows only mid-conversation. */}
-        <div className="flex items-center gap-4">
-          {hasConversation ? (
-            <div className="flex items-center gap-3">
-              <div className="ai-orb h-11 w-11 shrink-0">
-                <Sparkles className="h-5 w-5 text-brand-text drop-shadow" />
-              </div>
-              <h1 className="text-2xl font-black sm:text-3xl">Family AI</h1>
-              <span className="rounded-md bg-brand px-2.5 py-1 text-[10px] font-black tracking-wide text-brand-fg">BETA</span>
-            </div>
-          ) : (
-            <span className="text-sm font-semibold text-muted">Family Concierge</span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <button
-                onClick={() => setShowVoiceMenu((s) => !s)}
-                aria-label="Voice settings"
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition',
-                  voice.mode === 'text'
-                    ? 'border-border bg-surface/40 text-fg hover:bg-elevated'
-                    : 'border-brand/40 bg-brand/10 text-brand-text',
-                )}
-              >
-                {voice.mode === 'text' ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                <span className="hidden sm:inline">Voice</span>
-              </button>
-              {showVoiceMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
-                  <div className="popover-surface absolute right-0 z-20 mt-2 w-60 p-2">
-                    <p className="px-2 py-1.5 text-xs font-semibold text-muted">Assistant voice (this device)</p>
-                    {VOICE_MODES.map((m) => (
-                      <button
-                        key={m.value}
-                        onClick={() => { voice.setMode(m.value); setShowVoiceMenu(false); if (m.value === 'text') voice.stopSpeaking(); }}
-                        className={cn(
-                          'flex w-full flex-col items-start rounded-lg px-2 py-2 text-left transition',
-                          voice.mode === m.value ? 'bg-brand/10' : 'hover:bg-elevated',
-                        )}
-                      >
-                        <span className={cn('text-sm font-medium', voice.mode === m.value ? 'text-brand-text' : 'text-fg')}>{m.label}</span>
-                        <span className="text-xs text-muted">{m.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            <button onClick={newChat} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
-              <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New chat</span>
-            </button>
-          </div>
+  const thread = (
+    <>
+      <div className="mt-4 flex gap-2.5 overflow-x-auto scrollbar-none">
+        {CHIPS.map(([Icon, label]) => (
+          <button
+            key={label} type="button" onClick={() => void send(label)}
+            className="focus-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface/40 px-4 text-sm text-fg transition hover:border-brand/40 hover:bg-elevated"
+          >
+            <Icon className="h-4 w-4 text-brand-text" aria-hidden />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {threadError && (
+        <div role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+          {threadError}
         </div>
+      )}
 
-        {hasConversation ? (
-          /* ===== Active conversation ===== */
-          <>
-            <div className="mt-6 flex gap-2.5 overflow-x-auto scrollbar-none sm:flex-wrap sm:overflow-x-visible">
-              {CHIPS.map(([Icon, label]) => (
-                <button
-                  key={label} onClick={() => void send(label)}
-                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface/40 px-4 text-sm text-fg transition hover:border-brand/40 hover:bg-elevated"
-                >
-                  <Icon className="h-4 w-4 text-brand-text" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-7 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-4">
-              {messages.map((msg) =>
-                msg.role === 'assistant' ? (
-                  <div key={msg.id} className="assistant-message-enter flex gap-4">
-                    <div className="ai-orb mt-1 h-9 w-9 shrink-0">
-                      <Sparkles className="h-4 w-4 text-brand-text" />
-                    </div>
-                    <div className="max-w-[480px] space-y-2">
-                      <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6 whitespace-pre-wrap">
-                        {msg.content
-                          ? msg.content
-                          : (msg.actions && msg.actions.length > 0)
-                            ? <span className="text-muted">Working on it…</span>
-                            : (
-                              <span className="inline-flex items-center gap-1.5">
-                                {[0, 1, 2].map((i) => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand" style={{ animationDelay: `${i * 0.15}s` }} />)}
-                              </span>
-                            )}
-                      </div>
-                      {msg.actions && msg.actions.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {msg.actions.map((a, i) => (
-                            <span key={i} className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', a.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300')}>
-                              <CheckCircle2 className="h-3 w-3" /> {a.summary}
-                            </span>
-                          ))}
-                        </div>
+      <div className="mt-7 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-4">
+        {messages.map((msg) =>
+          msg.role === 'assistant' ? (
+            <div key={msg.id} className="assistant-message-enter flex gap-3">
+              <div className="ai-orb mt-1 h-8 w-8 shrink-0">
+                <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
+              </div>
+              <div className="min-w-0 max-w-[480px] space-y-2">
+                <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm leading-6 whitespace-pre-wrap">
+                  {msg.content
+                    ? msg.content
+                    : ((msg.actions && msg.actions.length > 0) || (msg.cards && msg.cards.length > 0))
+                      ? <span className="text-muted">Working on it…</span>
+                      : (
+                        <span className="inline-flex items-center gap-1.5" role="status" aria-label="Bubaly is thinking">
+                          {[0, 1, 2].map((i) => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand motion-reduce:animate-none" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                        </span>
                       )}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={msg.id} className="assistant-message-enter ml-auto max-w-[520px] text-right">
-                    <div className="inline-block rounded-2xl bg-brand px-5 py-3.5 text-sm font-medium text-brand-fg shadow-glow">
-                      {msg.content}
-                    </div>
-                  </div>
-                )
-              )}
-              <div ref={bottomRef} />
-            </div>
-
-            {/* Docked input bar */}
-            <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
-              <Composer variant="bar" {...composerProps} onMicPress={composerProps.onMic} />
-              <p className="mt-3 text-center text-xs text-muted/60">AI can make mistakes. Please double-check important information.</p>
-            </div>
-          </>
-        ) : (
-          /* ===== Welcome hero ===== */
-          <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-start rounded-3xl px-2 pb-5 pt-6 text-center sm:pt-8">
-            {/* Big question */}
-            <h2 className="text-2xl font-black sm:text-4xl">What can I help you with today?</h2>
-            <p className="mt-2 max-w-lg text-sm text-muted sm:text-base">
-              Tell me what you need — I&apos;ll handle the scheduling, lists, and reminders.
-            </p>
-
-            {/* Hero composer */}
-            <div className="mt-6 w-full max-w-2xl">
-              <Composer variant="hero" {...composerProps} onMicPress={composerProps.onMic} />
-            </div>
-
-            {/* Popular requests */}
-            <div className="mt-6 w-full max-w-3xl">
-              <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">Popular requests</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {POPULAR.map(({ icon: Icon, title, sub, prompt }) => (
-                  <button
-                    key={title}
-                    onClick={() => void send(prompt)}
-                    disabled={loading}
-                    className="ai-suggest-card group flex items-start gap-2.5 p-3 text-left disabled:opacity-50"
-                  >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text transition group-hover:bg-brand/20">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-fg">{title}</span>
-                      <span className="block truncate text-xs text-muted">{sub}</span>
-                    </span>
-                  </button>
-                ))}
+                </div>
+                {msg.actions && msg.actions.length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5" aria-label="What Bubaly did">
+                    {msg.actions.map((a, i) => (
+                      <li key={i} className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', a.ok ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger')}>
+                        <CheckCircle2 className="h-3 w-3" aria-hidden /> {a.summary}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {msg.cards && msg.cards.length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5" aria-label="Results">
+                    {msg.cards.map((card, i) => {
+                      const id = cardId(msg.id, i);
+                      return (
+                        <li key={id}>
+                          <button
+                            type="button"
+                            onClick={() => openCard(id)}
+                            className={cn(
+                              'focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition hover:bg-elevated',
+                              highlightId === id ? 'border-brand/60 bg-brand/15 text-brand-text' : 'border-brand/30 bg-brand/10 text-brand-text',
+                            )}
+                          >
+                            <LayoutList className="h-3 w-3" aria-hidden /> {cardChipLabel(card)}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             </div>
-
-            {/* Trust note */}
-            <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted sm:text-sm">
-              <ShieldCheck className="h-4 w-4 text-success" />
-              Your family&apos;s data stays private and secure.
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Sidebar — hidden on mobile, vertical on lg */}
-      <aside className="hidden lg:block lg:w-[330px] lg:shrink-0 lg:space-y-5">
-        {/* Conversations */}
-        <SideCard
-          title="Conversations"
-          action={<button onClick={newChat} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><Plus className="h-3.5 w-3.5" /> New</button>}
-        >
-          {conversations.length === 0 ? (
-            <p className="py-3 text-xs text-muted/60 text-center">No saved chats yet.</p>
           ) : (
-            <div className="space-y-0.5">
-              {conversations.map((c) => (
-                <div key={c.id} className={cn('group flex items-center gap-2 rounded-lg px-2 py-2', c.id === convId ? 'bg-brand/10' : 'hover:bg-elevated')}>
-                  <button onClick={() => void loadConversation(c.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                    <MessageSquare className={cn('h-4 w-4 shrink-0', c.id === convId ? 'text-brand-text' : 'text-muted')} />
-                    <span className="truncate text-xs text-fg/80">{c.title || 'New conversation'}</span>
-                  </button>
-                  <button onClick={() => void renameConversation(c.id, c.title)} aria-label="Rename conversation" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-fg group-hover:opacity-100">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => void deleteConversation(c.id)} aria-label="Delete conversation" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+            <div key={msg.id} className="assistant-message-enter ml-auto max-w-[520px] text-right">
+              <div className="inline-block rounded-2xl bg-brand px-4 py-3 text-sm font-medium text-brand-fg shadow-glow">
+                {msg.content}
+              </div>
             </div>
-          )}
-        </SideCard>
+          )
+        )}
+        <div ref={bottomRef} />
+      </div>
 
-        {/* At a Glance */}
-        <SideCard title="At a Glance">
-          <div className="grid grid-cols-2 gap-3">
-            {glance.map(({ icon: Icon, value, label }) => (
-              <div key={label} className="rounded-xl border border-border bg-bg/40 p-3">
-                <Icon className="h-5 w-5 text-brand-text" />
-                <p className="mt-2 text-2xl font-black leading-none">{value}</p>
-                <p className="mt-1 text-xs text-muted">{label}</p>
-              </div>
-            ))}
-          </div>
-        </SideCard>
+      {/* Docked input bar */}
+      <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
+        <Composer variant="bar" {...composerProps} onMicPress={composerProps.onMic} />
+        <p className="mt-3 text-center text-xs text-muted/60">AI can make mistakes. Please double-check important information.</p>
+      </div>
+    </>
+  );
 
-        {/* Upcoming */}
-        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View Calendar</a>}>
-          {upcoming.length > 0 ? upcoming.map((e, i) => {
-            const d = new Date(e.starts_at);
-            return (
-              <div key={e.id} className="flex items-center gap-3 py-2.5">
-                <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-white', ACCENT_COLORS[i % ACCENT_COLORS.length])}>
-                  <CalendarDays className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="font-semibold text-sm">{e.title}</p>
-                  <p className="text-xs text-muted">
-                    {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {!e.all_day && ` · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
-                  </p>
-                </div>
-              </div>
-            );
-          }) : (
-            <p className="py-4 text-sm text-muted/60 text-center">No upcoming events</p>
-          )}
-        </SideCard>
+  const hero = (
+    <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-start rounded-3xl px-2 pb-5 pt-6 text-center sm:pt-8">
+      <h2 className="text-2xl font-black sm:text-4xl">What can I help you with today?</h2>
+      <p className="mt-2 max-w-lg text-sm text-muted sm:text-base">
+        Tell me what you need — I&apos;ll handle the scheduling, lists, and reminders.
+      </p>
 
-        {/* Try asking */}
-        <SideCard title="Try Asking">
-          {[
-            { icon: CalendarDays, text: "What's on our schedule today?" },
-            { icon: UtensilsCrossed, text: 'Plan dinners for this week' },
-            { icon: ShoppingCart, text: 'Build a grocery list from our meal plan' },
-            { icon: ListChecks, text: 'What chores are due this week?' },
-          ].map(({ icon: Icon, text }) => (
-            <button key={text} onClick={() => void send(text)} className="flex w-full gap-3 rounded-lg py-2.5 px-1 text-left transition hover:bg-elevated">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10">
-                <Icon className="h-4 w-4 text-brand-text" />
+      <div className="mt-6 w-full max-w-2xl">
+        <Composer variant="hero" {...composerProps} onMicPress={composerProps.onMic} />
+      </div>
+
+      <div className="mt-6 w-full max-w-3xl">
+        <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">Popular requests</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {POPULAR.map(({ icon: Icon, title, sub, prompt }) => (
+            <button
+              key={title}
+              type="button"
+              onClick={() => void send(prompt)}
+              disabled={loading}
+              className="ai-suggest-card group flex items-start gap-2.5 p-3 text-left disabled:opacity-50"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text transition group-hover:bg-brand/20">
+                <Icon className="h-4 w-4" aria-hidden />
               </span>
-              <p className="text-xs leading-5 text-fg/80">{text}</p>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-bold text-fg">{title}</span>
+                <span className="block truncate text-xs text-muted">{sub}</span>
+              </span>
             </button>
           ))}
-        </SideCard>
+        </div>
+      </div>
 
-        {/* Recent Activity */}
-        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View All</a>}>
-          {activity.length > 0 ? activity.map((a) => (
-            <div key={a.text} className="flex items-center gap-3 py-2 text-xs">
-              <a.icon className={cn('h-4 w-4 shrink-0', a.color)} />
-              <span className="flex-1 text-fg/80">{a.text}</span>
-              <span className="shrink-0 text-muted/60">{a.time}</span>
+      <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted sm:text-sm">
+        <ShieldCheck className="h-4 w-4 text-success" aria-hidden />
+        Your family&apos;s data stays private and secure.
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-5">
+      {/* Top controls — voice mode + new chat. Title shows only mid-conversation. */}
+      <div className="flex items-center gap-4">
+        {hasConversation ? (
+          <div className="flex items-center gap-3">
+            <div className="ai-orb h-11 w-11 shrink-0">
+              <Sparkles className="h-5 w-5 text-brand-text drop-shadow" aria-hidden />
             </div>
-          )) : (
-            <p className="py-3 text-xs text-muted/60 text-center">No recent activity</p>
-          )}
-        </SideCard>
-
-        {/* Try saying */}
-        <SideCard title="Try saying something like...">
-          {TRY_PROMPTS.map((p) => (
-            <button key={p} onClick={() => void send(p)}
-              className="mt-2 block w-full rounded-full border border-border bg-surface/40 px-4 py-2.5 text-left text-xs text-fg/80 transition hover:border-brand/40 hover:bg-elevated">
-              &quot;{p}&quot;
+            <h1 className="text-2xl font-black sm:text-3xl">Family AI</h1>
+            <span className="rounded-md bg-brand px-2.5 py-1 text-[10px] font-black tracking-wide text-brand-fg">BETA</span>
+          </div>
+        ) : (
+          <span className="text-sm font-semibold text-muted">Family Concierge</span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowVoiceMenu((s) => !s)}
+              aria-label="Voice settings"
+              aria-expanded={showVoiceMenu}
+              className={cn(
+                'focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition',
+                voice.mode === 'text'
+                  ? 'border-border bg-surface/40 text-fg hover:bg-elevated'
+                  : 'border-brand/40 bg-brand/10 text-brand-text',
+              )}
+            >
+              {voice.mode === 'text' ? <VolumeX className="h-4 w-4" aria-hidden /> : <Volume2 className="h-4 w-4" aria-hidden />}
+              <span className="hidden sm:inline">Voice</span>
             </button>
-          ))}
-        </SideCard>
-      </aside>
+            {showVoiceMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
+                <div className="popover-surface absolute right-0 z-20 mt-2 w-60 p-2">
+                  <p className="px-2 py-1.5 text-xs font-semibold text-muted">Assistant voice (this device)</p>
+                  {VOICE_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => { voice.setMode(m.value); setShowVoiceMenu(false); if (m.value === 'text') voice.stopSpeaking(); }}
+                      className={cn(
+                        'focus-ring flex w-full flex-col items-start rounded-lg px-2 py-2 text-left transition',
+                        voice.mode === m.value ? 'bg-brand/10' : 'hover:bg-elevated',
+                      )}
+                    >
+                      <span className={cn('text-sm font-medium', voice.mode === m.value ? 'text-brand-text' : 'text-fg')}>{m.label}</span>
+                      <span className="text-xs text-muted">{m.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={newChat} className="focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
+            <Plus className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">New chat</span>
+          </button>
+        </div>
+      </div>
+
+      <AssistantWorkspace
+        pane={pane}
+        onPaneChange={setPane}
+        counts={{ plan: unseenCards }}
+        hero={hasConversation ? undefined : hero}
+        conversation={(
+          <ConversationPane
+            conversations={conversations}
+            activeId={convId}
+            error={conversationsError}
+            onSelect={(id) => void loadConversation(id)}
+            onNew={newChat}
+            onRename={(id, current) => void renameConversation(id, current)}
+            onDelete={(id) => void deleteConversation(id)}
+            onRetry={() => void loadConversations()}
+          >
+            {hasConversation ? thread : (
+              <p className="mt-4 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
+                Your conversation with Bubaly shows up here.
+              </p>
+            )}
+          </ConversationPane>
+        )}
+        plan={(
+          <ResultPane
+            messages={messages}
+            streaming={loading}
+            compact={!desktop}
+            canDecide={canDecide}
+            onAsk={ask}
+            highlightId={highlightId}
+          />
+        )}
+        context={(
+          <ContextRail
+            glance={glance}
+            upcoming={upcoming}
+            activity={activity}
+            prompts={TRY_ASKING}
+            loading={railLoading}
+            error={railError}
+            onRetry={() => void loadRail()}
+            onAsk={ask}
+          />
+        )}
+      />
+      <p className="sr-only" aria-live="polite">{planCount > 0 ? `${planCount} results available in the plan pane` : ''}</p>
     </div>
   );
 }
@@ -605,15 +673,16 @@ function Composer({
       {voiceError && (
         <div className="mb-2 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
           <span>{voiceError}</span>
-          <button onClick={dismissVoiceError} aria-label="Dismiss" className="ml-2 text-amber-300/70 hover:text-amber-200">✕</button>
+          <button type="button" onClick={dismissVoiceError} aria-label="Dismiss" className="ml-2 text-amber-300/70 hover:text-amber-200">✕</button>
         </div>
       )}
       {voice.status === 'speaking' && (
         <button
+          type="button"
           onClick={voice.stopSpeaking}
           className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand-text"
         >
-          <Square className="h-3 w-3" /> Stop speaking
+          <Square className="h-3 w-3" aria-hidden /> Stop speaking
         </button>
       )}
 
@@ -625,11 +694,11 @@ function Composer({
             <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
           </span>
           <span className="flex-1 text-sm font-medium text-rose-200">Listening… tap the mic to send</span>
-          <button onClick={voice.cancelRecording} className="rounded-full px-3 py-1.5 text-xs font-semibold text-rose-200/80 hover:text-rose-100">
+          <button type="button" onClick={voice.cancelRecording} className="rounded-full px-3 py-1.5 text-xs font-semibold text-rose-200/80 hover:text-rose-100">
             Cancel
           </button>
-          <button onClick={onMicPress} aria-label="Stop and send" className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
-            <Square className="h-4 w-4" />
+          <button type="button" onClick={onMicPress} aria-label="Stop and send" className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
+            <Square className="h-4 w-4" aria-hidden />
           </button>
         </div>
       ) : isHero ? (
@@ -644,24 +713,27 @@ function Composer({
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
             enterKeyHint="send"
             disabled={disabled}
+            aria-label="Ask Bubaly"
           />
           {voice.supported && (
             <button
+              type="button"
               onClick={onMicPress}
               disabled={disabled}
               aria-label="Record voice message"
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
             >
-              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-5 w-5" />}
+              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-5 w-5" aria-hidden />}
             </button>
           )}
           <button
+            type="button"
             onClick={onSend}
             disabled={!canSend}
             aria-label="Send"
             className="ai-send grid h-11 w-11 shrink-0 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-5 w-5" aria-hidden />
           </button>
         </div>
       ) : (
@@ -675,34 +747,24 @@ function Composer({
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
             enterKeyHint="send"
             disabled={disabled}
+            aria-label="Message Bubaly"
           />
           {voice.supported && (
             <button
+              type="button"
               onClick={onMicPress}
               disabled={disabled}
               aria-label="Record voice message"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
             >
-              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-4 w-4" aria-hidden />}
             </button>
           )}
-          <button onClick={onSend} disabled={!canSend} aria-label="Send" className="ai-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40">
-            <Send className="h-4 w-4" />
+          <button type="button" onClick={onSend} disabled={!canSend} aria-label="Send" className="ai-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40">
+            <Send className="h-4 w-4" aria-hidden />
           </button>
         </div>
       )}
     </div>
-  );
-}
-
-function SideCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-border bg-surface/40 p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-semibold">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
   );
 }

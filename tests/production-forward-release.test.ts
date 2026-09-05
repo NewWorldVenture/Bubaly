@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { assertPreflight, assertReleased, buildReleaseSql, readReleaseFiles, releaseLedger, runForwardRelease } from '../scripts/apply-production-forward-release.mjs';
+import { assertNoNewerMigrations, assertPreflight, assertReleased, buildReleaseSql, readReleaseFiles, releaseLedger, runForwardRelease } from '../scripts/apply-production-forward-release.mjs';
 
 const manifest = JSON.parse(readFileSync('supabase/production-forward-release.json', 'utf8'));
 const files = readReleaseFiles(manifest);
+// Existing release-behavior tests model only the reviewed bundle, not newer repository work.
+const listReviewedMigrationFiles = () => manifest.migrations.map(({ file }: { file: string }) => file);
 const snapshot = () => ({
   hasMigrationLedger: true,
   migrations: structuredClone(manifest.baseline),
@@ -25,6 +27,40 @@ const released = () => ({
 const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 201 });
 
 describe('reviewed production forward release', () => {
+  it('allows reviewed and historical filenames without replaying historical migrations', () => {
+    expect(() => assertNoNewerMigrations([
+      '0001_extensions_enums.sql', '0194_first.sql', '0194_second.sql',
+      '0239_previous.sql', ...listReviewedMigrationFiles(), 'README.md',
+    ])).not.toThrow();
+  });
+
+  it.each(['0255_ai_runtime_lockdown.sql', '0256_unreviewed.sql', '202609050001_future.sql'])(
+    'holds the pinned bundle when a newer migration exists: %s', (file) => {
+      expect(() => assertNoNewerMigrations([...listReviewedMigrationFiles(), file])).toThrow(file);
+    },
+  );
+
+  it.each([false, true])('rejects newer migrations before any database access, apply=%s', async (apply) => {
+    const after = released();
+    // Even a completed-release response must never be requested under an obsolete bundle.
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: after }])).mockResolvedValueOnce(reply(after.migrations));
+    const listMigrationFiles = vi.fn(() => [...listReviewedMigrationFiles(), '0255_ai_runtime_lockdown.sql']);
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply, fetchImpl, listMigrationFiles,
+    })).rejects.toThrow('0255_ai_runtime_lockdown.sql');
+    expect(listMigrationFiles).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before database access when repository inventory cannot be read', async () => {
+    const fetchImpl = vi.fn();
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', fetchImpl,
+      listMigrationFiles: () => { throw new Error('Repository inventory unavailable'); },
+    })).rejects.toThrow('Repository inventory unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('pins precisely 0240-0254 and normalizes checkout line endings', () => {
     expect(files).toHaveLength(15);
     expect(files[0].version).toBe('0240');
@@ -70,11 +106,11 @@ describe('reviewed production forward release', () => {
   it('defaults to metadata-only preview and rejects the wrong project before network access', async () => {
     const before = snapshot();
     const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: before }])).mockResolvedValueOnce(reply(before.migrations));
-    const result = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', fetchImpl });
+    const result = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', fetchImpl, listMigrationFiles: listReviewedMigrationFiles });
     expect(result.status).toBe('preview');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     for (const call of fetchImpl.mock.calls) expect(JSON.parse(call[1].body).read_only).toBe(true);
-    await expect(runForwardRelease({ manifest, files, projectRef: 'wrong', token: 'test-token', fetchImpl })).rejects.toThrow('audited Bubaly');
+    await expect(runForwardRelease({ manifest, files, projectRef: 'wrong', token: 'test-token', fetchImpl, listMigrationFiles: listReviewedMigrationFiles })).rejects.toThrow('audited Bubaly');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -84,7 +120,7 @@ describe('reviewed production forward release', () => {
       .mockResolvedValueOnce(reply([{ snapshot: before }])).mockResolvedValueOnce(reply(before.migrations))
       .mockResolvedValueOnce(reply({}))
       .mockResolvedValueOnce(reply([{ snapshot: after }])).mockResolvedValueOnce(reply(after.migrations));
-    const result = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl });
+    const result = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl, listMigrationFiles: listReviewedMigrationFiles });
     expect(result.status).toBe('applied');
     expect(fetchImpl).toHaveBeenCalledTimes(5);
     expect(JSON.parse(fetchImpl.mock.calls[2][1].body).read_only).toBe(false);
@@ -95,7 +131,7 @@ describe('reviewed production forward release', () => {
   it('does not replay a completed release', async () => {
     const after = released();
     const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: after }])).mockResolvedValueOnce(reply(after.migrations));
-    expect((await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl })).status).toBe('already_applied');
+    expect((await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl, listMigrationFiles: listReviewedMigrationFiles })).status).toBe('already_applied');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -105,7 +141,7 @@ describe('reviewed production forward release', () => {
       const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: before }])).mockResolvedValueOnce(reply(before.migrations));
       if (uncertain) fetchImpl.mockRejectedValueOnce(new Error('test-token private detail'));
       else fetchImpl.mockResolvedValueOnce(new Response('ERROR: 42703: private family data test-token', { status: 400 }));
-      const error = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl }).catch((e: Error) => e);
+      const error = await runForwardRelease({ manifest, files, projectRef: manifest.projectRef, token: 'test-token', apply: true, fetchImpl, listMigrationFiles: listReviewedMigrationFiles }).catch((e: Error) => e);
       if (!(error instanceof Error)) throw new Error('Expected the production release to fail.');
       expect(error.message).toMatch(/uncertain|SQLSTATE 42703/);
       expect(error.message).not.toMatch(/private family data|test-token/i);

@@ -67,6 +67,9 @@ function makeLedger(seed: LedgerRow[] = []) {
   const rows: LedgerRow[] = [...seed];
   let counter = 0;
   const { db, calls } = makeDb((call) => {
+    // Trust rows are filed through this client too (0252): answer like the
+    // family fake did so the same ids and payloads can be asserted.
+    if (call.table === 'approval_requests') return { data: { id: 'appr-1' }, error: null };
     if (call.table !== 'ai_tool_calls') return { data: null, error: null };
     if (call.kind === 'insert') {
       const payload = call.payload as LedgerRow;
@@ -90,8 +93,15 @@ function makeLedger(seed: LedgerRow[] = []) {
     }
     return { data: null, error: null };
   });
-  return { db, calls, rows };
+  const made = { db, calls, rows };
+  currentLedger = made;
+  return made;
 }
+
+/** The most recent ledger fake: where approval and audit rows land now. */
+let currentLedger: { calls: Call[] } = { calls: [] };
+/** Every trust write a test can observe, whichever client filed it. */
+const trustCalls = (family: { calls: Call[] }) => [...family.calls, ...currentLedger.calls];
 
 const NOW = new Date('2026-09-05T12:00:00Z');
 
@@ -246,7 +256,7 @@ describe('allowed writes', () => {
       CREATE_EVENT_ARGS,
     );
     expect(outcome.status).toBe('ok');
-    const audit = family.calls.find((c) => c.table === 'trust_audit_logs');
+    const audit = trustCalls(family).find((c) => c.table === 'trust_audit_logs');
     expect(audit?.payload).toMatchObject({ actor_kind: 'ai_agent', capability: 'automate', decision: 'allow' });
   });
 
@@ -284,7 +294,7 @@ describe('trust gate', () => {
     expect(outcome).toMatchObject({ status: 'denied' });
     expect(family.calls.some((c) => c.table === 'calendar_events')).toBe(false);
     expect(ledger.rows).toHaveLength(0);
-    expect(family.calls.some((c) => c.table === 'trust_audit_logs')).toBe(true);
+    expect(trustCalls(family).some((c) => c.table === 'trust_audit_logs')).toBe(true);
   });
 
   it('a household policy outranks the risk tier — a deny still denies a low-risk tool', async () => {
@@ -313,7 +323,7 @@ describe('trust gate', () => {
     expect(family.calls.some((c) => c.table === 'calendar_events' && c.kind === 'delete')).toBe(false);
     expect(ledger.rows).toHaveLength(0);
 
-    const approval = family.calls.find((c) => c.table === 'approval_requests' && c.kind === 'insert');
+    const approval = trustCalls(family).find((c) => c.table === 'approval_requests' && c.kind === 'insert');
     expect(approval?.payload).toMatchObject({
       family_id: 'fam-1',
       domain: 'calendar',
@@ -325,7 +335,7 @@ describe('trust gate', () => {
     expect((approval?.payload as { consequences: string[] }).consequences.length).toBeGreaterThan(0);
 
     // The tier's decision is auditable, not just the engine's.
-    const audits = family.calls.filter((c) => c.table === 'trust_audit_logs');
+    const audits = trustCalls(family).filter((c) => c.table === 'trust_audit_logs');
     expect(audits.some((c) => (c.payload as { context: { basis: string } }).context.basis === 'risk_tier')).toBe(true);
   });
 
@@ -341,7 +351,7 @@ describe('trust gate', () => {
     const outcome = await executeTool(scopeWith(family.db), 'calendar.updateEvent', { event_id: 'event-1', title: 'Soccer practice' });
 
     expect(outcome).toMatchObject({ status: 'pending_approval', approvalId: 'appr-1' });
-    const patch = family.calls.find((c) => c.table === 'approval_requests' && c.kind === 'update');
+    const patch = trustCalls(family).find((c) => c.table === 'approval_requests' && c.kind === 'update');
     expect((patch?.payload as { consequences: string[] }).consequences.length).toBeGreaterThan(0);
   });
 
@@ -366,11 +376,11 @@ describe('trust gate', () => {
     const outcome = await executeTool(scopeWith(family.db, { role: 'teen' }), 'add_todo', { task: 'Take out the bins' });
 
     expect(outcome).toMatchObject({ status: 'ok', summary: 'Added the task Take out the bins' });
-    const audit = family.calls.find((c) => c.table === 'trust_audit_logs');
+    const audit = trustCalls(family).find((c) => c.table === 'trust_audit_logs');
     // The engine itself refused (a teen has no `automate` capability); the risk
     // tier is what let a low-risk task through, and both are recorded.
     expect(audit?.payload).toMatchObject({ decision: 'deny' });
-    const tierAudit = family.calls.filter((c) => c.table === 'trust_audit_logs')
+    const tierAudit = trustCalls(family).filter((c) => c.table === 'trust_audit_logs')
       .find((c) => (c.payload as { context: { basis: string } }).context.basis === 'risk_tier');
     expect(tierAudit?.payload).toMatchObject({ decision: 'allow' });
   });
@@ -513,7 +523,7 @@ describe('skipTrust', () => {
     );
 
     expect(outcome).toMatchObject({ status: 'ok', summary: 'Removed Soccer from the calendar' });
-    expect(family.calls.some((c) => c.table === 'approval_requests')).toBe(false);
+    expect(trustCalls(family).some((c) => c.table === 'approval_requests')).toBe(false);
     expect(family.calls.some((c) => c.table === 'trust_policies')).toBe(false);
     expect(ledger.rows[0]).toMatchObject({ state: 'succeeded', tool_name: 'calendar.deleteEvent' });
   });

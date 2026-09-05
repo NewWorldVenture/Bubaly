@@ -52,6 +52,7 @@ export const SCHEMA_CHECKS = [
   ['ai_conversations.runtime_columns', '0250_ai_runtime_core.sql', 'state,prompt_version'],
   ['ai_messages.runtime_columns', '0250_ai_runtime_core.sql', 'structured_content,model,usage,request_id,sender_member_id'],
   ['approval_requests.runtime_columns', '0251_ai_trust_hardening.sql', 'request_id,run_id,plan_step_id,plan_step_ids,consequences,evidence,edited_payload,payload_kind,reviewed_by,review_note'],
+  ['ai_requests.runtime_columns', '0255_ai_runtime_lockdown.sql', 'client_request_id'],
 ];
 
 export async function auditSupabaseSchema({

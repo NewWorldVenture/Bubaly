@@ -27,6 +27,7 @@ import {
   type ModelCapabilities,
 } from '@/lib/ai/models';
 import { OpenAIProvider, type AIProvider } from '@/lib/ai/provider';
+import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 
 export type { AITask } from '@/lib/ai/models';
 export { AI_TASKS, DEFAULT_TASK_MODELS, TASK_REQUIREMENTS } from '@/lib/ai/models';
@@ -132,6 +133,9 @@ export async function resolveModelForTaskFromSettings(task: AITask): Promise<Mod
  * from the single admin setting (or `OPENAI_API_KEY`); only the model varies.
  */
 export async function resolveProviderForTask(task: AITask): Promise<AIProvider> {
+  // CI and e2e runs script the model (lib/ai/provider-stub.ts). The guard
+  // inside `isProviderStubEnabled` is what keeps this out of production.
+  if (isProviderStubEnabled()) return scriptedProvider();
   const stored = await readStoredConfig();
   const { model } = resolveModelForTask(task, { configured: stored.models?.[task] ?? null });
   return new OpenAIProvider(model, stored.openaiKey || process.env.OPENAI_API_KEY || '');

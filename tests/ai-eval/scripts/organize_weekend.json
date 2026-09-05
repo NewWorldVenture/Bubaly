@@ -1,0 +1,126 @@
+{
+  "id": "organize_weekend",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "organize_weekend"
+    ],
+    "text": [
+      "organize our weekend",
+      "organise our weekend",
+      "plan the weekend",
+      "this weekend"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "organize_weekend",
+      "confidence": 0.92,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Organize the weekend around Saturday's soccer game.",
+      "reasoning_summary": "Saturday morning is soccer, so I put the park outing Sunday afternoon when everyone is free, added a task to pack the picnic, and set a reminder Friday evening for the cleats. Nothing overlaps.",
+      "risk_level": "low",
+      "steps": [
+        {
+          "key": "events",
+          "step_type": "retrieve",
+          "tool_name": "calendar.searchEvents",
+          "description": "Read what is already on the weekend calendar",
+          "input": "{\"from\": \"2026-09-12T00:00:00\", \"to\": \"2026-09-13T23:59:00\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "free_slots",
+          "step_type": "retrieve",
+          "tool_name": "calendar.findFreeSlots",
+          "description": "Find the free blocks",
+          "input": "{\"duration_min\": 120, \"from\": \"2026-09-12T09:00:00\", \"to\": \"2026-09-13T19:00:00\", \"start_hour\": 9, \"end_hour\": 19, \"limit\": 6}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "add_activity",
+          "step_type": "act",
+          "tool_name": "calendar.createEvent",
+          "description": "Put the Sunday park outing on the calendar",
+          "input": "{\"title\": \"Park outing and picnic\", \"starts_at\": \"2026-09-13T14:00:00\", \"ends_at\": \"2026-09-13T16:30:00\", \"category\": \"general\"}",
+          "depends_on": [
+            "events",
+            "free_slots"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "prep_task",
+          "step_type": "act",
+          "tool_name": "tasks.createTodo",
+          "description": "Pack the picnic on Sunday morning",
+          "input": "{\"title\": \"Pack the picnic\", \"due_date\": \"2026-09-13\", \"priority\": \"medium\", \"assignee\": \"Dana\"}",
+          "depends_on": [
+            "add_activity"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "evening_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Remind everyone about the cleats on Friday evening",
+          "input": "{\"title\": \"Soccer game tomorrow at 10 \\u2014 cleats and water bottle\", \"remind_at\": \"2026-09-11T19:00:00\", \"kind\": \"time\"}",
+          "depends_on": [
+            "events"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "check_clashes",
+          "step_type": "verify",
+          "tool_name": null,
+          "description": "Make sure nothing on the weekend overlaps",
+          "input": "{\"checks\": [{\"kind\": \"no_calendar_conflicts\", \"start\": \"2026-09-12T00:00:00\", \"end\": \"2026-09-13T23:59:00\", \"label\": \"No weekend overlaps\"}]}",
+          "depends_on": [
+            "add_activity"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_family",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Share the weekend plan",
+          "input": "{\"recipients\": \"family\", \"type\": \"calendar_event\", \"title\": \"The weekend plan is set\", \"body\": \"Saturday 10:00 soccer, Sunday 2:00 park outing and picnic. Dana packs the picnic; cleats reminder Friday evening.\"}",
+          "depends_on": [
+            "check_clashes",
+            "prep_task",
+            "evening_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "Saturday is soccer at 10, so I put the park outing Sunday at 2 and added the picnic prep. Nothing overlaps.",
+    "toolCalls": []
+  }
+}

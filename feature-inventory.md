@@ -31,6 +31,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/command-center` | `calendar_events`, `chore_assignments`, `documents`, `family_members`, `meal_plans` |
 | `/dashboard/concierge-calls` | `concierge_calls` |
 | `/dashboard/concierge` | `approval_requests`, `calendar_events`, `concierge_plan_actions`, `concierge_plans`, `family_automation_runs`, `family_reminders`, `trust_policies` |
+| `/dashboard/concierge/runs/[id]` | `family_automation_runs`, `ai_requests`, `ai_plans`, `ai_plan_steps`, `ai_run_events`, `approval_requests`, `family_members` |
 | `/dashboard/conflicts` | `calendar_events`, `family_members` |
 | `/dashboard/connections` | `family_connections` |
 | `/dashboard/contacts` | `family_contacts` |
@@ -149,5 +150,5 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/wishlists` | `wishlist_items` |
 | `/dashboard/workload` | `calendar_events`, `chore_assignments`, `chores`, `family_members`, `todo_items`, `workload_snapshots` |
 
-**133 features.** Cross-feature intelligence (capture→task, concierge
+**134 features.** Cross-feature intelligence (capture→task, concierge
 write-back, autopilot, knowledge graph) documented in `architecture.md`.

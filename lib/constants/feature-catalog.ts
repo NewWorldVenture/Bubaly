@@ -30,6 +30,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('messages', 'Messages', 'Suggested', 'free', '/dashboard/messages'),
   F('ai-assistant', 'AI Assistant', 'Suggested', 'basic', '/dashboard/assistant'),
   F('ai-concierge', 'AI Concierge', 'Suggested', 'basic', '/dashboard/concierge'),
+  F('ai-requests', 'Ask Bubaly', 'Suggested', 'basic', '/dashboard/concierge/runs'),
   F('trip-intelligence', 'Trip Intelligence', 'Suggested', 'basic', '/dashboard/trip-intel'),
   F('ai-front-desk', 'AI Front Desk', 'Suggested', 'basic', '/dashboard/front-desk'),
   F('daily-briefing', 'Daily Briefing', 'Suggested', 'plus', '/dashboard/briefing'),
