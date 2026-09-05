@@ -1,0 +1,65 @@
+name: Supabase reviewed forward release
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the pinned 0240-0252 release after the read-only preflight
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      NEXT_PUBLIC_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      APPLY_RELEASE: ${{ inputs.apply }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Release preview or atomic apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$APPLY_RELEASE" = "true" ]; then
+            node scripts/apply-production-forward-release.mjs --apply
+          else
+            node scripts/apply-production-forward-release.mjs
+          fi
+      - name: Verify household and AI schema
+        if: success() && inputs.apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if node scripts/audit-supabase-schema.mjs; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then sleep 5; fi
+          done
+          exit 1
+      - name: Capture metadata after release attempt
+        if: always()
+        run: node scripts/audit-production-migration-state.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-forward-release-audit
+          path: |
+            .next/production-schema-audit.json
+            .next/production-forward-release-result.json
+          retention-days: 3
+          if-no-files-found: warn
