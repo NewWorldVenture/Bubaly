@@ -1,0 +1,38 @@
+{
+  "id": "answer_question",
+  "priority": 90,
+  "match": {
+    "intent": [
+      "answer_question",
+      "daily_brief",
+      "other"
+    ],
+    "text": [
+      "what's on",
+      "when is",
+      "who has",
+      "do we have"
+    ],
+    "fallback": true
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "answer_question",
+      "confidence": 0.8,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Answer a question from the household records.",
+      "reasoning_summary": "This is a question, not a request to change anything, so I answered it from what is on file.",
+      "risk_level": "low",
+      "steps": [],
+      "followups": [],
+      "clarification": null,
+      "answer": "From what's on file: soccer practice is Wednesday at 4:00 PM at Field 3, and Maya is down for it."
+    }
+  },
+  "chat": {
+    "text": "From what's on file: soccer practice is Wednesday at 4:00 PM at Field 3, and Maya is down for it.",
+    "toolCalls": []
+  }
+}

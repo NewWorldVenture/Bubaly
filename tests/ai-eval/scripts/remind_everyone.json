@@ -1,0 +1,109 @@
+{
+  "id": "remind_everyone",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "remind_everyone"
+    ],
+    "text": [
+      "remind everyone",
+      "make sure everyone",
+      "tell everyone"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "remind_everyone",
+      "confidence": 0.92,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Make sure everyone knows what they need before tomorrow.",
+      "reasoning_summary": "Maya has practice at 4 and homework due, so she gets one reminder for both; Dana has the dentist at 9. Nobody else has anything tomorrow, so nobody else is bothered.",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "key": "tomorrow_events",
+          "step_type": "retrieve",
+          "tool_name": "calendar.searchEvents",
+          "description": "Read tomorrow's calendar",
+          "input": "{\"from\": \"2026-09-06T00:00:00\", \"to\": \"2026-09-06T23:59:00\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "homework",
+          "step_type": "retrieve",
+          "tool_name": "school.listHomeworkDue",
+          "description": "Check homework due tomorrow",
+          "input": "{\"from\": \"2026-09-05T12:00:00\", \"to\": \"2026-09-07T00:00:00\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "todos",
+          "step_type": "retrieve",
+          "tool_name": "tasks.searchTodos",
+          "description": "Read what is still to do",
+          "input": "{\"done\": false, \"due_before\": \"2026-09-06\", \"limit\": 50}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_maya",
+          "step_type": "act",
+          "tool_name": "notifications.notify",
+          "description": "Tell Maya about practice and the maths homework",
+          "input": "{\"title\": \"Tomorrow: practice at 4, maths due\", \"body\": \"Bring your cleats and water bottle for practice at 4. The maths worksheet is due in the morning.\", \"audience\": \"members\", \"member_names\": [\"Maya\"], \"type\": \"system\"}",
+          "depends_on": [
+            "tomorrow_events",
+            "homework",
+            "todos"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_dana",
+          "step_type": "act",
+          "tool_name": "notifications.notify",
+          "description": "Remind Dana about the dentist",
+          "input": "{\"title\": \"Tomorrow: dentist at 9:00\", \"body\": \"Your dentist appointment is at 9:00. Leave by 8:30.\", \"audience\": \"members\", \"member_names\": [\"Dana\"], \"type\": \"calendar_event\"}",
+          "depends_on": [
+            "tomorrow_events"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "timed_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Set a reminder for the practice pickup",
+          "input": "{\"title\": \"Pick up Maya from practice\", \"remind_at\": \"2026-09-06T17:15:00\", \"kind\": \"time\", \"assignee\": \"Dana\"}",
+          "depends_on": [
+            "tomorrow_events"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "I reminded Maya about practice at 4 and her maths homework, and Dana about the 9:00 dentist. Nobody else has anything tomorrow.",
+    "toolCalls": []
+  }
+}

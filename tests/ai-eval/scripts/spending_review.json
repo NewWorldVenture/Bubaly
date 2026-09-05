@@ -1,0 +1,134 @@
+{
+  "id": "spending_review",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "spending_review"
+    ],
+    "text": [
+      "spend too much",
+      "why did we spend",
+      "spending review",
+      "over budget"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "spending_review",
+      "confidence": 0.92,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Explain where this month's spending went against plan.",
+      "reasoning_summary": "I compared this month with plan and with last month across every category, merchant and recurring charge. The review lands with the parents; the numbers come straight from the transactions on file. One task asks for a look at the discretionary expenses.",
+      "risk_level": "low",
+      "steps": [
+        {
+          "key": "budget_vs_actual",
+          "step_type": "retrieve",
+          "tool_name": "finances.budgetVsActual",
+          "description": "Compare each budget with what was spent",
+          "input": "{\"month\": \"2026-09\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "by_category",
+          "step_type": "retrieve",
+          "tool_name": "finances.spendingByCategory",
+          "description": "Total spending by category",
+          "input": "{\"from\": \"2026-09-01\", \"to\": \"2026-09-30\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "previous_period",
+          "step_type": "retrieve",
+          "tool_name": "finances.comparePeriods",
+          "description": "Compare with last month",
+          "input": "{\"from\": \"2026-09-01\", \"to\": \"2026-09-30\", \"compare_from\": \"2026-08-01\", \"compare_to\": \"2026-08-31\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "merchants",
+          "step_type": "retrieve",
+          "tool_name": "finances.merchantMovement",
+          "description": "See which merchants moved",
+          "input": "{\"from\": \"2026-09-01\", \"to\": \"2026-09-30\", \"limit\": 15}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "recurring",
+          "step_type": "retrieve",
+          "tool_name": "finances.recurringChanges",
+          "description": "Check recurring charges that changed",
+          "input": "{\"months\": 3}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "unusual",
+          "step_type": "retrieve",
+          "tool_name": "finances.unusualTransactions",
+          "description": "Flag unusual transactions",
+          "input": "{\"from\": \"2026-09-01\", \"to\": \"2026-09-30\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "review_task",
+          "step_type": "act",
+          "tool_name": "tasks.createTodo",
+          "description": "Ask a parent to review the discretionary expenses",
+          "input": "{\"title\": \"Review this month's discretionary expenses\", \"due_date\": \"2026-09-08\", \"priority\": \"medium\"}",
+          "depends_on": [
+            "by_category",
+            "unusual"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_managers",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Let the parents know the review is ready",
+          "input": "{\"recipients\": \"managers\", \"type\": \"system\", \"title\": \"Spending review for September is ready\", \"body\": \"Bubaly compared the month with plan and with last month. Open the run to see the biggest drivers and the options.\"}",
+          "depends_on": [
+            "budget_vs_actual",
+            "by_category",
+            "previous_period",
+            "merchants",
+            "recurring",
+            "unusual"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "I compared this month with plan and with last month. Open the review to see the biggest drivers; I've also added a task to look at the discretionary expenses.",
+    "toolCalls": []
+  }
+}

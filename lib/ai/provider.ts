@@ -1,6 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
 import { modelCapabilities } from '@/lib/ai/models';
+import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
@@ -514,6 +515,9 @@ export function getProvider(): AIProvider {
  * model for the job instead of the one global default.
  */
 export async function resolveProvider(): Promise<AIProvider> {
+  // Same scripted-provider branch as `resolveProviderForTask`, so the chat
+  // surface and the planner are stubbed together or not at all.
+  if (isProviderStubEnabled()) return scriptedProvider();
   try {
     const { getAIConfig } = await import('@/lib/ai/settings');
     const { createServiceClient } = await import('@/lib/supabase/server');
