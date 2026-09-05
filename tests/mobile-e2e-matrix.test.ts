@@ -25,4 +25,23 @@ describe('mobile e2e matrix covers landscape + dark (M-036)', () => {
       expect(config, `project ${name}`).toContain(`name: '${name}'`);
     }
   });
+
+  // M-042: the matrix used to run only public marketing routes, so the SIGNED-IN
+  // app — bottom tab bar, safe areas, full-height panels, the Quick-capture FAB —
+  // had no runtime coverage at phone width at all. The `iphone` project carries
+  // authenticated.spec.ts for that. Dropping it back out would silently return the
+  // authed app to desktop-only verification, which is exactly how the gap arose.
+  it('runs the authenticated journey at phone viewport, in both engine branches', () => {
+    const iphoneProjects = [...config.matchAll(/name: 'iphone',\s*testMatch:\s*([^,]+),/g)];
+    expect(iphoneProjects.length, 'webkit + chromium-pinned iphone projects').toBe(2);
+    for (const [, testMatch] of iphoneProjects) {
+      expect(testMatch, 'iphone testMatch must include authenticated').toContain('authenticated');
+    }
+  });
+
+  it('does not spend the slow authed journey on every device', () => {
+    // One phone is the point: the journey signs up, onboards and writes a record.
+    const authedProjects = (config.match(/authenticated\)\\\.spec\\\.ts/g) ?? []).length;
+    expect(authedProjects, 'only the two iphone project declarations').toBe(2);
+  });
 });

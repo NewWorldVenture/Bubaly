@@ -882,12 +882,32 @@ Weighting (per the mission brief):
 - **Note:** the generator re-encodes five small icons byte-identically-but-not-bitwise on each
   run (±1 byte, no visual change); those were reverted to keep the diff honest.
 
+### M-042 — the signed-in app was never tested at a phone viewport (closes M-009a)
+- **Severity:** P1 (test coverage gap on the surface most likely to break). **Phase:** 2/23.
+- **Problem:** the device matrix ran `mobile|overflow|public` specs — all **public marketing
+  routes**. `authenticated.spec.ts` ran only under the desktop `chromium` project, so the
+  signed-in app (bottom tab bar, safe areas, full-height chat panels, the Quick-capture FAB
+  — everything M-004…M-039 fixed) had **no runtime coverage at phone width at all**. The
+  backlog blamed missing CI Supabase creds; that was stale, since the `e2e` job provisions
+  its own isolated stack.
+- **Fix:** the `iphone` project's `testMatch` becomes
+  `/(mobile|overflow|public|authenticated)\.spec\.ts/`. One phone, not all 8 — the journey
+  signs up, onboards and writes a record, so it is the slowest spec and the matrix already
+  multiplies by 8. It self-skips unless `E2E_AUTHENTICATED=1`, so nothing changes locally.
+- **Files:** `playwright.config.ts`.
+- **Evidence — run against a real isolated Supabase, not assumed:** started docker +
+  `supabase start -x edge-runtime` (the edge-runtime container cannot set rlimits in this
+  sandbox; it is not needed for the journey), all 252 migrations applied. The journey
+  passed at **393×852 in 5.5s** — sign-in → onboarding wizard → dashboard → Quick capture →
+  task persisted → RLS forged-authority probes. Full `--project=iphone` run: **55/55 green**.
+- **Result:** no mobile defect surfaced in the authed app. The touch-target, safe-area and
+  panel-height work from M-004…M-039 holds at phone width under a real browser — this
+  converts that from static-guard confidence to runtime confidence.
+
 ## Next steps (autonomous, in order)
-The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. M-006/M-007/M-010 are
-**done**; the remaining OPEN items are **M-009(a)** (authed journeys at phone
-viewports — one-line `testMatch` change, but needs a session that can run
-`supabase start` to validate before pushing to `main`) and **M-008** (full per-route
-iPad portrait/landscape walkthrough).
+The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. M-006/M-007/M-009/M-010 are
+**done**; the only remaining OPEN item is **M-008** (full per-route iPad
+portrait/landscape walkthrough — the hub-grid slice landed as M-035).
 
 > **⚠️ The weighting table at the top of this file is stale.** It still reads 0% for
 > "Navigation & touch" and "Forms & keyboard" despite M-004/M-005/M-019/M-021 and
