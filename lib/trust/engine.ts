@@ -194,7 +194,7 @@ export type Decision = {
   approvalModel?: ApprovalModel;
   requiredApprovals?: number;
   /** the rule path that produced this, for explainability */
-  basis: 'emergency' | 'deny_grant' | 'policy' | 'allow_grant' | 'delegation' | 'role_default' | 'risk_tier' | 'fallback';
+  basis: 'emergency' | 'deny_grant' | 'policy' | 'allow_grant' | 'delegation' | 'role_default' | 'risk_tier' | 'family_setting' | 'fallback';
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

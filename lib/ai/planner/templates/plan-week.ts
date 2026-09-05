@@ -54,8 +54,21 @@ export const planWeekTemplate: WorkflowTemplate = {
       modelFills: 'title and remind_at for the one thing most likely to be forgotten', optional: true,
     },
     {
+      // §13: the writes above were accepted; this asks the database whether the
+      // week actually looks the way the plan promised, so a run that half
+      // worked reports "6 of 8" instead of claiming success.
+      key: 'check_week', stepType: 'verify', description: 'Check the week really is planned',
+      dependsOn: ['plan_dinners', 'prep_task', 'reschedule'],
+      input: (ctx) => ({
+        checks: [
+          { kind: 'count_at_least', table: 'meal_plans', min: 3, label: 'Dinners are on the plan' },
+          { kind: 'no_calendar_conflicts', start: localTime(ctx.weekStartKey, 0), end: localTime(ctx.weekEndKey, 23, 59), label: 'Nothing overlaps this week' },
+        ],
+      }),
+    },
+    {
       key: 'family_summary', stepType: 'notify', description: 'Send the family the week at a glance',
-      dependsOn: ['plan_dinners', 'prep_task', 'key_reminder'],
+      dependsOn: ['check_week', 'plan_dinners', 'prep_task', 'key_reminder'],
       input: (ctx) => ({ recipients: 'family', type: 'system', title: `Your week of ${ctx.weekStartKey} is planned`, body: '' }),
       modelFills: 'body: the conflicts found, the dinners chosen, the tasks assigned and the reminders set, in two or three sentences',
     },

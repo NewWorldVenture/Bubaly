@@ -48,6 +48,8 @@ import {
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
+import { getAISettings } from '@/lib/services/ai-settings';
 import { getTool } from './registry';
 import type { ToolDefinition, ToolOutcome } from './types';
 
@@ -300,6 +302,18 @@ async function gate(
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
+  // What this household said Bubaly may do (0257). `getAISettings` answers the
+  // cautious defaults rather than failing, so a settings problem can only
+  // tighten the gate, never open it.
+  const settings = await getAISettings(scope);
+  const risk = effectiveRisk(settings, tool);
+  const behavior = behaviorForDomain(settings, tool.domain);
+  if (!settings.enabled && actorKind === 'ai_agent' && !tool.readOnly) {
+    // Switched off means switched off: no approval is opened, because there is
+    // nothing for a parent to release — the family turned Bubaly's hands off.
+    return { kind: 'denied', reason: 'Bubaly is switched off for this family in Settings → Bubaly AI.' };
+  }
+
   const { decision: engineDecision, approvalId: engineApprovalId } = await evaluateTrust(scope.db, scope.familyId, {
     actor: { kind: actorKind, id: actorId, role },
     domain: tool.domain,
@@ -311,7 +325,7 @@ async function gate(
     payload: { name: tool.name, args: input as Record<string, unknown> },
     context: {
       confidence,
-      tags: [`op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`],
+      tags: [`op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`],
     },
   });
 
@@ -323,10 +337,12 @@ async function gate(
   // elevation is a deliberate decision and keeps the floor.
   if (decision.basis === 'role_default' || decision.basis === 'fallback') {
     const risked = riskToDecision({
-      risk: tool.risk,
+      // The family's own override, floored for money and documents.
+      risk,
       actor: { kind: actorKind, id: actorId, role },
       domain: tool.domain,
       capability,
+      behavior,
       explicitAllow: false,
     });
     // Safety rail: a tier must never release work that already has an approval

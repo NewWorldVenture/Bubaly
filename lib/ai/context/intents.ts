@@ -170,7 +170,12 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
   //    date+time is treated as an event even without a verb.
   const voice = classifyVoiceCommand(q, now);
   const event = parseEvent(q, now);
-  if (voice.explicit || event.matched || /^(buy|purchase)\b/i.test(q)) {
+  // A question about a day is a question, not a capture: "What's on tomorrow?"
+  // parses as an event because it names a date, and without this guard Bubaly
+  // would answer by trying to put something ON the calendar. An explicit
+  // command ("remind me to… tomorrow") still captures — the phrasing says so.
+  const asksAQuestion = QUESTION_RE.test(q) && /\?\s*$/.test(q);
+  if (voice.explicit || (!asksAQuestion && (event.matched || /^(buy|purchase)\b/i.test(q)))) {
     const entities: Record<string, string> = { kind: voice.kind, text: voice.text };
     if (event.matched) {
       entities.startsAt = event.startsAt.toISOString();

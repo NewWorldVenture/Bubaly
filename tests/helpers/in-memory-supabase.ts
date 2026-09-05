@@ -405,6 +405,13 @@ export class InMemorySupabase {
 
   replace(name: string, rows: Row[]): void { this.tables.set(name, rows); }
 
+  /**
+   * Empty every table, so one instance can serve a suite that seeds the same
+   * household per case. The mocked `createServiceClient` closes over a single
+   * client, so tests cannot simply build a new one between cases.
+   */
+  reset(): void { this.tables.clear(); this.log.length = 0; }
+
   uniquesFor(name: string): string[][] { return this.options.uniques?.[name] ?? []; }
 
   /** The defaults every migration in this repository gives its tables: a uuid id and timestamps. */

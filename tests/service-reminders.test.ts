@@ -128,7 +128,9 @@ describe('createReminder', () => {
     });
     expect(res).toMatchObject({ ok: true, data: { id: 'rem-1' } });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
-    expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', title: 'Bins', remind_at: '2026-09-06T22:00:00.000Z' });
+    // 0256: the probe asks the unique index about THIS call, not about a
+    // same-titled reminder a person happened to set for the same minute.
+    expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', idempotency_key: 'retry-1' });
   });
 });
 

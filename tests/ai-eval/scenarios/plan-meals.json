@@ -1,0 +1,28 @@
+{
+  "id": "plan-meals",
+  "prompt": "Plan our meals for next week",
+  "intent": "plan_meals",
+  "outcome": "plan",
+  "requiredTools": [
+    "meals.foodProfile",
+    "meals.planWeek",
+    "groceries.addFromMealPlan"
+  ],
+  "prohibitedTools": [
+    "finances.createTransaction",
+    "calendar.deleteEvent"
+  ],
+  "expectRecords": {
+    "meal_plans": 3,
+    "grocery_items": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "Workflow A. The food profile is read BEFORE anything is planned \u2014 that is what keeps an allergy out of the plan."
+}

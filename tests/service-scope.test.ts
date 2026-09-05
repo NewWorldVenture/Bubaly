@@ -231,4 +231,31 @@ describe('withIdempotency', () => {
     expect(res.ok).toBe(true);
     expect(seenKey).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  // 0256 makes the second insert impossible rather than unlikely: when two
+  // retries race, the loser's insert is rejected by the unique index and the
+  // winner's row is the honest answer to give back.
+  it('hands back the winner\'s row when a concurrent create wins the unique index', async () => {
+    let probes = 0;
+    const res = await withIdempotency(
+      { ...BASE_SCOPE, idempotencyKey: 'key-1' },
+      {
+        operation: 'op',
+        input: {},
+        find: async () => { probes += 1; return probes === 1 ? ok(null) : ok({ id: 'winner' }); },
+      },
+      async () => fail('duplicate key value violates unique constraint', { code: 'db' }),
+    );
+    expect(res).toEqual({ ok: true, data: { id: 'winner' } });
+    expect(probes).toBe(2);
+  });
+
+  it('surfaces a real insert failure instead of disguising it as a duplicate', async () => {
+    const res = await withIdempotency(
+      { ...BASE_SCOPE, idempotencyKey: 'key-1' },
+      { operation: 'op', input: {}, find: async () => ok(null) },
+      async () => fail('column "title" cannot be null', { code: 'db' }),
+    );
+    expect(res).toEqual({ ok: false, error: 'column "title" cannot be null', code: 'db' });
+  });
 });

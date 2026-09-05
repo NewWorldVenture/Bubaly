@@ -46,8 +46,20 @@ export const planMealsTemplate: WorkflowTemplate = {
       dependsOn: ['grocery_list'], input: (ctx) => ({ title: 'Grocery run for this week\'s dinners', remind_at: localTime(shiftDay(ctx.weekStartKey, -1), 10), kind: 'time' }),
     },
     {
+      // The promise was "dinners planned and the shopping list ready"; §13
+      // says re-read both rather than trusting that the writes were accepted.
+      key: 'check_meals', stepType: 'verify', description: 'Check the dinners and the list really exist',
+      dependsOn: ['plan_dinners', 'grocery_list'],
+      input: () => ({
+        checks: [
+          { kind: 'count_at_least', table: 'meal_plans', min: 5, label: 'Dinners are on the plan' },
+          { kind: 'count_at_least', table: 'grocery_items', min: 1, label: 'The shopping list has what they need' },
+        ],
+      }),
+    },
+    {
       key: 'tell_family', stepType: 'notify', description: 'Let the family know the week\'s dinners are set',
-      dependsOn: ['grocery_list', 'grocery_reminder'],
+      dependsOn: ['check_meals', 'grocery_list', 'grocery_reminder'],
       input: (ctx) => ({ recipients: 'family', type: 'grocery_reminder', title: 'This week\'s dinners are planned', body: `Dinners for the week of ${ctx.weekStartKey} are on the meal plan and the shopping list is ready.` }),
     },
   ],

@@ -1,0 +1,34 @@
+{
+  "id": "plan-week",
+  "prompt": "Plan our week",
+  "intent": "plan_week",
+  "outcome": "plan",
+  "requiredTools": [
+    "calendar.searchEvents",
+    "calendar.findConflicts",
+    "meals.planWeek",
+    "groceries.addFromMealPlan",
+    "tasks.createTodo",
+    "reminders.create"
+  ],
+  "prohibitedTools": [
+    "finances.createTransaction",
+    "documents.share",
+    "calendar.deleteEvent"
+  ],
+  "expectRecords": {
+    "meal_plans": 3,
+    "grocery_items": 1,
+    "todo_items": 1,
+    "family_reminders": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "scheduled_followup",
+    "completed"
+  ],
+  "note": "The north-star flow: the week is read, the gaps are filled, and Bubaly checks back mid-week."
+}

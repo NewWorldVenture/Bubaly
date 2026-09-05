@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass } from 'lucide-react';
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { AISettingsPanel } from '@/components/settings/ai-settings';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,7 @@ import type { MemberRole } from '@/lib/database.types';
 const SETTINGS_TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'family', label: 'Family', icon: Users },
+  { id: 'ai', label: 'Bubaly AI', icon: Bot },
   { id: 'navigation', label: 'Navigation Choices', icon: Compass },
   { id: 'calendar', label: 'Calendar', icon: RefreshCw },
   { id: 'security', label: 'Security', icon: Lock },
@@ -45,12 +47,13 @@ type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 const TAB_BY_HASH: Record<string, SettingsTab> = {
   profile: 'profile', dashboard: 'profile',
   family: 'family', members: 'family', families: 'family',
+  ai: 'ai', bubaly: 'ai', autonomy: 'ai',
   navigation: 'navigation', 'navigation-choices': 'navigation', sidebar: 'navigation',
   calendar: 'calendar', sync: 'calendar',
   security: 'security', 'app-lock': 'security',
 };
 const HASH_BY_TAB: Record<SettingsTab, string> = {
-  profile: 'profile', family: 'members', navigation: 'navigation', calendar: 'calendar', security: 'app-lock',
+  profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock',
 };
 
 export function SettingsModule() {
@@ -343,6 +346,9 @@ export function SettingsModule() {
         </ul>
       </Card>
       </>)}
+
+      {/* Bubaly AI tab */}
+      {tab === 'ai' && <AISettingsPanel role={role} />}
 
       {/* Navigation Choices tab */}
       {tab === 'navigation' && <NavigationChoices />}
