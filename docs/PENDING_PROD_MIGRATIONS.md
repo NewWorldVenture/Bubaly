@@ -26,7 +26,7 @@ from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
 
-`0255`, `0256` and `0257` are all outside the unchanged pinned bundle. Code
+`0255`, `0256`, `0257` and `0258` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
 application. A separately
 reviewed hash-pinned release, a new successful preview, the required matrix and
@@ -227,6 +227,7 @@ injection, run-event forgery and self-approval. Guard: `tests/ai-runtime-schema.
 | 0255 | `0255_ai_runtime_lockdown.sql` | Runtime INSERT lockdown preserving main's pending-decision, accounting, active-member, current-step, lease-expiry and idempotency guards; approvals require a non-null active caller member and no request/run/step/payload linkage; adds `ai_requests.client_request_id` + unique `(family_id, client_request_id)`; makes `ai_conversations`/`ai_messages` owner-only | **HELD.** This is runtime write-lockdown with conversation/message ownership, not the previously planned broader requester-privacy fix. The raw request/context/plan/run/tool/event privacy gap requires a separate reviewed follow-up and is not implemented here. No production apply is authorized; the pinned release bundle remains unchanged and held. |
 | 0256 | `0256_idempotency_keys.sql` | `idempotency_key` + partial unique `(family_id, idempotency_key)` on `calendar_events`, `family_reminders`, `todo_items`, `chore_assignments`, `meal_plans`, `grocery_items`; `fingerprint`, `source`, `receipt_document_id` (+ partial unique fingerprint) on `transactions` | §30/§45 duplicate protection stops being a probe the app hopes to win: a retried tool call cannot create a second event, reminder or to-do, and a receipt scanned twice cannot become two charges. Guards: `tests/0256-idempotency.test.ts`, `tests/duplicate-protection.test.ts` |
 | 0257 | `0257_family_ai_settings.sql` | `family_ai_settings` (one row per family: `enabled`, `behavior`, `category_behavior`, `risk_overrides`, `child_channels`, `memory_enabled`, quiet hours), member-read/manager-write RLS, seeded by `handle_new_family()` and backfilled | §11/§12: Settings → Bubaly AI. A family dials autonomy per category and can raise a tool's risk tier; money and documents keep `medium` as a floor in code. Defaults reproduce today's behaviour exactly. Guards: `tests/0257-ai-settings-seed.test.ts`, `tests/ai-settings.test.ts` |
+| 0258 | `0258_home_briefs_kind.sql` | `home_briefs.kind` ('daily'/'evening'), `handled` jsonb, `delivered_at`, and a unique `(family_id, as_of_date, kind)` | §49: the morning brief and the evening recap can coexist, "Bubaly handled" carries the runs that really completed, and a retried delivery cron tells the family once. Guards: `tests/0258-home-briefs.test.ts`, `tests/briefing-store.test.ts` |
 
 **Read the RLS change before applying.** 0251 replaces the permissive `FOR ALL
 is_family_member` policies on `family_automation_runs` (0022) and

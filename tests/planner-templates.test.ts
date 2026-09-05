@@ -29,9 +29,9 @@ function ctxOn(todayKey: string, extra: Partial<Parameters<typeof templateContex
 describe('workflow templates are runnable skeletons', () => {
   const ctx = ctxOn('2026-09-05');
 
-  it('covers the seven signature workflows plus the readiness sweep', () => {
+  it('covers the seven signature workflows plus the two proactive asks', () => {
     expect(allTemplates().map((t) => t.intent).sort()).toEqual([
-      'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
+      'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
     ]);
     for (const intent of INTENT_KEYS) {
       const template = templateFor(intent);
