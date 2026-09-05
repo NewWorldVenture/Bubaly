@@ -26,6 +26,19 @@ describe('middleware public API boundary', () => {
     expect(middleware).toContain("'/api/health'");
   });
 
+  it('excludes crawler and PWA files from the matcher so they are never guarded', () => {
+    // robots.txt/sitemap.xml are fetched by search engines and manifest.webmanifest/
+    // sw.js by PWA install + service-worker registration — all unauthenticated. If
+    // the matcher guards them, middleware 307s each to /login and indexing, install,
+    // offline mode, and web push break silently. Regression guard for that exact bug.
+    // Backslashes are stripped so the assertion reads as filenames, not as the
+    // regex escaping they carry inside the matcher string.
+    const matcher = middleware.slice(middleware.indexOf('matcher:')).replace(/\\/g, '');
+    for (const file of ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js']) {
+      expect(matcher, file).toContain(file);
+    }
+  });
+
   it('keeps the route-level boundary explicit in the source', () => {
     expect(middleware).toContain('rate-limit');
     expect(middleware).toContain('Provider webhooks');

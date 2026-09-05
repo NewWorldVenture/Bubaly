@@ -96,5 +96,13 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|svg|ico)$).*)'],
+  // Static, always-public files bypass middleware entirely — they carry no
+  // session and must stay reachable signed-out. robots.txt and sitemap.xml are
+  // fetched by crawlers; manifest.webmanifest and sw.js by PWA install and
+  // service-worker registration. Routing any of them through the auth guard
+  // 307s them to /login, which silently breaks indexing, install, offline mode,
+  // and web push — with no error anywhere to notice.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|sw\\.js|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico)$).*)',
+  ],
 };
