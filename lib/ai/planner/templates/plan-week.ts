@@ -17,6 +17,7 @@ export const planWeekTemplate: WorkflowTemplate = {
     'Keep every retrieve step independent so they run together.',
     'Plan dinners only for days the meal plan in the context leaves empty; drop the meal steps when the week is already planned.',
     'Add one prep task per commitment that needs something done beforehand (a form, a ride, equipment), with the person it is for as `assignee`; repeat the prep_task step with keys prep_task_2, prep_task_3 and so on.',
+    'When a task is not for one particular person, assign it to the adult the context\'s workload report shows carrying the least — spreading the mental load is the point of the week, not just filling the calendar.',
     'Move a calendar event only to resolve a genuine overlap shown in the context, and only when the context shows a free slot; otherwise drop the reschedule step and mention the clash in the summary.',
     'The family summary must name the conflicts found, the meals chosen and the tasks assigned, in plain words.',
   ],

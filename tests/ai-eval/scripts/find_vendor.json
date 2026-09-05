@@ -1,0 +1,127 @@
+{
+  "id": "find_vendor",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "find_vendor"
+    ],
+    "text": [
+      "find a plumber",
+      "find us a plumber",
+      "we need a plumber",
+      "who should we call about the leak"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "find_vendor",
+      "confidence": 0.94,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Get the leaking kitchen tap fixed: find the right trade and set up the call.",
+      "reasoning_summary": "This is a plumbing job. You used Reliable Plumbing for the bathroom last spring, so I opened a maintenance record against them, left a task to book the visit and a reminder to confirm it. Choosing and paying a tradesperson is yours to do, so I did not contact anyone.",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "key": "trade",
+          "step_type": "retrieve",
+          "tool_name": "home.tradeFromIssue",
+          "description": "Work out which trade this needs",
+          "input": "{\"issue\": \"The kitchen tap is leaking under the sink\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "contractors",
+          "step_type": "retrieve",
+          "tool_name": "home.listContractors",
+          "description": "Check the tradespeople on file",
+          "input": "{\"trade\": \"plumber\"}",
+          "depends_on": [
+            "trade"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "last_service",
+          "step_type": "retrieve",
+          "tool_name": "home.lastServiceByTrade",
+          "description": "See who did this kind of work last time",
+          "input": "{\"trade\": \"plumber\"}",
+          "depends_on": [
+            "trade"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "maintenance_record",
+          "step_type": "act",
+          "tool_name": "home.createMaintenanceTask",
+          "description": "Open a home-maintenance record for the repair",
+          "input": "{\"title\": \"Fix the leaking kitchen tap\", \"description\": \"Leaking under the sink; needs a plumber.\", \"priority\": \"high\", \"due_at\": \"2026-09-12T09:00:00\"}",
+          "depends_on": [
+            "contractors",
+            "last_service"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "contact_task",
+          "step_type": "act",
+          "tool_name": "tasks.createTodo",
+          "description": "Ask a parent to book the repair",
+          "input": "{\"title\": \"Call Reliable Plumbing about the kitchen tap\", \"due_date\": \"2026-09-08\", \"priority\": \"high\", \"assignee\": \"Dan\"}",
+          "depends_on": [
+            "maintenance_record"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "follow_up_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Remind a parent to confirm the appointment",
+          "input": "{\"title\": \"Confirm the plumber for the kitchen tap\", \"remind_at\": \"2026-09-09T09:00:00\", \"kind\": \"time\"}",
+          "depends_on": [
+            "contact_task"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_managers",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Tell the parents what is set up",
+          "input": "{\"recipients\": \"managers\", \"type\": \"system\", \"title\": \"Plumber for the kitchen tap\", \"body\": \"I opened a maintenance record for the leaking tap and left you a task to call Reliable Plumbing, who did the bathroom last spring. A reminder will nudge you to confirm the appointment.\"}",
+          "depends_on": [
+            "contact_task",
+            "follow_up_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [],
+      "clarification": null,
+      "answer": null
+    }
+  },
+  "chat": {
+    "text": "That is a plumbing job. Reliable Plumbing did your bathroom last spring \u2014 I left you a task to call them and a reminder to confirm the appointment.",
+    "toolCalls": []
+  }
+}

@@ -1,0 +1,276 @@
+{
+  "id": "prepare_vacation",
+  "priority": 10,
+  "match": {
+    "intent": [
+      "prepare_vacation"
+    ],
+    "text": [
+      "prepare for our trip",
+      "prepare for our vacation",
+      "get ready for our trip",
+      "are we ready for our trip",
+      "packing list",
+      "trip: autumn half-term in lisbon",
+      "autumn half-term in lisbon"
+    ]
+  },
+  "structured": {
+    "request_intent": {
+      "intent": "prepare_vacation",
+      "confidence": 0.93,
+      "entities": []
+    },
+    "family_plan": {
+      "objective": "Get the family ready for the trip: documents, packing, tasks, calendar and home prep.",
+      "reasoning_summary": "I put the trip on file, built the plan around it, made a packing list for each traveller and put the travel dates on the calendar. The passport that expires inside six months is the one thing that needs a person, so it is a task with a reminder two days before we leave.",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "key": "trip",
+          "step_type": "retrieve",
+          "tool_name": "trips.getTrip",
+          "description": "Read the trip details and travellers",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\"}",
+          "depends_on": [],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "documents",
+          "step_type": "retrieve",
+          "tool_name": "trips.documentsRisk",
+          "description": "Check passports and travel documents",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\"}",
+          "depends_on": [
+            "trip"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "conflicts",
+          "step_type": "retrieve",
+          "tool_name": "trips.commitmentConflicts",
+          "description": "Find commitments that overlap the trip",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\"}",
+          "depends_on": [
+            "trip"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "build_plan",
+          "step_type": "act",
+          "tool_name": "trips.buildPlan",
+          "description": "Build the trip plan: activities, budget and checklists",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\", \"preferences\": \"A relaxed week with a couple of day trips and food the children will eat.\"}",
+          "depends_on": [
+            "trip"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "packing_lists",
+          "step_type": "act",
+          "tool_name": "trips.createPackingList",
+          "description": "Create a packing list for each traveller",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\", \"per_traveler\": true}",
+          "depends_on": [
+            "trip"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "calendar",
+          "step_type": "act",
+          "tool_name": "trips.syncToCalendar",
+          "description": "Put departure and return on the calendar",
+          "input": "{\"vacation_id\": \"00000000-0000-4000-8000-00000000ab01\"}",
+          "depends_on": [
+            "trip",
+            "conflicts"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "passport_task",
+          "step_type": "act",
+          "tool_name": "tasks.createTodo",
+          "description": "Renew the passport that expires too soon",
+          "input": "{\"title\": \"Renew Maya's passport before Lisbon\", \"due_date\": \"2026-10-10\", \"priority\": \"high\", \"assignee\": \"Dan\"}",
+          "depends_on": [
+            "documents"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "critical_reminder",
+          "step_type": "act",
+          "tool_name": "reminders.create",
+          "description": "Remind the family about the critical items two days before",
+          "input": "{\"title\": \"Trip in two days: passports, tickets and packing\", \"remind_at\": \"2026-10-22T18:00:00\", \"kind\": \"time\", \"priority\": \"high\"}",
+          "depends_on": [
+            "passport_task",
+            "packing_lists"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "check_trip",
+          "step_type": "verify",
+          "tool_name": null,
+          "description": "Check the trip is really on the calendar and reminded",
+          "input": "{\"checks\": [{\"kind\": \"count_at_least\", \"table\": \"calendar_events\", \"min\": 1, \"label\": \"Travel dates are on the calendar\"}, {\"kind\": \"count_at_least\", \"table\": \"family_reminders\", \"min\": 1, \"label\": \"The pre-trip reminder is set\"}]}",
+          "depends_on": [
+            "calendar",
+            "critical_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        },
+        {
+          "key": "tell_family",
+          "step_type": "notify",
+          "tool_name": null,
+          "description": "Tell the family what is ready and what is still open",
+          "input": "{\"recipients\": \"family\", \"type\": \"system\", \"title\": \"Lisbon trip prep is under way\", \"body\": \"The travel dates are on the calendar, everyone has a packing list, and the only thing left is Maya's passport \\u2014 that one is a task with a reminder two days before we go.\"}",
+          "depends_on": [
+            "check_trip",
+            "critical_reminder"
+          ],
+          "condition": null,
+          "approval_required": null,
+          "verify": null
+        }
+      ],
+      "followups": [
+        {
+          "after": "2026-10-22T09:00:00",
+          "prompt": "Two days before Lisbon: check the packing lists and tasks, and escalate anything critical that is still open."
+        }
+      ],
+      "clarification": null,
+      "answer": null
+    },
+    "vacation_plan": {
+      "activities": [
+        {
+          "name": "Tram 28 ride through Alfama",
+          "category": "sightseeing",
+          "location": "Alfama",
+          "family_friendly": true,
+          "cost_usd": 12
+        },
+        {
+          "name": "Ocean\u00e1rio de Lisboa",
+          "category": "museum",
+          "location": "Parque das Na\u00e7\u00f5es",
+          "family_friendly": true,
+          "cost_usd": 90
+        },
+        {
+          "name": "Day trip to Sintra",
+          "category": "day_trip",
+          "location": "Sintra",
+          "family_friendly": true,
+          "cost_usd": 60
+        },
+        {
+          "name": "Past\u00e9is de Bel\u00e9m and the riverside",
+          "category": "food",
+          "location": "Bel\u00e9m",
+          "family_friendly": true,
+          "cost_usd": 25
+        }
+      ],
+      "itinerary": [
+        {
+          "day": 1,
+          "day_part": "afternoon",
+          "title": "Arrive and settle in",
+          "kind": "travel"
+        },
+        {
+          "day": 1,
+          "day_part": "evening",
+          "title": "Dinner near the apartment",
+          "kind": "meal"
+        },
+        {
+          "day": 2,
+          "day_part": "morning",
+          "title": "Tram 28 through Alfama",
+          "kind": "activity"
+        },
+        {
+          "day": 2,
+          "day_part": "afternoon",
+          "title": "Quiet time at the apartment",
+          "kind": "free_time"
+        },
+        {
+          "day": 3,
+          "day_part": "all_day",
+          "title": "Day trip to Sintra",
+          "kind": "activity"
+        },
+        {
+          "day": 4,
+          "day_part": "morning",
+          "title": "Ocean\u00e1rio de Lisboa",
+          "kind": "activity"
+        },
+        {
+          "day": 5,
+          "day_part": "afternoon",
+          "title": "Past\u00e9is de Bel\u00e9m and the riverside",
+          "kind": "meal"
+        },
+        {
+          "day": 7,
+          "day_part": "morning",
+          "title": "Pack and fly home",
+          "kind": "travel"
+        }
+      ],
+      "budget": [
+        {
+          "category": "lodging",
+          "planned_usd": 900
+        },
+        {
+          "category": "food",
+          "planned_usd": 600
+        },
+        {
+          "category": "activities",
+          "planned_usd": 300
+        },
+        {
+          "category": "transportation",
+          "planned_usd": 200
+        }
+      ]
+    }
+  },
+  "chat": {
+    "text": "The Lisbon trip is on file with the dates on the calendar and a packing list for everyone. Maya's passport expires inside six months, so that is a task with a reminder two days before we leave.",
+    "toolCalls": []
+  }
+}

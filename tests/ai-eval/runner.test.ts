@@ -43,6 +43,11 @@ const PARENT = '00000000-0000-4000-8000-00000000me01';
 const CHILD = '00000000-0000-4000-8000-00000000me02';
 const ADULT = '00000000-0000-4000-8000-00000000me03';
 const ADULT_USER = '00000000-0000-4000-8000-0000000000a2';
+/** The trip the vacation scenario prepares for. Fixed, because a scripted plan
+ *  carries its `vacation_id` literally — the executor passes `input_json`
+ *  through verbatim, which is exactly why a real plan reads the id from the
+ *  context rather than from an earlier step's output. */
+const TRIP = '00000000-0000-4000-8000-00000000ab01';
 const NOW = new Date('2026-09-05T15:00:00Z');
 
 const db: InMemorySupabase = createInMemorySupabase({
@@ -105,6 +110,29 @@ function seedHousehold() {
     family_id: FAMILY, title: 'Soccer practice', starts_at: '2026-09-16T20:00:00Z', ends_at: '2026-09-16T21:30:00Z',
     all_day: false, category: 'sports', location: null, assignee_id: CHILD, description: null, created_by: USER,
   }]);
+  // A trip already on file, with its travellers: "prepare for our trip" is
+  // asked about a trip the family has, not one Bubaly invents.
+  db.seed('vacations', [{
+    id: TRIP, family_id: FAMILY, title: 'Autumn half-term in Lisbon', destination: 'Lisbon',
+    kind: 'leisure', status: 'planning', start_date: '2026-10-24', end_date: '2026-10-31',
+    timezone: 'Europe/Lisbon', is_international: true, currency: 'USD', budget_cents: 250000,
+    cover_image_url: null, description: null, notes: null, created_by: USER,
+  }]);
+  db.seed('vacation_members', [
+    { vacation_id: TRIP, family_id: FAMILY, member_id: PARENT, role: 'traveler' },
+    { vacation_id: TRIP, family_id: FAMILY, member_id: CHILD, role: 'traveler' },
+  ]);
+  // Maya's passport expires inside six months of departure — the risk the
+  // vacation workflow is supposed to catch and turn into a task.
+  db.seed('vacation_documents', [{
+    vacation_id: TRIP, family_id: FAMILY, member_id: CHILD, kind: 'passport',
+    label: "Maya's passport", expires_on: '2027-01-15', document_id: null, notes: null,
+  }]);
+  // A plumber the family used before, so "find a plumber" has a real answer.
+  db.seed('home_contractors', [{
+    family_id: FAMILY, name: 'Reliable Plumbing', trade: 'plumber', company: 'Reliable Plumbing Ltd',
+    phone: '555-0100', email: null, website: null, rating: 5, is_preferred: true, notes: null, created_by: USER,
+  }]);
 }
 
 beforeAll(() => { if (!process.env.EVAL_DEBUG) vi.spyOn(console, 'error').mockImplementation(() => {}); });
@@ -141,7 +169,7 @@ describe('AI eval scenarios', () => {
       const planId = result.data.planId as string;
       const steps = db.table('ai_plan_steps').filter((s) => s.plan_id === planId);
       const tools = steps.map((s) => s.tool_name).filter(Boolean) as string[];
-      for (const tool of scenario.requiredTools) expect(tools, `${scenario.id} must use ${tool}`).toContain(tool);
+      for (const tool of scenario.requiredTools) expect(tools, `${scenario.id} must use ${tool}; the plan kept: ${tools.join(', ')}`).toContain(tool);
       for (const tool of scenario.prohibitedTools) expect(tools, `${scenario.id} must never use ${tool}`).not.toContain(tool);
 
       const runId = result.data.runId as string;
