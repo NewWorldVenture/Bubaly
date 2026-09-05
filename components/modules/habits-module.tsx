@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import {
   Flame, Plus, Trash2, Check, Sparkles, X, Pencil, Trophy, Target, CalendarCheck, Archive,
+  Minus,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -23,6 +24,8 @@ import {
   currentStreak, longestStreak, completionRate, heatmap, isDoneToday, toISODate, type HabitLike,
 } from '@/lib/habits/streaks';
 import type { HabitCoaching } from '@/lib/habits/ai';
+import { HABIT_PRESETS, PRESET_CATEGORIES, presetToHabit, presetTarget, dayProgress, doneDates, hydrationNudge, type HabitPreset } from '@/lib/habits/presets';
+import { ageOn } from '@/lib/members/age';
 
 type Habit = Tables<'habits'>;
 type HabitLog = Tables<'habit_logs'>;
@@ -72,15 +75,14 @@ export function HabitsModule() {
         .order('log_date', { ascending: false }),
   });
 
+  // A day counts once the habit's daily target is met, so a half-finished
+  // "8 cups of water" day does not extend the streak (TODO-0416).
   const logsByHabit = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const l of logsQ.data) {
-      const arr = map.get(l.habit_id) ?? [];
-      arr.push(l.log_date);
-      map.set(l.habit_id, arr);
-    }
+    for (const h of habitsQ.data) map.set(h.id, doneDates(logsQ.data, h.id, h.cadence === 'daily' ? h.target_per_period : 1));
     return map;
-  }, [logsQ.data]);
+  }, [logsQ.data, habitsQ.data]);
+  const countTarget = (h: Habit) => (h.cadence === 'daily' ? h.target_per_period : 1);
 
   async function toggleToday(habit: Habit) {
     const supabase = createClient();
@@ -98,6 +100,28 @@ export function HabitsModule() {
       });
       if (error) return toastError(describeDbError(error));
       success('Nice! Checked in for today 🔥');
+    }
+    void logsQ.refresh();
+  }
+
+  /** +1 / −1 for count habits (cups of water, refills). One row per day is
+   *  updated in place; the day is deleted when it drops to zero. */
+  async function logCount(habit: Habit, delta: number) {
+    const supabase = createClient();
+    const existing = logsQ.data.filter((l) => l.habit_id === habit.id && l.log_date === today).sort((a, b) => b.count - a.count)[0];
+    if (existing) {
+      const next = Math.max(0, existing.count + delta);
+      const { error } = next === 0
+        ? await supabase.from('habit_logs').delete().eq('id', existing.id)
+        : await supabase.from('habit_logs').update({ count: next }).eq('id', existing.id);
+      if (error) return toastError(describeDbError(error));
+      if (next >= countTarget(habit) && existing.count < countTarget(habit)) success(`${habit.title}: target met 💧`);
+    } else {
+      if (delta <= 0) return;
+      const { error } = await supabase.from('habit_logs').insert({
+        family_id: familyId, habit_id: habit.id, member_id: habit.member_id ?? selfMember?.id ?? null, log_date: today, count: delta, created_by: userId,
+      });
+      if (error) return toastError(describeDbError(error));
     }
     void logsQ.refresh();
   }
@@ -169,8 +193,9 @@ export function HabitsModule() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {habits.map((h) => (
             <HabitCard key={h.id} habit={h} today={today} logDates={logsByHabit.get(h.id) ?? []}
+              progress={countTarget(h) > 1 ? dayProgress(logsQ.data, h.id, today, countTarget(h)) : null}
               memberName={members.find((m) => m.id === h.member_id)?.display_name}
-              onToggle={() => toggleToday(h)} onEdit={() => setEditing(h)} onArchive={() => archive(h)} />
+              onToggle={() => toggleToday(h)} onCount={(d) => logCount(h, d)} onEdit={() => setEditing(h)} onArchive={() => archive(h)} />
           ))}
         </div>
       )}
@@ -223,9 +248,9 @@ function StatCard({ icon: Icon, label, value }: { icon: typeof Flame; label: str
   );
 }
 
-function HabitCard({ habit, today, logDates, memberName, onToggle, onEdit, onArchive }: {
-  habit: Habit; today: string; logDates: string[]; memberName?: string;
-  onToggle: () => void; onEdit: () => void; onArchive: () => void;
+function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onCount, onEdit, onArchive }: {
+  habit: Habit; today: string; logDates: string[]; progress: { count: number; target: number; pct: number; done: boolean } | null; memberName?: string;
+  onToggle: () => void; onCount: (delta: number) => void; onEdit: () => void; onArchive: () => void;
 }) {
   const c = colorOf(habit.color);
   const h: HabitLike = { cadence: habit.cadence, target_per_period: habit.target_per_period, weekdays: habit.weekdays };
@@ -233,7 +258,8 @@ function HabitCard({ habit, today, logDates, memberName, onToggle, onEdit, onArc
   const best = longestStreak(h, logDates);
   const rate = Math.round(completionRate(h, logDates, today, 30) * 100);
   const cells = heatmap(h, logDates, today, 28);
-  const done = isDoneToday(logDates, today);
+  const done = progress ? progress.done : isDoneToday(logDates, today);
+  const nudge = progress ? hydrationNudge(progress, new Date().getHours()) : null;
 
   return (
     <div className={cn('group flex flex-col rounded-2xl border-2 p-4', c.soft, c.ring)}>
@@ -244,16 +270,33 @@ function HabitCard({ habit, today, logDates, memberName, onToggle, onEdit, onArc
             <p className="truncate font-semibold">{habit.title}</p>
           </div>
           <p className="mt-0.5 text-xs text-muted">
-            {habit.cadence === 'weekly' ? `${habit.target_per_period}× / week` : 'Daily'}
+            {habit.cadence === 'weekly' ? `${habit.target_per_period}× / week` : habit.target_per_period > 1 ? `${habit.target_per_period}× / day` : 'Daily'}
             {memberName ? ` · ${memberName}` : ' · Family'}
           </p>
         </div>
+        {progress ? (
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button onClick={() => onCount(-1)} aria-label="Remove one" disabled={progress.count === 0} className={cn('flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition hover:border-current disabled:opacity-40', c.text)}><Minus className="h-4 w-4" /></button>
+            <button onClick={() => onCount(1)} aria-label="Add one" className={cn('flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border-2 px-2 text-sm font-semibold transition', done ? cn(c.dot, 'border-transparent text-white') : cn('border-border hover:border-current', c.text))}><Plus className="h-4 w-4" />1</button>
+          </div>
+        ) : (
         <button onClick={onToggle} aria-label="Toggle today"
           className={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
             done ? cn(c.dot, 'border-transparent text-white') : cn('border-border text-muted hover:border-current', c.text))}>
           <Check className="h-4 w-4" />
         </button>
+        )}
       </div>
+
+      {progress && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="font-semibold">{progress.count} / {progress.target} today</span>
+            {nudge && <span className={cn(progress.done ? 'text-emerald-500' : 'text-amber-500')}>{nudge}</span>}
+          </div>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border/50"><div className={cn('h-full rounded-full transition-all', c.dot)} style={{ width: `${progress.pct}%` }} /></div>
+        </div>
+      )}
 
       {/* streak + stats */}
       <div className="mt-3 flex items-center gap-4 text-xs">
@@ -289,11 +332,21 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
 }) {
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const [title, setTitle] = useState(habit?.title ?? '');
+  const [description, setDescription] = useState(habit?.description ?? '');
   const [color, setColor] = useState(habit?.color ?? 'violet');
   const [cadence, setCadence] = useState<'daily' | 'weekly'>(habit?.cadence ?? 'daily');
   const [target, setTarget] = useState(habit?.target_per_period ?? (habit?.cadence === 'weekly' ? 3 : 1));
   const [memberId, setMemberId] = useState<string | null>(habit ? habit.member_id : defaultMemberId);
   const [weekdays, setWeekdays] = useState<number[]>(habit?.weekdays ?? []);
+  const [presetKey, setPresetKey] = useState<string | null>(null);
+  const [presetCategory, setPresetCategory] = useState<HabitPreset['category']>('hydration');
+  const memberAge = ageOn(members.find((m) => m.id === memberId)?.birthday, new Date());
+
+  function applyPreset(preset: HabitPreset) {
+    const row = presetToHabit(preset, { id: memberId, age: memberAge });
+    setTitle(row.title); setDescription(row.description ?? ''); setColor(row.color); setCadence(row.cadence); setTarget(row.target_per_period); setWeekdays([]); setPresetKey(preset.key);
+  }
 
   function toggleWeekday(i: number) {
     setWeekdays((w) => (w.includes(i) ? w.filter((x) => x !== i) : [...w, i].sort()));
@@ -301,15 +354,14 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const title = String(form.get('title') ?? '').trim();
-    const description = String(form.get('description') ?? '').trim() || null;
-    if (!title) return toastError('Give your habit a name');
+    const name = title.trim();
+    const detail = description.trim() || null;
+    if (!name) return toastError('Give your habit a name');
     setLoading(true);
     const supabase = createClient();
     const patch = {
-      title, description, color, cadence,
-      target_per_period: cadence === 'weekly' ? Math.max(1, target) : 1,
+      title: name, description: detail, color, cadence,
+      target_per_period: Math.max(1, Math.min(cadence === 'weekly' ? 7 : 30, target)),
       member_id: memberId,
       weekdays: cadence === 'daily' ? weekdays : [],
     };
@@ -325,11 +377,30 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
   return (
     <Modal open onClose={onClose} title={habit ? 'Edit Habit' : 'New Habit'}>
       <form onSubmit={onSubmit} className="space-y-4">
+        {!habit && (
+          <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-semibold text-brand-text">Start from a preset</span>
+              {PRESET_CATEGORIES.map((c) => (
+                <button key={c.value} type="button" onClick={() => setPresetCategory(c.value)} className={cn('rounded-full px-2 py-0.5 text-[11px]', presetCategory === c.value ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>{c.label}</button>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {HABIT_PRESETS.filter((p) => p.category === presetCategory).map((p) => (
+                <button key={p.key} type="button" onClick={() => applyPreset(p)} aria-pressed={presetKey === p.key}
+                  className={cn('rounded-full border px-3 py-1 text-xs coarse:min-h-9', presetKey === p.key ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted hover:text-fg')}>
+                  {p.emoji} {p.title}{p.target !== 1 ? ` · ${presetTarget(p, memberAge)}${p.unit ? ` ${p.unit}` : '×'}/day` : ''}
+                </button>
+              ))}
+            </div>
+            {presetCategory === 'hydration' && <p className="mt-2 text-[11px] text-muted">Water targets follow the member’s age{memberAge !== null ? ` (${memberAge}: ${presetTarget(HABIT_PRESETS[0], memberAge)} cups a day)` : ''}; log each cup with +1 on the card.</p>}
+          </div>
+        )}
         <Field label="Habit">
-          {(id) => <Input id={id} name="title" defaultValue={habit?.title ?? ''} placeholder="e.g. Morning walk, Read 20 min" autoFocus />}
+          {(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Morning walk, Read 20 min" autoFocus />}
         </Field>
         <Field label="Description (optional)">
-          {(id) => <Textarea id={id} name="description" defaultValue={habit?.description ?? ''} placeholder="Why does this matter to you?" className="min-h-[60px]" />}
+          {(id) => <Textarea id={id} name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Why does this matter to you?" className="min-h-[60px]" />}
         </Field>
 
         <div>
@@ -361,6 +432,10 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
             {(id) => <Input id={id} type="number" min={1} max={7} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
           </Field>
         ) : (
+          <div className="space-y-3">
+            <Field label="Times per day" hint="1 for a check-in; 8 for “8 cups of water” with +1 logging">
+              {(id) => <Input id={id} type="number" min={1} max={30} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
+            </Field>
           <div>
             <label className="mb-1.5 block text-sm font-medium">Days (optional — leave blank for every day)</label>
             <div className="flex gap-1.5">
@@ -372,6 +447,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
                 </button>
               ))}
             </div>
+          </div>
           </div>
         )}
 

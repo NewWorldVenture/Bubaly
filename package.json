@@ -48,6 +48,7 @@
     "db:seed:projects": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_projects_one_family.sql",
     "db:seed:career": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_career_one_family.sql",
     "db:seed:language": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_language_one_family.sql",
+    "db:seed:hydration": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_hydration_one_family.sql",
     "db:seed:declutter": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_declutter_one_family.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
     "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",
