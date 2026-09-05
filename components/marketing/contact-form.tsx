@@ -73,7 +73,7 @@ export function ContactForm() {
             id={id}
             name="topic"
             defaultValue="general"
-            className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm text-fg focus-ring"
+            className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm text-fg focus-ring sm:text-base"
           >
             {CONTACT_TOPICS.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
