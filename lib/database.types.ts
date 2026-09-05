@@ -85,6 +85,10 @@ export type AiRunState =
 export type AiRunLifecycleState = AiRunState | 'paused';
 export type AiStepState = AiRunState | 'skipped';
 export type AiRequestKind = 'concierge' | 'feature' | 'routine' | 'trigger' | 'handle_it';
+/** `family_automation_rules.schedule_kind` (0259). */
+export type RoutineScheduleKind = 'cron' | 'relative';
+/** `routine_runs.status` (0259): one row per fired occurrence. */
+export type RoutineRunStatus = 'filed' | 'skipped' | 'failed';
 /** `home_briefs.kind` (0258): the morning brief and the evening recap. */
 export type HomeBriefKind = 'daily' | 'evening';
 /** `family_ai_settings.behavior` (0257): §11's three autonomy levels. */
@@ -1904,10 +1908,15 @@ export interface Database {
         { id?: string; family_id: string; for_date?: string; score?: number; level?: string; factors?: Json; suggestions?: Json; status?: string; metadata?: Json; created_by?: string | null },
         Partial<{ for_date: string; score: number; level: string; factors: Json; suggestions: Json; status: string; metadata: Json }>
       >;
+      routine_runs: T<
+        { id: string; family_id: string; rule_id: string; due_at: string; request_id: string | null; status: RoutineRunStatus; detail: string | null; created_at: string },
+        { id?: string; family_id: string; rule_id: string; due_at: string; request_id?: string | null; status?: RoutineRunStatus; detail?: string | null },
+        Partial<{ request_id: string | null; status: RoutineRunStatus; detail: string | null }>
+      >;
       family_automation_rules: T<
-        { id: string; family_id: string; name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; trigger_type: string; trigger_config?: Json; action_type: string; action_config?: Json; is_enabled?: boolean; requires_approval?: boolean; last_run_at?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
-        Partial<{ name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; updated_by: string | null }>
+        { id: string; family_id: string; name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; schedule_kind: RoutineScheduleKind | null; schedule_expr: string | null; anchor_key: string | null; offset_days: number | null; at_hour: number | null; next_run_at: string | null; said: string | null; source_request_id: string | null; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; trigger_type: string; trigger_config?: Json; action_type: string; action_config?: Json; is_enabled?: boolean; requires_approval?: boolean; last_run_at?: string | null; status?: string; metadata?: Json; schedule_kind?: RoutineScheduleKind | null; schedule_expr?: string | null; anchor_key?: string | null; offset_days?: number | null; at_hour?: number | null; next_run_at?: string | null; said?: string | null; source_request_id?: string | null; created_by?: string | null; updated_by?: string | null },
+        Partial<{ name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; updated_by: string | null; schedule_kind: RoutineScheduleKind | null; schedule_expr: string | null; anchor_key: string | null; offset_days: number | null; at_hour: number | null; next_run_at: string | null; said: string | null; source_request_id: string | null }>
       >;
       // Also the AI run + continuation queue (0250). `status` is the legacy 0022
       // free-text column the concierge/autopilot surfaces still read and write;
