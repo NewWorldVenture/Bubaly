@@ -37,6 +37,10 @@ export type HomeProjectKind = 'repair' | 'renovation' | 'upgrade' | 'outdoor' | 
 export type HomeProjectStatus = 'idea' | 'planning' | 'quoting' | 'scheduled' | 'in_progress' | 'on_hold' | 'done' | 'cancelled';
 export type HomeProjectPriority = 'low' | 'medium' | 'high';
 export type ProjectQuoteStatus = 'requested' | 'received' | 'accepted' | 'declined' | 'expired';
+export type CareerWorkMode = 'remote' | 'hybrid' | 'onsite' | 'any';
+export type CareerEmploymentType = 'full_time' | 'part_time' | 'contract' | 'internship' | 'first_job' | 'any';
+export type CareerStatus = 'exploring' | 'active_search' | 'interviewing' | 'offer' | 'employed' | 'paused';
+export type JobStage = 'saved' | 'applied' | 'screening' | 'interview' | 'offer' | 'accepted' | 'rejected' | 'withdrawn';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2513,6 +2517,21 @@ export interface Database {
         { id: string; family_id: string; project_id: string; contractor_id: string | null; contractor_name: string; amount_cents: number; includes_materials: boolean; lead_time_days: number | null; valid_until: string | null; status: ProjectQuoteStatus; received_on: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; project_id: string; contractor_id?: string | null; contractor_name: string; amount_cents: number; includes_materials?: boolean; lead_time_days?: number | null; valid_until?: string | null; status?: ProjectQuoteStatus; received_on?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ contractor_id: string | null; contractor_name: string; amount_cents: number; includes_materials: boolean; lead_time_days: number | null; valid_until: string | null; status: ProjectQuoteStatus; received_on: string | null; notes: string | null }>
+      >;
+      career_profiles: T<
+        { id: string; family_id: string; member_id: string; title: string; is_active: boolean; headline: string | null; summary: string | null; skills: string[]; target_roles: string[]; target_keywords: string[]; work_mode: CareerWorkMode; employment_type: CareerEmploymentType; salary_target_cents: number | null; location: string | null; status: CareerStatus; weekly_goal: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; title?: string; is_active?: boolean; headline?: string | null; summary?: string | null; skills?: string[]; target_roles?: string[]; target_keywords?: string[]; work_mode?: CareerWorkMode; employment_type?: CareerEmploymentType; salary_target_cents?: number | null; location?: string | null; status?: CareerStatus; weekly_goal?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; is_active: boolean; headline: string | null; summary: string | null; skills: string[]; target_roles: string[]; target_keywords: string[]; work_mode: CareerWorkMode; employment_type: CareerEmploymentType; salary_target_cents: number | null; location: string | null; status: CareerStatus; weekly_goal: number; notes: string | null }>
+      >;
+      job_applications: T<
+        { id: string; family_id: string; profile_id: string; company: string; role_title: string; stage: JobStage; source: string | null; url: string | null; location: string | null; work_mode: 'remote' | 'hybrid' | 'onsite' | null; salary_min_cents: number | null; salary_max_cents: number | null; applied_on: string | null; last_activity_on: string | null; next_step: string | null; next_step_on: string | null; contact_name: string | null; contact_email: string | null; resume_id: string | null; excitement: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; profile_id: string; company: string; role_title: string; stage?: JobStage; source?: string | null; url?: string | null; location?: string | null; work_mode?: 'remote' | 'hybrid' | 'onsite' | null; salary_min_cents?: number | null; salary_max_cents?: number | null; applied_on?: string | null; last_activity_on?: string | null; next_step?: string | null; next_step_on?: string | null; contact_name?: string | null; contact_email?: string | null; resume_id?: string | null; excitement?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ company: string; role_title: string; stage: JobStage; source: string | null; url: string | null; location: string | null; work_mode: 'remote' | 'hybrid' | 'onsite' | null; salary_min_cents: number | null; salary_max_cents: number | null; applied_on: string | null; last_activity_on: string | null; next_step: string | null; next_step_on: string | null; contact_name: string | null; contact_email: string | null; resume_id: string | null; excitement: number | null; notes: string | null }>
+      >;
+      resume_versions: T<
+        { id: string; family_id: string; profile_id: string; title: string; target_role: string | null; body: string; keywords: string[]; ats_score: number | null; matched_keywords: string[]; missing_keywords: string[]; is_primary: boolean; file_path: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; profile_id: string; title: string; target_role?: string | null; body?: string; keywords?: string[]; ats_score?: number | null; matched_keywords?: string[]; missing_keywords?: string[]; is_primary?: boolean; file_path?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; target_role: string | null; body: string; keywords: string[]; ats_score: number | null; matched_keywords: string[]; missing_keywords: string[]; is_primary: boolean; file_path: string | null; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };
