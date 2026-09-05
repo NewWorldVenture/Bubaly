@@ -64,7 +64,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('pets', 'Pets', 'Daily Life', 'basic', '/dashboard/pets'),
   F('closet', 'Closet & Outfits', 'Daily Life', 'basic', '/dashboard/closet'),
   F('watchlist', 'Family Watchlist', 'Daily Life', 'free', '/dashboard/watchlist'),
-  F('home-inventory', 'Home Inventory', 'Family & Home', 'basic', '/dashboard/inventory'),
+  F('home-inventory-finder', 'Home Inventory', 'Family & Home', 'basic', '/dashboard/inventory'),
   F('sleep-coach', 'Sleep Coach', 'Daily Life', 'basic', '/dashboard/sleep'),
   F('declutter', 'Declutter Missions', 'Family & Home', 'free', '/dashboard/declutter'),
   F('move-planner', 'Move Planner', 'Family & Home', 'basic', '/dashboard/moving'),
