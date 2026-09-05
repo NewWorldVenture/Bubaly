@@ -7,8 +7,15 @@
 -- request that a parent approves, so points balances have real history.
 -- ============================================================
 
+-- Transaction-safety: 0096 later runs `ADD VALUE IF NOT EXISTS 'pending'` /
+-- `'cancelled'` and uses 'pending' as a column DEFAULT in the SAME statement
+-- batch. Postgres refuses to use an enum value added in the current transaction
+-- (SQLSTATE 55P04), so a fresh database applied by the Supabase CLI failed at
+-- 0096. Declaring both values here (appended, matching the order production
+-- ended up with) makes 0096's ADD VALUE a no-op on a fresh replay. On databases
+-- where the type already exists this block is a no-op (duplicate_object).
 DO $$ BEGIN
-  CREATE TYPE redemption_status AS ENUM ('requested', 'approved', 'fulfilled', 'rejected');
+  CREATE TYPE redemption_status AS ENUM ('requested', 'approved', 'fulfilled', 'rejected', 'pending', 'cancelled');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS public.reward_redemptions (
