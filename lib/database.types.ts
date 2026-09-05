@@ -85,6 +85,8 @@ export type AiRunState =
 export type AiRunLifecycleState = AiRunState | 'paused';
 export type AiStepState = AiRunState | 'skipped';
 export type AiRequestKind = 'concierge' | 'feature' | 'routine' | 'trigger' | 'handle_it';
+/** `family_ai_settings.behavior` (0257): §11's three autonomy levels. */
+export type AutonomyBehaviorValue = 'recommend' | 'prepare' | 'execute';
 export type AiRunType = 'concierge' | 'routine' | 'trigger' | 'handle_it' | 'concierge_plan';
 export type AiPlanStatus =
   | 'draft' | 'approved' | 'executing' | 'completed' | 'partially_completed' | 'failed' | 'cancelled' | 'superseded';
@@ -231,8 +233,8 @@ export interface Database {
         Partial<{ status: InviteStatus; role: MemberRole; accepted_by: string | null; onboarding_key: string | null }>
       >;
       calendar_events: T<
-        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null; onboarding_key: string | null } & Stamps,
-        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null; onboarding_key?: string | null },
+        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null; onboarding_key: string | null; idempotency_key: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null; onboarding_key?: string | null; idempotency_key?: string | null },
         Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; onboarding_key: string | null }>
       >;
       routine_templates: T<
@@ -271,8 +273,8 @@ export interface Database {
         Partial<{ title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean; category: string | null; difficulty: string; est_minutes: number | null; proof_required: string; reward_mode: string; cash_cents: number | null; cash_min_cents: number | null; cash_max_cents: number | null; points_min: number | null; points_max: number | null; auto_approve_score: number | null; safety_level: string; instructions: string | null; example_image_url: string | null; icon: string | null; is_active: boolean }>
       >;
       chore_assignments: T<
-        { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean } & Stamps,
-        { id?: string; family_id: string; chore_id: string; member_id: string; status?: TaskStatus; due_at?: string | null },
+        { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; idempotency_key: string | null; disputed: boolean } & Stamps,
+        { id?: string; family_id: string; chore_id: string; member_id: string; status?: TaskStatus; idempotency_key?: string | null; due_at?: string | null },
         Partial<{ member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean }>
       >;
       rewards: T<
@@ -291,8 +293,8 @@ export interface Database {
         Partial<{ name: string; meal_type: MealType; recipe_url: string | null; image_url: string | null; ingredients: Json; notes: string | null }>
       >;
       meal_plans: T<
-        { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
+        { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; idempotency_key: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; idempotency_key?: string | null; created_by?: string | null },
         Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
       >;
       meal_votes: T<
@@ -316,8 +318,8 @@ export interface Database {
         Partial<{ name: string; is_archived: boolean }>
       >;
       grocery_items: T<
-        { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; created_by?: string | null },
+        { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; idempotency_key: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; idempotency_key?: string | null; created_by?: string | null },
         Partial<{ name: string; quantity: string | null; category: string | null; is_checked: boolean }>
       >;
       pantry_items: T<
@@ -1171,8 +1173,8 @@ export interface Database {
         Partial<{ name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string }>
       >;
       transactions: T<
-        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; merchant?: string | null; amount: number; category?: string | null; date?: string; type?: TransactionType; status?: string; notes?: string | null; created_by?: string | null },
+        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null; idempotency_key: string | null; fingerprint: string | null; source: string; receipt_document_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; merchant?: string | null; amount: number; category?: string | null; date?: string; type?: TransactionType; status?: string; notes?: string | null; idempotency_key?: string | null; fingerprint?: string | null; source?: string; receipt_document_id?: string | null; created_by?: string | null },
         Partial<{ account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null }>
       >;
       wallet_cards: T<
@@ -1377,6 +1379,11 @@ export interface Database {
         { id?: string; family_id: string; contact_id?: string | null; caller_name?: string | null; caller_number?: string | null; direction?: string; status?: string; classification?: string; priority?: string; transcript?: string | null; ai_summary?: string | null; action_items?: unknown[]; voicemail_url?: string | null; duration_secs?: number | null; is_read?: boolean; received_at?: string; created_by?: string | null },
         Partial<{ contact_id: string | null; caller_name: string | null; caller_number: string | null; status: string; classification: string; priority: string; transcript: string | null; ai_summary: string | null; action_items: unknown[]; voicemail_url: string | null; duration_secs: number | null; is_read: boolean; updated_at: string }>
       >;
+      family_ai_settings: T<
+        { family_id: string; enabled: boolean; behavior: AutonomyBehaviorValue; category_behavior: Json; risk_overrides: Json; child_channels: Json; memory_enabled: boolean; quiet_hours_start: number | null; quiet_hours_end: number | null; updated_by: string | null; created_at: string; updated_at: string },
+        { family_id: string; enabled?: boolean; behavior?: AutonomyBehaviorValue; category_behavior?: Json; risk_overrides?: Json; child_channels?: Json; memory_enabled?: boolean; quiet_hours_start?: number | null; quiet_hours_end?: number | null; updated_by?: string | null },
+        Partial<{ enabled: boolean; behavior: AutonomyBehaviorValue; category_behavior: Json; risk_overrides: Json; child_channels: Json; memory_enabled: boolean; quiet_hours_start: number | null; quiet_hours_end: number | null; updated_by: string | null; updated_at: string }>
+      >;
       trust_policies: T<
         { id: string; family_id: string; name: string; description: string | null; domain: string; capability: string; subject_kind: string; subject_role: string | null; subject_member_id: string | null; effect: string; conditions: Json; approval_model: string; required_approvals: number; priority: number; enabled: boolean; is_system: boolean; created_by: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; name: string; description?: string | null; domain?: string; capability?: string; subject_kind?: string; subject_role?: string | null; subject_member_id?: string | null; effect?: string; conditions?: Json; approval_model?: string; required_approvals?: number; priority?: number; enabled?: boolean; is_system?: boolean; created_by?: string | null },
@@ -1443,8 +1450,8 @@ export interface Database {
         Partial<{ contact_id: string | null; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; updated_at: string }>
       >;
       family_reminders: T<
-        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean; tags?: string[]; url?: string | null; flagged?: boolean; early_reminder_minutes?: number | null; image_url?: string | null; subtasks?: Json; list_id?: string | null },
+        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; idempotency_key: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean; tags?: string[]; url?: string | null; flagged?: boolean; early_reminder_minutes?: number | null; image_url?: string | null; subtasks?: Json; idempotency_key?: string | null; list_id?: string | null },
         Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; updated_at: string }>
       >;
       reminder_lists: T<
@@ -1463,8 +1470,8 @@ export interface Database {
         Partial<{ name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null }>
       >;
       todo_items: T<
-        { id: string; family_id: string; list_id: string; created_by: string | null; assigned_to_id: string | null; title: string; notes: string | null; is_done: boolean; priority: string; due_date: string | null; tags: string[]; sort_order: number; completed_at: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; list_id: string; created_by?: string | null; assigned_to_id?: string | null; title: string; notes?: string | null; is_done?: boolean; priority?: string; due_date?: string | null; tags?: string[]; sort_order?: number },
+        { id: string; family_id: string; list_id: string; created_by: string | null; assigned_to_id: string | null; title: string; notes: string | null; is_done: boolean; priority: string; due_date: string | null; tags: string[]; sort_order: number; idempotency_key: string | null; completed_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; list_id: string; created_by?: string | null; assigned_to_id?: string | null; title: string; notes?: string | null; is_done?: boolean; priority?: string; due_date?: string | null; tags?: string[]; idempotency_key?: string | null; sort_order?: number },
         Partial<{ title: string; notes: string | null; is_done: boolean; priority: string; due_date: string | null; tags: string[]; sort_order: number; completed_at: string | null; assigned_to_id: string | null }>
       >;
       sync_providers: T<

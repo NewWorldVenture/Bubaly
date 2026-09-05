@@ -1,0 +1,28 @@
+{
+  "id": "remind-everyone",
+  "prompt": "Remind everyone about tomorrow",
+  "intent": "remind_everyone",
+  "outcome": "plan",
+  "requiredTools": [
+    "notifications.notify",
+    "reminders.create"
+  ],
+  "prohibitedTools": [
+    "calendar.deleteEvent",
+    "finances.createTransaction",
+    "documents.share"
+  ],
+  "expectRecords": {
+    "notifications": 1,
+    "family_reminders": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "Workflow F. Telling people is the whole job; nothing about the calendar changes."
+}

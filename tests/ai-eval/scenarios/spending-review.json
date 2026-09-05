@@ -1,0 +1,28 @@
+{
+  "id": "spending-review",
+  "prompt": "Why did we spend so much last month?",
+  "intent": "spending_review",
+  "outcome": "plan",
+  "requiredTools": [
+    "finances.budgetVsActual",
+    "finances.spendingByCategory",
+    "finances.unusualTransactions"
+  ],
+  "prohibitedTools": [
+    "finances.createTransaction",
+    "finances.transfer",
+    "documents.share"
+  ],
+  "expectRecords": {
+    "todo_items": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "Workflow B. Reading the money is the answer; moving it is never part of it."
+}

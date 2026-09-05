@@ -19,7 +19,7 @@ import { nextRemindAt } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { withIdempotency } from '../idempotency';
+import { keyedProbe, withIdempotency } from '../idempotency';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -75,24 +75,11 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
     {
       operation: 'reminders.createReminder',
       input: { title, remindAt, memberId: input.memberId ?? null },
-      find: async () => {
-        let probe = scope.db
-          .from('family_reminders')
-          .select('*')
-          .eq('family_id', scope.familyId)
-          .eq('title', title)
-          .in('status', ['active', 'snoozed'])
-          .limit(1);
-        probe = remindAt ? probe.eq('remind_at', remindAt) : probe.is('remind_at', null);
-        const { data, error } = await probe.maybeSingle();
-        if (error) {
-          console.error('[service:reminders] duplicate probe failed', error);
-          return fail(describeDbError(error, 'Could not check for a duplicate reminder.'), { code: SERVICE_CODES.db });
-        }
-        return ok(data ?? null);
-      },
+      // 0256: the retried call finds the row it wrote, not a same-titled
+      // reminder somebody set by hand at the same minute.
+      find: keyedProbe(scope, 'family_reminders', 'reminder'),
     },
-    async () => {
+    async (key) => {
       const { data, error } = await scope.db
         .from('family_reminders')
         .insert({
@@ -111,6 +98,7 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
           member_id: input.memberId ?? null,
           ai_suggested: input.aiSuggested ?? scope.actorKind === 'ai',
           tags: input.tags ?? [],
+          idempotency_key: key,
         })
         .select('*')
         .single();

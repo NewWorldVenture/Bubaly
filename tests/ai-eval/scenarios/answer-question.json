@@ -1,0 +1,23 @@
+{
+  "id": "answer-question",
+  "prompt": "What's on tomorrow?",
+  "intent": "answer_question",
+  "outcome": "answer",
+  "requiredTools": [],
+  "prohibitedTools": [
+    "meals.planWeek",
+    "calendar.createEvent",
+    "tasks.createTodo",
+    "reminders.create"
+  ],
+  "expectRecords": {},
+  "expectNoRecords": [
+    "calendar_events",
+    "todo_items",
+    "family_reminders",
+    "meal_plans"
+  ],
+  "expectApproval": false,
+  "finalStates": [],
+  "note": "A question is answered, not executed: no run, no rows."
+}

@@ -57,6 +57,7 @@ function txn(over: Partial<{ id: string; name: string; merchant: string | null; 
     id: over.id ?? `t-${Math.random().toString(36).slice(2, 8)}`, family_id: 'fam-1', account_id: null, member_id: null,
     name: over.name ?? 'Store', merchant: over.merchant ?? null, amount: over.amount ?? 10, category: 'category' in over ? over.category ?? null : 'Groceries',
     date: over.date ?? '2026-09-01', type: over.type ?? ('expense' as const), status: 'posted', notes: null, created_by: 'auth-1',
+    idempotency_key: null, fingerprint: null, source: 'manual', receipt_document_id: null,
     created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
   };
 }

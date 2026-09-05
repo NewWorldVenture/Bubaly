@@ -20,7 +20,7 @@ import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduli
 import type { EventCategory, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { withIdempotency } from '../idempotency';
+import { keyedProbe, withIdempotency } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -80,26 +80,12 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
     {
       operation: 'calendar.createEvent',
       input: { title, startsAt, allDay: input.allDay ?? false },
-      // Until P3-01 adds `idempotency_key` to calendar_events, the natural key
-      // is the duplicate a retry would actually produce: same family, same
-      // title, same instant.
-      find: async () => {
-        const { data, error } = await scope.db
-          .from('calendar_events')
-          .select('*')
-          .eq('family_id', scope.familyId)
-          .eq('title', title)
-          .eq('starts_at', startsAt)
-          .limit(1)
-          .maybeSingle();
-        if (error) {
-          console.error('[service:calendar] duplicate probe failed', error);
-          return fail(describeDbError(error, 'Could not check for a duplicate event.'), { code: SERVICE_CODES.db });
-        }
-        return ok(data ?? null);
-      },
+      // 0256's `idempotency_key` + partial unique index: the retried call finds
+      // its own row rather than a coincidence, and two retries racing cannot
+      // both insert.
+      find: keyedProbe(scope, 'calendar_events', 'event'),
     },
-    async () => {
+    async (key) => {
       const { data, error } = await scope.db
         .from('calendar_events')
         .insert({
@@ -115,6 +101,7 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
           recurrence_until: isoOrNull(input.recurrenceUntil),
           assignee_id: input.assigneeId ?? null,
           created_by: scope.userId,
+          idempotency_key: key,
         })
         .select('*')
         .single();

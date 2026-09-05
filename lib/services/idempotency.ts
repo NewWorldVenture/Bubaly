@@ -8,13 +8,21 @@
 // reserved a ledger row under the same key it would collide with its own
 // caller on that unique index. So the guard here answers a narrower question —
 // "does the row this call would create already exist?" — and lets each service
-// supply the probe that can answer it for its own table. Today those probes
-// match on the natural key (family + title + instant); when P3-01 adds
-// `idempotency_key` columns to the domain tables the probe becomes a lookup on
-// that column and nothing else about this guard changes.
+// supply the probe that can answer it for its own table.
+//
+// Since 0256 the tables the AI writes carry `idempotency_key` with a PARTIAL
+// unique index on `(family_id, idempotency_key)`, so `keyedProbe` below is the
+// probe every one of them should use: it asks the database the exact question
+// ("is this call's row already here?") instead of guessing from a natural key,
+// and — because the index makes a second insert impossible rather than
+// unlikely — the guard can treat a losing race as a success and hand back the
+// row the winner wrote. Tables without the column (recipes, announcements,
+// service records) keep a natural-key probe; the guard is the same either way.
 import 'server-only';
 import { createHash } from 'node:crypto';
-import type { ServiceResult, ServiceScope } from './types';
+import { describeDbError } from '@/lib/supabase/errors';
+import type { Database } from '@/lib/database.types';
+import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from './types';
 
 type StableValue = null | boolean | number | string | StableValue[] | { [key: string]: StableValue };
 
@@ -93,5 +101,68 @@ export async function withIdempotency<T>(
   const existing = await options.find(key);
   if (!existing.ok) return existing;
   if (existing.data !== null) return { ok: true, data: existing.data };
-  return create(key);
+
+  const created = await create(key);
+  if (created.ok) return created;
+
+  // The probe said no and the insert still failed: on a table with 0256's
+  // unique index that is what losing the race looks like, and the row the
+  // winner wrote is the honest answer. A failure with nothing behind it is
+  // returned unchanged, so a real error is never disguised as success.
+  const raced = await options.find(key);
+  if (raced.ok && raced.data !== null) return { ok: true, data: raced.data };
+  return created;
+}
+
+/** The tables 0256 gave an `idempotency_key` and its partial unique index. */
+export const KEYED_TABLES = [
+  'calendar_events', 'family_reminders', 'todo_items', 'chore_assignments', 'meal_plans', 'grocery_items',
+] as const;
+export type KeyedTable = (typeof KEYED_TABLES)[number];
+
+/**
+ * WHY the cast: `supabase.from()` is generic over one literal table name, so a
+ * union of names yields a union of builders TypeScript will not call. The
+ * union above is closed and every query filters `family_id`, so a dynamic name
+ * here can still only reach this family's rows — the same argument
+ * `lib/ai/runs/verify.ts` makes for its allow-list.
+ */
+type KeyedReader = {
+  from(table: KeyedTable): {
+    select(columns: string): {
+      eq(column: string, value: unknown): {
+        eq(column: string, value: unknown): {
+          limit(n: number): { maybeSingle(): PromiseLike<{ data: unknown; error: unknown }> };
+        };
+      };
+    };
+  };
+};
+
+/**
+ * The probe for a 0256 table: "did this exact call already write its row?".
+ *
+ * Family-scoped like every other service query — the unique index is per
+ * family, and a key is only ever unique within one.
+ */
+export function keyedProbe<T extends KeyedTable>(
+  scope: ServiceScope,
+  table: T,
+  what: string,
+): IdempotencyProbe<Database['public']['Tables'][T]['Row']> {
+  return async (key: string) => {
+    const reader = scope.db as unknown as KeyedReader;
+    const { data, error } = await reader
+      .from(table)
+      .select('*')
+      .eq('family_id', scope.familyId)
+      .eq('idempotency_key', key)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error(`[service:idempotency] duplicate probe failed for ${table}`, error);
+      return fail(describeDbError(error, `Could not check for a duplicate ${what}.`), { code: SERVICE_CODES.db });
+    }
+    return ok((data ?? null) as Database['public']['Tables'][T]['Row'] | null);
+  };
 }

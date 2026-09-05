@@ -80,8 +80,21 @@ export const prepareVacationTemplate: WorkflowTemplate = {
       dependsOn: ['build_plan', 'packing_lists', 'calendar', 'prep_task', 'home_checklist'], input: (ctx) => ({ vacation_id: vacationId(ctx) }),
     },
     {
+      // The spec's own example of verification (§13): the trip is only
+      // "prepared" if the dates are on the calendar and the reminder exists.
+      key: 'check_trip', stepType: 'verify', description: 'Check the trip is really on the calendar and reminded',
+      dependsOn: ['calendar', 'critical_reminder'],
+      input: (ctx) => ({
+        checks: [
+          { kind: 'count_at_least', table: 'calendar_events', min: 1, label: 'Travel dates are on the calendar' },
+          { kind: 'count_at_least', table: 'family_reminders', min: 1, label: 'The pre-trip reminder is set' },
+          { kind: 'no_calendar_conflicts', start: localTime(departureKey(ctx), 0), end: localTime(departureKey(ctx), 23, 59), label: 'Departure day is clear' },
+        ],
+      }),
+    },
+    {
       key: 'tell_family', stepType: 'notify', description: 'Tell the family what is ready and what is still open',
-      dependsOn: ['check_readiness', 'critical_reminder'],
+      dependsOn: ['check_trip', 'check_readiness', 'critical_reminder'],
       input: () => ({ recipients: 'family', type: 'system', title: 'Trip prep is under way', body: '' }),
       modelFills: 'body: what is on the calendar, whose packing lists exist, and the open items with owners',
     },

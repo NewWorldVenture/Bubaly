@@ -16,7 +16,7 @@ import 'server-only';
 import type { Priority, RecurrenceFreq, TaskStatus, Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { withIdempotency } from '../idempotency';
+import { keyedProbe, withIdempotency } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type TodoList = Tables<'todo_lists'>;
@@ -99,24 +99,11 @@ export async function createTodo(scope: ServiceScope, input: CreateTodoInput): P
     {
       operation: 'tasks.createTodo',
       input: { title, listId: list.data.id, dueDate: input.dueDate ?? null },
-      find: async () => {
-        const { data, error } = await scope.db
-          .from('todo_items')
-          .select('*')
-          .eq('family_id', scope.familyId)
-          .eq('list_id', list.data.id)
-          .eq('title', title)
-          .eq('is_done', false)
-          .limit(1)
-          .maybeSingle();
-        if (error) {
-          console.error('[service:tasks] duplicate probe failed', error);
-          return fail(describeDbError(error, 'Could not check for a duplicate task.'), { code: SERVICE_CODES.db });
-        }
-        return ok(data ?? null);
-      },
+      // 0256: keyed on the call, so re-running a plan step returns its own
+      // to-do while a family that really wants two "Pack the kit" rows gets two.
+      find: keyedProbe(scope, 'todo_items', 'task'),
     },
-    async () => {
+    async (key) => {
       const { data, error } = await scope.db
         .from('todo_items')
         .insert({
@@ -130,6 +117,7 @@ export async function createTodo(scope: ServiceScope, input: CreateTodoInput): P
           due_date: input.dueDate ?? null,
           priority,
           tags: input.tags ?? [],
+          idempotency_key: key,
         })
         .select('*')
         .single();

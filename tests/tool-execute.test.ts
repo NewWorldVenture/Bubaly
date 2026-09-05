@@ -150,8 +150,9 @@ const CREATE_EVENT_ARGS = { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z', 
 /** Serves the calendar tables for a successful create, delete and verify. */
 const calendarDomain = (call: Call): Reply | null => {
   if (call.table !== 'calendar_events') return null;
-  if (call.kind === 'select' && call.filters.title !== undefined) {
-    // The service's own duplicate probe matches on title + instant; nothing yet.
+  if (call.kind === 'select' && call.filters.idempotency_key !== undefined) {
+    // The service's own duplicate probe (0256) asks whether THIS call already
+    // wrote its row; in these tests it never has.
     return { data: null, error: null };
   }
   return { data: EVENT_ROW, error: null };

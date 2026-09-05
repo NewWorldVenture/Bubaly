@@ -18,8 +18,17 @@ and the required traceability/review evidence remain unresolved. `0255`
 conversation/message ownership and client-request deduplication. It is not the
 broader raw request/context/plan/run/tool/event privacy closure; that gap requires
 a separate reviewed follow-up and is not implemented by this migration.
-`0255` is outside the unchanged pinned bundle. Code presence and prior test
-reports do not establish completed review or production application. A separately
+`0256` (`0256_idempotency_keys.sql`) adds `idempotency_key` plus family-scoped
+partial unique indexes to the six tables Bubaly writes, and `fingerprint` /
+`source` / `receipt_document_id` to `transactions`; `0257`
+(`0257_family_ai_settings.sql`) adds the per-family AI settings row, seeds it
+from `handle_new_family()` and backfills existing families. Both are additive
+and both default to today's behaviour — `0257`'s `behavior` default is
+`execute` precisely so applying it changes no household's experience.
+
+`0255`, `0256` and `0257` are all outside the unchanged pinned bundle. Code
+presence and prior test reports do not establish completed review or production
+application. A separately
 reviewed hash-pinned release, a new successful preview, the required matrix and
 review evidence, and explicit parent authorization are required before any
 production apply. No future release range is authorized by this inventory.
@@ -216,6 +225,8 @@ injection, run-event forgery and self-approval. Guard: `tests/ai-runtime-schema.
 | 0253 | `0253_ai_worker_execute_lockdown.sql` | Revokes `claim_ai_runs(int, int)` from `public`, `anon` and `authenticated`; grants it to `service_role` only, and verifies | Only the server worker (`/api/cron/ai-runs`) can claim the global run queue. Guard: `tests/production-security-boundaries.test.ts` |
 | 0254 | `0254_wallet_write_policy_drift.sql` | Drops the legacy permissive wallet write policies and adds restrictive manager guards on the five wallet tables | Closes the wallet RLS drift (LB-010/PLA-0580) so a child cannot mint completed credits. Guard: `tests/production-security-boundaries.test.ts` |
 | 0255 | `0255_ai_runtime_lockdown.sql` | Runtime INSERT lockdown preserving main's pending-decision, accounting, active-member, current-step, lease-expiry and idempotency guards; approvals require a non-null active caller member and no request/run/step/payload linkage; adds `ai_requests.client_request_id` + unique `(family_id, client_request_id)`; makes `ai_conversations`/`ai_messages` owner-only | **HELD.** This is runtime write-lockdown with conversation/message ownership, not the previously planned broader requester-privacy fix. The raw request/context/plan/run/tool/event privacy gap requires a separate reviewed follow-up and is not implemented here. No production apply is authorized; the pinned release bundle remains unchanged and held. |
+| 0256 | `0256_idempotency_keys.sql` | `idempotency_key` + partial unique `(family_id, idempotency_key)` on `calendar_events`, `family_reminders`, `todo_items`, `chore_assignments`, `meal_plans`, `grocery_items`; `fingerprint`, `source`, `receipt_document_id` (+ partial unique fingerprint) on `transactions` | §30/§45 duplicate protection stops being a probe the app hopes to win: a retried tool call cannot create a second event, reminder or to-do, and a receipt scanned twice cannot become two charges. Guards: `tests/0256-idempotency.test.ts`, `tests/duplicate-protection.test.ts` |
+| 0257 | `0257_family_ai_settings.sql` | `family_ai_settings` (one row per family: `enabled`, `behavior`, `category_behavior`, `risk_overrides`, `child_channels`, `memory_enabled`, quiet hours), member-read/manager-write RLS, seeded by `handle_new_family()` and backfilled | §11/§12: Settings → Bubaly AI. A family dials autonomy per category and can raise a tool's risk tier; money and documents keep `medium` as a floor in code. Defaults reproduce today's behaviour exactly. Guards: `tests/0257-ai-settings-seed.test.ts`, `tests/ai-settings.test.ts` |
 
 **Read the RLS change before applying.** 0251 replaces the permissive `FOR ALL
 is_family_member` policies on `family_automation_runs` (0022) and

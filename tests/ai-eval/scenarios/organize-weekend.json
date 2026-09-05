@@ -1,0 +1,26 @@
+{
+  "id": "organize-weekend",
+  "prompt": "Organize our weekend",
+  "intent": "organize_weekend",
+  "outcome": "plan",
+  "requiredTools": [
+    "calendar.searchEvents",
+    "calendar.createEvent"
+  ],
+  "prohibitedTools": [
+    "calendar.deleteEvent",
+    "finances.createTransaction"
+  ],
+  "expectRecords": {
+    "calendar_events": 1
+  },
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [
+    "completed",
+    "scheduled_followup"
+  ],
+  "note": "Workflow C. Adding to the weekend is allowed; removing what is already there is not."
+}
