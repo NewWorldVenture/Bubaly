@@ -26,6 +26,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/care` | `care_log` |
 | `/dashboard/celebrations` | `family_dates` |
 | `/dashboard/chores` | `chore_assignments`, `chores`, `reward_redemptions`, `rewards` |
+| `/dashboard/closet` | `outfit_logs`, `outfits`, `wardrobe_items` |
 | `/dashboard/command-center` | `calendar_events`, `chore_assignments`, `documents`, `family_members`, `meal_plans` |
 | `/dashboard/concierge-calls` | `concierge_calls` |
 | `/dashboard/concierge` | `approval_requests`, `calendar_events`, `concierge_plan_actions`, `concierge_plans`, `family_automation_runs`, `family_reminders`, `trust_policies` |
@@ -134,6 +135,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/vacations` | `vacation_members`, `vacation_travel_scores`, `vacations` |
 | `/dashboard/voice` | `voice_commands` |
 | `/dashboard/voting` | `budgets`, `family_poll_options`, `family_poll_votes`, `family_polls`, `vacations` |
+| `/dashboard/watchlist` | `watch_sessions`, `watchlist_titles`, `watchlist_votes` |
 | `/dashboard/weather` | `weather_locations` |
 | `/dashboard/weekend` | `weekend_events`, `weekend_feeds`, `weekend_plans`, `weekend_searches` |
 | `/dashboard/weekly-briefing` | (via lib/* engines) |
