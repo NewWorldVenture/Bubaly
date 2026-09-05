@@ -9,12 +9,12 @@
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "ios": {
-      "bundleIdentifier": "com.bubaly.bubaly",
+      "bundleIdentifier": "com.bubaly.companion",
       "supportsTablet": true,
       "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
     },
     "android": {
-      "package": "com.bubaly.bubaly",
+      "package": "com.bubaly.companion",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#03090f" }
     },

@@ -32,10 +32,17 @@ export default defineConfig({
     // Chromium-emulated ≠ real iOS Safari — physical/WebKit checks stay in
     // PHYSICAL_DEVICE_TEST_PLAN. (Set PW_WEBKIT=1 in an env with WebKit installed
     // to run the iPhone/iPad projects on their native engine.)
+    //
+    // `iphone` alone also runs `authenticated.spec.ts` (M-009a): the public specs
+    // cover marketing routes, but the signed-in app — where the bottom tab bar,
+    // safe areas and full-height panels actually live — was only ever exercised at
+    // desktop width. One phone, not all eight: the journey signs up, onboards and
+    // writes a record, so it is the slowest spec in the suite and the matrix
+    // already multiplies everything by 8. It self-skips unless E2E_AUTHENTICATED=1.
     ...(process.env.PW_WEBKIT === '1'
       ? [
           { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'] } },
-          { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'] } },
+          { name: 'iphone', testMatch: /(mobile|overflow|public|authenticated)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'] } },
           { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'] } },
           // Landscape variants (M-036): rotation is where overflow bugs hide.
           { name: 'iphone-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPhone 14 Pro landscape'] } },
@@ -43,7 +50,7 @@ export default defineConfig({
         ]
       : [
           { name: 'iphone-se', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone SE'], browserName: 'chromium' as const } },
-          { name: 'iphone', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'], browserName: 'chromium' as const } },
+          { name: 'iphone', testMatch: /(mobile|overflow|public|authenticated)\.spec\.ts/, use: { ...devices['iPhone 14 Pro'], browserName: 'chromium' as const } },
           { name: 'ipad', testMatch: /(mobile|overflow|public)\.spec\.ts/, use: { ...devices['iPad (gen 7)'], browserName: 'chromium' as const } },
           // Landscape variants (M-036): rotation is where overflow bugs hide.
           { name: 'iphone-landscape', testMatch: /(mobile|overflow)\.spec\.ts/, use: { ...devices['iPhone 14 Pro landscape'], browserName: 'chromium' as const } },

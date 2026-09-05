@@ -13,7 +13,9 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mark = readFileSync(join(root, 'public/brand/bubaly-mark.png'));
 const outDir = join(root, 'public/icons');
+const launchDir = join(root, 'public/launch');
 mkdirSync(outDir, { recursive: true });
+mkdirSync(launchDir, { recursive: true });
 
 const BG = '#ffffff';
 
@@ -49,10 +51,61 @@ async function renderMaskable(size) {
   await sharp(png).toFile(join(outDir, `maskable-${size}.png`));
 }
 
+// iOS "Add to Home Screen" launch screens. Without an apple-touch-startup-image
+// matching the exact device, Safari launches an installed PWA on a blank white
+// screen until the first paint — which reads as a broken app on a dark-themed
+// product. iOS only accepts an EXACT device-pixel match, so every current iPhone
+// needs its own file; the media queries that select them live in app/layout.tsx
+// and are kept in sync by tests/mobile-ios-launch-screens.test.ts.
+//
+// Portrait only: iOS uses the portrait image to launch in either orientation,
+// and doubling the set for landscape adds weight for no visible gain.
+export const LAUNCH_SCREENS = [
+  { width: 375, height: 667, ratio: 2 },  // SE (2nd/3rd gen), 8
+  { width: 414, height: 736, ratio: 3 },  // 8 Plus
+  { width: 375, height: 812, ratio: 3 },  // X, XS, 11 Pro, 12/13 mini
+  { width: 414, height: 896, ratio: 2 },  // XR, 11
+  { width: 414, height: 896, ratio: 3 },  // XS Max, 11 Pro Max
+  { width: 390, height: 844, ratio: 3 },  // 12, 12 Pro, 13, 13 Pro, 14
+  { width: 428, height: 926, ratio: 3 },  // 12/13 Pro Max, 14 Plus
+  { width: 393, height: 852, ratio: 3 },  // 14 Pro, 15, 15 Pro, 16
+  { width: 430, height: 932, ratio: 3 },  // 14 Pro Max, 15 Plus/Pro Max, 16 Plus
+  { width: 402, height: 874, ratio: 3 },  // 16 Pro
+  { width: 440, height: 956, ratio: 3 },  // 16 Pro Max
+];
+
+// Matches manifest.background_color / theme_color so the launch screen is
+// continuous with the app's own first paint instead of flashing against it.
+const LAUNCH_BG = { r: 9, g: 12, b: 20, alpha: 1 };
+
+async function renderLaunchScreen({ width, height, ratio }) {
+  const pixelWidth = width * ratio;
+  const pixelHeight = height * ratio;
+  // The mark sits at ~38% of the short edge — large enough to read on an SE,
+  // small enough not to crop on a tall Pro Max.
+  const markSize = Math.round(Math.min(pixelWidth, pixelHeight) * 0.38);
+  const resizedMark = await sharp(mark)
+    .resize(markSize, markSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+
+  await sharp({ create: { width: pixelWidth, height: pixelHeight, channels: 4, background: LAUNCH_BG } })
+    .composite([{ input: resizedMark, gravity: 'center' }])
+    .png()
+    .toFile(join(launchDir, `launch-${pixelWidth}x${pixelHeight}.png`));
+}
+
 const run = async () => {
   await Promise.all(standard.map(renderStandard));
   await Promise.all(maskable.map(renderMaskable));
+  // No root /apple-touch-icon.png is written: it would be a byte-identical copy of
+  // icons/icon-180.png, and scripts/audit-marketing-assets.mjs fails the build on
+  // duplicate shipped image content. iOS only scans the document root when a page
+  // ships no <link rel="apple-touch-icon"> — app/layout.tsx emits that link on
+  // every route via metadata.icons.apple, so the root file would never be read.
+  await Promise.all(LAUNCH_SCREENS.map(renderLaunchScreen));
   console.log(`Generated ${standard.length + maskable.length} unique icons in public/icons`);
+  console.log(`Generated ${LAUNCH_SCREENS.length} iOS launch screens in public/launch`);
 };
 
 run().catch((e) => { console.error(e); process.exit(1); });
