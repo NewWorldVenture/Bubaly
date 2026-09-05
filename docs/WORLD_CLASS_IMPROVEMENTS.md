@@ -70,3 +70,42 @@ the deployed commit and these repaired public journeys after Vercel finishes.
   stopped. Subsequent production preview launches, including a loopback-only
   launch, were rejected by automatic approval policy. This is not a browser
   pass: the new browser journeys still require a deployed-site run.
+
+## Deployed-site follow-up
+
+Vercel deployed `357e6c03` successfully. The live-site run completed 97 checks:
+95 passed, including all 18 new journey checks across desktop, iPhone SE, and
+Pixel emulation. Two accessibility checks found the existing Show PIN button on
+the newly reachable kid-login page was only 16 x 16px. This follow-up makes it
+44 x 44px, adds keyboard focus styling, reserves input space, and gives the PIN
+an explicit label separate from the toggle. A browser regression exercises
+show/hide behavior without submitting sign-in.
+
+Production schema probes used the site's public anonymous client configuration
+and `select=*&limit=0`, with no family records retrieved. `blog_posts` and
+`families` returned HTTP 200 and zero rows as controls. All 27 tables below
+returned HTTP 404 with PostgREST code `PGRST205` (table not in the schema cache):
+
+| Existing module | Tables unavailable through the production API |
+| --- | --- |
+| Closet | `wardrobe_items`, `outfits`, `outfit_logs` |
+| Watchlist | `watchlist_titles`, `watchlist_votes`, `watch_sessions` |
+| Inventory | `home_locations`, `inventory_items`, `inventory_moves` |
+| Sleep | `sleep_logs`, `bedtime_routines`, `sleep_checkins` |
+| Declutter | `declutter_zones`, `declutter_missions`, `declutter_sessions` |
+| Moving | `moves`, `move_tasks`, `move_boxes` |
+| Projects | `home_projects`, `project_materials`, `project_quotes` |
+| Career | `career_profiles`, `job_applications`, `resume_versions` |
+| Language | `language_goals`, `language_sessions`, `vocab_cards` |
+
+This proves these API-backed tools are not ready, even though the general health
+probe is green. It does not distinguish unapplied migrations from stale schema
+cache or other schema configuration. Inspect the remote ledger and schema with
+the correct Supabase credentials, repair the cause, then verify authenticated
+CRUD and family isolation. Recreating the modules would not resolve this issue.
+
+The verified public project reference and publishable client key have now been
+configured as `SUPABASE_PROJECT_REF` and `SUPABASE_ANON_KEY` in GitHub's
+`production` environment. The two remaining missing private credentials are
+`SUPABASE_ACCESS_TOKEN` and `SUPABASE_SERVICE_ROLE_KEY`. Add them through GitHub
+environment secrets, not chat, before running the existing migration workflow.

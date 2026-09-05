@@ -47,21 +47,22 @@ export function KidLoginForm() {
             className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring"
           />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">4-digit PIN</span>
+        <div className="block">
+          <label htmlFor="kid-login-pin" className="mb-1 block text-sm font-medium">4-digit PIN</label>
           <div className="relative">
             <input
+              id="kid-login-pin"
               value={pin}
               onChange={(e) => setPin(normalizePin(e.target.value))}
               inputMode="numeric" type={showPin ? 'text' : 'password'} placeholder="••••"
-              className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring"
+              className="h-12 w-full rounded-xl border border-border bg-bg px-12 text-center text-lg tracking-[0.5em] focus-ring"
             />
             <button type="button" onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+              className="focus-ring absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
               {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-        </label>
+        </div>
         <Button type="submit" disabled={loading || username.trim().length < 3 || pin.length !== 4} className="w-full">
           {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Sign in
         </Button>

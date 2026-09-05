@@ -29,6 +29,23 @@ test('each homepage feature leads to its existing detail card', async ({ page })
   }
 });
 
+test('kid sign-in has a labelled PIN and a usable visibility control', async ({ page }) => {
+  await page.goto('/kid-login');
+  const pin = page.getByLabel('4-digit PIN', { exact: true });
+  await pin.fill('1234');
+  await expect(pin).toHaveAttribute('type', 'password');
+  const show = page.getByRole('button', { name: 'Show PIN', exact: true });
+  const target = await show.boundingBox();
+  expect(target?.width).toBeGreaterThanOrEqual(44);
+  expect(target?.height).toBeGreaterThanOrEqual(44);
+  await show.click();
+  await expect(pin).toHaveAttribute('type', 'text');
+  await expect(pin).toHaveValue('1234');
+  await page.getByRole('button', { name: 'Hide PIN', exact: true }).click();
+  await expect(pin).toHaveAttribute('type', 'password');
+  await expect(page).toHaveURL(/\/kid-login$/);
+});
+
 test('the mobile menu supports keyboard dismissal and returns focus', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const toggle = page.getByRole('button', { name: 'Toggle menu' });
