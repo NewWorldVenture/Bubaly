@@ -11,6 +11,16 @@ Next.js 15 (App Router) · TypeScript · Tailwind · Supabase (Postgres + Auth +
 Bubaly ships natively via **Capacitor** (one codebase, wrapping the hosted, Supabase-wired app) plus an installable **PWA** — no feature drift between web and mobile. Alongside the shell, **`mobile/` is a native Expo app** (expo-router, Supabase auth in the Keychain/Keystore, the family's daily loop — Today, Calendar, Chores, Grocery, Assistant) built on the **same design tokens as the web** (`design/tokens.json`, dark default + light toggle) and talking to the assistant through `/api/ai` with a bearer token. Push notifications are fully wired to Supabase (`push_devices` + `lib/server/push.ts`, delivered through the notification engine). See **[docs/mobile.md](docs/mobile.md)** for setup, build, and release. Building the `.ipa`/`.aab` requires a Mac with Xcode / Android Studio; native push requires Firebase/APNs credentials.
 
 ## What's in here now
+
+**Newest (Top-50 everyday problems → product):** nine modules built end to end
+against the "everyday problems → electronic business" table — Closet & Outfits,
+Family Watchlist, Home Inventory, Sleep Coach, Declutter Missions, Move Planner,
+Home Projects, Career Hub and Language Practice — plus hydration presets inside
+Habits. Each has a pure engine with unit tests, a Supabase-wired module with a
+write-boundary test, an AI insight, and a 250-row-per-table seed
+(`npm run db:seed:<module>`). Migrations 0240–0248; see
+`docs/PENDING_PROD_MIGRATIONS.md` and the `## Opportunity Build` section of
+`todo.md` for the row-by-row mapping.
 ```
 supabase/
   migrations/

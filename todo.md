@@ -35,36 +35,36 @@
 | # | Everyday problem | Opportunity | Bubaly | Where |
 |---|---|---|---|---|
 | 1 | Don't know what to cook | AI Meal Planner | ✅ Shipped | `/dashboard/meals`, `/api/ai/meals/plan`, Chef / Fridge Chef |
-| 2 | Resume isn't good enough | AI Resume Optimizer | 🆕 TODO-0414 | `/dashboard/career` (resume versions + ATS scoring + AI rewrite) |
+| 2 | Resume isn't good enough | AI Resume Optimizer | ✅ Built (TODO-0414) | `/dashboard/career` (resume versions + ATS scoring + AI rewrite) |
 | 3 | Don't know what gift to buy | AI Gift Finder | ✅ Shipped | `/dashboard/wishlists`, `/dashboard/celebrations`, `/api/ai/gift` |
-| 4 | Don't know what to wear | AI Outfit Planner | 🆕 TODO-0407 | `/dashboard/closet` |
+| 4 | Don't know what to wear | AI Outfit Planner | ✅ Built (TODO-0407) | `/dashboard/closet` |
 | 5 | Procrastination | AI Accountability Coach | ✅ Shipped | `/dashboard/goals`, `/dashboard/habits`, `/dashboard/focus` |
 | 6 | Email takes too much time | AI Email Assistant | ✅ Shipped (hub) | `/dashboard/inbox` (Communications Hub), `/dashboard/paperwork` |
 | 7 | Can't write well | Personal Writing Assistant | ✅ Shipped (partial) | Homework AI help, Paperwork AI draft-reply; TODO-0415 adds guided writing practice |
-| 8 | Don't know what to watch | Universal Entertainment Finder | 🆕 TODO-0408 | `/dashboard/watchlist` |
+| 8 | Don't know what to watch | Universal Entertainment Finder | ✅ Built (TODO-0408) | `/dashboard/watchlist` |
 | 9 | Forget birthdays/events | Relationship Reminder App | ✅ Shipped | `/dashboard/celebrations`, `/dashboard/contacts`, `/dashboard/reminders` |
 | 10 | Can't decide where to eat | AI Restaurant Decider | ✅ Shipped | `/dashboard/dining` |
 | 11 | Too many subscriptions | Subscription Audit Tool | ✅ Shipped | `/dashboard/subscriptions`, `/dashboard/renewals` |
 | 12 | Household chores are disorganized | Family Chore Planner | ✅ Shipped | `/dashboard/chores`, `/missions` |
 | 13 | Can't remember passwords/accounts | Digital-Life Organizer | ✅ Shipped | `/dashboard/passwords`, `/dashboard/binder` |
-| 14 | Can't stay hydrated | Habit/Hydration Coach | 🆕 TODO-0416 | Hydration presets + quick-log in `/dashboard/habits` |
-| 15 | Can't remember where things are | AI Home Inventory | 🆕 TODO-0409 | `/dashboard/inventory` |
+| 14 | Can't stay hydrated | Habit/Hydration Coach | ✅ Built (TODO-0416) | Hydration presets + quick-log in `/dashboard/habits` |
+| 15 | Can't remember where things are | AI Home Inventory | ✅ Built (TODO-0409) | `/dashboard/inventory` |
 | 16 | Money disappears / overspending | AI Personal CFO | ✅ Shipped | `/dashboard/family-cfo`, `/dashboard/budgets`, `/dashboard/expenses` |
 | 17 | Can't lose weight | AI Weight-Loss OS | ✅ Shipped | `/dashboard/nutrition`, `/dashboard/health`, `/api/ai/health/coach` |
-| 18 | Can't sleep | AI Sleep Coach | 🆕 TODO-0410 | `/dashboard/sleep` |
+| 18 | Can't sleep | AI Sleep Coach | ✅ Built (TODO-0410) | `/dashboard/sleep` |
 | 19 | Constant stress | AI Stress Coach | ✅ Shipped | `/dashboard/calm`, `/dashboard/family-stress` |
 | 20 | Don't know how to make more money | AI Income Builder | ⏸ Out of scope | Not a household-operations problem; TODO-0414 covers the career side |
-| 21 | Job searching is exhausting | AI Job-Seeker Agent | 🆕 TODO-0414 | `/dashboard/career` (application pipeline + follow-ups) |
+| 21 | Job searching is exhausting | AI Job-Seeker Agent | ✅ Built (TODO-0414) | `/dashboard/career` (application pipeline + follow-ups) |
 | 22 | Don't know where money goes | Automated Spending Intelligence | ✅ Shipped | `/dashboard/expenses`, `/dashboard/money-timeline` |
 | 23 | Can't stick to exercise | Adaptive AI Fitness Coach | ✅ Shipped | `/dashboard/health` (workouts), `/api/ai/health/coach` |
 | 24 | Grocery bills too high | AI Grocery Optimizer | ✅ Shipped | `/dashboard/grocery`, `/dashboard/savings`, `/dashboard/pantry` |
 | 25 | Can't stay organized | Personal AI Chief of Staff | ✅ Shipped | `/dashboard/command-center`, `/dashboard/family-coo`, `/dashboard/assistant` |
 | 26 | Too much screen time | Digital Behavior Coach | ✅ Shipped | `/dashboard/screen-time` |
-| 27 | House is cluttered | AI Decluttering Coach | 🆕 TODO-0411 | `/dashboard/declutter` |
+| 27 | House is cluttered | AI Decluttering Coach | ✅ Built (TODO-0411) | `/dashboard/declutter` |
 | 28 | Travel planning takes forever | AI Trip Operating System | ✅ Shipped | `/dashboard/trips`, `/dashboard/trip-intel`, `/dashboard/vacations` |
 | 29 | Kids' schedules are chaotic | Family Operating System | ✅ Shipped (core) | `/dashboard/calendar`, `/dashboard/school`, `/dashboard/sports` |
-| 30 | Don't know what career to pursue | AI Career Navigator | 🆕 TODO-0414 | `/dashboard/career` (`/api/ai/career`) |
-| 31 | Learning a language is hard | AI Conversation Tutor | 🆕 TODO-0415 | `/dashboard/language` |
+| 30 | Don't know what career to pursue | AI Career Navigator | ✅ Built (TODO-0414) | `/dashboard/career` (`/api/ai/career`) |
+| 31 | Learning a language is hard | AI Conversation Tutor | ✅ Built (TODO-0415) | `/dashboard/language` |
 | 32 | Home maintenance gets forgotten | AI Home Manager | ✅ Shipped | `/dashboard/home` (maintenance, warranties, pros) |
 | 33 | Meetings waste time | Meeting Elimination Assistant | ⏸ Out of scope | Workplace tool |
 | 34 | Don't understand bills/contracts | AI Bill/Contract Explainer | ✅ Shipped | `/dashboard/bills`, `/dashboard/paperwork` |
@@ -82,20 +82,20 @@
 | 46 | Small businesses can't manage everything | AI Small-Business COO | ⏸ Out of scope | Different product |
 | 47 | Loneliness | Interest-Based Connection Platform | ✅ Shipped | `/dashboard/social`, Marketplace Community Circles |
 | 48 | Schoolwork overwhelms families | AI Family Tutor | ✅ Shipped | `/dashboard/homework`, `/dashboard/school`; TODO-0415 adds language tutoring |
-| 49 | Moving is extremely stressful | Moving Operating System | 🆕 TODO-0412 | `/dashboard/moving` |
-| 50 | Home projects are difficult to manage | AI Home Project Manager | 🆕 TODO-0413 | `/dashboard/projects` |
+| 49 | Moving is extremely stressful | Moving Operating System | ✅ Built (TODO-0412) | `/dashboard/moving` |
+| 50 | Home projects are difficult to manage | AI Home Project Manager | ✅ Built (TODO-0413) | `/dashboard/projects` |
 
-Totals: 33 shipped (5 partial), 10 new capabilities across 9 modules + 1 preset, 4 out of scope.
+Totals: 33 shipped (5 partial), 10 new capabilities across 9 modules + 1 preset — all built this session (TODO-0407 → TODO-0416), 4 out of scope.
 
 #### TODO-0407 - Closet & Outfits — "Don't know what to wear" (row 4)
 
 - Timestamp: 2026-09-05 America/New_York
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Severity: Feature
 - Category: New module / Daily Life
 - Feature: Closet & Outfits (AI Outfit Planner)
 - Route: `/dashboard/closet`
-- File or files: `supabase/migrations/0240_closet_outfits.sql`, `lib/closet/*`, `components/modules/closet-module.tsx`, `app/(app)/dashboard/closet/page.tsx`, `app/api/ai/closet/route.ts`, `supabase/seed_closet_one_family.sql`, `tests/closet-*.test.ts`
+- File or files: `supabase/migrations/0240_closet_outfits.sql`, `lib/closet/*`, `components/modules/closet-module.tsx`, `app/(app)/dashboard/closet/page.tsx`, `lib/ai/insights.ts` (`closet` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_closet_one_family.sql`, `tests/closet-*.test.ts`
 - Database objects: `wardrobe_items` (per-member garments: category, color, warmth, formality, seasons, size, status, last worn), `outfits` (named combinations, occasion, weather band), `outfit_logs` (what was worn, when, in which weather)
 - Affected roles: every family member (kids see their own closet)
 - Scenario: families buy duplicates, kids outgrow clothes unnoticed, and mornings start with "what do I wear?". A closet inventory + a deterministic outfit engine (weather band × occasion × laundry rotation) + an AI stylist produce a daily suggestion per member.
@@ -103,15 +103,15 @@ Totals: 33 shipped (5 partial), 10 new capabilities across 9 modules + 1 preset,
 
 #### TODO-0408 - Family Watchlist — "Don't know what to watch" (row 8)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/watchlist`
-- File or files: `supabase/migrations/0241_family_watchlist.sql`, `lib/watchlist/*`, `components/modules/watchlist-module.tsx`, `app/api/ai/watchlist/route.ts`, `supabase/seed_watchlist_one_family.sql`
+- File or files: `supabase/migrations/0241_family_watchlist.sql`, `lib/watchlist/*`, `components/modules/watchlist-module.tsx`, `lib/ai/insights.ts` (`watchlist` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_watchlist_one_family.sql`
 - Database objects: `watchlist_titles` (title, kind, genres, age rating, min age, runtime, service, status, priority), `watchlist_votes` (member votes), `watch_sessions` (movie nights: who watched, rating, notes)
 - Scenario: "movie night" decisions with every age at the table. A deterministic picker ranks titles by votes, age-appropriateness for tonight's audience and available runtime; the AI route explains the pick and offers alternates.
 
 #### TODO-0409 - Home Inventory — "Can't remember where things are" (row 15)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/inventory`
 - File or files: `supabase/migrations/0242_home_inventory.sql`, `lib/inventory/*`, `components/modules/inventory-module.tsx`, `supabase/seed_inventory_one_family.sql`
 - Database objects: `home_locations` (rooms/containers, nested), `inventory_items` (what, where, quantity, value, warranty link, status: in place / lent / lost / disposed), `inventory_moves` (movement history)
@@ -119,57 +119,57 @@ Totals: 33 shipped (5 partial), 10 new capabilities across 9 modules + 1 preset,
 
 #### TODO-0410 - Sleep Coach — "Can't sleep" (row 18)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/sleep`
-- File or files: `supabase/migrations/0243_sleep_coach.sql`, `lib/sleep/*`, `components/modules/sleep-module.tsx`, `app/api/ai/sleep/route.ts`, `supabase/seed_sleep_one_family.sql`
+- File or files: `supabase/migrations/0243_sleep_coach.sql`, `lib/sleep/*`, `components/modules/sleep-module.tsx`, `lib/ai/insights.ts` (`sleep` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_sleep_one_family.sql`
 - Database objects: `sleep_logs` (per member per night: bed/wake, duration, quality, awakenings), `bedtime_routines` (per member: target bed/wake, wind-down steps, active flag), `sleep_checkins` (daily 2-minute check-in: energy, caffeine, screens, notes)
 - Scenario: age-aware sleep targets (toddler → teen → adult), sleep debt and consistency scores, routine adherence, and an AI coach that builds a 7-day behavioural program from the family's own logs.
 
 #### TODO-0411 - Declutter Missions — "House is cluttered" (row 27)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/declutter`
-- File or files: `supabase/migrations/0244_declutter.sql`, `lib/declutter/*`, `components/modules/declutter-module.tsx`, `app/api/ai/declutter/route.ts`, `supabase/seed_declutter_one_family.sql`
+- File or files: `supabase/migrations/0244_declutter.sql`, `lib/declutter/*`, `components/modules/declutter-module.tsx`, `lib/ai/insights.ts` (`declutter` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_declutter_one_family.sql`
 - Database objects: `declutter_zones` (room/zone, clutter score, last reset), `declutter_missions` (10–15 minute missions: assignee, scheduled, status, items removed, before/after photos), `declutter_sessions` (timed sessions, minutes, streak source)
 - Scenario: turn "clean the house" into 10–15 minute missions per zone generated from clutter scores and room templates, assign them across the family (they feed chores/points), and let the AI coach plan the week.
 
 #### TODO-0412 - Move Planner — "Moving is extremely stressful" (row 49)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/moving`
-- File or files: `supabase/migrations/0245_move_planner.sql`, `lib/moving/*`, `components/modules/moving-module.tsx`, `app/api/ai/moving/route.ts`, `supabase/seed_moving_one_family.sql`
+- File or files: `supabase/migrations/0245_move_planner.sql`, `lib/moving/*`, `components/modules/moving-module.tsx`, `lib/ai/insights.ts` (`moving` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_moving_one_family.sql`
 - Database objects: `moves` (from/to, move date, status, budget, movers), `move_tasks` (timeline tasks by category with lead days, assignee, status), `move_boxes` (labelled boxes: room, contents, fragile, packed/unpacked, destination)
 - Scenario: one workflow from "we're moving" to "settled": a T-8-weeks → T+2-weeks task template (address changes, utilities, movers, school/medical/pet transfers), a box inventory, and an AI planner that adapts the template to the family's dates and situation.
 
 #### TODO-0413 - Home Projects — "Home projects are difficult to manage" (row 50)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/projects`
-- File or files: `supabase/migrations/0246_home_projects.sql`, `lib/projects/*`, `components/modules/projects-module.tsx`, `app/api/ai/projects/route.ts`, `supabase/seed_projects_one_family.sql`
+- File or files: `supabase/migrations/0246_home_projects.sql`, `lib/projects/*`, `components/modules/projects-module.tsx`, `lib/ai/insights.ts` (`projects` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_projects_one_family.sql`
 - Database objects: `home_projects` (title, room, status, budget vs spent, dates, priority), `project_materials` (materials list with estimated/actual cost, purchased), `project_quotes` (contractor quotes: amount, status, validity)
 - Scenario: photo/description → scope → materials → budget → quotes → tracking. Budget health and quote comparison are deterministic; the AI route drafts scope + materials from a description and links to the existing Home Pros marketplace.
 
 #### TODO-0414 - Career Hub — resume, job search, career navigation (rows 2, 21, 30)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/career`
-- File or files: `supabase/migrations/0247_career_hub.sql`, `lib/career/*`, `components/modules/career-module.tsx`, `app/api/ai/career/route.ts`, `supabase/seed_career_one_family.sql`
+- File or files: `supabase/migrations/0247_career_hub.sql`, `lib/career/*`, `components/modules/career-module.tsx`, `lib/ai/insights.ts` (`career` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_career_one_family.sql`
 - Database objects: `career_profiles` (per adult/teen: headline, skills, target roles, work mode, salary target), `job_applications` (pipeline: company, role, stage, dates, next step, salary, source), `resume_versions` (resume text per target role with an ATS keyword score)
 - Scenario: the household's income depends on its careers — a parent's next role, a teen's first job. Deterministic ATS keyword scoring, pipeline stats and follow-up nudges; AI rewrites a resume for a target role and maps skills → options → skills-gap roadmap.
 
 #### TODO-0415 - Language Practice — "Learning a language is hard" (row 31)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/language`
-- File or files: `supabase/migrations/0248_language_practice.sql`, `lib/language/*`, `components/modules/language-module.tsx`, `app/api/ai/language/route.ts`, `supabase/seed_language_one_family.sql`
+- File or files: `supabase/migrations/0248_language_practice.sql`, `lib/language/*`, `components/modules/language-module.tsx`, `lib/ai/insights.ts` (`language` insight kind) + `app/api/ai/insights/route.ts`, `supabase/seed_language_one_family.sql`
 - Database objects: `language_goals` (member, language, current/target CEFR level, weekly minutes), `language_sessions` (practice sessions: kind, minutes, score, topic, corrections), `vocab_cards` (spaced-repetition cards: term, translation, mastery, next review)
 - Scenario: kids and parents practising a language together — SM-2 style review scheduling, weekly-minutes progress and streaks, and an AI conversation tutor that answers in the target language with gentle corrections.
 
 #### TODO-0416 - Hydration in Habits — "Can't stay hydrated" (row 14)
 
-- Status: `[ ]` In progress this session
+- Status: `[x]` Completed in code, tested (engine unit tests, module write-boundary tests, migration + 250-row seed validated on a fresh schema), committed; ships to `main` with the opportunities PR — production apply steps in `docs/PENDING_PROD_MIGRATIONS.md` (0240–0248)
 - Route: `/dashboard/habits`
-- File or files: `lib/habits/presets.ts`, `components/modules/habits-module.tsx`, `tests/habits-presets.test.ts`
+- File or files: `lib/habits/presets.ts`, `components/modules/habits-module.tsx`, `tests/habits-presets.test.ts`, `tests/habits-hydration.test.ts`, `supabase/seed_hydration_one_family.sql`
 - Database objects: none new (habits + habit_logs)
 - Scenario: the lightest-weight opportunity in the table (a reminder + streak). Bubaly's habit engine already does streaks and reminders, so hydration ships as first-class presets (water by age, "8 glasses", "bottle refills") with one-tap logging rather than a separate app.
 

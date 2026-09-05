@@ -127,6 +127,35 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0213 | `0213_admin_churn_kind.sql` | Widens `admin_notifications.kind` to admit `subscription_churn` | **Founder churn alerts (the other half of the growth ledger).** The admin bell + digest now also fire when a **paying family cancels or downgrades to free** — was paid+active → now canceled/unpaid/expired or on the free plan, detected in the Stripe webhook via the pure `isChurn` (fires once on the loss, never on a tier change that stays paid, never on transient `past_due`). Best-effort/service-role. Just a CHECK widening — safe before apply (churn inserts no-op until it lands). Additive/idempotent. **PG16-verified** (idempotent ×2; churn kind accepted, bogus rejected). Requires 0206/0207/0209. |
 | 0214 | `0214_family_contact_center.sql` | `family_contact_channels` (one per family: `@bubaly.com` local-part + dedicated Twilio number + AI-concierge config) + `family_inbox_messages` (unified inbox) | **Family Operations Center (Family+).** Every Family+ family gets ONE central contact identity — a `@bubaly.com` address and a dedicated phone number — and inbound calls/texts/emails all route into `family_inbox_messages`, where the AI concierge triages them (summary + intent, urgent → SMS the human fallback, otherwise a courteous auto-reply). Family-scoped RLS reads; all writes are privileged (provisioning + webhooks use the service role; the controls at `/dashboard/contact-center` are parent-gated). **Owner keys (dark until set):** `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` (already used by Guardian) buy + wire numbers; without them a number request is saved as `pending`. Inbound **email** to `@bubaly.com` additionally needs an inbound-email provider pointed at `/api/contact-center/*` (owner DNS/infra) — the address is assignable now; email routing lights up when that's connected. AI triage uses the existing provider and degrades to a deterministic classifier without it. Additive/idempotent. **PG16-verified** (idempotent ×2; CI-unique email local-part, provider-ref dedup, channel/status checks, 2 RLS policies). |
 
+
+### Opportunity modules (0240–0248) — Top-50 everyday problems → Bubaly
+
+All additive + idempotent, family-scoped RLS via `is_family_member`, `updated_at`
+triggers, realtime publication. Each has a matching `npm run db:seed:<module>`
+script that loads 250 rows per table for the target family (idempotent, tagged
+`[seed:<module>]`). Apply in order; `supabase db push` does it in one go.
+
+| # | File | Adds | Feature it unblocks |
+|---|------|------|---------------------|
+| 0240 | `0240_closet_outfits.sql` | `wardrobe_items`, `outfits`, `outfit_logs` | Closet & Outfits `/dashboard/closet` (`db:seed:closet`) |
+| 0241 | `0241_family_watchlist.sql` | `watchlist_titles`, `watchlist_votes`, `watch_sessions` | Family Watchlist `/dashboard/watchlist` (`db:seed:watchlist`) |
+| 0242 | `0242_home_inventory.sql` | `home_locations`, `inventory_items`, `inventory_moves` | Home Inventory `/dashboard/inventory` (`db:seed:inventory`) |
+| 0243 | `0243_sleep_coach.sql` | `sleep_logs`, `bedtime_routines`, `sleep_checkins` | Sleep Coach `/dashboard/sleep` (`db:seed:sleep`) |
+| 0244 | `0244_declutter.sql` | `declutter_zones`, `declutter_missions`, `declutter_sessions` | Declutter Missions `/dashboard/declutter` (`db:seed:declutter`) |
+| 0245 | `0245_move_planner.sql` | `moves`, `move_tasks`, `move_boxes` | Move Planner `/dashboard/moving` (`db:seed:moving`) |
+| 0246 | `0246_home_projects.sql` | `home_projects`, `project_materials`, `project_quotes` (links `home_contractors`) | Home Projects `/dashboard/projects` (`db:seed:projects`) |
+| 0247 | `0247_career_hub.sql` | `career_profiles`, `job_applications`, `resume_versions` | Career Hub `/dashboard/career` (`db:seed:career`) |
+| 0248 | `0248_language_practice.sql` | `language_goals`, `language_sessions`, `vocab_cards` | Language Practice `/dashboard/language` (`db:seed:language`) |
+| — | (no migration) | Hydration presets + count logging use the existing `habits` / `habit_logs` | Habits `/dashboard/habits` (`db:seed:hydration`) |
+
+> **Data API grants.** These tables rely on the project's default privileges
+> (tables created by `postgres` are granted to `anon` / `authenticated` /
+> `service_role`), like every migration since 0002. The production project was
+> created under that legacy default, so nothing extra is needed there. A project
+> created after 2026-05-30, or a local stack without `[api] auto_expose_new_tables
+> = true` in `supabase/config.toml`, revokes those defaults and would need explicit
+> `GRANT`s — see the comment in `config.toml`.
+
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
 safe to re-run. When in doubt, **run the full push**: idempotent migrations make
