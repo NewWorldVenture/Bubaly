@@ -192,6 +192,6 @@ test.describe('Ask Bubaly concierge loop', () => {
     // And the page reflects the finished run after one more reload.
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: PLAN_OBJECTIVE })).toBeVisible();
-    await expect(page.getByText(/\d+ of \d+ steps completed/).first()).toBeVisible();
+    await expect(page.getByText(/^\d+ of \d+ steps complete$/).first()).toBeVisible();
   });
 });
