@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **430 tables**.
+Generated from `supabase/migrations/*.sql` — **433 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -77,6 +77,9 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `dashboard_layout_events` | `0089_dashboard_layouts.sql` |
 | `dashboard_layouts` | `0089_dashboard_layouts.sql` |
 | `decision_options` | `0130_family_decisions.sql` |
+| `declutter_missions` | `0244_declutter.sql` |
+| `declutter_sessions` | `0244_declutter.sql` |
+| `declutter_zones` | `0244_declutter.sql` |
 | `demo_email_uses` | `0162_demo_email_uses.sql` |
 | `demo_sessions` | `0138_demo_sessions.sql` |
 | `departure_plans` | `0098_trip_intelligence.sql` |

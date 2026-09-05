@@ -56,7 +56,8 @@ export type InsightKind =
   | 'closet'
   | 'watchlist'
   | 'inventory'
-  | 'sleep';
+  | 'sleep'
+  | 'declutter';
 
 export type InsightMember = { id: string; name: string };
 
@@ -678,6 +679,28 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         .map((c) => `- ${day(c.checkin_date)} ${who(c.member_id)}: energy ${c.energy}/5, mood ${c.mood}/5${c.caffeine_after_2pm ? ', late caffeine' : ''}${c.screens_in_bed ? ', screens in bed' : ''}${c.exercised ? ', exercised' : ''}`)
         .join('\n') || 'No check-ins yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nRecent nights:\n${logs}\n\nRoutines:\n${routines}\n\nCheck-ins:\n${checkins}\n\nGive, per member with data: (1) how their week compares with their age target, (2) the single habit most worth changing, with the evidence from their own nights, (3) a 7-day program (one line per day). Then one family-wide tip.${q(d)}`;
+    },
+  },
+
+  declutter: {
+    label: 'AI declutter coach',
+    title: 'AI Decluttering Coach',
+    blurb: 'A week of 10–15 minute missions, ordered by where the clutter actually is, with a nudge for whoever is due.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are an encouraging, practical decluttering coach for a busy family. Work ONLY from the zones, missions and sessions provided. ' +
+      'Keep every mission to 10–15 minutes, name the zone exactly, celebrate streaks and items removed, and never shame anyone. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const zones = cap(r(d, 'declutter_zones').filter((z) => z.is_active), 30).shown
+        .map((z) => `- ${z.name}${z.room ? ` (${z.room})` : ''}: clutter ${z.clutter_score}/5, ${z.kind}${z.last_reset_at ? `, last reset ${day(z.last_reset_at)}` : ', never reset'}`)
+        .join('\n') || 'No zones yet.';
+      const missions = cap(r(d, 'declutter_missions'), 25).shown
+        .map((m) => `- [${m.status}] ${m.title} (${m.minutes} min${m.assignee_id ? `, ${who(m.assignee_id)}` : ''}${m.scheduled_for ? `, ${day(m.scheduled_for)}` : ''}${Number(m.items_removed) ? `, ${m.items_removed} items out` : ''})`)
+        .join('\n') || 'No missions yet.';
+      const sessions = cap(r(d, 'declutter_sessions'), 12).shown.map((s) => `- ${day(s.started_at)} ${who(s.member_id)}: ${s.minutes} min, ${s.items_removed} items removed`).join('\n') || 'No sessions yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nZones:\n${zones}\n\nRecent missions:\n${missions}\n\nRecent sessions:\n${sessions}\n\nGive: (1) the three zones to hit first and why, (2) a 7-day plan of one 10–15 minute mission per day with a suggested person, (3) one habit that would stop the worst zone refilling.${q(d)}`;
     },
   },
 

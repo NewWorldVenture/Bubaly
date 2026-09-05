@@ -131,6 +131,14 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { sleep_logs: logs.data ?? [], bedtime_routines: routines.data ?? [], sleep_checkins: checkins.data ?? [] };
     }
+    case 'declutter': {
+      const [zones, missions, sessions] = await Promise.all([
+        eq(sb, 'declutter_zones', familyId).order('clutter_score', { ascending: false }).limit(60),
+        eq(sb, 'declutter_missions', familyId).order('scheduled_for', { ascending: false, nullsFirst: false }).limit(60),
+        eq(sb, 'declutter_sessions', familyId).order('started_at', { ascending: false }).limit(20),
+      ]);
+      return { declutter_zones: zones.data ?? [], declutter_missions: missions.data ?? [], declutter_sessions: sessions.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };

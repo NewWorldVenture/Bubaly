@@ -34,6 +34,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/connections` | `family_connections` |
 | `/dashboard/contacts` | `family_contacts` |
 | `/dashboard/decisions` | `decision_options`, `family_decisions` |
+| `/dashboard/declutter` | `declutter_missions`, `declutter_sessions`, `declutter_zones` |
 | `/dashboard/dental` | `health_providers`, `health_visits`, `insurance_policies`, `medical_profiles`, `medications` |
 | `/dashboard/devices` | `smart_devices` |
 | `/dashboard/dining` | `dining_out` |
