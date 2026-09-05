@@ -65,6 +65,7 @@ export const SERVICE_DESCRIPTIONS: Record<string, string> = {
   '/dashboard/sleep': 'Age-aware sleep targets for every family member, bedtime routines, a 2-minute check-in, and an AI coach that builds a 7-day program from your own nights.',
   '/dashboard/moving': 'One workflow from “we’re moving” to “settled”: an eight-week checklist tailored to kids, pets and rentals, a searchable numbered box inventory, budget health and an AI move planner.',
   '/dashboard/projects': 'Scope → materials → budget → quotes → done: every home project with a real materials list, budget health that counts what is committed, side-by-side contractor quotes and an AI scope drafter.',
+  '/dashboard/career': 'The household’s careers in one place: job searches per member, a pipeline with follow-up nudges, resume versions scored against the role’s keywords, a skills-to-roles map and an AI career coach.',
   '/dashboard/declutter': 'Turn “clean the house” into 10–15 minute missions per zone, spread across the family for the week, with streaks, before/after photos and an AI coach.',
   '/dashboard/locator': 'A private family map — see where everyone is, with check-ins and place alerts, on your terms.',
   '/dashboard/social': 'Coordinate the family’s social life — RSVPs, invites, and who’s doing what this weekend.',

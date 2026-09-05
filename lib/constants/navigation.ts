@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Truck, Hammer, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, type LucideIcon,
+  Truck, Hammer, Briefcase, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -182,6 +182,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
       { href: '/dashboard/tax-vault', label: 'Tax Vault', icon: FolderLock, minLevel: 1 },
+      { href: '/dashboard/career', label: 'Career Hub', icon: Briefcase, minLevel: 1 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
       { href: '/dashboard/migrate', label: 'Switch to Bubaly', icon: Import, minLevel: 0 },

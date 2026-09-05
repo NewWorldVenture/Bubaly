@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **439 tables**.
+Generated from `supabase/migrations/*.sql` — **442 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -49,6 +49,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `calendar_feeds` | `0045_calendar_feeds.sql` |
 | `call_logs` | `0092_front_desk.sql` |
 | `care_log` | `0032_care_log.sql` |
+| `career_profiles` | `0247_career_hub.sql` |
 | `case_studies` | `0059_reputation.sql` |
 | `checkout_sessions` | `0051_checkout_sessions.sql` |
 | `child_login_throttle` | `0137_child_login_throttle.sql` |
@@ -189,6 +190,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `invest_holdings` | `0097_kid_investing.sql` |
 | `invest_orders` | `0097_kid_investing.sql` |
 | `invites` | `0002_tables.sql` |
+| `job_applications` | `0247_career_hub.sql` |
 | `journal_entries` | `0087_journal.sql` |
 | `journey_events` | `0124_journey_events.sql` |
 | `keyword_intel` | `0066_competitive_intel.sql` |
@@ -303,6 +305,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `renewals` | `0033_renewals.sql` |
 | `rental_cars` | `0037_auto.sql` |
 | `reputation_settings` | `0041_reviews.sql` |
+| `resume_versions` | `0247_career_hub.sql` |
 | `reviews` | `0041_reviews.sql` |
 | `reward_redemptions` | `0028_reward_redemptions.sql` |
 | `rewards` | `0002_tables.sql` |

@@ -24,6 +24,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/calendar` | `calendar_events` |
 | `/dashboard/calm` | `agent_activity`, `approval_requests`, `autopilot_suggestions`, `family_operating_index`, `reminders` |
 | `/dashboard/care` | `care_log` |
+| `/dashboard/career` | `career_profiles`, `job_applications`, `resume_versions` |
 | `/dashboard/celebrations` | `family_dates` |
 | `/dashboard/chores` | `chore_assignments`, `chores`, `reward_redemptions`, `rewards` |
 | `/dashboard/closet` | `outfit_logs`, `outfits`, `wardrobe_items` |

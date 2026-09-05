@@ -60,7 +60,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     tint: 'bg-emerald-500/15 text-emerald-300',
     countLabel: 'tools',
     hrefs: [
-      '/dashboard/billing', '/wallet', '/economy', '/dashboard/expenses',
+      '/dashboard/billing', '/wallet', '/economy', '/dashboard/expenses', '/dashboard/career',
       '/dashboard/subscriptions', '/dashboard/insurance', '/dashboard/tax-vault',
       '/dashboard/family-cfo', '/referrals',
     ],

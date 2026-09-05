@@ -59,7 +59,8 @@ export type InsightKind =
   | 'sleep'
   | 'declutter'
   | 'moving'
-  | 'projects';
+  | 'projects'
+  | 'career';
 
 export type InsightMember = { id: string; name: string };
 
@@ -750,6 +751,30 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         return `- ${p.title} (${p.kind}, ${p.status}, ${p.priority} priority, ${p.is_diy ? 'DIY' : 'hiring'}${p.room ? `, ${p.room}` : ''}${p.owner_id ? `, owner ${who(p.owner_id)}` : ''}). Budget ${p.budget_cents == null ? 'not set' : money(Number(p.budget_cents))}${p.target_start ? `, start ${day(p.target_start)}` : ''}${p.target_end ? `, finish ${day(p.target_end)}` : ''}.${p.description ? ` Scope: ${String(p.description).slice(0, 160)}` : ''}\n  Materials: ${matLine}\n  Quotes: ${quoteLine}`;
       }).join('\n') || 'No projects yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nProjects:\n${projects}\n\nGive: (1) for each active project the one next step and any budget or safety concern, (2) which quote to accept where there are several and why, (3) a materials sanity check (missing or over-ordered items), (4) what to do this weekend.${q(d)}`;
+    },
+  },
+
+  career: {
+    label: 'AI career coach',
+    title: 'AI Career Coach',
+    blurb: 'Resume rewrite for the target role, what to do about each stalled application, and a skills-gap roadmap.',
+    maxTokens: 900,
+    allowQuestion: true,
+    system:
+      'You are a candid, encouraging career coach for a family — a parent changing roles or a teen after a first job. Work ONLY from the profiles, applications and resumes provided. ' +
+      'Be concrete: rewrite bullets with numbers, name the missing keywords, give exact follow-up wording, and map skills to realistic next roles. Never invent employers, salaries or credentials. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const arr = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x)) : []);
+      const profiles = cap(r(d, 'career_profiles'), 4).shown.map((p) => {
+        const apps = r(d, 'job_applications').filter((a) => a.profile_id === p.id);
+        const resumes = r(d, 'resume_versions').filter((x) => x.profile_id === p.id);
+        const appLines = apps.slice(0, 12).map((a) => `  - ${a.role_title} @ ${a.company} [${a.stage}${a.applied_on ? `, applied ${day(a.applied_on)}` : ''}${a.next_step ? `, next: ${a.next_step}${a.next_step_on ? ` by ${day(a.next_step_on)}` : ''}` : ''}${a.salary_min_cents || a.salary_max_cents ? `, ${money(Number(a.salary_min_cents ?? a.salary_max_cents))}–${money(Number(a.salary_max_cents ?? a.salary_min_cents))}` : ''}]`).join('\n') || '  (no applications)';
+        const primary = resumes.find((x) => x.is_primary) ?? resumes[0];
+        const resumeLine = primary ? `  Resume "${primary.title}" (${primary.target_role ?? 'general'}): ATS ${primary.ats_score ?? '?'}/100, missing keywords: ${arr(primary.missing_keywords).slice(0, 8).join(', ') || 'none'}\n  Resume text (excerpt): ${String(primary.body ?? '').slice(0, 900)}` : '  (no resume yet)';
+        return `${who(p.member_id)} — ${p.title} (${p.status}, ${p.employment_type}, ${p.work_mode}${p.location ? `, ${p.location}` : ''}${p.salary_target_cents ? `, target ${money(Number(p.salary_target_cents))}` : ''}). Target roles: ${arr(p.target_roles).join(', ') || 'none'}. Skills: ${arr(p.skills).join(', ') || 'none'}. Wants ${p.weekly_goal} applications a week.\n  Applications:\n${appLines}\n${resumeLine}`;
+      }).join('\n\n') || 'No job searches yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\n${profiles}\n\nFor each search give: (1) three rewritten resume bullets that add the missing keywords and a number, (2) what to do about each application that is waiting or stalled, with the exact message to send, (3) a skills-gap roadmap: the two skills to learn next and how, (4) one honest observation about the target.${q(d)}`;
     },
   },
 

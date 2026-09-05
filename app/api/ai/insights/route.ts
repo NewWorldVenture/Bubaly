@@ -159,6 +159,16 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { home_projects: live.data ?? [], project_materials: materials.data ?? [], project_quotes: quotes.data ?? [] };
     }
+    case 'career': {
+      const live = await eq(sb, 'career_profiles', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      const ids = (live.data ?? []).map((p) => p.id);
+      if (!ids.length) return { career_profiles: [], job_applications: [], resume_versions: [] };
+      const [apps, resumes] = await Promise.all([
+        eq(sb, 'job_applications', familyId).in('profile_id', ids).order('updated_at', { ascending: false }).limit(60),
+        eq(sb, 'resume_versions', familyId).in('profile_id', ids).order('is_primary', { ascending: false }).limit(8),
+      ]);
+      return { career_profiles: live.data ?? [], job_applications: apps.data ?? [], resume_versions: resumes.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };
