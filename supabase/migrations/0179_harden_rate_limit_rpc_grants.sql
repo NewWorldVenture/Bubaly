@@ -1,4 +1,4 @@
--- FamilyOS :: 0179 - Harden durable limiter RPC privileges
+-- Bubaly :: 0179 - Harden durable limiter RPC privileges
 --
 -- 0156 granted the SECURITY DEFINER limiter RPC to anon and left the prune RPC
 -- inheriting PostgreSQL's default PUBLIC execute privilege. A caller could then

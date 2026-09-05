@@ -1,4 +1,4 @@
--- FamilyOS :: 0106 todo_lists / todo_items RLS repair
+-- Bubaly :: 0106 todo_lists / todo_items RLS repair
 -- ----------------------------------------------------------------------------
 -- Same production-drift safeguard as 0105 (calendar_events): re-assert the
 -- canonical family-scoped policies for the Tasks page's tables so authenticated

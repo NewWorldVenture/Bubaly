@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Onboarding calendar imports (500 records).
+-- Bubaly · SEED — Onboarding calendar imports (500 records).
 -- Fills onboarding_imports so the value-first first-run (T1) can be tested at
 -- volume: every source, a spread of event/conflict/action counts, and a computed
 -- brief summary per row. Idempotent via brief->>'seed' = 'onboard'; resolves the

@@ -1,10 +1,10 @@
-# FamilyOS — Roadmap Build TODO
+# Bubaly — Roadmap Build TODO
 
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
 - Last updated: 2026-07-18 05:58:00 -04:00
-- Repository: NewWorldVenture/FamilyOS
+- Repository: NewWorldVenture/Bubaly
 - Branch: `codex/world-class-production`
 - Commit: `ab2d2adc` makes Family Assistant reasoning reads fail closed after `e4851253` repaired shared Operating Index and graph loaders; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally

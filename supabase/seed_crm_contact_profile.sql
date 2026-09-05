@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Progressive-profiling answers (500 records).
+-- Bubaly · SEED — Progressive-profiling answers (500 records).
 -- Fills crm_contact_profile so the progressive-profiling flow + segmentation
 -- can be tested at volume. Creates 500 seed crm_contacts leads (if needed) and
 -- gives each a partial-to-complete profile: a spread of role / top_priority /

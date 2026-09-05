@@ -1,4 +1,4 @@
--- FamilyOS :: 0034 social media command center
+-- Bubaly :: 0034 social media command center
 -- Persistence for the Social Media Command Center: connected accounts + encrypted
 -- tokens, the unified feed, drafts/variants/targets, media library, scheduling,
 -- the publish job/result pipeline, comments/messages (inbox), analytics snapshots,
@@ -7,7 +7,7 @@
 --
 -- Security model:
 --   * Every household table is family-scoped via public.is_family_member(family_id)
---     — the same hard isolation boundary used everywhere else in FamilyOS. No row
+--     — the same hard isolation boundary used everywhere else in Bubaly. No row
 --     ever crosses a family.
 --   * social_account_tokens stores ONLY ciphertext (encrypt with lib/social/crypto
 --     / the existing SYNC_TOKEN_KEY AES-256-GCM helper). RLS leaves it with NO

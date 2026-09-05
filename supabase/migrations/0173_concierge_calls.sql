@@ -1,4 +1,4 @@
--- FamilyOS :: 0173 — AI Concierge Calls (outbound: "Bubaly calls for you")
+-- Bubaly :: 0173 — AI Concierge Calls (outbound: "Bubaly calls for you")
 --
 -- The competitive gap no family app fills: the AI places phone calls ON BEHALF
 -- of the family — booking a dentist, rescheduling a haircut, confirming a

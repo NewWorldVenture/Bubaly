@@ -1,4 +1,4 @@
--- FamilyOS :: 0110 transactions.member_id
+-- Bubaly :: 0110 transactions.member_id
 -- ----------------------------------------------------------------------------
 -- Adds a nullable per-member attribution to transactions so the Finances
 -- dashboard's "Spending by Person" card can group real spend by family member.

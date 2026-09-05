@@ -1,4 +1,4 @@
--- FamilyOS :: 0119 family_credentials (Wi-Fi & Passwords vault)
+-- Bubaly :: 0119 family_credentials (Wi-Fi & Passwords vault)
 -- ----------------------------------------------------------------------------
 -- Backs the Family hub's "Wi-Fi & Passwords" card with a real store: shared
 -- family credentials (Wi-Fi networks, streaming/website/app logins, door PINs,

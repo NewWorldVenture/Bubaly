@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Routine templates + items (60 templates × 9 items = 540 rows).
+-- Bubaly · SEED — Routine templates + items (60 templates × 9 items = 540 rows).
 -- Fills routine_templates + routine_template_items so the calendar Routines panel
 -- (components/modules/routines-panel.tsx) renders populated in a fresh env — the
 -- table ships in 0122 but had NO seed anywhere (LB-014). 60 realistic routines

@@ -1,4 +1,4 @@
--- FamilyOS :: 0103 — backfill enum values that drifted on long-lived databases.
+-- Bubaly :: 0103 — backfill enum values that drifted on long-lived databases.
 --
 -- Root cause: 0001 defines each enum with `create type … exception when
 -- duplicate_object then null`. On a database that already had an OLDER version

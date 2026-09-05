@@ -1,6 +1,6 @@
 // lib/memories/on-this-day.ts — "On this day" memory resurfacing.
 //
-// Delight, not admin: at meaningful moments FamilyOS surfaces the family's own
+// Delight, not admin: at meaningful moments Bubaly surfaces the family's own
 // past. Given the photo library this pure module finds the ones taken on today's
 // month+day in a previous year and labels them ("2 years ago"), newest match
 // first. No I/O, so it's deterministic and unit-tested; a client reads

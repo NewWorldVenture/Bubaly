@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Paperwork Inbox (500 records).
+-- Bubaly · SEED — Paperwork Inbox (500 records).
 -- Fills paperwork_items so the triage inbox can be tested at volume: all 7
 -- kinds × realistic titles/summaries/senders, a spread of urgency and status,
 -- due dates from 30 days back to 90 days ahead, extracted-action JSON in the

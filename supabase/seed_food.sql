@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_food.sql — demo data for the Food & Nutrition hub
+-- Bubaly :: seed_food.sql — demo data for the Food & Nutrition hub
 --
 -- Fills the food-domain tables the hub (/dashboard/food) and Dining Out
 -- (/dashboard/dining) read but seed_home.sql doesn't:

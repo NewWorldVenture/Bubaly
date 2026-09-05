@@ -1,4 +1,4 @@
--- FamilyOS :: 0143 AI feedback — the "Why this?" learning loop (T7)
+-- Bubaly :: 0143 AI feedback — the "Why this?" learning loop (T7)
 -- ----------------------------------------------------------------------------
 -- The "Why this?" affordance shows a recommendation's reason + inputs and lets
 -- the family respond: Helpful / Not helpful, dismiss, undo, or adjust. Those

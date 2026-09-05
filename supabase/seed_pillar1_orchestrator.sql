@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #1: Orchestrator questions (Operating Layer)
+-- Bubaly · SEED — Pillar #1: Orchestrator questions (Operating Layer)
 -- 500+ records. Feeds the five daily questions on
 -- /dashboard/family-operating-index (what'll go wrong tomorrow · who's
 -- overloaded · what to decide next · what info is missing · what can auto-run).

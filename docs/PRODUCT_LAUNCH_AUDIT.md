@@ -150,7 +150,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Role: authenticated family members; API re-checks auth + rate-limits
 - Subscription tier / household config: all
 - Scenario: a user surfaced 4 competitor AI family organizers (Sense, Nori AI, Maple, Skylight 2) and asked to beat them.
-- Severity: **MEDIUM** (competitive/feature — the single headline capability FamilyOS lacked).
+- Severity: **MEDIUM** (competitive/feature — the single headline capability Bubaly lacked).
 - Reproduction/analysis: mapped each competitor headline to existing code (see `docs/COMPETITIVE_ANALYSIS.md`) — Sense (Magic Import `ai/import`), Maple (sync providers + flyer vision), Skylight (`/display` kiosk) already matched/beaten; only **Nori's "fridge photo → recipes, allergy-checked, auto grocery list"** was missing (the vision provider existed but no meals endpoint used it for recipes).
 - Expected: parity+ with Nori — a fridge photo yields allergy-safe dinners and one-tap grocery add.
 - Actual (before): no such feature; the vision plumbing was used only for flyer→events.

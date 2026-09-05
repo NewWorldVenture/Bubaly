@@ -1,4 +1,4 @@
--- FamilyOS :: seed_behavior_logs.sql
+-- Bubaly :: seed_behavior_logs.sql
 -- LB-014 slice (agent-05, PLA-0803): `behavior_logs` (migration 0073) had ZERO
 -- seed coverage anywhere (not in SEED_ALL, not in any seed_*.sql), so the Behavior
 -- Tracking dashboard (/dashboard/behavior → behavior-module) renders EMPTY in a

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Microsoft / Outlook two-way sync (500+ records).
+-- Bubaly · SEED — Microsoft / Outlook two-way sync (500+ records).
 -- Exercises the R9 provider-agnostic adapter at volume: a connected Microsoft
 -- sync_account + connection, an Outlook calendar mirror, and 500 already-synced
 -- Outlook-origin events with their external mappings (exactly what the generic

@@ -1,4 +1,4 @@
--- FamilyOS :: 0157 Family signals — add the budget-drift kind (R10)
+-- Bubaly :: 0157 Family signals — add the budget-drift kind (R10)
 -- ----------------------------------------------------------------------------
 -- Widens family_signals.kind (0142) to include 'budget_drift' — the 5th hard
 -- signal: a budget category over its cap for the current period (a stronger,

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Autonomous execution loop (500 records).
+-- Bubaly · SEED — Autonomous execution loop (500 records).
 -- Fills family_automation_runs with loop-triggered runs (trigger_type
 -- 'plan_accepted') so the Concierge Autopilot panel can be tested at volume:
 -- realistic "Bubaly did it" summaries across executed / pending / dismissed,

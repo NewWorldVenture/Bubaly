@@ -1,6 +1,6 @@
 # AGENT_REGISTRY
 
-Registered agents in the FamilyOS production-readiness audit. **Live claims** are
+Registered agents in the Bubaly production-readiness audit. **Live claims** are
 in `docs/audit/COORDINATION.md §3`; this registry adds the directive-mandated
 identity/heartbeat layer and maps stable directive IDs to the existing board
 handles (`agent-01`..`agent-05`, `codex`).

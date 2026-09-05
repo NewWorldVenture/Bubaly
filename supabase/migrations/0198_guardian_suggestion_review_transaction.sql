@@ -1,4 +1,4 @@
--- FamilyOS :: 0198 - atomic Guardian suggestion review
+-- Bubaly :: 0198 - atomic Guardian suggestion review
 --
 -- A suggestion review changes both the human-review state and, for approved
 -- suggestions, the trust graph or routing rules. Keep those writes and the

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Independence milestones (500 records).
+-- Bubaly · SEED — Independence milestones (500 records).
 -- Fills independence_milestones so the growth-ladder module can be tested at
 -- volume: every domain × age band across the family's kids (falls back to any
 -- members if no child/teen), realistic status mix (achieved with evidence +

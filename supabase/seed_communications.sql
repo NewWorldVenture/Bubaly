@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Email/Comms Concierge (family_communications 500).
+-- Bubaly · SEED — Email/Comms Concierge (family_communications 500).
 -- The unified family inbox at real volume: calls, SMS, email, WhatsApp, school &
 -- sports messages across every category, status and priority — so
 -- /dashboard/inbox renders full.

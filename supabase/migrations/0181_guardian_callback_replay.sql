@@ -1,4 +1,4 @@
--- FamilyOS :: 0181 - Durable Guardian callback replay protection
+-- Bubaly :: 0181 - Durable Guardian callback replay protection
 --
 -- Twilio signatures authenticate the sender, but a signed callback can still be
 -- retried or replayed. Callback claims are service-role only and are created

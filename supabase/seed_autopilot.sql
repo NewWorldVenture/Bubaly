@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Autopilot (autopilot_suggestions 500 + approval_requests 500).
+-- Bubaly · SEED — Autopilot (autopilot_suggestions 500 + approval_requests 500).
 -- The Autopilot queue + the approval inbox at volume, spanning statuses.
 -- Idempotent: suggestions cleared by dedupe_key prefix 'seed-ap-'; approvals by
 -- a '[seed:ap]' summary marker.

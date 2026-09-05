@@ -1,4 +1,4 @@
--- FamilyOS :: 0180 - Durable Resend webhook replay protection
+-- Bubaly :: 0180 - Durable Resend webhook replay protection
 --
 -- Svix signatures authenticate Resend deliveries, but a valid signed event can
 -- still be replayed. Store each Svix id so campaign counters and engagement

@@ -1,4 +1,4 @@
--- FamilyOS :: 0140 Home briefs — "outcome, never empty" daily home snapshot
+-- Bubaly :: 0140 Home briefs — "outcome, never empty" daily home snapshot
 -- ----------------------------------------------------------------------------
 -- T3 (TIME-TO-FIRST-VALUE): a brand-new or quiet family should land on an OUTCOME,
 -- not empty widgets. The AI home now computes a first-run outcome brief — how ready

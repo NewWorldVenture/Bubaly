@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 4): more user-facing left-nav
+-- Bubaly · SEED — feature-gap coverage (round 4): more user-facing left-nav
 -- tables that had no seed rows. Covers: event RSVPs · meal nutrition · trip plans ·
 -- departure plans · calendar feeds · driver licenses · rental cars · vehicle
 -- inspections · homes · household info · home security events · gift links ·

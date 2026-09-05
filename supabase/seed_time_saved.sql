@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Time-Saved metric (R11)  [seed:timesaved]
+-- Bubaly · SEED — Time-Saved metric (R11)  [seed:timesaved]
 -- Populates the three "system handled it for you" inputs lib/metric/time-saved.ts
 -- counts over the last 7 days, so the Home + Experience "N hours saved this week"
 -- banner shows a real figure:

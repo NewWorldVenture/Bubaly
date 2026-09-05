@@ -1,4 +1,4 @@
--- FamilyOS :: 0105 — Child logins (no email required)
+-- Bubaly :: 0105 — Child logins (no email required)
 --
 -- Lets a parent give a child (who has no email) a real account they can sign
 -- into with a simple username + 4-digit PIN. The child gets a Supabase Auth user

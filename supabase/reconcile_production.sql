@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: reconcile_production.sql
+-- Bubaly :: reconcile_production.sql
 -- Applies ONLY the objects that drifted out of production:
 --   1. documents.asset_id column        (from migration 0007)
 --   2. super_admins + is_super_admin()   (migration 0008)

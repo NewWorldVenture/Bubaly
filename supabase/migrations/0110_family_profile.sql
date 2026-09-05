@@ -1,4 +1,4 @@
--- FamilyOS :: 0110 family profile fields + member contact fields + RLS safeguard
+-- Bubaly :: 0110 family profile fields + member contact fields + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The new Family hub page (/dashboard/family) shows a richer family profile
 -- (cover photo, mailing address, a shareable family code) and per-member

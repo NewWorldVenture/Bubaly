@@ -1,4 +1,4 @@
--- FamilyOS :: 0136 accept_invite made idempotent
+-- Bubaly :: 0136 accept_invite made idempotent
 -- ----------------------------------------------------------------------------
 -- Found in a real browser smoke test of the invite journey: accepting an invite
 -- twice — a double-click, React strict-mode double-effect, or simply revisiting

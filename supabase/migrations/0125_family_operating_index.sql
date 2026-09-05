@@ -1,4 +1,4 @@
--- FamilyOS :: 0125 Family Operating Index (the measurable core of the Operating Layer)
+-- Bubaly :: 0125 Family Operating Index (the measurable core of the Operating Layer)
 -- ----------------------------------------------------------------------------
 -- The Operating Layer's north-star metric is "how well is this household
 -- functioning" measured over time. This table stores one append-only SNAPSHOT

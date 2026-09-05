@@ -8,7 +8,7 @@
 // it fully re-seeds the marketplace for the chosen family each time.
 
 export const MARKETPLACE_SEED_SQL = String.raw`-- ============================================================================
--- FamilyOS · Marketplace test seed — 500 listings (+ offers)
+-- Bubaly · Marketplace test seed — 500 listings (+ offers)
 -- Where: Supabase Dashboard → SQL Editor → New query → paste → Run.
 -- Safe to re-run: it deletes THIS family's existing marketplace rows first,
 -- then inserts a fresh 500. It only touches the family resolved below.

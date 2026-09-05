@@ -1,4 +1,4 @@
--- FamilyOS :: 0225 - pin search_path on the last two SECURITY DEFINER functions
+-- Bubaly :: 0225 - pin search_path on the last two SECURITY DEFINER functions
 --
 -- Postgres SECURITY DEFINER functions run with the OWNER's privileges, so an
 -- unpinned search_path is a hardening gap: a caller who does `set search_path`

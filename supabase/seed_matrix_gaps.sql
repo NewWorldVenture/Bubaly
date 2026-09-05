@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Feature-matrix gap tables (500 records each).
+-- Bubaly · SEED — Feature-matrix gap tables (500 records each).
 -- Fills the competitive-matrix features that lacked a 500-row seed so every one
 -- can be tested at volume: Pets, Vehicles, Contacts, Wish lists, Medications,
 -- Homework, Insurance, Utilities, Family tree, Announcements, Subscriptions,

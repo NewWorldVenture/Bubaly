@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_prod.sql  — ONE paste-and-run script (SQL Editor safe)
+-- Bubaly :: seed_prod.sql  — ONE paste-and-run script (SQL Editor safe)
 --
 -- Self-contained and POOLER-SAFE: no temp tables, no BEGIN/COMMIT, so every
 -- statement is independent and works in the Supabase SQL Editor.

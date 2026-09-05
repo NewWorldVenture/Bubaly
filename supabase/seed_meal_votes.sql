@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Meal votes (500 + 2 options each).
+-- Bubaly · SEED — Meal votes (500 + 2 options each).
 -- Fills meal_votes (+ meal_vote_options) at volume so the FOI **communication**
 -- dimension (open decisions) and /dashboard/voting render at scale. 500 votes
 -- with a status/meal-type spread, each with two options. Idempotent via title

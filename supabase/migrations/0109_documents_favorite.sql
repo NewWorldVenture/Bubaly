@@ -1,4 +1,4 @@
--- FamilyOS :: 0109 documents.is_favorite + Files indexes + RLS safeguard
+-- Bubaly :: 0109 documents.is_favorite + Files indexes + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The redesigned Files page (/dashboard/documents) adds a per-file favorite
 -- ("star") toggle and richer sorting/filtering. This migration:

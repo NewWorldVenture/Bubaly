@@ -26,7 +26,7 @@ control plane and public acquisition loop now have validated AEO/SEO/content/
 landing lifecycle controls, sitemap publication, explicit degraded states, and
 consent-gated attribution/provider failure handling.
 
-FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
+Bubaly has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
 - 631 Vitest files and 3,734 tests pass in the latest full local gate; the marketing cluster is 46 files and 245 tests green.
 - Typecheck passes and lint exits successfully with two pre-existing `messages-module` hook-dependency warnings. The latest fresh-directory production build generated all 489 static routes and passed; it emitted only the existing webpack cache and Supabase Edge-runtime warnings.

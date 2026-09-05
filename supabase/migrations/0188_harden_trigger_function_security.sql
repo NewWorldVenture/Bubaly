@@ -1,4 +1,4 @@
--- FamilyOS :: 0188 - Pin SECURITY DEFINER trigger functions
+-- Bubaly :: 0188 - Pin SECURITY DEFINER trigger functions
 --
 -- Migration 0014 created these trigger functions without a fixed search_path.
 -- They are invoked by PostgreSQL triggers, not by clients, so direct execution

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace (marketplace_listings 500 + offers 500).
+-- Bubaly · SEED — Marketplace (marketplace_listings 500 + offers 500).
 -- Buy / sell / rent / borrow / free / wanted listings across every category and
 -- status, each with an offer, so /dashboard/marketplace renders at real volume.
 -- Idempotent: seed rows carry description='[seed]'; deleting the listings

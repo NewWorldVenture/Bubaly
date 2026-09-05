@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: pending migrations bundle
+-- Bubaly :: pending migrations bundle
 -- Paste this whole file into the Supabase SQL Editor (or run via psql).
 -- Idempotent: safe to run more than once. Assumes base migrations
 -- 0001–0009 are already applied (the app's existing tables).
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS public.blog_posts (
   slug            text NOT NULL UNIQUE,
   title           text NOT NULL,
   excerpt         text NOT NULL DEFAULT '',
-  author          text NOT NULL DEFAULT 'The FamilyOS Team',
+  author          text NOT NULL DEFAULT 'The Bubaly Team',
   published_at    date NOT NULL DEFAULT current_date,
   reading_minutes integer NOT NULL DEFAULT 5,
   tags            text[] NOT NULL DEFAULT '{}',
@@ -99,7 +99,7 @@ VALUES
     'From school emails to soccer practice, see how AI can help your family stay organized, stress-free, and always one step ahead.',
     'Jessica Miller', '2024-05-12', 6, ARRAY['ai','product'], 'AI & Technology', true, '#7c5dff',
     $json$[
-      {"type":"p","text":"Chatbots answer questions. A chief of staff gets things done. That distinction is the whole idea behind the FamilyOS assistant."},
+      {"type":"p","text":"Chatbots answer questions. A chief of staff gets things done. That distinction is the whole idea behind the Bubaly assistant."},
       {"type":"h2","text":"From words to records"},
       {"type":"p","text":"Ask it to add soccer every Tuesday and it creates the recurring event. Ask it to plan dinners and build a grocery list, and it writes real rows into your family's database."}
     ]$json$::jsonb
@@ -108,56 +108,56 @@ VALUES
     'sync-family-schedule',
     'How to Sync Your Family''s Schedule (Without the Chaos)',
     'A practical guide to keeping everyone on the same page — from soccer practice to dentist appointments.',
-    'The FamilyOS Team', '2024-05-10', 5, ARRAY['organization'], 'Organization', false, '#3b82f6',
+    'The Bubaly Team', '2024-05-10', 5, ARRAY['organization'], 'Organization', false, '#3b82f6',
     $json$[{"type":"p","text":"Every household runs on a hidden layer of coordination. Here's how to make it visible and shared."}]$json$::jsonb
   ),
   (
     'last-day-school-checklist',
     'Last-Day-of-School Checklist: Don''t Miss a Thing',
     'Return the library books, pick up art projects, say goodbye to teachers — a complete end-of-year checklist.',
-    'The FamilyOS Team', '2024-05-09', 4, ARRAY['school'], 'School & Activities', false, '#10b981',
+    'The Bubaly Team', '2024-05-09', 4, ARRAY['school'], 'School & Activities', false, '#10b981',
     $json$[{"type":"p","text":"The last week of school is a whirlwind. Here's how to get through it without forgetting anything."}]$json$::jsonb
   ),
   (
     'healthy-family-habits',
     'Healthy Family Habits That Stick (Even on Busy Weeks)',
     'Small rituals that make a big difference — and how to actually maintain them when life gets hectic.',
-    'The FamilyOS Team', '2024-05-07', 6, ARRAY['wellness'], 'Wellness', false, '#f59e0b',
+    'The Bubaly Team', '2024-05-07', 6, ARRAY['wellness'], 'Wellness', false, '#f59e0b',
     $json$[{"type":"p","text":"The habits that stick are the ones that require the least willpower."}]$json$::jsonb
   ),
   (
     'family-budget-basics',
     'Budgeting as a Family: 5 Simple Steps to Get Started',
     'Money conversations don''t have to be stressful. Here''s a framework that actually works for busy families.',
-    'The FamilyOS Team', '2024-05-04', 5, ARRAY['finances'], 'Family Finances', false, '#ec4899',
+    'The Bubaly Team', '2024-05-04', 5, ARRAY['finances'], 'Family Finances', false, '#ec4899',
     $json$[{"type":"p","text":"Starting a family budget feels overwhelming. Break it into five simple steps."}]$json$::jsonb
   ),
   (
     'ai-family-life',
     '5 Ways AI Can Make Family Life So Much Easier',
     'From meal planning to homework help, AI is quietly transforming how modern families operate.',
-    'The FamilyOS Team', '2024-05-02', 6, ARRAY['ai'], 'AI & Technology', false, '#7c5dff',
+    'The Bubaly Team', '2024-05-02', 6, ARRAY['ai'], 'AI & Technology', false, '#7c5dff',
     $json$[{"type":"p","text":"AI isn't just for tech companies. Here are five practical ways it's changing family life."}]$json$::jsonb
   ),
   (
     'quality-time',
     'How to Create More Quality Time (Without More Time)',
     'The secret isn''t finding more hours. It''s making the hours you have count.',
-    'The FamilyOS Team', '2024-04-30', 6, ARRAY['parenting','wellness'], 'Parenting', false, '#f97316',
+    'The Bubaly Team', '2024-04-30', 6, ARRAY['parenting','wellness'], 'Parenting', false, '#f97316',
     $json$[{"type":"p","text":"Most parents already know how precious time with their kids is. The challenge is protecting it."}]$json$::jsonb
   ),
   (
     'taming-the-family-mental-load',
     'Taming the family mental load',
     'The invisible work of running a household is real. Here''s how to share it.',
-    'The FamilyOS Team', '2026-05-02', 4, ARRAY['organization','parenting'], 'Parenting', false, NULL,
+    'The Bubaly Team', '2026-05-02', 4, ARRAY['organization','parenting'], 'Parenting', false, NULL,
     $json$[{"type":"p","text":"Every household runs on a hidden layer of coordination."}]$json$::jsonb
   ),
   (
     'meal-planning-that-actually-sticks',
     'Meal planning that actually sticks',
     'A simple weekly rhythm — and how to make the grocery list build itself.',
-    'The FamilyOS Team', '2026-05-18', 3, ARRAY['meals','routines'], 'Organization', false, NULL,
+    'The Bubaly Team', '2026-05-18', 3, ARRAY['meals','routines'], 'Organization', false, NULL,
     $json$[{"type":"p","text":"Most meal-planning systems fail because they're too much work."}]$json$::jsonb
   )
 ON CONFLICT (slug) DO NOTHING;
@@ -276,7 +276,7 @@ ALTER TABLE public.family_conversations
 -- service-role client in the super-admin-gated admin console (which bypasses
 -- RLS). This keeps marketing data fully admin-only.
 --
--- "Customers" in FamilyOS are existing families/subscriptions/contacts — those
+-- "Customers" in Bubaly are existing families/subscriptions/contacts — those
 -- are NOT duplicated here; the marketing customer view is derived at read time
 -- from the existing tables. These tables store marketing-specific objects only.
 -- ============================================================
@@ -1211,7 +1211,7 @@ CREATE POLICY "Members can manage renewals" ON public.renewals
 -- ============================================================
 -- Migration 0034: Social Command Center
 -- ============================================================
--- FamilyOS :: 0034 social media command center
+-- Bubaly :: 0034 social media command center
 -- Persistence for the Social Media Command Center: connected accounts + encrypted
 -- tokens, the unified feed, drafts/variants/targets, media library, scheduling,
 -- the publish job/result pipeline, comments/messages (inbox), analytics snapshots,
@@ -1220,7 +1220,7 @@ CREATE POLICY "Members can manage renewals" ON public.renewals
 --
 -- Security model:
 --   * Every household table is family-scoped via public.is_family_member(family_id)
---     — the same hard isolation boundary used everywhere else in FamilyOS. No row
+--     — the same hard isolation boundary used everywhere else in Bubaly. No row
 --     ever crosses a family.
 --   * social_account_tokens stores ONLY ciphertext (encrypt with lib/social/crypto
 --     / the existing SYNC_TOKEN_KEY AES-256-GCM helper). RLS leaves it with NO
@@ -2008,7 +2008,7 @@ on conflict (platform) do update set
 -- ============================================================
 -- Migration 0035: Push devices
 -- ============================================================
--- FamilyOS :: 0035 push devices
+-- Bubaly :: 0035 push devices
 -- Stores per-user push registrations so the notification engine can deliver
 -- pushes to the installed PWA (Web Push / VAPID) and the native iOS/iPadOS and
 -- Android apps (Capacitor → APNs/FCM tokens). One row per physical device.
@@ -2068,7 +2068,7 @@ create policy push_devices_delete on public.push_devices for delete
 -- ============================================================
 -- Migration 0036: Home & Maintenance
 -- ============================================================
--- FamilyOS :: 0036 home & maintenance command center
+-- Bubaly :: 0036 home & maintenance command center
 -- Turns "Home & Maintenance" into a full homeowner system: properties, enriched
 -- assets, first-class warranty management, a maintenance + AI-forecast loop,
 -- service history, and saved contractors ("find a pro"). Builds on the existing
@@ -2076,7 +2076,7 @@ create policy push_devices_delete on public.push_devices for delete
 -- (0007); nothing here breaks those.
 --
 -- Every table is family-scoped via public.is_family_member(family_id) — the same
--- hard isolation boundary used across FamilyOS. updated_at is auto-maintained.
+-- hard isolation boundary used across Bubaly. updated_at is auto-maintained.
 
 -- ----------------------------------------------------------------------------
 -- Properties
@@ -2258,7 +2258,7 @@ end $$;
 -- ============================================================
 -- Migration 0037: Auto & Vehicles
 -- ============================================================
--- FamilyOS :: 0037 auto / vehicles command center
+-- Bubaly :: 0037 auto / vehicles command center
 -- A full vehicle system mirroring Home & Maintenance: vehicles, driver licenses,
 -- registrations, inspection stickers, insurance (full policy + an emergency
 -- quick-glance), rental cars, a service log, and AI logs. Every record carries a

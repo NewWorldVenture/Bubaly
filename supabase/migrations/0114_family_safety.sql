@@ -1,4 +1,4 @@
--- FamilyOS :: 0114 Family safety & play dates
+-- Bubaly :: 0114 Family safety & play dates
 -- ----------------------------------------------------------------------------
 -- Backs the new expandable "Family" nav group:
 --   • safety_check_ins — lightweight "I'm safe / on my way / need help" posts

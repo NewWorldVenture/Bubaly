@@ -1,4 +1,4 @@
--- FamilyOS :: 0123 Family facts ("Build a persistent family knowledge graph")
+-- Bubaly :: 0123 Family facts ("Build a persistent family knowledge graph")
 -- ----------------------------------------------------------------------------
 -- The persistent store behind Family Memory: durable facts the family looks up
 -- again and again — sizes, allergies, preferences, key contacts, account

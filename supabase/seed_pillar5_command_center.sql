@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #5: Command Center evening summary
+-- Bubaly · SEED — Pillar #5: Command Center evening summary
 -- 500 daily Family Operating Index snapshots (one per day, 500 days back). The
 -- "yesterday" snapshot carries open suggestions + a lower composite, so the
 -- "Since yesterday" recap on /dashboard/command-center (and the Operating Index)

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 3): user-facing, left-nav tables
+-- Bubaly · SEED — feature-gap coverage (round 3): user-facing, left-nav tables
 -- that had NO seed rows, so their pages rendered empty during testing. Covers:
 --   Care Log · Habit logs · Health goals/providers/symptoms · Insurance Hub ·
 --   Expense split shares · Reward redemptions · Pet care · Auto (registrations,

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace safety reports (~500 rows).
+-- Bubaly · SEED — Marketplace safety reports (~500 rows).
 -- Fills the super-admin moderation queue (/admin/marketplace/reports): up to
 -- 500 reports across all seven reasons and all four statuses, one per distinct
 -- listing (so the "one open report per listing+member" index is never

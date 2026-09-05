@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Trips + Vacation Planner OS (the last big feature-gap).
+-- Bubaly · SEED — Trips + Vacation Planner OS (the last big feature-gap).
 -- ----------------------------------------------------------------------------
 -- The Trip Planner (`trips`/`trip_items`) and the 27-table Vacation Planner
 -- (`vacations` + every child: destinations, itinerary days/items, flights,

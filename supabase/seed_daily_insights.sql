@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Daily insights (500 records).
+-- Bubaly · SEED — Daily insights (500 records).
 -- Fills daily_insights so the "insight of the day" (T4) can be tested at volume:
 -- every kind across ~56 days, with a spread of statuses (active/dismissed/acted).
 -- Idempotent: clears its own '[seed:insight]' rows first, then inserts (never

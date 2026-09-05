@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Documents (documents, 500) with placeholder storage paths.
+-- Bubaly · SEED — Documents (documents, 500) with placeholder storage paths.
 -- Mix of categories + some expiring soon + some secure. Idempotent via a
 -- '[seed:doc]' title marker. Files aren't uploaded (storage_path is a stub) —
 -- rows are for exercising list/filter/expiry UI at volume.

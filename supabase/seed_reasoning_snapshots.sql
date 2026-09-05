@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Reasoning snapshots (500 records).
+-- Bubaly · SEED — Reasoning snapshots (500 records).
 -- Fills reasoning_snapshots so the unified Family Reasoning Engine (R7) can be
 -- tested at volume and its day-over-day trend renders: 500 distinct days, each a
 -- compact six-question report with a varying all-clear / attention mix. Idempotent

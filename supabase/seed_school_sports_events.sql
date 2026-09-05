@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — School & Sports calendar events (520 records).
+-- Bubaly · SEED — School & Sports calendar events (520 records).
 -- Fills school_events + sports_events so the School and Sports calendar surfaces
 -- render populated in a fresh/demo environment (both tables ship in 0002 but had
 -- NO seed anywhere — see LB-014). 260 school events across all event types +

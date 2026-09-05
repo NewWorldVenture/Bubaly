@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace "Make an Offer" negotiations (~520 rows).
+-- Bubaly · SEED — Marketplace "Make an Offer" negotiations (~520 rows).
 -- Fills the Best-Offer surface so /marketplace/negotiations and the item-page
 -- offer panel can be tested at volume: 100 fixed-price sale listings, each with
 -- one negotiation thread spanning the full state space (open·your-turn /

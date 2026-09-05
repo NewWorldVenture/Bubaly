@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Pillar #3: Family Intelligence / Playbook
+-- Bubaly · SEED — Pillar #3: Family Intelligence / Playbook
 -- 500 suggested playbook facts in the review inbox (/dashboard/playbook) so you
 -- can fully test Save / Dismiss / realtime. Idempotent: unique(family_id,
 -- signature) → ON CONFLICT DO NOTHING (re-run is a no-op; dismissed/accepted

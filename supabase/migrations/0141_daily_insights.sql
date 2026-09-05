@@ -1,4 +1,4 @@
--- FamilyOS :: 0141 Daily insights — the one proactive "insight of the day" (T4)
+-- Bubaly :: 0141 Daily insights — the one proactive "insight of the day" (T4)
 -- ----------------------------------------------------------------------------
 -- T4 (TIME-TO-FIRST-VALUE): instead of many small reminders, the home surfaces ONE
 -- ranked, proactive insight above the fold ("leave 20 min earlier", "2 assignments

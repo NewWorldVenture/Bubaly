@@ -1,4 +1,4 @@
--- FamilyOS :: 0175 — Child independence progression (renumbered from 0167)
+-- Bubaly :: 0175 — Child independence progression (renumbered from 0167)
 --
 -- "AI increases responsibilities as children mature": an age-banded milestone
 -- ladder across six life domains (chores, money, safety, self-care, school,

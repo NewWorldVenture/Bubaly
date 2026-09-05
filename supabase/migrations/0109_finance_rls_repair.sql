@@ -1,4 +1,4 @@
--- FamilyOS :: 0109 finance RLS repair
+-- Bubaly :: 0109 finance RLS repair
 -- ----------------------------------------------------------------------------
 -- Same production-drift safeguard as 0105/0106/0107 for the Finances page's
 -- tables: re-assert the canonical family-scoped policies so authenticated

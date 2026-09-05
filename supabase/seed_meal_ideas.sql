@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Meal ideas catalog (500 records).
+-- Bubaly · SEED — Meal ideas catalog (500 records).
 -- The curated, family-agnostic dinner library the first-run briefing (T2) draws
 -- its "3 dinner ideas" from. Real dish × cuisine × effort combinations so the
 -- picker has variety at volume. Idempotent: clears the seeded catalog first

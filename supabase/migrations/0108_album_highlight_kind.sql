@@ -1,4 +1,4 @@
--- FamilyOS :: 0108 family_albums 'highlight' kind + RLS safeguard
+-- Bubaly :: 0108 family_albums 'highlight' kind + RLS safeguard
 -- ----------------------------------------------------------------------------
 -- The redesigned Memories page distinguishes "Recent Highlights" (curated,
 -- front-and-center albums) from ordinary "Albums". Highlights are stored as

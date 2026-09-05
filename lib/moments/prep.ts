@@ -1,6 +1,6 @@
 // lib/moments/prep.ts — the "life moment" orchestration engine.
 //
-// Anticipatory FamilyOS treats a single upcoming calendar event not as a row on
+// Anticipatory Bubaly treats a single upcoming calendar event not as a row on
 // a grid but as a MOMENT that touches many modules at once. Given one event this
 // pure engine returns a coordinated, deterministic prep bundle — leave-by time,
 // packing, snacks/shopping, weather awareness, budget heads-up, photo reminder —

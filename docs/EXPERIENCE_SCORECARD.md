@@ -1,4 +1,4 @@
-# FamilyOS — Experience Scorecard
+# Bubaly — Experience Scorecard
 
 Objective UX health per **journey**, so "world-class" is measured, not asserted.
 Pairs with `docs/FRICTION_BACKLOG.md` (the Opportunity Register = *what to fix

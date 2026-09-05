@@ -388,11 +388,11 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
   settings: {
     label: 'AI setup tips',
     title: 'AI Setup Assistant',
-    blurb: 'Get more from FamilyOS based on how your family uses it.',
+    blurb: 'Get more from Bubaly based on how your family uses it.',
     maxTokens: 700,
     allowQuestion: true,
     system:
-      'You are an onboarding/optimization assistant for the FamilyOS app. Based on family size, roles, and ' +
+      'You are an onboarding/optimization assistant for the Bubaly app. Based on family size, roles, and ' +
       'how much data exists in each area, recommend features to set up next and quick wins. Be specific and brief. ' + SHARED_RULES,
     buildUser: (d) => {
       const counts = Object.entries(d.rows).map(([k, v]) => `${k}: ${v.length}`).join(', ') || 'no activity yet';

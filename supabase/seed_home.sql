@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_home.sql  — demo data for the /home dashboard
+-- Bubaly :: seed_home.sql  — demo data for the /home dashboard
 --
 -- WHAT IT SEEDS (everything the /home page reads, with NOW()-relative dates so
 -- every widget renders populated — Today's Schedule, Tasks, Upcoming Events,

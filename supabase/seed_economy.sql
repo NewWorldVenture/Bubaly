@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Family Economy / Allowance (currency_transactions 500+).
+-- Bubaly · SEED — Family Economy / Allowance (currency_transactions 500+).
 -- Custom non-cash currencies (Stars ⭐, Screen-time ⏰, Chore Coins 🪙), a reward
 -- catalog, an immutable 500-row token ledger, and ~120 redemptions — enough to
 -- exercise /economy (Allowance) at real volume.

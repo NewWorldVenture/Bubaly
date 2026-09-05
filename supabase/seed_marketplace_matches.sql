@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace matches (500 records).
+-- Bubaly · SEED — Marketplace matches (500 records).
 -- Fills marketplace_matches so the supply↔demand strip (0150) renders at volume:
 -- pairs the family's open "wanted" listings with open supply listings (sell /
 -- free / rent / borrow) posted by someone else, scored + reasoned. Requires the

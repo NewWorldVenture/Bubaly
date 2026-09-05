@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 5): the last user-facing left-nav
+-- Bubaly · SEED — feature-gap coverage (round 5): the last user-facing left-nav
 -- tables with no seed rows. Covers: Loyalty (account + transactions + redemptions) ·
 -- Weather saved locations · wallet Pay handles · Assistant chat history
 -- (conversations + messages) · Concierge sessions · Opportunities.

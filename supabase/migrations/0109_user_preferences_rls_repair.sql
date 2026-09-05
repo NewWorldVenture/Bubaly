@@ -1,4 +1,4 @@
--- FamilyOS :: 0109 user_preferences RLS repair
+-- Bubaly :: 0109 user_preferences RLS repair
 -- ----------------------------------------------------------------------------
 -- Production-drift safeguard (same class as 0105/0106/0107). The canonical
 -- policy from 0004 (`prefs_all` FOR ALL, own-row) drifted in production, leaving

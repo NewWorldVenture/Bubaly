@@ -1,4 +1,4 @@
--- FamilyOS :: 0019 sync_connections one-per-account
+-- Bubaly :: 0019 sync_connections one-per-account
 -- connectAccount() upserts a single connection row per provider account, so the
 -- account_id needs a unique constraint to back the ON CONFLICT target.
 

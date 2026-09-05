@@ -1,19 +1,19 @@
-# Competitive Analysis — Bubaly / FamilyOS vs. AI Family Organizers
+# Competitive Analysis — Bubaly / Bubaly vs. AI Family Organizers
 
 Grounded, code-cited comparison against the four AI family organizers a user
 surfaced (Sense, Nori AI, Maple, Skylight Calendar 2). Each competitor headline
-is mapped to the FamilyOS capability that already meets or beats it — with file
+is mapped to the Bubaly capability that already meets or beats it — with file
 evidence — and the single genuine gap that this pass closed.
 
 Last updated: 2026-07-18 · Owner: `agent-fable-opus` (CLAUDE-POLISH-01)
 
 ## Verdict
 
-FamilyOS already matched or beat **3 of the 4** competitors' headline features
+Bubaly already matched or beat **3 of the 4** competitors' headline features
 before this pass; the one true gap (Nori's "fridge photo → recipes") is now
-shipped (**Fridge Chef**, PLA-0835). Net: FamilyOS covers the union of all four.
+shipped (**Fridge Chef**, PLA-0835). Net: Bubaly covers the union of all four.
 
-| Competitor | Headline feature | FamilyOS status | Evidence |
+| Competitor | Headline feature | Bubaly status | Evidence |
 |-----------|------------------|-----------------|----------|
 | **Sense** — "Best Overall AI Organizer" | Scans inbox for school/sports emails → calendar events; shared to-dos, daily agendas, routine chores | **BEATEN** — "Magic Import" turns pasted school/sports text into calendar events **plus** chores, reminders, grocery, and meal-plan entries (broader than events-only), each Trust-governed before write. Daily/weekly agendas + routine chores are first-class. | `app/api/ai/import/route.ts`, `app/(app)/dashboard/briefing/**`, `lib/planning/prep.ts`, chores/routines |
 | **Sense/Maple** — parse "messy school admin emails" | Turn email/flyer content into tasks/events | **BEATEN (vision)** — a **photo of a school flyer/PDF** is read by the OpenAI vision model into calendar events; the provider supports multimodal image input natively | `app/api/ai/flyer/route.ts`, `lib/ai/provider.ts` (AIImage / image_url) |

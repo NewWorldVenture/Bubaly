@@ -1,4 +1,4 @@
--- FamilyOS :: 0121 Voice commands ("Full conversational interface")
+-- Bubaly :: 0121 Voice commands ("Full conversational interface")
 -- ----------------------------------------------------------------------------
 -- Backs the Voice Control command center (/dashboard/voice): a family-scoped log
 -- of every spoken command, how it was routed (task/note/event/shopping), what it

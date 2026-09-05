@@ -1,4 +1,4 @@
--- FamilyOS :: 0131 Autonomous prep plans
+-- Bubaly :: 0131 Autonomous prep plans
 -- ----------------------------------------------------------------------------
 -- "Prepare, don't notify": a coordinated preparation plan for something on the
 -- horizon (a trip, a birthday, an expiring document, school start), with ordered,

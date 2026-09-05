@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_weekend.sql — high-volume Weekend Planner demo data
+-- Bubaly :: seed_weekend.sql — high-volume Weekend Planner demo data
 --
 -- Seeds >= 500 rows into EACH weekend-planner table for the 5 demo families
 -- from seed.sql (run seed.sql FIRST — it creates the families + members):

@@ -1,4 +1,4 @@
--- FamilyOS :: 0146 Activation telemetry — TTFV / time-to-first-value (T10)
+-- Bubaly :: 0146 Activation telemetry — TTFV / time-to-first-value (T10)
 -- ----------------------------------------------------------------------------
 -- The onboarding funnel (0133) measures getting THROUGH sign-up. This measures
 -- getting to VALUE: one row per activation milestone a new family reaches

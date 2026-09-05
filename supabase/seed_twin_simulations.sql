@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Twin simulations (500 records).
+-- Bubaly · SEED — Twin simulations (500 records).
 -- Fills twin_simulations so the Digital Twin activity projection (R8) can be
 -- tested at volume: saved "what-if" scenarios spanning verdicts + weekly-hour
 -- loads, each with a per-dimension breakdown. Idempotent via input->>'seed'='r8';

@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Proactive Front Door (R5)  [seed:frontdoor]
+-- Bubaly · SEED — Proactive Front Door (R5)  [seed:frontdoor]
 -- Populates the Home front-door hero at volume:
 --   • 300 AUTO-EXECUTED autopilot_suggestions (last ~48h) → "I already handled N"
 --   • 250 PENDING approval_requests (varied priority)     → "N waiting on your OK"

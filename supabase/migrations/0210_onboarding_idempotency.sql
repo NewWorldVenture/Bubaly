@@ -1,4 +1,4 @@
--- FamilyOS :: 0210 onboarding finalization idempotency
+-- Bubaly :: 0210 onboarding finalization idempotency
 --
 -- A wizard request can be retried after a browser timeout or a partial write.
 -- Nullable keys preserve all historical rows while giving new finalizations a

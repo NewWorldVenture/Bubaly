@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Money-timeline insights (500 records).
+-- Bubaly · SEED — Money-timeline insights (500 records).
 -- Fills money_timeline_insights so the Financial Copilot list + acknowledge/
 -- dismiss flow can be tested at volume: the 4 week-bearing insight kinds
 -- (low_balance / heavy_week / goal_at_risk / set_aside) across 125 distinct ISO

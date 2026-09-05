@@ -1,4 +1,4 @@
--- FamilyOS :: 0148 Moment activations — the Moments organizing-layer log (R12)
+-- Bubaly :: 0148 Moment activations — the Moments organizing-layer log (R12)
 -- ----------------------------------------------------------------------------
 -- R12 (Moments as an organizing layer): the home/moments surface leads with the
 -- life moment the family is in right now (Morning · School · Dinner · Weekend) or

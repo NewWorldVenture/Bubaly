@@ -1,4 +1,4 @@
--- FamilyOS :: 0178 - Fix recursive RLS in marketplace circles.
+-- Bubaly :: 0178 - Fix recursive RLS in marketplace circles.
 --
 -- Migration 0176 used direct reads from marketplace_circle_members inside that
 -- table's own SELECT policy (and inside policies on related tables). PostgreSQL

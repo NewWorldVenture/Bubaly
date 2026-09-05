@@ -1,4 +1,4 @@
--- FamilyOS :: 0222 - chore submission decision-status guard (A-07 defense-in-depth)
+-- Bubaly :: 0222 - chore submission decision-status guard (A-07 defense-in-depth)
 --
 -- chore_submissions shipped (0043) with a single `FOR ALL ... USING/ WITH CHECK
 -- is_family_member` policy. Children hold real Supabase sessions and the anon key

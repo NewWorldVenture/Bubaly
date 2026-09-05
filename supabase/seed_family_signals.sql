@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Family signals (500 records).
+-- Bubaly · SEED — Family signals (500 records).
 -- Fills family_signals so Family Intelligence (R10) can be tested at volume: all
 -- four hard-signal kinds, each with realistic evidence + a spread of statuses
 -- (active/acknowledged/dismissed). Idempotent via evidence->>'seed' = 'r10';

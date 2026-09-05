@@ -1,4 +1,4 @@
--- FamilyOS :: 0124 Journey events (Experience Scorecard instrumentation)
+-- Bubaly :: 0124 Journey events (Experience Scorecard instrumentation)
 -- ----------------------------------------------------------------------------
 -- Lightweight product telemetry so the Experience Scorecard uses REAL medians
 -- instead of design-time estimates. Each row is one phase of a user journey

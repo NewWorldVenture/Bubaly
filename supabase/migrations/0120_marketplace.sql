@@ -1,4 +1,4 @@
--- FamilyOS :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
+-- Bubaly :: 0120 Marketplace ("Buy, sell, rent, borrow within the platform")
 -- ----------------------------------------------------------------------------
 -- A family-scoped marketplace / lending board: post items to sell, rent out,
 -- lend ("borrow"), give away free, or request ("wanted"). Other members express

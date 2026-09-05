@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Home briefs (500 daily snapshots).
+-- Bubaly · SEED — Home briefs (500 daily snapshots).
 -- Fills home_briefs so the outcome-first home (T3) can be tested at volume and its
 -- readiness trend renders: one snapshot per day for 500 days, readiness climbing
 -- over time (early days sparse → recent days set up). Idempotent: upserts on

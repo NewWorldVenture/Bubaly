@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Location & Safety (family_places + member_locations +
+-- Bubaly · SEED — Location & Safety (family_places + member_locations +
 -- location_events 500). Places (Home/School/Work…), current member locations,
 -- and 500 arrive/leave/ping events. Idempotent via '[seed:loc]' markers.
 -- Where: Supabase → SQL Editor → paste → Run.

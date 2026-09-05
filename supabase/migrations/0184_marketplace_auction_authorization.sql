@@ -1,4 +1,4 @@
--- FamilyOS :: 0184 - auction authorization and atomic Buy-It-Now
+-- Bubaly :: 0184 - auction authorization and atomic Buy-It-Now
 --
 -- Migration 0183 exposed two unsafe paths: authenticated clients could insert
 -- directly into marketplace_bids, and Buy-It-Now claimed a listing before its

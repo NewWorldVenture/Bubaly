@@ -1,4 +1,4 @@
--- FamilyOS :: 0219 — lock admin_users + support_tickets RLS to service-role only
+-- Bubaly :: 0219 — lock admin_users + support_tickets RLS to service-role only
 --
 -- CRITICAL tenant-isolation fix (PLA-0590 / LB-011). Migration 0010 created both
 -- tables with the comment "RLS: only service-role (admin console) reads/writes"

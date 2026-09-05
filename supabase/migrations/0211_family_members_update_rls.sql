@@ -1,4 +1,4 @@
--- FamilyOS :: 0211 - Restore manager-only family membership updates
+-- Bubaly :: 0211 - Restore manager-only family membership updates
 --
 -- Migration 0118 reasserted the old self-update exception from 0004. That
 -- exception lets any authenticated member update their own membership row,

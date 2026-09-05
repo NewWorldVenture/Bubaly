@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace V2 (1,200+ records).
+-- Bubaly · SEED — Marketplace V2 (1,200+ records).
 -- Fills the AI-first marketplace so every V2 surface renders at volume:
 --   • a storefront per family member (+ follows between members)
 --   • 6 curated collections with ~150 items

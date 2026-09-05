@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Meals (meals 500 + family_recipes 500 + meal_plans 500).
+-- Bubaly · SEED — Meals (meals 500 + family_recipes 500 + meal_plans 500).
 -- Fills the meal planner: a library of meals + recipes, and 500 planned days.
 -- Idempotent via '[seed:meal]' notes / '[seed:meal]' description markers.
 -- Where: Supabase → SQL Editor → paste → Run.

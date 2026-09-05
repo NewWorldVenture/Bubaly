@@ -1,4 +1,4 @@
--- FamilyOS :: 0003 functions + triggers
+-- Bubaly :: 0003 functions + triggers
 
 -- ----- RLS helper functions (SECURITY DEFINER bypasses RLS to avoid recursion) -----
 

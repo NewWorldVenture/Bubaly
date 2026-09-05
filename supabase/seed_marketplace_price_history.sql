@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Marketplace price history + drop watch (~580 rows).
+-- Bubaly · SEED — Marketplace price history + drop watch (~580 rows).
 -- Fills the price-history surface on the item page: 130 fixed-price sale
 -- listings, each with a 2–4 step DECLINING price ladder (so the item page shows
 -- "Price dropped X%", "Lowest ever", and the history list), plus ~65 watcher

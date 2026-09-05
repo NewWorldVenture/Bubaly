@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Anchor family household (a 2nd parent + 3 kids).
+-- Bubaly · SEED — Anchor family household (a 2nd parent + 3 kids).
 --
 -- ROOT CAUSE under LB-014: the anchor/demo family is created by the family
 -- trigger with ONLY its parent member — no children. So every kid-dependent seed

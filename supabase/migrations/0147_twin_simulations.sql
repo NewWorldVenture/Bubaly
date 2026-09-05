@@ -1,4 +1,4 @@
--- FamilyOS :: 0147 Twin simulations — saved "what-if" activity projections (R8)
+-- Bubaly :: 0147 Twin simulations — saved "what-if" activity projections (R8)
 -- ----------------------------------------------------------------------------
 -- R8 (Digital Twin depth): the full "if Emma joins travel soccer, what has to
 -- move?" projection reasons across schedule · travel · cost · family time ·

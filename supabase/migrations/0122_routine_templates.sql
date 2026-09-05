@@ -1,4 +1,4 @@
--- FamilyOS :: 0122 recurring-routine templates
+-- Bubaly :: 0122 recurring-routine templates
 -- ----------------------------------------------------------------------------
 -- A "routine" is a reusable bundle of related calendar events that repeats on a
 -- set of weekdays — e.g. "School Morning" = wake 7:00 → breakfast 7:30 →

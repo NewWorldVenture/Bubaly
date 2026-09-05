@@ -1,4 +1,4 @@
--- FamilyOS :: seed.sql
+-- Bubaly :: seed.sql
 -- Demo data. Members are seeded as "managed profiles" (user_id null) so this runs
 -- without provisioning auth users. Real members attach when they sign up / accept invites.
 -- Idempotent-ish: safe to run on a fresh db.

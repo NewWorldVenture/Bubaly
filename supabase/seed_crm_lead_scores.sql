@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Lead scores (500 records).
+-- Bubaly · SEED — Lead scores (500 records).
 -- Fills crm_lead_scores so the admin Lead Scores view + ledger can be tested at
 -- volume. Creates 500 seed crm_contacts leads (if needed) and gives each a
 -- score/band plus an itemized factors ledger whose points sum to the score, so

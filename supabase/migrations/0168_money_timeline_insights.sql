@@ -1,4 +1,4 @@
--- FamilyOS :: 0168 — Financial Copilot: money-timeline insights (schedule↔money)
+-- Bubaly :: 0168 — Financial Copilot: money-timeline insights (schedule↔money)
 --
 -- Deepens the schedule↔money linkage (industry-first #8). The forward cash-flow
 -- timeline itself is computed live in the app (lib/finance/timeline.ts) by fusing

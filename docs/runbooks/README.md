@@ -13,7 +13,7 @@ Source of truth for status: `docs/LAUNCH_BLOCKERS.md` (LB-xxx) and `docs/PRODUCT
 CI has been failing at **infrastructure/provisioning** (every run ~5s, no runner) — **not a code
 failure** (all 7 quality gates pass locally: `npm ci`, `npm audit --omit=dev`, `db:audit:migrations`,
 `tsc`, lint, `vitest` 3559, `build`). Fix: GitHub Actions **runner availability / minutes / spending
-limit** for `NewWorldVenture/FamilyOS`. Once green, the authed-E2E + build + test evidence generates
+limit** for `NewWorldVenture/Bubaly`. Once green, the authed-E2E + build + test evidence generates
 itself on every push. (LB-015 in `docs/LAUNCH_BLOCKERS.md`.)
 
 ## 1. Apply the pending prod migrations — **P0 security first**

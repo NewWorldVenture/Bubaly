@@ -1,4 +1,4 @@
--- FamilyOS :: 0104 — Dining Out
+-- Bubaly :: 0104 — Dining Out
 -- Backs the "Dining Out" surface of the Food & Nutrition hub: saved restaurants
 -- the family wants to try / loves, plus a log of recent dining-out visits.
 -- Follows the food-OS conventions (0102): is_family_member RLS + set_updated_at.

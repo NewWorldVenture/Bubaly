@@ -1,4 +1,4 @@
--- FamilyOS :: 0035 push devices
+-- Bubaly :: 0035 push devices
 -- Stores per-user push registrations so the notification engine can deliver
 -- pushes to the installed PWA (Web Push / VAPID) and the native iOS/iPadOS and
 -- Android apps (Capacitor → APNs/FCM tokens). One row per physical device.

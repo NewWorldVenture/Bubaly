@@ -1,4 +1,4 @@
--- FamilyOS :: 0142 Family signals — the "hard signal" family-intelligence store (R10)
+-- Bubaly :: 0142 Family signals — the "hard signal" family-intelligence store (R10)
 -- ----------------------------------------------------------------------------
 -- R10 (MOATS / Family Intelligence): the harder-to-copy behavioral signals the
 -- strategy calls out — which reminders keep getting ignored, when the family is

@@ -1,4 +1,4 @@
--- FamilyOS :: 0174 — Household workload balancing + analytics (renumbered from 0166)
+-- Bubaly :: 0174 — Household workload balancing + analytics (renumbered from 0166)
 --
 -- The "mental load" feature no mainstream family app ships well: measure who is
 -- actually carrying the household (chores by estimated minutes, tasks, events

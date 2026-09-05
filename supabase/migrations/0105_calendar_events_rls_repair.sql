@@ -1,4 +1,4 @@
--- FamilyOS :: 0105 calendar_events RLS repair
+-- Bubaly :: 0105 calendar_events RLS repair
 -- ----------------------------------------------------------------------------
 -- Production drift fix: some environments ended up with RLS enabled on
 -- public.calendar_events but WITHOUT the standard family-scoped SELECT policy

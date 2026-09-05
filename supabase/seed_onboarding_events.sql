@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Onboarding funnel (onboarding_events, ~550 across 250 sessions).
+-- Bubaly · SEED — Onboarding funnel (onboarding_events, ~550 across 250 sessions).
 -- Realistic drop-off so /dashboard/onboarding-funnel can be tested: every session
 -- reaches 'profile', ~70% reach 'pin', ~50% complete 'done'. Not family-scoped
 -- (pre-family telemetry). Idempotent via meta->>'seed' = 'onboarding'.

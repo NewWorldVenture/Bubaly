@@ -1,4 +1,4 @@
--- FamilyOS :: 0183 — Marketplace auctions (timed bidding — the eBay-beating core)
+-- Bubaly :: 0183 — Marketplace auctions (timed bidding — the eBay-beating core)
 --
 -- Turns any sell listing into a real-time timed auction. Craigslist has no
 -- bidding at all; eBay has it but is impersonal and unsafe. Ours is community-

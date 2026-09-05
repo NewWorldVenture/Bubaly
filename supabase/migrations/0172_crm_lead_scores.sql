@@ -1,4 +1,4 @@
--- FamilyOS :: 0172 — Transparent lead scores (visitor-intelligence gap #14)
+-- Bubaly :: 0172 — Transparent lead scores (visitor-intelligence gap #14)
 --
 -- The signals existed (mkt_visitors sessions, touchpoint conversions, consent,
 -- demo, progressive profile, lifecycle) but there was no visible score. This

@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyOS :: seed_large.sql  — high-volume demo data
+-- Bubaly :: seed_large.sql  — high-volume demo data
 --
 -- Seeds >= 500 rows into every family-scoped DATA table, on top of the
 -- 5 demo families + 25 members from seed.sql. Run seed.sql FIRST (it

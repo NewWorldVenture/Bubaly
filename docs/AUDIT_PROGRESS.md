@@ -1,4 +1,4 @@
-# FamilyOS Launch Audit Progress
+# Bubaly Launch Audit Progress
 
 Audit started: 2026-07-15
 Owner: Codex

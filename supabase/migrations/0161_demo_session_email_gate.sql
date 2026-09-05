@@ -1,4 +1,4 @@
--- FamilyOS :: 0161 — Email-gate the demo + defer the countdown
+-- Bubaly :: 0161 — Email-gate the demo + defer the countdown
 --
 -- The "Test Account" demo now opens behind a blurred email-capture pop-up: one
 -- click provisions the demo and signs the visitor in, but the 5-minute clock does

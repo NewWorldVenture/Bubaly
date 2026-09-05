@@ -1,5 +1,5 @@
 -- ============================================================================
--- FamilyOS · SEED — Family Operating Index history (500 daily snapshots).
+-- Bubaly · SEED — Family Operating Index history (500 daily snapshots).
 -- Fills family_operating_index with 500 days of daily snapshots so the FOI
 -- **trend line** + "since yesterday" day-over-day recap render at volume (the
 -- page shows "first reading" until history exists). A gentle wave around the mid-

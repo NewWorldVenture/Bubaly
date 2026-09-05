@@ -6,7 +6,7 @@
 --   • Most recent shipped seed sets live in: supabase/seed_recent_updates.sql
 --   • Per-feature files: supabase/seed_<feature>.sql
 -- ============================================================================
--- FamilyOS :: SEED_ALL_COMPLETE_SCHEMA_SAFE.sql
+-- Bubaly :: SEED_ALL_COMPLETE_SCHEMA_SAFE.sql
 -- Complete replacement generated from the supplied SEED_ALL script.
 --
 -- FIX INCLUDED:
@@ -18,7 +18,7 @@
 -- ============================================================================
 
 -- ============================================================================
--- FamilyOS :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
+-- Bubaly :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
 -- ============================================================================
 -- Runs all 61 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
@@ -52,7 +52,7 @@ end $$;
 
 -- ==================== seed_core_content.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Core content (500 records each) for the main family hubs.
+-- Bubaly · SEED — Core content (500 records each) for the main family hubs.
 -- Fills the everyday surfaces so the app can be tested at volume: Calendar,
 -- To-Dos, Groceries, Notes, Photos, Journal, Habits. Idempotent via '[seed:core]'
 -- / 'seed-core' markers (never clobbers real data). Get-or-creates the lists.
@@ -170,7 +170,7 @@ end $$;
 
 -- ==================== seed_pillar1_orchestrator.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #1: Orchestrator questions (Operating Layer)
+-- Bubaly · SEED — Pillar #1: Orchestrator questions (Operating Layer)
 -- 500+ records. Feeds the five daily questions on
 -- /dashboard/family-operating-index (what'll go wrong tomorrow · who's
 -- overloaded · what to decide next · what info is missing · what can auto-run).
@@ -234,7 +234,7 @@ end $$;
 
 -- ==================== seed_pillar2_twin.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #2: Household Digital Twin
+-- Bubaly · SEED — Pillar #2: Household Digital Twin
 -- 500+ records. Gives the decision simulator (/dashboard/family-digital-twin) a
 -- rich linked model to reason over: a busy 60-day schedule plus teams, classes,
 -- routines and budgets. Idempotent via '[seed:p2]' markers.
@@ -308,7 +308,7 @@ end $$;
 
 -- ==================== seed_pillar3_playbook.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #3: Family Intelligence / Playbook
+-- Bubaly · SEED — Pillar #3: Family Intelligence / Playbook
 -- 500 suggested playbook facts in the review inbox (/dashboard/playbook) so you
 -- can fully test Save / Dismiss / realtime. Idempotent: unique(family_id,
 -- signature) → ON CONFLICT DO NOTHING (re-run is a no-op; dismissed/accepted
@@ -349,7 +349,7 @@ end $$;
 
 -- ==================== seed_pillar4_outcomes.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #4: Outcomes launcher
+-- Bubaly · SEED — Pillar #4: Outcomes launcher
 -- 500 records that light up every outcome badge on /dashboard/outcomes:
 --   200 calendar events (100 today) · 150 overdue to-dos · 150 open grocery
 --   items · plus a member birthday within 2 weeks.
@@ -427,7 +427,7 @@ end $$;
 
 -- ==================== seed_pillar5_command_center.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #5: Command Center evening summary
+-- Bubaly · SEED — Pillar #5: Command Center evening summary
 -- 500 daily Family Operating Index snapshots (one per day, 500 days back). The
 -- "yesterday" snapshot carries open suggestions + a lower composite, so the
 -- "Since yesterday" recap on /dashboard/command-center (and the Operating Index)
@@ -474,7 +474,7 @@ end $$;
 
 -- ==================== seed_pillar6_agents.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #6: Specialized agents (agent_activity)
+-- Bubaly · SEED — Pillar #6: Specialized agents (agent_activity)
 -- 500 activity records spread across the 10 agents so /dashboard/agents shows a
 -- rich per-agent history you can Done/Dismiss and fully test. Idempotent:
 -- clears its own '[seed:p6]' rows (matched on detail) first, then reinserts.
@@ -535,7 +535,7 @@ end $$;
 
 -- ==================== seed_pillar8_calm.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #8: Design for Calm (calm inbox sources)
+-- Bubaly · SEED — Pillar #8: Design for Calm (calm inbox sources)
 -- The calm inbox has no table of its own — it aggregates other sources. This
 -- seeds 500 reminders due in the next 24h (the "For today" stream). Combine with
 -- the #6 (agent_activity) and #7 (family_operating_index) seeds for the "Needs
@@ -583,7 +583,7 @@ end $$;
 
 -- ==================== seed_pillar9_connections.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Pillar #9: Family API / Connections (family_connections)
+-- Bubaly · SEED — Pillar #9: Family API / Connections (family_connections)
 -- 500 connection records across every provider + status so /dashboard/connections
 -- and the underlying table can be fully tested. Idempotent: clears its own
 -- 'seed-p9-%' rows first (matched on external_account_id), then reinserts.
@@ -638,7 +638,7 @@ end $$;
 
 -- ==================== seed_messages.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Messages (family_messages, 500) across all kinds.
+-- Bubaly · SEED — Messages (family_messages, 500) across all kinds.
 -- Get-or-creates a "Seed Chat" conversation, then 500 messages (text/image/
 -- voice/file/announcement). Idempotent via a '[seed:msg]' marker in content.
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -694,7 +694,7 @@ end $$;
 
 -- ==================== seed_chores.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Chores (chores 500 + chore_assignments 500).
+-- Bubaly · SEED — Chores (chores 500 + chore_assignments 500).
 -- 500 chores across priorities/recurrence + one assignment each spanning the
 -- full task_status lifecycle. Idempotent via a '[seed:chore]' description marker
 -- (assignments cascade-cleared by chore_id).
@@ -760,7 +760,7 @@ end $$;
 
 -- ==================== seed_meals.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Meals (meals 500 + family_recipes 500 + meal_plans 500).
+-- Bubaly · SEED — Meals (meals 500 + family_recipes 500 + meal_plans 500).
 -- Fills the meal planner: a library of meals + recipes, and 500 planned days.
 -- Idempotent via '[seed:meal]' notes / '[seed:meal]' description markers.
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -826,7 +826,7 @@ end $$;
 
 -- ==================== seed_documents.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Documents (documents, 500) with placeholder storage paths.
+-- Bubaly · SEED — Documents (documents, 500) with placeholder storage paths.
 -- Mix of categories + some expiring soon + some secure. Idempotent via a
 -- '[seed:doc]' title marker. Files aren't uploaded (storage_path is a stub) —
 -- rows are for exercising list/filter/expiry UI at volume.
@@ -869,7 +869,7 @@ end $$;
 
 -- ==================== seed_location.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Location & Safety (family_places + member_locations +
+-- Bubaly · SEED — Location & Safety (family_places + member_locations +
 -- location_events 500). Places (Home/School/Work…), current member locations,
 -- and 500 arrive/leave/ping events. Idempotent via '[seed:loc]' markers.
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -935,7 +935,7 @@ end $$;
 
 -- ==================== seed_finance.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Finance hub (financial_accounts + transactions 500 +
+-- Bubaly · SEED — Finance hub (financial_accounts + transactions 500 +
 -- bills 500). A handful of accounts, 500 transactions (income/expense/transfer)
 -- and 500 bills across statuses. Idempotent via '[seed:fin]' markers.
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -1012,7 +1012,7 @@ end $$;
 
 -- ==================== seed_memories.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Memories (family_memories 500 + trip_memories 500).
+-- Bubaly · SEED — Memories (family_memories 500 + trip_memories 500).
 -- The memory timeline + trip scrapbook at volume. Idempotent via '[seed:mem]'
 -- body marker (family_memories) / '[seed:mem]' note marker (trip_memories).
 -- Where: Supabase → SQL Editor → paste → Run.
@@ -1069,7 +1069,7 @@ end $$;
 
 -- ==================== seed_autopilot.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Autopilot (autopilot_suggestions 500 + approval_requests 500).
+-- Bubaly · SEED — Autopilot (autopilot_suggestions 500 + approval_requests 500).
 -- The Autopilot queue + the approval inbox at volume, spanning statuses.
 -- Idempotent: suggestions cleared by dedupe_key prefix 'seed-ap-'; approvals by
 -- a '[seed:ap]' summary marker.
@@ -1137,7 +1137,7 @@ end $$;
 
 -- ==================== seed_vault.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Family Vault (family_credentials, 500) across all categories.
+-- Bubaly · SEED — Family Vault (family_credentials, 500) across all categories.
 -- Wi-Fi, website logins, app PINs, streaming, memberships, etc. Idempotent via a
 -- '[seed:vault]' notes marker. Secrets are obviously-fake placeholders.
 -- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0119 applied.)
@@ -1181,7 +1181,7 @@ end $$;
 
 -- ==================== seed_graph.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Knowledge Graph (graph_entities 500 + graph_edges 500).
+-- Bubaly · SEED — Knowledge Graph (graph_entities 500 + graph_edges 500).
 -- A connected household graph so traversal, path-finding and impact propagation
 -- can be exercised at volume. Idempotent: clears its own '[seed:graph]' rows
 -- (attributes marker) first — edges cascade from entities.
@@ -1251,7 +1251,7 @@ end $$;
 
 -- ==================== seed_decisions.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Decision Engine (family_decisions 500 + decision_options ~1500).
+-- Bubaly · SEED — Decision Engine (family_decisions 500 + decision_options ~1500).
 -- 500 trade-off decisions, each with 3 options carrying real metrics so the engine
 -- can score them. Idempotent: clears its own '[seed:dec]' rows (detail marker);
 -- options cascade from decisions. Where: Supabase → SQL Editor → paste → Run.
@@ -1311,7 +1311,7 @@ end $$;
 
 -- ==================== seed_prep_plans.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Prep Plans (prep_plans 500 + prep_plan_steps ~2000).
+-- Bubaly · SEED — Prep Plans (prep_plans 500 + prep_plan_steps ~2000).
 -- 500 look-ahead plans across kinds/urgencies, each with a few timed steps, so
 -- /dashboard/prep-plans can be tested at volume. Idempotent: clears its own
 -- 'seed-prep-%' signal rows (steps cascade). Where: Supabase → SQL Editor → Run.
@@ -1372,7 +1372,7 @@ end $$;
 
 -- ==================== seed_onboarding_events.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Onboarding funnel (onboarding_events, ~550 across 250 sessions).
+-- Bubaly · SEED — Onboarding funnel (onboarding_events, ~550 across 250 sessions).
 -- Realistic drop-off so /dashboard/onboarding-funnel can be tested: every session
 -- reaches 'profile', ~70% reach 'pin', ~50% complete 'done'. Not family-scoped
 -- (pre-family telemetry). Idempotent via meta->>'seed' = 'onboarding'.
@@ -1413,7 +1413,7 @@ end $$;
 
 -- ==================== seed_network_aggregates.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Intelligence Network aggregates (network_aggregates).
+-- Bubaly · SEED — Intelligence Network aggregates (network_aggregates).
 -- Synthetic PUBLISH-SAFE aggregates so /dashboard/intelligence can be tested when
 -- a family opts in. Every row has cohort_size >= 20 (the k-anonymity floor), so it
 -- mirrors exactly what the real cron would publish. The set is the FULL deterministic
@@ -1472,7 +1472,7 @@ end $$;
 
 -- ==================== seed_matrix_gaps.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Feature-matrix gap tables (500 records each).
+-- Bubaly · SEED — Feature-matrix gap tables (500 records each).
 -- Fills the competitive-matrix features that lacked a 500-row seed so every one
 -- can be tested at volume: Pets, Vehicles, Contacts, Wish lists, Medications,
 -- Homework, Insurance, Utilities, Family tree, Announcements, Subscriptions,
@@ -1642,7 +1642,7 @@ end $$;
 
 -- ==================== seed_onboarding_imports.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Onboarding calendar imports (500 records).
+-- Bubaly · SEED — Onboarding calendar imports (500 records).
 -- Fills onboarding_imports so the value-first first-run (T1) can be tested at
 -- volume: every source, a spread of event/conflict/action counts, and a computed
 -- brief summary per row. Idempotent via brief->>'seed' = 'onboard'; resolves the
@@ -1714,7 +1714,7 @@ end $$;
 
 -- ==================== seed_meal_ideas.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Meal ideas catalog (500 records).
+-- Bubaly · SEED — Meal ideas catalog (500 records).
 -- The curated, family-agnostic dinner library the first-run briefing (T2) draws
 -- its "3 dinner ideas" from. Real dish × cuisine × effort combinations so the
 -- picker has variety at volume. Idempotent: clears the seeded catalog first
@@ -1766,7 +1766,7 @@ end $$;
 
 -- ==================== seed_home_briefs.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Home briefs (500 daily snapshots).
+-- Bubaly · SEED — Home briefs (500 daily snapshots).
 -- Fills home_briefs so the outcome-first home (T3) can be tested at volume and its
 -- readiness trend renders: one snapshot per day for 500 days, readiness climbing
 -- over time (early days sparse → recent days set up). Idempotent: upserts on
@@ -1845,7 +1845,7 @@ end $$;
 
 -- ==================== seed_daily_insights.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Daily insights (500 records).
+-- Bubaly · SEED — Daily insights (500 records).
 -- Fills daily_insights so the "insight of the day" (T4) can be tested at volume:
 -- every kind across ~56 days, with a spread of statuses (active/dismissed/acted).
 -- Idempotent: clears its own '[seed:insight]' rows first, then inserts (never
@@ -1907,7 +1907,7 @@ end $$;
 
 -- ==================== seed_notifications.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Notifications (500) for the partner-tone surfaces (T5).
+-- Bubaly · SEED — Notifications (500) for the partner-tone surfaces (T5).
 -- Fills the bell + /dashboard/notifications with 500 notifications across every
 -- type and read state so the partner-tone phrasing (notificationsLine / bellLabel)
 -- can be exercised at real volume — from "all caught up" up to a full inbox.
@@ -1959,7 +1959,7 @@ end $$;
 
 -- ==================== seed_economy.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Family Economy / Allowance (currency_transactions 500+).
+-- Bubaly · SEED — Family Economy / Allowance (currency_transactions 500+).
 -- Custom non-cash currencies (Stars ⭐, Screen-time ⏰, Chore Coins 🪙), a reward
 -- catalog, an immutable 500-row token ledger, and ~120 redemptions — enough to
 -- exercise /economy (Allowance) at real volume.
@@ -2045,7 +2045,7 @@ end $$;
 
 -- ==================== seed_concierge.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — AI Concierge (concierge_plans 500).
+-- Bubaly · SEED — AI Concierge (concierge_plans 500).
 -- Getaways, restaurants, date nights, parties, travel, services — across every
 -- kind + status — so /dashboard/concierge renders at real volume.
 -- Idempotent: seed rows carry a '[seed]' title prefix; deleted before re-insert.
@@ -2093,7 +2093,7 @@ end $$;
 
 -- ==================== seed_front_desk.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — AI Front Desk / Phone Concierge (call_logs 500).
+-- Bubaly · SEED — AI Front Desk / Phone Concierge (call_logs 500).
 -- Enables Front Desk for the family and fills the screened-call log with 500
 -- calls spanning every status + classification, so /dashboard/front-desk renders
 -- at real volume.
@@ -2149,7 +2149,7 @@ end $$;
 
 -- ==================== seed_communications.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Email/Comms Concierge (family_communications 500).
+-- Bubaly · SEED — Email/Comms Concierge (family_communications 500).
 -- The unified family inbox at real volume: calls, SMS, email, WhatsApp, school &
 -- sports messages across every category, status and priority — so
 -- /dashboard/inbox renders full.
@@ -2200,7 +2200,7 @@ end $$;
 
 -- ==================== seed_marketplace.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace (marketplace_listings 500 + offers 500).
+-- Bubaly · SEED — Marketplace (marketplace_listings 500 + offers 500).
 -- Buy / sell / rent / borrow / free / wanted listings across every category and
 -- status, each with an offer, so /dashboard/marketplace renders at real volume.
 -- Idempotent: seed rows carry description='[seed]'; deleting the listings
@@ -2263,7 +2263,7 @@ end $$;
 
 -- ==================== seed_family_signals.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Family signals (500 records).
+-- Bubaly · SEED — Family signals (500 records).
 -- Fills family_signals so Family Intelligence (R10) can be tested at volume: all
 -- four hard-signal kinds, each with realistic evidence + a spread of statuses
 -- (active/acknowledged/dismissed). Idempotent via evidence->>'seed' = 'r10';
@@ -2333,7 +2333,7 @@ end $$;
 
 -- ==================== seed_twin_simulations.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Twin simulations (500 records).
+-- Bubaly · SEED — Twin simulations (500 records).
 -- Fills twin_simulations so the Digital Twin activity projection (R8) can be
 -- tested at volume: saved "what-if" scenarios spanning verdicts + weekly-hour
 -- loads, each with a per-dimension breakdown. Idempotent via input->>'seed'='r8';
@@ -2392,7 +2392,7 @@ end $$;
 
 -- ==================== seed_moment_activations.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Moment activations (500 records).
+-- Bubaly · SEED — Moment activations (500 records).
 -- Fills moment_activations so the Moments organizing layer (R12) can be tested at
 -- volume and its engagement history renders: every moment × ~50 days with a spread
 -- of statuses (active/engaged/dismissed). Idempotent via reason like '%[seed]%';
@@ -2446,7 +2446,7 @@ end $$;
 
 -- ==================== seed_reasoning_snapshots.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Reasoning snapshots (500 records).
+-- Bubaly · SEED — Reasoning snapshots (500 records).
 -- Fills reasoning_snapshots so the unified Family Reasoning Engine (R7) can be
 -- tested at volume and its day-over-day trend renders: 500 distinct days, each a
 -- compact six-question report with a varying all-clear / attention mix. Idempotent
@@ -2526,7 +2526,7 @@ end $$;
 
 -- ==================== seed_feature_gaps_family.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (500 rows each) for family features that
+-- Bubaly · SEED — feature-gap coverage (500 rows each) for family features that
 -- had NO seed and therefore rendered empty at test time:
 --   Rides · Renewals · Immunizations · Health Visits · Family Dates ·
 --   Screen-time entries · Wallet goals · Reminder lists.
@@ -2683,7 +2683,7 @@ end $$;
 
 -- ==================== seed_sync_microsoft.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Microsoft / Outlook two-way sync (500+ records).
+-- Bubaly · SEED — Microsoft / Outlook two-way sync (500+ records).
 -- Exercises the R9 provider-agnostic adapter at volume: a connected Microsoft
 -- sync_account + connection, an Outlook calendar mirror, and 500 already-synced
 -- Outlook-origin events with their external mappings (exactly what the generic
@@ -2795,7 +2795,7 @@ end $$;
 
 -- ==================== seed_marketplace_matches.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace matches (500 records).
+-- Bubaly · SEED — Marketplace matches (500 records).
 -- Fills marketplace_matches so the supply↔demand strip (0150) renders at volume:
 -- pairs the family's open "wanted" listings with open supply listings (sell /
 -- free / rent / borrow) posted by someone else, scored + reasoned. Requires the
@@ -2865,7 +2865,7 @@ end $$;
 
 -- ==================== seed_marketplace_v2.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace V2 (1,200+ records).
+-- Bubaly · SEED — Marketplace V2 (1,200+ records).
 -- Fills the AI-first marketplace so every V2 surface renders at volume:
 --   • a storefront per family member (+ follows between members)
 --   • 6 curated collections with ~150 items
@@ -3019,7 +3019,7 @@ end $$;
 
 
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage, batch 2 (500 rows each) for more live
+-- Bubaly · SEED — feature-gap coverage, batch 2 (500 rows each) for more live
 -- family features that had NO seed and rendered empty at test time:
 --   Smart Devices · Home Warranties · Babysitters · Expense Splits · Date Nights.
 -- Each block is guarded by to_regclass (missing table = skipped, never fatal).
@@ -3130,7 +3130,7 @@ end $$;
 
 
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage for FK-parented tables that had no seed:
+-- Bubaly · SEED — feature-gap coverage for FK-parented tables that had no seed:
 --   Medication Doses (500) and Kid Investing order history (500), plus the parent
 --   rows they require (seed medications; an educational asset catalog + a child
 --   investing wallet per member + starter holdings).
@@ -3234,7 +3234,7 @@ end $$;
 
 
 -- ============================================================================
--- FamilyOS · SEED — Trips + Vacation Planner OS (the last big feature-gap).
+-- Bubaly · SEED — Trips + Vacation Planner OS (the last big feature-gap).
 -- ----------------------------------------------------------------------------
 -- The Trip Planner (`trips`/`trip_items`) and the 27-table Vacation Planner
 -- (`vacations` + every child: destinations, itinerary days/items, flights,
@@ -3664,7 +3664,7 @@ end $$;
 
 -- ==================== seed_operating_index_history.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Family Operating Index history (500 daily snapshots).
+-- Bubaly · SEED — Family Operating Index history (500 daily snapshots).
 -- Fills family_operating_index with 500 days of daily snapshots so the FOI
 -- **trend line** + "since yesterday" day-over-day recap render at volume (the
 -- page shows "first reading" until history exists). A gentle wave around the mid-
@@ -3735,7 +3735,7 @@ end $$;
 
 -- ==================== seed_meal_votes.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Meal votes (500 + 2 options each).
+-- Bubaly · SEED — Meal votes (500 + 2 options each).
 -- Fills meal_votes (+ meal_vote_options) at volume so the FOI **communication**
 -- dimension (open decisions) and /dashboard/voting render at scale. 500 votes
 -- with a status/meal-type spread, each with two options. Idempotent via title
@@ -3807,7 +3807,7 @@ end $$;
 
 -- ==================== seed_concierge_plan_actions.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Concierge plan actions (500 records).
+-- Bubaly · SEED — Concierge plan actions (500 records).
 -- Fills concierge_plan_actions so the deeper write-back audit renders at volume:
 -- 500 materializations (calendar / reminder / task) across the family's concierge
 -- plans, one per (plan, kind). Requires the concierge plans seeded first
@@ -3883,7 +3883,7 @@ end $$;
    through Supabase Auth APIs. See tests/seed-auth-safety-contract.test.ts.
 
 -- ============================================================================
--- FamilyOS · SEED — Onboarding progress (500 accounts).
+-- Bubaly · SEED — Onboarding progress (500 accounts).
 -- Fills onboarding_progress (migration 0159) at volume so the onboarding
 -- lifecycle + marketing-signal layer can be tested across a realistic mix of
 -- accounts: fully-onboarded wizard graduates, the "needs setup" auto-provisioned
@@ -4009,7 +4009,7 @@ end $$;
 */
 -- ==================== seed_feature_gaps_3.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 3): user-facing, left-nav tables
+-- Bubaly · SEED — feature-gap coverage (round 3): user-facing, left-nav tables
 -- that had NO seed rows, so their pages rendered empty during testing. Covers:
 --   Care Log · Habit logs · Health goals/providers/symptoms · Insurance Hub ·
 --   Expense split shares · Reward redemptions · Pet care · Auto (registrations,
@@ -4333,7 +4333,7 @@ end $$;
 
 -- ==================== seed_feature_gaps_4.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 4): more user-facing left-nav
+-- Bubaly · SEED — feature-gap coverage (round 4): more user-facing left-nav
 -- tables that had no seed rows. Covers: event RSVPs · meal nutrition · trip plans ·
 -- departure plans · calendar feeds · driver licenses · rental cars · vehicle
 -- inspections · homes · household info · home security events · gift links ·
@@ -4535,7 +4535,7 @@ end $$;
 
 -- ==================== seed_feature_gaps_5.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — feature-gap coverage (round 5): the last user-facing left-nav
+-- Bubaly · SEED — feature-gap coverage (round 5): the last user-facing left-nav
 -- tables with no seed rows. Covers: Loyalty (account + transactions + redemptions) ·
 -- Weather saved locations · wallet Pay handles · Assistant chat history
 -- (conversations + messages) · Concierge sessions · Opportunities.
@@ -4670,7 +4670,7 @@ end $$;
 
 -- ==================== seed_concierge_calls.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — AI Concierge Calls (500 records).
+-- Bubaly · SEED — AI Concierge Calls (500 records).
 -- Fills concierge_calls so the outbound "Bubaly calls for you" module can be
 -- tested at volume: every task_kind × category, the full status lifecycle
 -- (draft/queued/calling/completed/failed/action_needed/cancelled), an
@@ -4852,7 +4852,7 @@ end $$;
 
 -- ==================== seed_workload.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Workload snapshots (500 records).
+-- Bubaly · SEED — Workload snapshots (500 records).
 -- Fills workload_snapshots so Workload Balance analytics can be tested at
 -- volume: up to 5 members × 100 ISO weeks of history, with a realistic drift
 -- (one member consistently heavier, slowly rebalancing toward fair).
@@ -4943,7 +4943,7 @@ end $$;
 
 -- ==================== seed_independence.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Independence milestones (500 records).
+-- Bubaly · SEED — Independence milestones (500 records).
 -- Fills independence_milestones so the growth-ladder module can be tested at
 -- volume: every domain × age band across the family's kids (falls back to any
 -- members if no child/teen), realistic status mix (achieved with evidence +
@@ -5037,7 +5037,7 @@ end $$;
 
 -- ==================== seed_money_timeline.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Money-timeline insights (500 records).
+-- Bubaly · SEED — Money-timeline insights (500 records).
 -- Fills money_timeline_insights so the Financial Copilot list + acknowledge/
 -- dismiss flow can be tested at volume: the 4 week-bearing insight kinds
 -- (low_balance / heavy_week / goal_at_risk / set_aside) across 125 distinct ISO
@@ -5129,7 +5129,7 @@ end $$;
 
 -- ==================== seed_paperwork.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Paperwork Inbox (500 records).
+-- Bubaly · SEED — Paperwork Inbox (500 records).
 -- Fills paperwork_items so the triage inbox can be tested at volume: all 7
 -- kinds × realistic titles/summaries/senders, a spread of urgency and status,
 -- due dates from 30 days back to 90 days ahead, extracted-action JSON in the
@@ -5223,7 +5223,7 @@ end $$;
 
 -- ==================== seed_contact_interactions.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Contact interactions (500 records).
+-- Bubaly · SEED — Contact interactions (500 records).
 -- Fills contact_interactions so the per-contact Relationship Timeline can be
 -- tested at volume: spreads 500 touches across up to 25 of the family's
 -- contacts (creating 8 seed contacts if the family has none), all 6 kinds
@@ -5319,7 +5319,7 @@ end $$;
 
 -- ==================== seed_autonomy_runs.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Autonomous execution loop (500 records).
+-- Bubaly · SEED — Autonomous execution loop (500 records).
 -- Fills family_automation_runs with loop-triggered runs (trigger_type
 -- 'plan_accepted') so the Concierge Autopilot panel can be tested at volume:
 -- realistic "Bubaly did it" summaries across executed / pending / dismissed,
@@ -5427,7 +5427,7 @@ end $$;
 
 -- ==================== seed_dining_out.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Dining Out (500 records).
+-- Bubaly · SEED — Dining Out (500 records).
 -- Fills dining_out so the upgraded Dining page can be tested at volume:
 -- 100 saved restaurants (cuisines, price levels, ratings, favorites) +
 -- 400 logged visits over ~2 years (spend + item counts) so the 30-day stat
@@ -5511,7 +5511,7 @@ end $$;
 
 -- ==================== seed_crm_contact_profile.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Progressive-profiling answers (500 records).
+-- Bubaly · SEED — Progressive-profiling answers (500 records).
 -- Fills crm_contact_profile so the progressive-profiling flow + segmentation
 -- can be tested at volume. Creates 500 seed crm_contacts leads (if needed) and
 -- gives each a partial-to-complete profile: a spread of role / top_priority /
@@ -5577,7 +5577,7 @@ end $$;
 
 -- ==================== seed_crm_lead_scores.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Lead scores (500 records).
+-- Bubaly · SEED — Lead scores (500 records).
 -- Fills crm_lead_scores so the admin Lead Scores view + ledger can be tested at
 -- volume. Creates 500 seed crm_contacts leads (if needed) and gives each a
 -- score/band plus an itemized factors ledger whose points sum to the score, so
@@ -5636,7 +5636,7 @@ end $$;
 
 -- ==================== seed_marketplace_quickpost.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Quick-Post comparables (500 records).
+-- Bubaly · SEED — Quick-Post comparables (500 records).
 -- Fills marketplace_listings with priced SELL comparables across all 10
 -- categories × 5 conditions with realistic per-category price bands, so the
 -- "Post in 60 seconds" AI price suggestion (lib/marketplace/quick-post.ts —
@@ -5713,7 +5713,7 @@ end $$;
 
 -- ==================== seed_marketplace_circles.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Community Circles (500 records).
+-- Bubaly · SEED — Community Circles (500 records).
 -- Makes the cross-family marketplace REAL for testing: 4 partner families
 -- (fixed ids, created only if missing), 6 circles (fixed ids + friendly join
 -- codes), 30 circle memberships (your family + all 4 partners in every circle),
@@ -5848,7 +5848,7 @@ end $$;
 
 -- ==================== seed_marketplace_auctions.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace auctions (60 auctions + ~470 bids ≈ 530 rows).
+-- Bubaly · SEED — Marketplace auctions (60 auctions + ~470 bids ≈ 530 rows).
 -- Fills the auction surface so /marketplace/auctions and the item auction panel
 -- can be tested at volume: a spread of live/ending-soon/scheduled auctions with
 -- realistic bid ladders, reserves, and Buy-It-Now, plus bid history per lot.
@@ -5976,7 +5976,7 @@ end $$;
 
 -- ==================== seed_marketplace_negotiations.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace "Make an Offer" negotiations (~520 rows).
+-- Bubaly · SEED — Marketplace "Make an Offer" negotiations (~520 rows).
 -- Fills the Best-Offer surface so /marketplace/negotiations and the item-page
 -- offer panel can be tested at volume: 100 fixed-price sale listings, each with
 -- one negotiation thread spanning the full state space (open·your-turn /
@@ -6157,7 +6157,7 @@ end $$;
 
 -- ==================== seed_marketplace_handoffs.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace pickup & hand-off (~520 rows).
+-- Bubaly · SEED — Marketplace pickup & hand-off (~520 rows).
 -- Fills the hand-off coordinator on /marketplace/orders: 160 claimed sale
 -- listings, each with a confirmed order and a pickup hand-off spanning every
 -- status (proposed / confirmed-with-code / completed / cancelled), safe public
@@ -6286,7 +6286,7 @@ end $$;
 
 -- ==================== seed_marketplace_price_history.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace price history + drop watch (~580 rows).
+-- Bubaly · SEED — Marketplace price history + drop watch (~580 rows).
 -- Fills the price-history surface on the item page: 130 fixed-price sale
 -- listings, each with a 2–4 step DECLINING price ladder (so the item page shows
 -- "Price dropped X%", "Lowest ever", and the history list), plus ~65 watcher
@@ -6398,7 +6398,7 @@ end $$;
 
 -- ==================== seed_marketplace_returns.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace rent/borrow returns (~500 rows).
+-- Bubaly · SEED — Marketplace rent/borrow returns (~500 rows).
 -- Fills the return-tracking surface on /marketplace/orders: 250 rent/borrow
 -- listings + 250 orders whose due dates span every return state. Borrower is a
 -- second existing active member of the same family.
@@ -6512,7 +6512,7 @@ end $$;
 
 -- ==================== seed_marketplace_reports.sql ====================
 -- ============================================================================
--- FamilyOS · SEED — Marketplace safety reports (~500 rows).
+-- Bubaly · SEED — Marketplace safety reports (~500 rows).
 -- Fills the super-admin moderation queue (/admin/marketplace/reports): up to
 -- 500 reports across all seven reasons and all four statuses, one per distinct
 -- listing (so the "one open report per listing+member" index is never

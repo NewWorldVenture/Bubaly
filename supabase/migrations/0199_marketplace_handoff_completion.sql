@@ -1,4 +1,4 @@
--- FamilyOS :: 0199 - atomic Marketplace hand-off completion
+-- Bubaly :: 0199 - atomic Marketplace hand-off completion
 --
 -- Completing a pickup must advance both the hand-off and its order together.
 -- Keep the code check and both status changes in one member-authorized transaction.
