@@ -18,7 +18,9 @@ describe('authenticated context error boundary', () => {
   });
 
   it('keeps shared auth failures observable while failing closed for privileged checks', () => {
-    expect(source).toContain("if (error) console.error('[auth] user lookup failed', error);");
+    // A signed-out visitor (AuthSessionMissingError) is not a failure and must
+    // not be logged; every other error stays observable.
+    expect(source).toContain("if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);");
     expect(source).toContain("console.error('[auth] super-admin allowlist lookup failed', error);");
   });
 });
