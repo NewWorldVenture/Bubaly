@@ -187,7 +187,7 @@ export default function AIPage() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-brand-text">{d.when}</p>
                   <p className="text-base font-semibold">{d.what}</p>
                 </div>
-                <span className="ml-auto text-sm font-bold text-muted/60">0{i + 1}</span>
+                <span className="ml-auto text-sm font-bold text-muted">0{i + 1}</span>
               </div>
               <p className="mt-4 text-sm leading-6 text-muted">{d.body}</p>
             </div>

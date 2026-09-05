@@ -90,7 +90,7 @@ export default async function FAQPage() {
 
       {!aeo.available && (
         <Section className="pt-0">
-          <p className="mx-auto max-w-3xl rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">
+          <p className="mx-auto max-w-3xl rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200" role="status">
             The live Knowledge Center is temporarily unavailable. The core answers below are still available; please refresh shortly for the latest team updates.
           </p>
         </Section>

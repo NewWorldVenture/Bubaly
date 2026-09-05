@@ -153,7 +153,7 @@ function TryDemoButton() {
     <button
       type="submit"
       disabled={pending}
-      className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-white shadow-glow transition hover:opacity-90 disabled:opacity-70"
+      className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-brand-fg shadow-glow transition hover:opacity-90 disabled:opacity-70"
     >
       {pending
         ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting your demo…</>

@@ -59,7 +59,7 @@ export default async function ContactPage() {
                 </p>
                 <Link
                   href="/feedback"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg transition hover:bg-brand/90"
                 >
                   <Gift className="h-4 w-4" /> Share an idea or request
                 </Link>
@@ -76,7 +76,7 @@ export default async function ContactPage() {
                     afterwards (login-form honours ?redirect=). */}
                 <Link
                   href="/login?redirect=%2Ffeedback"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg transition hover:bg-brand/90"
                 >
                   <Gift className="h-4 w-4" /> Share an idea or request
                 </Link>
