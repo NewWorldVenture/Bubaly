@@ -25,6 +25,7 @@ export type WatchVote = 'love' | 'up' | 'down';
 export type HomeLocationKind = 'room' | 'closet' | 'garage' | 'attic' | 'basement' | 'shed' | 'storage_unit' | 'box' | 'shelf' | 'drawer' | 'cabinet' | 'vehicle' | 'other';
 export type InventoryCategory = 'electronics' | 'tools' | 'sports' | 'toys' | 'documents' | 'kitchen' | 'furniture' | 'seasonal' | 'clothing' | 'outdoor' | 'medical' | 'keys' | 'jewelry' | 'other';
 export type InventoryStatus = 'in_place' | 'lent' | 'lost' | 'disposed' | 'in_repair';
+export type SleepSource = 'manual' | 'wearable' | 'estimate';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2441,6 +2442,21 @@ export interface Database {
         { id: string; family_id: string; item_id: string; from_location_id: string | null; to_location_id: string | null; moved_by: string | null; moved_at: string; reason: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; item_id: string; from_location_id?: string | null; to_location_id?: string | null; moved_by?: string | null; moved_at?: string; reason?: string | null; created_by?: string | null },
         Partial<{ from_location_id: string | null; to_location_id: string | null; moved_by: string | null; moved_at: string; reason: string | null }>
+      >;
+      sleep_logs: T<
+        { id: string; family_id: string; member_id: string; sleep_date: string; bedtime: string; wake_time: string; duration_min: number; quality: number | null; awakenings: number; source: SleepSource; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; sleep_date: string; bedtime: string; wake_time: string; duration_min: number; quality?: number | null; awakenings?: number; source?: SleepSource; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; sleep_date: string; bedtime: string; wake_time: string; duration_min: number; quality: number | null; awakenings: number; source: SleepSource; notes: string | null }>
+      >;
+      bedtime_routines: T<
+        { id: string; family_id: string; member_id: string; name: string; target_bedtime: string; target_wake: string; wind_down_min: number; steps: string[]; days_of_week: number[]; is_active: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; name?: string; target_bedtime?: string; target_wake?: string; wind_down_min?: number; steps?: string[]; days_of_week?: number[]; is_active?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; name: string; target_bedtime: string; target_wake: string; wind_down_min: number; steps: string[]; days_of_week: number[]; is_active: boolean; notes: string | null }>
+      >;
+      sleep_checkins: T<
+        { id: string; family_id: string; member_id: string; checkin_date: string; energy: number; mood: number; caffeine_after_2pm: boolean; screens_in_bed: boolean; exercised: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; checkin_date?: string; energy?: number; mood?: number; caffeine_after_2pm?: boolean; screens_in_bed?: boolean; exercised?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; checkin_date: string; energy: number; mood: number; caffeine_after_2pm: boolean; screens_in_bed: boolean; exercised: boolean; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };

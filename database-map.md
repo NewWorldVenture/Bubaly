@@ -1,6 +1,6 @@
 # Database Map
 
-Generated from `supabase/migrations/*.sql` — **427 tables**.
+Generated from `supabase/migrations/*.sql` — **430 tables**.
 
 **RLS model:** `0118_rls_drift_repair.sql` dynamically enables Row-Level Security on EVERY
 public base table (information_schema loop), re-asserts the strict 0004 policies on the
@@ -39,6 +39,7 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `babysitter_profiles` | `0088_family_wallet.sql` |
 | `backlinks` | `0066_competitive_intel.sql` |
 | `badges` | `0043_chore_missions.sql` |
+| `bedtime_routines` | `0243_sleep_coach.sql` |
 | `behavior_logs` | `0073_behavior_tracking.sql` |
 | `billing_customers` | `0002_tables.sql` |
 | `bills` | `0006_financial_health_school_sports.sql` |
@@ -306,6 +307,8 @@ convention). Every migration is additive + idempotent and PG16-validated before 
 | `school_events` | `0002_tables.sql` |
 | `screen_time_entries` | `0074_screen_time.sql` |
 | `screen_time_limits` | `0074_screen_time.sql` |
+| `sleep_checkins` | `0243_sleep_coach.sql` |
+| `sleep_logs` | `0243_sleep_coach.sql` |
 | `smart_devices` | `0081_home_management.sql` |
 | `social_access_permissions` | `0034_social_command_center.sql` |
 | `social_account_tokens` | `0034_social_command_center.sql` |

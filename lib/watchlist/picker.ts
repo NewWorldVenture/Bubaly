@@ -54,16 +54,7 @@ export type TitleLike = {
 export type VoteLike = { title_id: string; member_id: string; vote: WatchVote };
 export type SessionLike = { title_id: string | null; title_name: string; watched_on: string; rating: number | null; member_ids: string[] };
 
-/** Whole years old on `today` for a YYYY-MM-DD birthday (null when unknown). */
-export function ageOn(birthday: string | null | undefined, today: Date): number | null {
-  if (!birthday) return null;
-  const b = new Date(`${birthday.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(b.getTime())) return null;
-  let age = today.getFullYear() - b.getFullYear();
-  const beforeBirthday = today.getMonth() < b.getMonth() || (today.getMonth() === b.getMonth() && today.getDate() < b.getDate());
-  if (beforeBirthday) age -= 1;
-  return Math.max(0, age);
-}
+export { ageOn } from '@/lib/members/age';
 
 /** Sum of the audience's votes for a title (members not voting count 0). */
 export function voteScore(titleId: string, votes: VoteLike[], audienceIds?: string[]): number {

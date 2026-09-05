@@ -88,7 +88,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     tint: 'bg-blue-500/15 text-blue-300',
     countLabel: 'tools',
     hrefs: [
-      '/dashboard/health', '/dashboard/medical', '/dashboard/medications',
+      '/dashboard/health', '/dashboard/sleep', '/dashboard/medical', '/dashboard/medications',
       '/dashboard/dental', '/dashboard/care', '/dashboard/readiness',
       '/dashboard/focus', '/dashboard/family-health', '/dashboard/family-stress',
     ],

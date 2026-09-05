@@ -22,7 +22,7 @@ import {
   CreditCard, Users, Image as ImageIcon, GraduationCap, Gift, MessageCircle,
   BookHeart, PiggyBank, Receipt, RefreshCw, MapPin, NotebookPen,
   Repeat, CloudSun, Cake, Megaphone, ChefHat, ListChecks,
-  Plus, X, Check, Settings2, Shirt, Clapperboard, PackageSearch,
+  Plus, X, Check, Settings2, Shirt, Clapperboard, PackageSearch, MoonStar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -53,6 +53,7 @@ export const SHORTCUT_CATALOG: Shortcut[] = [
   { key: 'closet', icon: Shirt, label: 'Closet', href: '/dashboard/closet', hint: 'Outfit today' },
   { key: 'watchlist', icon: Clapperboard, label: 'Watchlist', href: '/dashboard/watchlist', hint: 'Movie night' },
   { key: 'inventory', icon: PackageSearch, label: 'Inventory', href: '/dashboard/inventory', hint: 'Where is it?' },
+  { key: 'sleep', icon: MoonStar, label: 'Sleep', href: '/dashboard/sleep', hint: 'Log last night' },
   { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
   { key: 'finances', icon: CreditCard, label: 'Finances', href: '/dashboard/billing', hint: 'Track money' },
   { key: 'contacts', icon: Users, label: 'Contacts', href: '/dashboard/contacts', hint: 'Add contact' },

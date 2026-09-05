@@ -120,6 +120,7 @@ Every dashboard feature and the Supabase tables its page/actions/module touch di
 | `/dashboard/settings` | `crm_contact_profile`, `crm_contacts`, `families`, `family_members`, `invites`, `profiles` |
 | `/dashboard/setup` | `family_onboarding` |
 | `/dashboard/signups` | `opportunities` |
+| `/dashboard/sleep` | `bedtime_routines`, `sleep_checkins`, `sleep_logs` |
 | `/dashboard/social-feed` | `social_reader_items`, `social_reader_sources` |
 | `/dashboard/social` | `social_access_permissions`, `social_accounts`, `social_calendar_items`, `social_comments`, `social_media_library`, `social_post_variants`, `social_posts`, `social_schedules` +1 more |
 | `/dashboard/sports` | `game_results`, `sports_events`, `teams` |
