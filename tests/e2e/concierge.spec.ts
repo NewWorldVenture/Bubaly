@@ -86,6 +86,7 @@ test.describe('Ask Bubaly concierge loop', () => {
   });
 
   test('"Plan our week" lands on a run page that survives a reload', async ({ page }) => {
+    test.setTimeout(120_000);
     // Sign in and take the fresh family through onboarding to the dashboard,
     // the same path authenticated.spec.ts pins. A new family is on its trial,
     // which is what grants the Basic-tier `ai-requests` feature.

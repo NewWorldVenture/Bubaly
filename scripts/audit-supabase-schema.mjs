@@ -42,6 +42,16 @@ export const SCHEMA_CHECKS = [
   ['language_goals', '0248_language_practice.sql'],
   ['language_sessions', '0248_language_practice.sql'],
   ['vocab_cards', '0248_language_practice.sql'],
+  ['ai_requests', '0250_ai_runtime_core.sql'],
+  ['ai_request_context', '0250_ai_runtime_core.sql'],
+  ['ai_plans', '0250_ai_runtime_core.sql'],
+  ['ai_plan_steps', '0250_ai_runtime_core.sql'],
+  ['ai_run_events', '0250_ai_runtime_core.sql'],
+  ['ai_tool_calls', '0250_ai_runtime_core.sql'],
+  ['family_automation_runs.runtime_columns', '0250_ai_runtime_core.sql', 'request_id,plan_id,requested_by_member_id,state,current_step_id,run_after,lease_owner,lease_expires_at,attempt,max_attempts,idempotency_key,cancel_requested_at,paused_at'],
+  ['ai_conversations.runtime_columns', '0250_ai_runtime_core.sql', 'state,prompt_version'],
+  ['ai_messages.runtime_columns', '0250_ai_runtime_core.sql', 'structured_content,model,usage,request_id,sender_member_id'],
+  ['approval_requests.runtime_columns', '0251_ai_trust_hardening.sql', 'request_id,run_id,plan_step_id,plan_step_ids,consequences,evidence,edited_payload,payload_kind,reviewed_by,review_note'],
 ];
 
 export async function auditSupabaseSchema({

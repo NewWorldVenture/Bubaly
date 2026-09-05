@@ -1,0 +1,1353 @@
+{
+  "schema_version": 1,
+  "report_id": "bubaly-capability-audit-21-29",
+  "audit_date": "2026-09-05",
+  "repository_root": ".",
+  "implementation_path_basis": "repository_relative",
+  "audit_type": "read_only_requirements_to_implementation_audit",
+  "audit_status": "completed_with_material_implementation_gaps",
+  "source": {
+    "sha256": "9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3",
+    "sha256_verification": "Provided by user; not independently recomputed.",
+    "section_copy_directory": ".next/blueprint-sections/",
+    "obsolete_split_used": false,
+    "sections_completely_read": [
+      {
+        "id": "3.21",
+        "file": ".next/blueprint-sections/3_21.md",
+        "read_status": "complete",
+        "delivery": "Section copy retrieved once; full section content recovered from canonical attachment after combined tool output truncation."
+      },
+      {
+        "id": "3.22",
+        "file": ".next/blueprint-sections/3_22.md",
+        "read_status": "complete",
+        "delivery": "Section copy retrieved once; full section content recovered from canonical attachment after combined tool output truncation."
+      },
+      {
+        "id": "3.23",
+        "file": ".next/blueprint-sections/3_23.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.24",
+        "file": ".next/blueprint-sections/3_24.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.25",
+        "file": ".next/blueprint-sections/3_25.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.26",
+        "file": ".next/blueprint-sections/3_26.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.27",
+        "file": ".next/blueprint-sections/3_27.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.28",
+        "file": ".next/blueprint-sections/3_28.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "3.29",
+        "file": ".next/blueprint-sections/3_29.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.40",
+        "file": ".next/blueprint-sections/34_40.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.41",
+        "file": ".next/blueprint-sections/34_41.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.43",
+        "file": ".next/blueprint-sections/34_43.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.44",
+        "file": ".next/blueprint-sections/34_44.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.45",
+        "file": ".next/blueprint-sections/34_45.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.47",
+        "file": ".next/blueprint-sections/34_47.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.48",
+        "file": ".next/blueprint-sections/34_48.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.49",
+        "file": ".next/blueprint-sections/34_49.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      },
+      {
+        "id": "34.50",
+        "file": ".next/blueprint-sections/34_50.md",
+        "read_status": "complete",
+        "delivery": "Complete section-copy content reviewed."
+      }
+    ],
+    "assigned_section_count": 18,
+    "completely_read_section_count": 18,
+    "assigned_read_coverage_complete": true,
+    "coverage_limit": "Complete coverage is claimed for the 18 assigned sections only, not the full 113-section blueprint or all global contracts.",
+    "recovery_note": "An initial combined tool response was truncated. Sections 3.21 and 3.22 were recovered completely from the canonical attachment without reopening the section copies. An attempted recovery of global 101-113 matched numbered build tasks rather than section headings; those passages were discarded and are not counted as global reading coverage."
+  },
+  "ownership_and_dependencies": {
+    "owned_capability_sections": [
+      "3.21",
+      "3.22",
+      "3.23",
+      "3.24",
+      "3.25",
+      "3.26",
+      "3.27",
+      "3.28",
+      "3.29"
+    ],
+    "parent_owns": [
+      "global_contracts",
+      "matrix_foundation",
+      "goal_controls",
+      "credentials",
+      "commits",
+      "pushes",
+      "production_deployments"
+    ],
+    "matrix_foundation_dependency": {
+      "status": "pending",
+      "effect": "Implementation slices below are recommendations. Consume the parent-owned ActorContext, capability, approval, AgentRun, provenance and event contracts when the foundation is ready.",
+      "implementation_started": false
+    },
+    "feature_implementation_authorized": false,
+    "authorized_write": "docs/traceability/capability-audit-21-29.json",
+    "shared_navigation_modified": false
+  },
+  "evidence_scope": {
+    "executed": [
+      "Read assigned blueprint section copies in bounded batches, with the documented attachment recovery.",
+      "Read and search local Bubaly route, component, domain-service, registry and migration source.",
+      "Inspect already captured source in memory to avoid reopening files.",
+      "Trace handlers, data queries, algorithms and schema policies statically."
+    ],
+    "not_executed": [
+      "Authenticated customer journeys or staging mutations",
+      "Tests, builds, lint, typechecks or AI evaluations during the revised capability audit",
+      "Live-browser checks during the revised capability audit",
+      "Database queries, migrations or production data changes",
+      "Provider API calls, integration connections, purchases, messages or account creation",
+      "Credential inspection or secret-value disclosure",
+      "Git commands, commits, pushes, deployments or goal changes"
+    ],
+    "baseline_commit": {
+      "user_provided": "01881fb279589d7a90acb8302817bb385fbe036d",
+      "independently_verified": false,
+      "note": "The working tree and live site were not verified to match this commit."
+    },
+    "proof_policy": {
+      "capability_pass_claims": 0,
+      "blocked_claims_for_unwritten_work": 0,
+      "statement": "Source inspection supports the gaps and reusable implementation observations below. File existence, tool names, schema declarations and test filenames do not prove a working customer journey.",
+      "remaining_acceptance_evidence": [
+        "Executed persisted happy path and correction path",
+        "Owner, adult, dependent and other-household authorization proof",
+        "Provider failure, retry and replay/idempotency behavior",
+        "AI golden and adversarial evaluation results",
+        "Actual responsive primary-journey execution",
+        "Domain event, source provenance and AgentRun traceability"
+      ]
+    }
+  },
+  "shared_findings": [
+    {
+      "id": "GROUP3-REGISTRY",
+      "priority": "P1",
+      "status": "implementation_gap",
+      "finding": "The central registry exposes calendar, task/chore, grocery, reminder, family and notification primitives. The requested pet, relationship, digital-account, moving, purchase-advisor, inventory, brief and project orchestration tools are not registered. Chore create/assign/complete/list primitives already exist and should be reused.",
+      "evidence": [
+        {
+          "path": "lib/ai/tools/registry.ts",
+          "line": 56,
+          "observation": "Registration combines six imported tool sets.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/ai/tools/tasks.ts",
+          "line": 221,
+          "observation": "Tool-name search identifies tasks.createChore, tasks.assignChore, tasks.completeChore and tasks.listOpenChores.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/ai/tools/groceries.ts",
+          "line": 29,
+          "observation": "Tool-name search identifies grocery list mutation/read primitives, not product comparison or owned-item checking.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "first_safe_slice": "Add domain definitions incrementally to the existing registry using the parent foundation; separate reads, proposals, internal writes and approval-controlled side effects."
+    },
+    {
+      "id": "GROUP3-ROLLOUT",
+      "priority": "P2",
+      "status": "implementation_gap",
+      "finding": "No exact matches were found for the nine packet-specific feature-flag identifiers in app, lib, components or supabase/migrations. Existing tier gates are not evidence that these rollout contracts are implemented.",
+      "exact_identifiers_searched": [
+        "feature_pet_os",
+        "feature_workload_manager",
+        "feature_relationship_graph",
+        "feature_digital_vault",
+        "feature_moving_project",
+        "feature_purchase_advisor",
+        "feature_visual_inventory",
+        "feature_daily_brief",
+        "feature_home_project_manager"
+      ],
+      "first_safe_slice": "Map the packet flags to the parent-owned rollout mechanism before enabling each completed workflow."
+    },
+    {
+      "id": "GROUP3-SERVICE-TRACEABILITY",
+      "priority": "P1",
+      "status": "implementation_gap",
+      "finding": "Several mapped UI handlers write directly through the browser Supabase client. Those handlers do not show the required typed actor-aware domain service, domain-event publication and AgentRun linkage. Workload reassignment is a useful existing server-action exception.",
+      "evidence": [
+        {
+          "path": "components/modules/pets-module.tsx",
+          "line": 239,
+          "observation": "Manual pet creation inserts through createClient().",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/moving-module.tsx",
+          "line": 83,
+          "observation": "Checklist generation inserts move_tasks from the browser.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/projects-module.tsx",
+          "line": 69,
+          "observation": "Project completion updates the row from the browser.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "app/(app)/dashboard/workload/actions.ts",
+          "line": 14,
+          "observation": "Reassignment resolves user context, scopes the update to the active family and writes audit metadata.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "first_safe_slice": "Wrap the chosen first customer workflow in a typed server service and connect the parent's authorization, event and run-history contracts; do not replace shared infrastructure within this capability group."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "pet_os",
+      "source_sections": [
+        "3.21",
+        "34.40"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/family/pets",
+      "observed_routes": [
+        "/dashboard/pets"
+      ],
+      "feature_flag": "feature_pet_os",
+      "required_tools": [
+        "pet.extract",
+        "pet.routine",
+        "pet.sitter",
+        "pet.replenish"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/pets/page.tsx",
+        "components/modules/pets-module.tsx",
+        "lib/pets/care.ts",
+        "supabase/migrations/0083_pets.sql"
+      ],
+      "existing_data": [
+        "pets",
+        "pet_care_records"
+      ],
+      "existing_behavior": "Code queries family pet profiles and care records, supports manual insertion and displays due-date/care recommendations.",
+      "evidence": [
+        {
+          "path": "components/modules/pets-module.tsx",
+          "line": 233,
+          "observation": "Profile form creates a pet from manually supplied fields.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/pets-module.tsx",
+          "line": 298,
+          "observation": "Care-record form stores kind, date, dose and next-due information.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/pets/care.ts",
+          "line": 160,
+          "observation": "Recommendations use existing records and species care categories.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0083_pets.sql",
+          "line": 40,
+          "observation": "Pet-care records lack the required source-document, extraction-confidence and run linkage.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "PET-INGEST",
+          "priority": "P1",
+          "customer_outcome": "A vet record cannot become reviewed, source-linked care facts, appointments and reminders through the mapped workflow."
+        },
+        {
+          "id": "PET-SHARING",
+          "priority": "P1",
+          "customer_outcome": "An owner cannot prepare a scoped, time-limited sitter view through the mapped pet module."
+        },
+        {
+          "id": "PET-CROSS-DOMAIN",
+          "priority": "P2",
+          "customer_outcome": "Food/supply replenishment and pet-specific travel coordination are not connected to the pet record workflow."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Import a vet record, confirm the extracted facts and create linked care reminders.",
+        "tools": [
+          "pet.extract",
+          "pet.routine"
+        ],
+        "data": [
+          "source/document reference",
+          "confirmed care facts",
+          "pet appointment/routine links",
+          "extraction provenance"
+        ],
+        "integrations": [
+          "Documents",
+          "Calendar",
+          "Notifications"
+        ],
+        "safeguards": [
+          "Preserve owner/vet medication instructions without model-generated changes.",
+          "Require review for ambiguous dates or pet identity.",
+          "Use parent-owned actor and run contracts."
+        ],
+        "later_slices": [
+          "Time-limited sitter sharing",
+          "Supply cadence linked to Shopping and Travel"
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "workload_manager",
+      "source_sections": [
+        "3.22",
+        "34.41"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/plan/chores",
+      "observed_routes": [
+        "/dashboard/chores",
+        "/dashboard/workload"
+      ],
+      "feature_flag": "feature_workload_manager",
+      "required_tools": [
+        "chores.generate",
+        "chores.assign",
+        "chores.rebalance",
+        "chores.swap",
+        "chores.complete"
+      ],
+      "observed_reusable_tools": [
+        "tasks.createChore",
+        "tasks.assignChore",
+        "tasks.completeChore",
+        "tasks.listOpenChores"
+      ],
+      "existing_implementation_paths": [
+        "components/modules/chores-module.tsx",
+        "components/modules/workload-module.tsx",
+        "lib/workload/balance.ts",
+        "app/(app)/dashboard/workload/actions.ts",
+        "app/(app)/dashboard/workload/page.tsx",
+        "lib/chores/ai.ts",
+        "lib/chores/logic.ts",
+        "lib/chores/server.ts"
+      ],
+      "existing_data": [
+        "chores",
+        "chore_assignments",
+        "rewards",
+        "workload_snapshots",
+        "kid_progress",
+        "chore_approval_events"
+      ],
+      "existing_behavior": "Code calculates effort-weighted workload, suggests reassignment, applies an audited server-side reassignment and supports chore review/rewards.",
+      "evidence": [
+        {
+          "path": "lib/workload/balance.ts",
+          "line": 117,
+          "observation": "Load uses chore estimates plus fixed task and event weights.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/workload/balance.ts",
+          "line": 154,
+          "observation": "Rebalance selection uses relative load and broad member roles, without calendar availability or chore-specific safety/age inputs.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "app/(app)/dashboard/workload/actions.ts",
+          "line": 14,
+          "observation": "The action checks family membership and open assignment status; it does not evaluate availability or task-specific eligibility.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/chores/ai.ts",
+          "line": 135,
+          "observation": "Age-aware chore-plan generation exists separately from workload reassignment.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "WORKLOAD-ELIGIBILITY",
+          "priority": "P1",
+          "customer_outcome": "A suggested recipient is not checked against actual schedule availability and chore-specific age/safety restrictions."
+        },
+        {
+          "id": "WORKLOAD-LEARNING",
+          "priority": "P2",
+          "customer_outcome": "The next cycle does not learn actual completion duration or expose configurable fairness weights in the inspected balancing engine."
+        },
+        {
+          "id": "WORKLOAD-SWAPS",
+          "priority": "P2",
+          "customer_outcome": "A negotiated swap/request-help lifecycle and registered rebalance/swap tools are missing."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Review and apply a safe, available reassignment with an explanation.",
+        "tools": [
+          "chores.rebalance",
+          "chores.swap"
+        ],
+        "data": [
+          "eligibility rules",
+          "availability inputs",
+          "swap state",
+          "actual effort observations"
+        ],
+        "integrations": [
+          "Calendar",
+          "Tasks/Chores",
+          "Notifications",
+          "existing reward/allowance flow"
+        ],
+        "safeguards": [
+          "Revalidate guardian authority and chore eligibility server-side.",
+          "Preserve completed or stale assignments.",
+          "Keep weights transparent and configurable."
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "relationship_graph",
+      "source_sections": [
+        "3.23",
+        "34.43"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/family/relationships",
+      "observed_routes": [
+        "/dashboard/relationship",
+        "/dashboard/contacts/[id]"
+      ],
+      "feature_flag": "feature_relationship_graph",
+      "required_tools": [
+        "relationship.remind",
+        "relationship.summarize",
+        "relationship.followup"
+      ],
+      "existing_implementation_paths": [
+        "components/modules/relationship-module.tsx",
+        "app/(app)/dashboard/relationship/page.tsx",
+        "app/(app)/dashboard/contacts/[id]/actions.ts",
+        "supabase/migrations/0170_contact_interactions.sql"
+      ],
+      "existing_data": [
+        "relationship_dates",
+        "relationship_gift_ideas",
+        "relationship_profile",
+        "family_contacts",
+        "contact_interactions",
+        "family_communications"
+      ],
+      "existing_behavior": "Dates, gifts and relationship preferences are persisted; a reconnect draft uses contact history and linked communications.",
+      "evidence": [
+        {
+          "path": "app/(app)/dashboard/contacts/[id]/actions.ts",
+          "line": 61,
+          "observation": "Reconnect draft builds context from logged interactions and communication summaries.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0170_contact_interactions.sql",
+          "line": 38,
+          "observation": "Inspected interaction read policies authorize household membership rather than private-note ownership.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/relationship-module.tsx",
+          "line": 64,
+          "observation": "Relationship-date reads are family-scoped; the mapped surface has no private-note visibility workflow.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "RELATIONSHIP-PRIVATE-MEMORY",
+          "priority": "P1",
+          "customer_outcome": "A member cannot rely on private relationship notes remaining excluded from shared retrieval and drafts through the inspected data model."
+        },
+        {
+          "id": "RELATIONSHIP-FOLLOWUP",
+          "priority": "P2",
+          "customer_outcome": "Low-frequency, configurable follow-up suggestions lack the required review/dismiss/history and domain-tool lifecycle."
+        },
+        {
+          "id": "RELATIONSHIP-DELETION",
+          "priority": "P2",
+          "customer_outcome": "Comprehensive deletion of relationship memory and derived indexes is not established by the inspected handlers."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Store a private interaction note and generate a follow-up using only authorized history.",
+        "tools": [
+          "relationship.summarize",
+          "relationship.remind",
+          "relationship.followup"
+        ],
+        "data": [
+          "contact/note visibility",
+          "follow-up preferences",
+          "suggestion and interaction linkage"
+        ],
+        "integrations": [
+          "Contacts",
+          "Calendar",
+          "occasion planning",
+          "messaging drafts"
+        ],
+        "safeguards": [
+          "Filter before model context construction.",
+          "Never send automatically.",
+          "Expose edit/dismiss and configurable frequency."
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "digital_vault",
+      "source_sections": [
+        "3.24",
+        "34.44"
+      ],
+      "status": "required_account_directory_not_found_in_inspected_implementation",
+      "priority": "P1",
+      "blueprint_route": "/documents/digital-life",
+      "observed_routes": [
+        "/dashboard/files/vault"
+      ],
+      "feature_flag": "feature_digital_vault",
+      "required_tools": [
+        "account.add",
+        "account.discover",
+        "account.recovery",
+        "account.review"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/files/vault/page.tsx",
+        "components/modules/files-hub-module.tsx"
+      ],
+      "existing_data": [
+        "documents"
+      ],
+      "existing_behavior": "The existing vault is a document view using secure flags, uploads and signed downloads.",
+      "evidence": [
+        {
+          "path": "app/(app)/dashboard/files/vault/page.tsx",
+          "line": 9,
+          "observation": "The route renders FilesHubModule with view=vault.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/files-hub-module.tsx",
+          "line": 65,
+          "observation": "The work surface queries documents; it does not model digital account ownership or recovery.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "method": "targeted_source_search",
+          "scope": [
+            "app",
+            "lib",
+            "components",
+            "supabase/migrations"
+          ],
+          "observation": "No matches for digital_accounts, account_recovery_refs, account_access_policies, digital_estate or the account-directory/password-manager search terms.",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "ACCOUNTS-DIRECTORY",
+          "priority": "P1",
+          "customer_outcome": "The household cannot inventory service ownership, users, recovery references and password-manager links in a dedicated account workflow."
+        },
+        {
+          "id": "ACCOUNTS-EMERGENCY",
+          "priority": "P1",
+          "customer_outcome": "Explicit emergency access policy and digital-estate/export instructions are not implemented in the mapped vault surface."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Add safe digital-account metadata and retrieve an authorized recovery checklist.",
+        "tools": [
+          "account.add",
+          "account.recovery"
+        ],
+        "data": [
+          "digital_accounts",
+          "account_members",
+          "safe recovery references",
+          "access policies"
+        ],
+        "integrations": [
+          "existing documents",
+          "Finance/Subscriptions",
+          "supported password-manager links"
+        ],
+        "safeguards": [
+          "No plaintext password fields.",
+          "Encrypt sensitive references and log access.",
+          "No provider account changes or implicit emergency bypass."
+        ],
+        "later_slices": [
+          "Receipt-based discovery",
+          "Periodic review",
+          "Digital-estate export"
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "moving_project",
+      "source_sections": [
+        "3.25",
+        "34.45"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/home/moving",
+      "observed_routes": [
+        "/dashboard/moving"
+      ],
+      "feature_flag": "feature_moving_project",
+      "required_tools": [
+        "move.create",
+        "move.plan",
+        "move.recalc",
+        "move.track_box",
+        "move.address_change"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/moving/page.tsx",
+        "components/modules/moving-module.tsx",
+        "lib/moving/planner.ts",
+        "supabase/migrations/0245_move_planner.sql"
+      ],
+      "existing_data": [
+        "moves",
+        "move_tasks",
+        "move_boxes"
+      ],
+      "existing_behavior": "Conditional checklist templates produce dated tasks; the UI tracks boxes, owners, budgets and progress.",
+      "evidence": [
+        {
+          "path": "lib/moving/planner.ts",
+          "line": 116,
+          "observation": "planTasks excludes existing template keys and calculates dates only for new tasks.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/moving-module.tsx",
+          "line": 367,
+          "observation": "Editing the move updates moves only; it does not update existing task due dates.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0245_move_planner.sql",
+          "line": 87,
+          "observation": "Inspected migration adds updated_at triggers, not move-date recalculation.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "MOVE-DATE-RECALC",
+          "priority": "P1",
+          "customer_outcome": "After the move date changes, existing checklist tasks retain their old due dates in the inspected implementation."
+        },
+        {
+          "id": "MOVE-HOUSEHOLD-DEPENDENCIES",
+          "priority": "P2",
+          "customer_outcome": "Address changes and school/pet/service transitions are generic templates, not derived from the household's actual accounts and providers."
+        },
+        {
+          "id": "MOVE-LINKED-INVENTORY",
+          "priority": "P2",
+          "customer_outcome": "Box contents are text entries rather than canonical inventory links supporting automatic post-move location updates."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Change the move date and safely review/recalculate unfinished dependent tasks.",
+        "tools": [
+          "move.recalc"
+        ],
+        "data": [
+          "task date provenance",
+          "explicit date overrides",
+          "dependency links",
+          "recalculation history"
+        ],
+        "integrations": [
+          "Calendar/Tasks",
+          "Home",
+          "existing move boxes"
+        ],
+        "safeguards": [
+          "Transactional and idempotent update.",
+          "Preserve completed tasks and deliberate overrides.",
+          "Do not perform external address changes."
+        ],
+        "later_slices": [
+          "Household-derived account/service transition tasks",
+          "Canonical box-item links and post-move verification"
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "purchase_advisor",
+      "source_sections": [
+        "3.26",
+        "34.47"
+      ],
+      "status": "partial_adjacent_shopping_implementation_with_gaps",
+      "priority": "P2",
+      "blueprint_route": "/shopping",
+      "observed_routes": [
+        "/dashboard/grocery"
+      ],
+      "feature_flag": "feature_purchase_advisor",
+      "required_tools": [
+        "shopping.requirements",
+        "shopping.search",
+        "shopping.compare",
+        "shopping.owned_check",
+        "shopping.proposal"
+      ],
+      "observed_reusable_tools": [
+        "groceries.addItems",
+        "groceries.listOpen",
+        "groceries.checkItem",
+        "groceries.clearChecked"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/grocery/page.tsx",
+        "components/modules/shopping-module.tsx",
+        "lib/grocery/retailers.ts"
+      ],
+      "existing_data": [
+        "grocery_lists",
+        "grocery_items"
+      ],
+      "existing_behavior": "Shopping lists persist items; retailer helpers provide search deep links and copyable list handoff without pretending to place orders.",
+      "evidence": [
+        {
+          "path": "components/modules/shopping-module.tsx",
+          "line": 54,
+          "observation": "The primary surface reads grocery lists and items.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "lib/grocery/retailers.ts",
+          "line": 1,
+          "observation": "Retailer support explicitly provides handoff rather than ordering API execution.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "PURCHASE-CONTEXT",
+          "priority": "P2",
+          "customer_outcome": "No mapped workflow checks whether an owned item meets the need or derives compatibility and budget constraints."
+        },
+        {
+          "id": "PURCHASE-COMPARISON",
+          "priority": "P2",
+          "customer_outcome": "No sourced, timestamped candidate comparison or persisted purchase proposal/ownership outcome is implemented in the mapped shopping surface."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Turn a need into explicit requirements and show whether an owned item already solves it.",
+        "tools": [
+          "shopping.requirements",
+          "shopping.owned_check"
+        ],
+        "data": [
+          "purchase requests",
+          "constraints",
+          "canonical owned-item links"
+        ],
+        "integrations": [
+          "Home Inventory",
+          "Wardrobe",
+          "Travel",
+          "Finance"
+        ],
+        "later_slices": [
+          "Provider-backed normalized candidates with source and timestamp",
+          "Comparison/proposal persistence",
+          "Affiliate disclosure and approved retailer handoff"
+        ],
+        "safeguards": [
+          "No fabricated compatibility, availability or prices.",
+          "No purchase execution in the first slice."
+        ],
+        "provider_readiness": "Not inspected or exercised; not classified as BLOCKED.",
+        "executed": false
+      }
+    },
+    {
+      "id": "visual_inventory",
+      "source_sections": [
+        "3.27",
+        "34.48"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/home/inventory",
+      "observed_routes": [
+        "/dashboard/inventory"
+      ],
+      "feature_flag": "feature_visual_inventory",
+      "required_tools": [
+        "inventory.capture",
+        "inventory.confirm",
+        "inventory.search",
+        "inventory.move",
+        "inventory.hide"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/inventory/page.tsx",
+        "components/modules/inventory-module.tsx",
+        "lib/inventory/finder.ts",
+        "supabase/migrations/0242_home_inventory.sql"
+      ],
+      "existing_data": [
+        "home_locations",
+        "inventory_items",
+        "inventory_moves"
+      ],
+      "existing_behavior": "Manual item/photo capture, nested location paths, loan/warranty tracking and move history are present.",
+      "evidence": [
+        {
+          "path": "lib/inventory/finder.ts",
+          "line": 93,
+          "observation": "Query is split into raw whitespace tokens; every token must match a stored field or the item is discarded.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/inventory-module.tsx",
+          "line": 329,
+          "observation": "Photo upload stores an image without a candidate extraction/confirmation step.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0242_home_inventory.sql",
+          "line": 79,
+          "observation": "Inspected item/location policies authorize household membership; no per-item hiding contract is present.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/inventory-module.tsx",
+          "line": 403,
+          "observation": "Photo removal clears the form path; this handler does not remove the storage object.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "INVENTORY-PRIVATE-ITEMS",
+          "priority": "P1",
+          "customer_outcome": "The mapped surface cannot hide sensitive items from other household members."
+        },
+        {
+          "id": "INVENTORY-LANGUAGE",
+          "priority": "P2",
+          "customer_outcome": "Conversational queries such as 'Where are the passports?' can fail because incidental words and punctuation must match stored fields."
+        },
+        {
+          "id": "INVENTORY-CONFIRMED-VISION",
+          "priority": "P2",
+          "customer_outcome": "No visual candidate review, confidence/last-confirmed location evidence, or complete photo retention/deletion workflow is present."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Answer an authorized item-location question with stored evidence and last-confirmed state.",
+        "tools": [
+          "inventory.search",
+          "inventory.hide",
+          "inventory.confirm"
+        ],
+        "data": [
+          "item visibility",
+          "location observations",
+          "confirmation timestamps",
+          "source-photo links"
+        ],
+        "integrations": [
+          "Home",
+          "Documents",
+          "Moving"
+        ],
+        "safeguards": [
+          "Filter before search and AI retrieval.",
+          "Do not guess a location.",
+          "Use storage deletion/retention operations for removed photos."
+        ],
+        "later_slices": [
+          "Photo capture to candidate review",
+          "Canonical moving-box updates"
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "daily_brief",
+      "source_sections": [
+        "3.28",
+        "34.49"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/home#brief",
+      "observed_routes": [
+        "/dashboard/briefing"
+      ],
+      "feature_flag": "feature_daily_brief",
+      "required_tools": [
+        "brief.generate",
+        "brief.explain",
+        "brief.dismiss",
+        "brief.configure"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/briefing/page.tsx",
+        "components/modules/briefing-module.tsx",
+        "app/api/ai/briefing/route.ts",
+        "lib/home/home-brief.ts",
+        "supabase/migrations/0140_home_briefs.sql"
+      ],
+      "existing_data": [
+        "live cross-domain digest inputs",
+        "family_operating_index",
+        "home_briefs",
+        "sessionStorage briefing cache"
+      ],
+      "existing_behavior": "Briefing generation consumes household domains, displays a deterministic digest and operating-index change recap; a separate home_briefs schema provides daily household snapshots.",
+      "evidence": [
+        {
+          "path": "components/modules/briefing-module.tsx",
+          "line": 640,
+          "observation": "Read cache key is fos_briefing_<type>_<date>, without household or member identity.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/briefing-module.tsx",
+          "line": 666,
+          "observation": "Generated data is written under the same unscoped key.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "app/api/ai/briefing/route.ts",
+          "line": 53,
+          "observation": "Source queries collect multiple household domains; several select display fields without source record IDs.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "app/api/ai/briefing/route.ts",
+          "line": 238,
+          "observation": "Model output uses JSON.parse and broad object checks rather than a strict runtime result schema.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0140_home_briefs.sql",
+          "line": 28,
+          "observation": "Home brief uniqueness is family/date, not a member-specific brief-item/delivery lifecycle.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "BRIEF-CACHE-ISOLATION",
+          "priority": "P1",
+          "customer_outcome": "A cached brief is not keyed to household/member identity or permission state, creating a stale-context reuse risk. Runtime household switching was not exercised."
+        },
+        {
+          "id": "BRIEF-ITEM-LIFECYCLE",
+          "priority": "P1",
+          "customer_outcome": "The generated briefing lacks durable member-specific source/action/dismissal records and permission-aware invalidation."
+        },
+        {
+          "id": "BRIEF-DELIVERY",
+          "priority": "P2",
+          "customer_outcome": "Per-member category/delivery preferences and delivery logs are not established by the inspected briefing workflow."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Display only the current member's authorized, current-household brief and retain explainable item state.",
+        "tools": [
+          "brief.generate",
+          "brief.explain",
+          "brief.dismiss",
+          "brief.configure"
+        ],
+        "data": [
+          "tenant/member/permission-scoped cache",
+          "source-linked brief items",
+          "change baselines",
+          "preferences",
+          "delivery logs"
+        ],
+        "integrations": [
+          "household domain signals",
+          "parent authorization contracts",
+          "Notifications/email"
+        ],
+        "safeguards": [
+          "Invalidate on household/member/permission changes.",
+          "Runtime-validate model output.",
+          "Permission-filter before summarization and retrieval."
+        ],
+        "executed": false
+      }
+    },
+    {
+      "id": "home_project_manager",
+      "source_sections": [
+        "3.29",
+        "34.50"
+      ],
+      "status": "partial_implementation_with_gaps",
+      "priority": "P1",
+      "blueprint_route": "/home/projects",
+      "observed_routes": [
+        "/dashboard/projects"
+      ],
+      "feature_flag": "feature_home_project_manager",
+      "required_tools": [
+        "project.scope",
+        "project.plan",
+        "project.compare_quotes",
+        "project.track",
+        "project.complete"
+      ],
+      "existing_implementation_paths": [
+        "app/(app)/dashboard/projects/page.tsx",
+        "components/modules/projects-module.tsx",
+        "lib/projects/planner.ts",
+        "supabase/migrations/0246_home_projects.sql"
+      ],
+      "existing_data": [
+        "home_projects",
+        "project_materials",
+        "project_quotes",
+        "home_contractors"
+      ],
+      "existing_behavior": "Project board, material estimates, budget arithmetic, contractor links and quote comparison are present.",
+      "evidence": [
+        {
+          "path": "lib/projects/planner.ts",
+          "line": 92,
+          "observation": "Scope suggestions match keywords against static templates rather than constructing dependency-aware project phases.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "components/modules/projects-module.tsx",
+          "line": 68,
+          "observation": "Completion updates home_projects.status and completed_at only.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        },
+        {
+          "path": "supabase/migrations/0246_home_projects.sql",
+          "line": 15,
+          "observation": "Inspected schema models projects/materials/quotes but not the required phase, decision, receipt and completion handoff lifecycle.",
+          "method": "static_source_inspection",
+          "runtime_executed": false
+        }
+      ],
+      "gaps": [
+        {
+          "id": "PROJECT-COMPLETION-HANDOFF",
+          "priority": "P1",
+          "customer_outcome": "Completing a project does not update home assets, warranties, maintenance schedules or linked receipts."
+        },
+        {
+          "id": "PROJECT-DEPENDENCIES",
+          "priority": "P2",
+          "customer_outcome": "No dependency-aware phase/task plan or decision/change history is implemented in the mapped project workflow."
+        },
+        {
+          "id": "PROJECT-QUOTE-SOURCES",
+          "priority": "P2",
+          "customer_outcome": "Manual quote arithmetic does not establish source-backed quote extraction and structured scope comparison."
+        }
+      ],
+      "first_safe_slice": {
+        "outcome": "Finish a project through a reviewed handoff that updates the home's durable records.",
+        "tools": [
+          "project.complete"
+        ],
+        "data": [
+          "completion handoff",
+          "canonical asset links",
+          "receipts/warranties",
+          "maintenance links",
+          "decision history"
+        ],
+        "integrations": [
+          "Home assets",
+          "Documents",
+          "Calendar/Tasks",
+          "Finance"
+        ],
+        "safeguards": [
+          "Idempotent completion and reversible review where possible.",
+          "Retain source evidence and cost assumptions.",
+          "Escalate safety-critical/professional work."
+        ],
+        "later_slices": [
+          "Dependency-aware project.plan",
+          "Source-backed project.compare_quotes"
+        ],
+        "executed": false
+      }
+    }
+  ],
+  "recommended_sequence": [
+    {
+      "order": 1,
+      "focus": "Tenant/member briefing cache isolation and relationship/inventory visibility.",
+      "dependency": "Parent-owned actor and permission contracts."
+    },
+    {
+      "order": 2,
+      "focus": "Server-enforced workload availability and chore eligibility.",
+      "dependency": "Parent-owned authorization plus existing chore and calendar primitives."
+    },
+    {
+      "order": 3,
+      "focus": "Move-date recalculation and project-completion handoff.",
+      "dependency": "Parent-owned typed mutation, idempotency, event and AgentRun contracts."
+    },
+    {
+      "order": 4,
+      "focus": "Pet document-to-care workflow, safe account directory, purchase requirements and visual capture.",
+      "dependency": "Parent-owned provenance, ingestion and provider interfaces."
+    }
+  ],
+  "supplementary_pricing_ux_audit": {
+    "relationship_to_blueprint_audit": "Separate earlier public-site evidence; not proof of any capability section's acceptance.",
+    "site": "https://www.bubaly.com/",
+    "routes_inspected": [
+      "/",
+      "/pricing"
+    ],
+    "browser": "Playwright Chromium, fresh anonymous contexts",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "executed": [
+      "Public GET navigation",
+      "DOM text and geometry inspection",
+      "Viewport/full-page screenshots",
+      "Vertical and horizontal scrolling",
+      "Public FAQ accordion interaction"
+    ],
+    "request_policy": "All requests other than GET, HEAD and OPTIONS were aborted.",
+    "blocked_write_requests_observed": [
+      "POST /api/exit-intent/resolve",
+      "POST /api/mkt/track"
+    ],
+    "not_executed": [
+      "Sign-in",
+      "Demo-account entry",
+      "Form fill or submission",
+      "Consent/theme/settings changes",
+      "Account creation",
+      "Checkout or purchases",
+      "Production API writes"
+    ],
+    "parent_reported_suite": {
+      "passed": 148,
+      "independently_rerun": false,
+      "counts_as_blueprint_acceptance": false
+    },
+    "findings": [
+      {
+        "id": "UX-PRICING-001",
+        "priority": "P2",
+        "route": "/pricing",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "finding": "The Family Basic card includes Rewards and AI Daily Briefing, while the comparison table marks both as Family+ only.",
+        "reproduction": "Compare the Basic card around scrollY 676 with the comparison table around scrollY 2653.",
+        "screenshot_paths": [
+          ".next/ux-agent/pricing-desktop-basic-promises.png",
+          ".next/ux-agent/pricing-desktop-comparison.png"
+        ],
+        "evidence_status": "observed_live_read_only",
+        "limitation": "Actual subscribed entitlements were not tested."
+      },
+      {
+        "id": "UX-PRICING-002",
+        "priority": "P2",
+        "route": "/pricing",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "finding": "Viewing paid-plan columns hides all feature labels because the comparison table has no fixed first column.",
+        "reproduction": "At approximately scrollY 6681, scroll the table fully right. A 640px table in a 340px container moves 300px horizontally, leaving checkmarks without feature names.",
+        "screenshot_paths": [
+          ".next/ux-agent/pricing-mobile-comparison-left.png",
+          ".next/ux-agent/pricing-mobile-comparison-right.png"
+        ],
+        "evidence_status": "observed_live_read_only"
+      },
+      {
+        "id": "UX-PRICING-003",
+        "priority": "P3",
+        "route": "/pricing",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "finding": "Pricing FAQs embed the SEO page title in the questions and provide generic product text instead of useful pricing explanations.",
+        "reproduction": "Scroll near 7269 and expand the second pricing FAQ.",
+        "screenshot_paths": [
+          ".next/ux-agent/pricing-desktop-faq-expanded.png"
+        ],
+        "evidence_status": "observed_live_read_only"
+      }
+    ],
+    "landing_page_result": "No additional landing-page defect was substantiated in the bounded earlier audit.",
+    "screenshot_verification_this_document_turn": "Previously generated and visually inspected during the earlier audit; not reopened or revalidated for this write."
+  },
+  "change_record": {
+    "feature_code_changed": false,
+    "newly_written_paths": [
+      "docs/traceability/capability-audit-21-29.json"
+    ],
+    "tests_or_feature_validation_run_for_this_write": false,
+    "no_other_write_authorized_or_planned": true
+  }
+}

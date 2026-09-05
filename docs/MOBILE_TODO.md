@@ -42,6 +42,9 @@ Legend: severity — P1 (blocks mobile use) / P2 (degrades) / P3 (polish).
 | M-029 | 3 | Blog article **Table of Contents** now on mobile — native `<details>` collapsible ToC (`lg:hidden`, shared h2 anchors, 44px links) — was `hidden lg:block` sidebar-only. Public blog surface (parallel bot) | `af0c11ca` |
 | M-038 | 6 | Pricing **billing-period toggle** (Monthly/Yearly, ~36px) grows to ≥44px tall on touch (`coarse:min-h-11`) — a key conversion control. Public marketing surface (parallel bot) | `f9c9fade` |
 | M-039 | 3 | **Legal pages** (privacy/terms/cookies/acceptable-use) get a mobile Table of Contents — native `<details>` collapsible ToC (`lg:hidden`, shared section anchors, 44px links) via their shared `legal.tsx` layout — was `hidden lg:block` sidebar-only. Public marketing surface (parallel bot) | (this commit) |
+| M-040 | native | **iOS bundle-id collision fixed.** The Capacitor shell and the Expo companion both declared `com.bubaly.bubaly`. One bundle id binds to one App Store Connect record, and on a device the second install *replaces* the first — so neither could be TestFlighted alongside the other, and nothing surfaced the clash until submission. Expo companion → `com.bubaly.companion` (iOS + Android). Guard `tests/mobile-bundle-id-distinct.test.ts` (3) | (this commit) |
+| M-042 | 2/23 | **Authed journey now runs at phone viewport (closes M-009a).** `authenticated.spec.ts` only ever ran under the desktop `chromium` project, so the signed-in app — where the bottom tab bar, safe areas and full-height panels live — was never exercised at a real phone viewport. The `iphone` project's `testMatch` now includes it. Validated against a real isolated Supabase (docker + `supabase start -x edge-runtime`, 252 migrations): journey green at 393×852 in 5.5s; full `--project=iphone` run 55/55 | (this commit) |
+| M-041 | 16 | **iOS PWA launch screens.** An installed home-screen PWA launched on a blank white screen — no `apple-touch-startup-image` existed, and iOS only accepts an exact device-pixel match. Added 11 generated launch images covering every current iPhone (`public/launch/*`, from `scripts/generate-icons.mjs`), the media queries that select them (`lib/pwa/launch-screens.ts` → `app/layout.tsx`), and the legacy `apple-mobile-web-app-capable` meta (pre-15.4 iOS opened the icon in a browser tab). A root `/apple-touch-icon.png` was tried and **reverted**: it is byte-identical to `icons/icon-180.png`, which trips the duplicate-image guard in `audit-marketing-assets.mjs`, and iOS only scans the root when a page ships no `<link rel="apple-touch-icon">` — `app/layout.tsx` emits that on every route. Guard `tests/mobile-ios-launch-screens.test.ts` (5) | (this commit) |
 
 Guard tests include `tests/mobile-overlay-scroll-lock.test.ts` (7),
 `tests/mobile-overlay-dialog-a11y.test.ts` (5),
@@ -155,9 +158,21 @@ the nav on a taller-home-indicator phone.
   (`mobile|overflow|public`). New `tests/e2e/mobile.spec.ts` asserts per-device:
   viewport-meta `viewport-fit=cover`, no horizontal overflow, and **no focusable
   input < 16px** (runtime iOS-zoom guard). `--list` → 225 tests / 5 projects.
-- 🔜 **Remaining:** (a) authed critical journeys (login → create/edit record →
-  upload → nav) need CI Supabase creds — extend `PUBLIC_ROUTES` → authed once
-  available (see `authenticated.spec.ts`); (b) ✅ landscape + dark-mode variants — DONE (M-036, `agent-fable-opus`): iphone/ipad-landscape + pixel-dark projects, 275 tests/8 projects, 39 assertions executed live green;
+- ✅ **(a) authed critical journey at phone viewport — DONE (M-042).** The old
+  blocker ("needs CI Supabase creds") was stale: the CI `e2e` job provisions its
+  own isolated Supabase, but `authenticated.spec.ts` only ran under the desktop
+  `chromium` project because the mobile projects' `testMatch` excluded it. The
+  `iphone` project now matches `/(mobile|overflow|public|authenticated)\.spec\.ts/`,
+  so the signed-in journey — sign-in → onboarding wizard → dashboard → Quick
+  capture → task persisted → RLS authority probes — runs at 393×852 on every PR.
+  One phone, not all 8: the journey is the slowest spec and the matrix already
+  multiplies. **Validated locally against a real isolated Supabase** (docker +
+  `supabase start -x edge-runtime`, all 252 migrations applied): the journey
+  passed at iPhone viewport in 5.5s, and the full `--project=iphone` run was
+  55/55 green. No mobile defect surfaced in the authed app — the M-004…M-039
+  touch-target, safe-area and panel-height work holds up at phone width under a
+  real browser;
+ (b) ✅ landscape + dark-mode variants — DONE (M-036, `agent-fable-opus`): iphone/ipad-landscape + pixel-dark projects, 275 tests/8 projects, 39 assertions executed live green;
   (c) wire the mobile projects into CI — ✅ **DONE**: `run-e2e.mjs` runs all projects with no filter, so the CI `e2e` job (PR + push to main) now executes the mobile matrix as a gate. Running the full matrix needs a
   `next build` + server (~5 min) — kicked once for evidence.
 

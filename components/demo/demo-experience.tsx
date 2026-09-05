@@ -78,7 +78,7 @@ export function DemoEmailGate() {
         <GateButton />
       </form>
 
-      {/* Or sign in for real (Google · Apple) instead of the ephemeral demo. */}
+      {/* Or sign in for real (Google) instead of the ephemeral demo. */}
       <div className="my-4 flex items-center gap-3 text-xs font-medium text-white/35">
         <span className="h-px flex-1 bg-border" aria-hidden />
         or

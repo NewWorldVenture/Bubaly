@@ -17,6 +17,8 @@ import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpe
 const FAMILY = '00000000-0000-4000-8000-00000000fa01';
 const USER = '00000000-0000-4000-8000-0000000000a1';
 const PARENT = '00000000-0000-4000-8000-00000000me01';
+const CHILD_USER = '00000000-0000-4000-8000-0000000000a2';
+const CHILD = '00000000-0000-4000-8000-00000000me02';
 const RUN = '00000000-0000-4000-8000-00000000ru01';
 const REQUEST = '00000000-0000-4000-8000-00000000rq01';
 const PLAN = '00000000-0000-4000-8000-00000000pl01';
@@ -40,10 +42,10 @@ function scope(): ServiceScope {
 }
 
 /** What the planner does for a plan outcome, minus the model: a plan row, a fresh ready run, and the outcome pointing at both. */
-async function plannerPlans(): Promise<{ ok: true; data: Record<string, unknown> }> {
+async function plannerPlans(plannerScope: ServiceScope = scope()): Promise<{ ok: true; data: Record<string, unknown> }> {
   await client.from('ai_plans').insert({ id: PLAN, family_id: FAMILY, request_id: REQUEST, version: 2, status: 'approved' });
   const { data } = await client.from('family_automation_runs')
-    .insert({ family_id: FAMILY, request_id: REQUEST, plan_id: PLAN, state: 'ready', status: 'approved', run_type: 'concierge', requested_by_member_id: PARENT, lease_owner: null, attempt: 0, max_attempts: 5 })
+    .insert({ family_id: FAMILY, request_id: REQUEST, plan_id: PLAN, state: 'ready', status: 'approved', run_type: 'concierge', requested_by_member_id: plannerScope.memberId, lease_owner: null, attempt: 0, max_attempts: 5 })
     .select('id').single();
   return { ok: true, data: { kind: 'plan', planId: PLAN, runId: (data as { id: string }).id, stepCount: 2, riskLevel: 'low', requiresApproval: false, summary: 'Saturday is sorted.' } };
 }
@@ -55,6 +57,11 @@ beforeEach(() => {
   db = createInMemorySupabase({ userId: USER });
   client = db as unknown as SupabaseClient<Database>;
   holder.client = client;
+  db.seed('families', [{ id: FAMILY, timezone: 'America/New_York' }]);
+  db.seed('family_members', [
+    { id: PARENT, family_id: FAMILY, user_id: USER, role: 'parent', is_active: true },
+    { id: CHILD, family_id: FAMILY, user_id: CHILD_USER, role: 'child', is_active: true },
+  ]);
   db.seed('ai_requests', [{
     id: REQUEST, family_id: FAMILY, requested_by: USER, requested_by_member_id: PARENT, kind: 'concierge', request_text: 'Organize our weekend',
     interpreted_intent: 'organize_weekend', status: 'awaiting_context', conversation_id: null, error: null,
@@ -72,6 +79,85 @@ beforeEach(() => {
 
 const run = () => db.table('family_automation_runs').find((r) => r.id === RUN) as Row;
 const request = () => db.table('ai_requests').find((r) => r.id === REQUEST) as Row;
+
+function expectNoAnswerWork(kick: () => void): void {
+  expect(buildContext).not.toHaveBeenCalled();
+  expect(planRequest).not.toHaveBeenCalled();
+  expect(kick).not.toHaveBeenCalled();
+  expect(run()).toMatchObject({ state: 'awaiting_context', plan_id: null, lease_owner: null });
+  expect(request()).toMatchObject({ status: 'awaiting_context' });
+  expect((request().clarifications as Row[])[0].answer).toBeNull();
+  expect(db.table('ai_run_events')).toHaveLength(0);
+  expect(db.table('ai_request_context')).toHaveLength(0);
+  expect(db.table('ai_plans')).toHaveLength(0);
+  // Only the initial run read occurred: no claim or compensating state write.
+  expect(db.log.filter((entry) => entry.table === 'family_automation_runs')).toHaveLength(1);
+}
+
+describe('answerClarification requester boundary', () => {
+  it('denies a manager answering a child request before gathering context or claiming the run', async () => {
+    const { answerClarification } = await import('@/lib/ai/runs/intake');
+    Object.assign(run(), { requested_by_member_id: CHILD });
+    Object.assign(request(), { requested_by: CHILD_USER, requested_by_member_id: CHILD });
+    const kick = vi.fn();
+
+    const result = await answerClarification(scope(), RUN, 'Use my private financial details', { db: client, kick });
+
+    expect(result).toEqual({
+      ok: false, code: 'denied', error: 'Only the person who made this request can answer that clarification.',
+    });
+    expectNoAnswerWork(kick);
+    expect(db.log).toEqual([{ table: 'family_automation_runs' }]);
+  });
+
+  it.each(['requested_by', 'requested_by_member_id'] as const)('rejects a request whose %s does not match the run requester', async (field) => {
+    const { answerClarification } = await import('@/lib/ai/runs/intake');
+    request()[field] = field === 'requested_by' ? CHILD_USER : CHILD;
+    const kick = vi.fn();
+
+    const result = await answerClarification(scope(), RUN, 'This one', { db: client, kick });
+
+    expect(result).toMatchObject({ ok: false, code: 'denied' });
+    expectNoAnswerWork(kick);
+  });
+
+  it.each(['missing', 'inactive', 'different user', 'different family'] as const)('rejects %s current membership before any answer work', async (membership) => {
+    const { answerClarification } = await import('@/lib/ai/runs/intake');
+    const member = db.table('family_members').find((row) => row.id === PARENT) as Row;
+    if (membership === 'missing') db.replace('family_members', db.table('family_members').filter((row) => row.id !== PARENT));
+    if (membership === 'inactive') member.is_active = false;
+    if (membership === 'different user') member.user_id = CHILD_USER;
+    if (membership === 'different family') member.family_id = '00000000-0000-4000-8000-00000000fa02';
+    const kick = vi.fn();
+
+    const result = await answerClarification(scope(), RUN, 'This one', { db: client, kick });
+
+    expect(result).toMatchObject({ ok: false, code: 'denied' });
+    expectNoAnswerWork(kick);
+  });
+
+  it('continues a child requester with their current role instead of a cached manager role', async () => {
+    const { answerClarification } = await import('@/lib/ai/runs/intake');
+    Object.assign(run(), { requested_by_member_id: CHILD });
+    Object.assign(request(), { requested_by: CHILD_USER, requested_by_member_id: CHILD });
+    const caller: ServiceScope = { ...scope(), userId: CHILD_USER, memberId: CHILD, role: 'parent' };
+    const kick = vi.fn();
+
+    const result = await answerClarification(caller, RUN, 'This weekend', { db: client, kick });
+
+    expect(result).toMatchObject({ ok: true, data: { requestId: REQUEST, runId: RUN, planId: PLAN, outcome: 'plan' } });
+    const expectedScope = {
+      familyId: FAMILY, userId: CHILD_USER, memberId: CHILD, role: 'child', actorKind: 'member',
+      tz: 'America/New_York', requestId: REQUEST, runId: RUN,
+    };
+    expect(buildContext).toHaveBeenCalledWith(expect.objectContaining(expectedScope), { intent: 'organize_weekend', requestId: REQUEST });
+    expect(planRequest.mock.calls[0][0]).toMatchObject(expectedScope);
+    expect(run()).toMatchObject({ state: 'ready', plan_id: PLAN, requested_by_member_id: CHILD });
+    expect(request()).toMatchObject({ requested_by: CHILD_USER, requested_by_member_id: CHILD });
+    expect(kick).toHaveBeenCalledTimes(1);
+    expect(kick).toHaveBeenCalledWith(RUN, expect.any(Object));
+  });
+});
 
 describe('answerClarification under a double submission', () => {
   it('lets exactly one answer claim the run; the other is refused before it writes anything', async () => {

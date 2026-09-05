@@ -11,6 +11,7 @@ on:
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/audit-supabase-schema.mjs'
+      - 'scripts/audit-production-migration-state.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
       - 'scripts/backfill-marketing-image-provenance.mjs'
       - 'scripts/backfill-marketing-coverage.mjs'
@@ -79,6 +80,16 @@ jobs:
             echo "Remote Supabase migration history is unavailable or out of sync. Repair the reviewed migration ledger before db push." >&2
             exit 1
           fi
+          node scripts/audit-production-migration-state.mjs --enforce-history
+
+      - name: Retain metadata-only migration audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-schema-audit
+          path: .next/production-schema-audit.json
+          retention-days: 3
+          if-no-files-found: warn
 
       - name: Apply ordered migrations
         run: supabase db push --yes

@@ -3,6 +3,7 @@ import './globals.css';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { ToastProvider } from '@/components/ui/toast';
 import { AndroidBackHandler } from '@/components/app/android-back-handler';
+import { LAUNCH_SCREENS, launchScreenHref, launchScreenMedia } from '@/lib/pwa/launch-screens';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -60,6 +61,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        {/* Next emits the standard `mobile-web-app-capable` for appleWebApp.capable.
+            iOS before 15.4 only honours the apple-prefixed name, and without it those
+            devices open the home-screen icon in a Safari tab with browser chrome
+            instead of standalone. Harmless on newer iOS, which accepts both. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/* Per-device launch images — see lib/pwa/launch-screens.ts. */}
+        {LAUNCH_SCREENS.map((screen) => (
+          <link
+            key={launchScreenHref(screen)}
+            rel="apple-touch-startup-image"
+            href={launchScreenHref(screen)}
+            media={launchScreenMedia(screen)}
+          />
+        ))}
       </head>
       <body className="font-sans antialiased">
         <AndroidBackHandler />

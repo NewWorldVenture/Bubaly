@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0252_ai_runtime_lockdown.sql — close the write paths a family member could
+-- 0255_ai_runtime_lockdown.sql - close the write paths a family member could
 -- use to make Bubaly act with someone else's authority.
 -- ----------------------------------------------------------------------------
 -- A security review of the concierge loop (0250/0251 + the Phase 2 code) found
@@ -42,14 +42,11 @@ create policy family_automation_runs_insert on public.family_automation_runs
     and state = 'queued'
     and plan_id is null
     and request_id is null
+    and current_step_id is null
+    and requested_by_member_id is null
     and lease_owner is null
-    and (
-      requested_by_member_id is null
-      or requested_by_member_id in (
-        select fm.id from public.family_members fm
-        where fm.user_id = auth.uid() and fm.family_id = family_automation_runs.family_id
-      )
-    )
+    and lease_expires_at is null
+    and idempotency_key is null
   );
 
 -- ─── 2. approval_requests: only the server files a request on Bubaly's behalf
@@ -61,6 +58,15 @@ create policy approval_requests_insert on public.approval_requests
   for insert to authenticated
   with check (
     public.is_family_member(family_id)
+    and status = 'pending'
+    and approvals = '[]'::jsonb
+    and decided_by is null
+    and decided_at is null
+    and executed_at is null
+    and execution_result is null
+    and reviewed_by is null
+    and review_note is null
+    and edited_payload is null
     and requested_by_kind = 'member'
     and requested_by_member_id in (
       select fm.id from public.family_members fm
@@ -81,11 +87,20 @@ create policy ai_requests_insert on public.ai_requests
     and requested_by = auth.uid()
     and kind = 'concierge'
     and status = 'queued'
+    and context_stats = '{}'::jsonb
+    and prompt_tokens is null
+    and completion_tokens is null
+    and latency_ms is null
+    and model is null
+    and error is null
+    and started_at is null
+    and completed_at is null
     and (
       requested_by_member_id is null
       or requested_by_member_id in (
         select fm.id from public.family_members fm
         where fm.user_id = auth.uid() and fm.family_id = ai_requests.family_id
+          and fm.is_active
       )
     )
   );

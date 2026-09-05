@@ -59,9 +59,15 @@ const RUN = {
 };
 const REQUEST = {
   id: 'req-1', family_id: 'fam-1', request_text: 'Organize our weekend', interpreted_intent: 'organize_weekend',
+  requested_by: 'user-2', requested_by_member_id: 'member-2',
   conversation_id: null, clarifications: [{ question: 'Which weekend?', reason: 'Two weekends fit.', asked_at: '2026-09-01T00:00:00.000Z', answer: null, answered_at: null }],
   model: 'gpt-x', prompt_tokens: 1234, completion_tokens: 56,
 };
+const FAMILY = { id: 'fam-1', timezone: 'America/Chicago' };
+const MEMBERS = [
+  { id: 'member-1', family_id: 'fam-1', user_id: 'user-1', role: 'parent', is_active: true },
+  { id: 'member-2', family_id: 'fam-1', user_id: 'user-2', role: 'child', is_active: true },
+];
 
 const state: { run: Record<string, unknown> | null; deleted: boolean; casMiss: boolean } = { run: { ...RUN }, deleted: true, casMiss: false };
 let db: ReturnType<typeof makeDb>;
@@ -69,6 +75,12 @@ let db: ReturnType<typeof makeDb>;
 /** Family-scoped like the real tables: a read whose family filter does not match the row returns nothing. */
 function respond(call: Call): Reply {
   const family = call.filters.family_id;
+  if (call.table === 'families' && call.kind === 'select') {
+    return { data: call.filters.id === FAMILY.id ? FAMILY : null, error: null };
+  }
+  if (call.table === 'family_members' && call.kind === 'select') {
+    return { data: MEMBERS.find((member) => member.id === call.filters.id && member.family_id === family) ?? null, error: null };
+  }
   if (call.table === 'family_automation_runs') {
     if (call.kind === 'delete') return { data: state.deleted ? [{ id: call.filters.id }] : [], error: null };
     if (call.kind === 'select') return { data: state.run && state.run.family_id === family ? state.run : null, error: null };
@@ -121,9 +133,9 @@ vi.mock('@/lib/ai/runs/controls', () => ({
   rerunStep: (...a: unknown[]) => rerunStep(...a),
 }));
 
-function ctxFor(familyId: string, role = 'parent', memberId = 'member-1') {
+function ctxFor(familyId: string, role = 'parent', memberId = 'member-1', userId = 'user-1') {
   return {
-    user: { id: 'user-1', email: 'parent@example.com' },
+    user: { id: userId, email: `${userId}@example.com` },
     memberships: [],
     active: { familyId, role, family: { name: 'Fam', timezone: 'America/Chicago' }, member: { id: memberId } },
   };
@@ -197,6 +209,11 @@ describe('GET /api/ai/runs/[id]', () => {
 });
 
 describe('POST /api/ai/runs/[id]/answer', () => {
+  beforeEach(() => {
+    // Answer as the original child requester, not the family's manager.
+    getUserContext.mockResolvedValue(ctxFor('fam-1', 'child', 'member-2', 'user-2'));
+  });
+
   it('records the answer, re-plans the same request and continues the same run', async () => {
     const { POST } = await import('@/app/api/ai/runs/[id]/answer/route');
     const res = await POST(post('run-1', 'answer', { answer: 'This one' }), params('run-1'));
@@ -209,6 +226,9 @@ describe('POST /api/ai/runs/[id]/answer', () => {
     const claim = db.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'update' && c.filters.state === 'awaiting_context');
     expect(claim?.filters).toMatchObject({ id: 'run-1', family_id: 'fam-1', state: 'awaiting_context' });
     expect(claim?.payload).toMatchObject({ state: 'planning' });
+    const membership = db.calls.find((c) => c.table === 'family_members' && c.kind === 'select');
+    expect(membership?.filters).toMatchObject({ id: 'member-2', family_id: 'fam-1' });
+    expect(db.calls.indexOf(membership as Call)).toBeLessThan(db.calls.indexOf(claim as Call));
     expect(db.calls.indexOf(claim as Call)).toBeLessThan(db.calls.findIndex((c) => c.table === 'ai_requests' && c.kind === 'update'));
     // …then the answer lands on the request's clarifications and the planner sees it.
     const recorded = db.calls.find((c) => c.table === 'ai_requests' && c.kind === 'update' && Array.isArray((c.payload as Record<string, unknown>).clarifications));
@@ -216,6 +236,9 @@ describe('POST /api/ai/runs/[id]/answer', () => {
     expect(planRequest).toHaveBeenCalledTimes(1);
     expect(planRequest.mock.calls[0][1]).toMatchObject({ requestId: 'req-1', requestText: 'Organize our weekend', intent: 'organize_weekend', answers: { 'Which weekend?': 'This one' } });
     expect(buildContext.mock.calls[0][1]).toMatchObject({ intent: 'organize_weekend', requestId: 'req-1' });
+    const requester = { familyId: 'fam-1', userId: 'user-2', memberId: 'member-2', role: 'child', tz: 'America/Chicago' };
+    expect(buildContext.mock.calls[0][0]).toMatchObject(requester);
+    expect(planRequest.mock.calls[0][0]).toMatchObject(requester);
 
     // The planner's fresh run is retired with a guarded delete; the plan attaches to the run the person is on.
     const retired = db.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'delete');
@@ -295,7 +318,22 @@ describe('POST /api/ai/runs/[id]/answer', () => {
     expect(planRequest).not.toHaveBeenCalled();
   });
 
-  it('403s a member who neither manages the family nor asked, 404s another family, 400s an empty answer', async () => {
+  it('403s a parent answering a child request before context, planning or writes', async () => {
+    getUserContext.mockResolvedValue(ctxFor('fam-1'));
+    const { POST } = await import('@/app/api/ai/runs/[id]/answer/route');
+    const res = await POST(post('run-1', 'answer', { answer: 'This one' }), params('run-1'));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: 'Only the person who made this request can answer that clarification.', code: 'denied',
+    });
+    expect(buildContext).not.toHaveBeenCalled();
+    expect(planRequest).not.toHaveBeenCalled();
+    expect(kickRun).not.toHaveBeenCalled();
+    expect(db.calls.filter((c) => c.kind !== 'select')).toHaveLength(0);
+    expect(state.run).toMatchObject({ requested_by_member_id: 'member-2', state: 'awaiting_context', plan_id: null });
+  });
+
+  it('403s a non-requester, 404s another family, 400s an empty answer', async () => {
     const { POST } = await import('@/app/api/ai/runs/[id]/answer/route');
     getUserContext.mockResolvedValue(ctxFor('fam-1', 'teen', 'member-9'));
     expect((await POST(post('run-1', 'answer', { answer: 'This one' }), params('run-1'))).status).toBe(403);

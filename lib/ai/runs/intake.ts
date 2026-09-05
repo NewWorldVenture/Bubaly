@@ -28,7 +28,6 @@ import { buildContext } from '@/lib/ai/context/builder';
 import { classifyIntent, isIntentKey, type IntentKey } from '@/lib/ai/context/intents';
 import { planRequest, type PlanOutcome } from '@/lib/ai/planner';
 import { runPagePath, type AIRequestContext, type AIRequestResponse } from '@/lib/ai/chat-request';
-import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
 import { makeKey } from '@/lib/services/idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -36,7 +35,7 @@ import { cancelRun, pauseRun, rerunStep, resumeRun } from './controls';
 import { kickRun } from './continue';
 import { legacyStatusFor } from './states';
 import {
-  appendEvent, createRequest, createRun, ledgerClient, loadRun, updateRequest, updateRun, updateRunWhereState, type RequestRow,
+  appendEvent, createRequest, createRun, ledgerClient, loadRun, loadRunActor, updateRequest, updateRun, updateRunWhereState, type RequestRow,
 } from './store';
 
 type DB = SupabaseClient<Database>;
@@ -381,13 +380,13 @@ export async function answerClarification(
   if (!loaded.ok) return loaded;
   const run = loaded.data;
   if (!run) return fail('That run could not be found.', { code: SERVICE_CODES.notFound });
-  const requester = !!scope.memberId && run.requested_by_member_id === scope.memberId;
-  if (!isManager(scope.role) && !requester) return fail('Only a parent or adult in the family, or the person who asked, can answer that.', { code: SERVICE_CODES.denied });
+   if (!scope.userId || !scope.memberId || run.requested_by_member_id !== scope.memberId) {
+     return fail('Only the person who made this request can answer that clarification.', { code: SERVICE_CODES.denied });
+   }
   if (run.state !== 'awaiting_context') return fail('That run is not waiting on an answer.', { code: SERVICE_CODES.invalidInput });
   if (!run.request_id) return fail('That run has no request to continue.', { code: SERVICE_CODES.invalidInput });
 
   const requestId = run.request_id;
-  const requestScope: ServiceScope = { ...scope, requestId, runId };
   const { data: requestRow, error: requestError } = await db.from('ai_requests').select('*').eq('id', requestId).eq('family_id', scope.familyId).maybeSingle();
   if (requestError) {
     console.error('[ai/intake] could not read the request to answer', requestError);
@@ -395,6 +394,21 @@ export async function answerClarification(
   }
   const request = requestRow as RequestRow | null;
   if (!request) return fail('That request could not be found.', { code: SERVICE_CODES.notFound });
+  if (request.requested_by !== scope.userId || request.requested_by_member_id !== scope.memberId) {
+    return fail('Only the person who made this request can answer that clarification.', { code: SERVICE_CODES.denied });
+  }
+
+  // A manager must not gather their private context into another requester's
+  // snapshot. Verify the original actor before claiming or changing anything,
+  // and use their current role rather than authority cached by the caller.
+  const actor = await loadRunActor(db, scope.familyId, scope.memberId);
+  if (!actor.ok) return actor;
+  if (actor.data.memberId !== scope.memberId || actor.data.userId !== scope.userId || !actor.data.role) {
+    return fail('Only the active person who made this request can answer that clarification.', { code: SERVICE_CODES.denied });
+  }
+  const requestScope: ServiceScope = {
+    ...scope, role: actor.data.role, tz: actor.data.timezone, requestId, runId,
+  };
 
   // Claim the run BEFORE anything is written, by compare-and-set from
   // `awaiting_context`. The state check above was a plain read: two answers

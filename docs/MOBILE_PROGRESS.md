@@ -838,10 +838,82 @@ Weighting (per the mission brief):
   (modules/app-shell), agent-02 (overlays), agent-fable-opus (PWA/SW). Extends the
   ToC-parity pattern (M-029) to all four legal pages via their shared layout.
 
+### M-040 — Capacitor shell and Expo companion shipped the same iOS bundle id (native release blocker)
+- **Severity:** P1 (blocks shipping/testing both native tracks). **Phase:** native release.
+- **Problem:** `capacitor.config.ts` (`appId`) and `mobile/app.json`
+  (`ios.bundleIdentifier` + `android.package`) both declared **`com.bubaly.bubaly`**.
+  `docs/mobile.md` describes these as two distinct apps, but a bundle id binds 1:1 to an
+  App Store Connect record, and on a device the second install of a shared id **replaces**
+  the first instead of sitting beside it. So the two tracks could never be TestFlighted or
+  installed together — and nothing failed until submission, which is the most expensive
+  place to find it.
+- **Fix:** the Capacitor shell keeps `com.bubaly.bubaly` (it is the full-parity flagship and
+  the id already written into the Xcode instructions); the Expo companion moves to
+  **`com.bubaly.companion`** on both platforms. Documented the split in `docs/mobile.md` so
+  the next change doesn't silently re-converge them.
+- **Files:** `mobile/app.json`, `docs/mobile.md`.
+- **Test:** `tests/mobile-bundle-id-distinct.test.ts` (3) — asserts the iOS ids differ, the
+  Android package names differ, and all three stay reverse-DNS shaped.
+- **Evidence:** guard green (3/3); `tsc --noEmit` clean; lint 0 errors; `next build` exit 0.
+
+### M-041 — Installed iOS PWA launched on a blank white screen (no launch images)
+- **Severity:** P2 (first-run perception — the app looks broken). **Phase:** 16 (PWA).
+- **Problem:** the app shipped **no `apple-touch-startup-image` at all**. iOS only shows a
+  launch image when a media query matches the device's exact CSS width, height and DPR;
+  with no match it holds a **blank white screen** until first paint — jarring against a
+  `#090c14` dark product, and the single most "unfinished" moment of an install. Two
+  smaller gaps alongside it: Next emits only the standard `mobile-web-app-capable`, so iOS
+  **before 15.4** opened the home-screen icon in a Safari tab with browser chrome instead of
+  standalone.
+- **Fix:** `scripts/generate-icons.mjs` now also renders **11 launch screens** covering every
+  current iPhone (SE → 16 Pro Max) into `public/launch/`.
+  `lib/pwa/launch-screens.ts` holds the device list and builds both the file path and the
+  media query; `app/layout.tsx` renders one `<link rel="apple-touch-startup-image">` per
+  device and adds the legacy `apple-mobile-web-app-capable`. Portrait only — iOS launches
+  from the portrait image in either orientation, so a landscape set doubles weight for no
+  visible gain.
+- **Files:** `scripts/generate-icons.mjs`, `lib/pwa/launch-screens.ts`, `app/layout.tsx`,
+  `public/launch/*` (11 PNGs, 1.3 MB), `docs/mobile.md`.
+- **Test:** `tests/mobile-ios-launch-screens.test.ts` (5) — the generator's device list and
+  the rendered list must be identical, every declared device must have a real PNG on disk, no
+  duplicate device signatures, the markup must carry both the startup links and the legacy
+  meta, and the media query must pin width + height + DPR + orientation.
+- **Evidence:** guards green (5/5); `tsc --noEmit` clean; lint 0 errors; `next build` exit 0.
+- **Note:** the generator re-encodes five small icons byte-identically-but-not-bitwise on each
+  run (±1 byte, no visual change); those were reverted to keep the diff honest.
+
+### M-042 — the signed-in app was never tested at a phone viewport (closes M-009a)
+- **Severity:** P1 (test coverage gap on the surface most likely to break). **Phase:** 2/23.
+- **Problem:** the device matrix ran `mobile|overflow|public` specs — all **public marketing
+  routes**. `authenticated.spec.ts` ran only under the desktop `chromium` project, so the
+  signed-in app (bottom tab bar, safe areas, full-height chat panels, the Quick-capture FAB
+  — everything M-004…M-039 fixed) had **no runtime coverage at phone width at all**. The
+  backlog blamed missing CI Supabase creds; that was stale, since the `e2e` job provisions
+  its own isolated stack.
+- **Fix:** the `iphone` project's `testMatch` becomes
+  `/(mobile|overflow|public|authenticated)\.spec\.ts/`. One phone, not all 8 — the journey
+  signs up, onboards and writes a record, so it is the slowest spec and the matrix already
+  multiplies by 8. It self-skips unless `E2E_AUTHENTICATED=1`, so nothing changes locally.
+- **Files:** `playwright.config.ts`.
+- **Evidence — run against a real isolated Supabase, not assumed:** started docker +
+  `supabase start -x edge-runtime` (the edge-runtime container cannot set rlimits in this
+  sandbox; it is not needed for the journey), all 252 migrations applied. The journey
+  passed at **393×852 in 5.5s** — sign-in → onboarding wizard → dashboard → Quick capture →
+  task persisted → RLS forged-authority probes. Full `--project=iphone` run: **55/55 green**.
+- **Result:** no mobile defect surfaced in the authed app. The touch-target, safe-area and
+  panel-height work from M-004…M-039 holds at phone width under a real browser — this
+  converts that from static-guard confidence to runtime confidence.
+
 ## Next steps (autonomous, in order)
-The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. Top of queue now:
-**M-006** (field-level mobile keyboard: `inputMode` on numeric/currency/search),
-then M-007 (overlays/safe-area), M-009 (Playwright matrix), M-010 (PWA/offline).
+The prioritized backlog lives in **`docs/MOBILE_TODO.md`**. M-006/M-007/M-009/M-010 are
+**done**; the only remaining OPEN item is **M-008** (full per-route iPad
+portrait/landscape walkthrough — the hub-grid slice landed as M-035).
+
+> **⚠️ The weighting table at the top of this file is stale.** It still reads 0% for
+> "Navigation & touch" and "Forms & keyboard" despite M-004/M-005/M-019/M-021 and
+> M-006/M-015/M-031 having shipped. Re-deriving those percentages honestly means
+> auditing all 41 entries — do that rather than nudging the numbers, since this
+> file's whole premise is that percentages come from verified work only.
 
 ---
 

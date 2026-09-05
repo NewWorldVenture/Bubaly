@@ -1,0 +1,461 @@
+{
+  "schemaVersion": 1,
+  "auditId": "capability-audit-01-10",
+  "auditDate": "2026-09-05",
+  "pathBase": "repository",
+  "sourceSHA256": "9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3",
+  "sourceHashEvidence": "Supplied by the parent/user; not independently recalculated in this audit.",
+  "suppliedMainCommit": "01881fb279589d7a90acb8302817bb385fbe036d",
+  "commitEvidence": "Supplied by the parent/user; no git inspection was performed and the report does not attest to deployed revision.",
+  "scope": {
+    "capabilitySections": ["3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10"],
+    "packetSections": ["34.1", "34.2", "34.3", "34.4", "34.8", "34.14", "34.16", "34.18", "34.19", "34.20"],
+    "mode": "Static requirement audit; this new report is the sole authorized write.",
+    "excluded": [
+      "Superseded Top 50 opportunity-build audit",
+      "Feature implementation",
+      "Shared sidebar or global navigation changes",
+      "Global foundation implementation, which remains parent-owned",
+      "Production, provider or deployment actions"
+    ]
+  },
+  "readingCoverage": {
+    "assignedContentCompletelyRead": true,
+    "assignedSourceFileCount": 20,
+    "applicableGlobalSourceFileCount": 23,
+    "totalCompletelyReadSourceFileCount": 43,
+    "method": "Correct per-section copies were read in bounded batches. Complete assigned source content was consumed; retained command output was used to recover display omissions without rereading files.",
+    "obsoleteSplitUsed": false,
+    "coverageIsNotWholeBlueprintCompletion": true,
+    "capabilitiesAndPackets": [
+      {"section": "3.1", "file": ".next/blueprint-sections/3_1.md", "completelyRead": true},
+      {"section": "3.2", "file": ".next/blueprint-sections/3_2.md", "completelyRead": true},
+      {"section": "3.3", "file": ".next/blueprint-sections/3_3.md", "completelyRead": true},
+      {"section": "3.4", "file": ".next/blueprint-sections/3_4.md", "completelyRead": true},
+      {"section": "3.5", "file": ".next/blueprint-sections/3_5.md", "completelyRead": true},
+      {"section": "3.6", "file": ".next/blueprint-sections/3_6.md", "completelyRead": true},
+      {"section": "3.7", "file": ".next/blueprint-sections/3_7.md", "completelyRead": true},
+      {"section": "3.8", "file": ".next/blueprint-sections/3_8.md", "completelyRead": true},
+      {"section": "3.9", "file": ".next/blueprint-sections/3_9.md", "completelyRead": true},
+      {"section": "3.10", "file": ".next/blueprint-sections/3_10.md", "completelyRead": true},
+      {"section": "34.1", "file": ".next/blueprint-sections/34_1.md", "completelyRead": true},
+      {"section": "34.2", "file": ".next/blueprint-sections/34_2.md", "completelyRead": true},
+      {"section": "34.3", "file": ".next/blueprint-sections/34_3.md", "completelyRead": true},
+      {"section": "34.4", "file": ".next/blueprint-sections/34_4.md", "completelyRead": true},
+      {"section": "34.8", "file": ".next/blueprint-sections/34_8.md", "completelyRead": true},
+      {"section": "34.14", "file": ".next/blueprint-sections/34_14.md", "completelyRead": true},
+      {"section": "34.16", "file": ".next/blueprint-sections/34_16.md", "completelyRead": true},
+      {"section": "34.18", "file": ".next/blueprint-sections/34_18.md", "completelyRead": true},
+      {"section": "34.19", "file": ".next/blueprint-sections/34_19.md", "completelyRead": true},
+      {"section": "34.20", "file": ".next/blueprint-sections/34_20.md", "completelyRead": true}
+    ],
+    "applicableGlobals": [
+      {"section": "1", "file": ".next/blueprint-sections/1.md", "completelyRead": true},
+      {"section": "9", "file": ".next/blueprint-sections/9.md", "completelyRead": true},
+      {"section": "19", "file": ".next/blueprint-sections/19.md", "completelyRead": true},
+      {"section": "30", "file": ".next/blueprint-sections/30.md", "completelyRead": true},
+      {"section": "93", "file": ".next/blueprint-sections/93.md", "completelyRead": true},
+      {"section": "95", "file": ".next/blueprint-sections/95.md", "completelyRead": true},
+      {"section": "96", "file": ".next/blueprint-sections/96.md", "completelyRead": true},
+      {"section": "98", "file": ".next/blueprint-sections/98.md", "completelyRead": true},
+      {"section": "99", "file": ".next/blueprint-sections/99.md", "completelyRead": true},
+      {"section": "100", "file": ".next/blueprint-sections/100.md", "completelyRead": true},
+      {"section": "101", "file": ".next/blueprint-sections/101.md", "completelyRead": true},
+      {"section": "102", "file": ".next/blueprint-sections/102.md", "completelyRead": true},
+      {"section": "103", "file": ".next/blueprint-sections/103.md", "completelyRead": true},
+      {"section": "104", "file": ".next/blueprint-sections/104.md", "completelyRead": true},
+      {"section": "105", "file": ".next/blueprint-sections/105.md", "completelyRead": true},
+      {"section": "106", "file": ".next/blueprint-sections/106.md", "completelyRead": true},
+      {"section": "107", "file": ".next/blueprint-sections/107.md", "completelyRead": true},
+      {"section": "108", "file": ".next/blueprint-sections/108.md", "completelyRead": true},
+      {"section": "109", "file": ".next/blueprint-sections/109.md", "completelyRead": true},
+      {"section": "110", "file": ".next/blueprint-sections/110.md", "completelyRead": true},
+      {"section": "111", "file": ".next/blueprint-sections/111.md", "completelyRead": true},
+      {"section": "112", "file": ".next/blueprint-sections/112.md", "completelyRead": true},
+      {"section": "113", "file": ".next/blueprint-sections/113.md", "completelyRead": true}
+    ]
+  },
+  "evidencePolicy": {
+    "completionAssessment": "NOT_ESTABLISHED",
+    "noCapabilityMarkedPass": true,
+    "unwrittenWorkIsNotExternalBlocked": true,
+    "priorityDefinitions": {
+      "P1": "Concrete inspected behavior contradicts a safety or truthful-completion requirement.",
+      "P2": "Required customer outcome is incomplete or not evidenced in the inspected integration paths."
+    },
+    "executed": [
+      "Read all 20 assigned capability and packet source files completely.",
+      "Read all 23 applicable global-contract source files completely.",
+      "Performed bounded static inspection of relevant local routes, modules, services, tools and selected schema artifacts.",
+      "Traced inspected call sites and persistence behavior without executing application workflows."
+    ],
+    "notExecuted": [
+      "Application runtime or browser customer journeys",
+      "Unit, integration, RLS, E2E, replay, AI golden or adversarial tests",
+      "Syntax, type, lint, build or JSON-validation checks",
+      "Provider, OCR, vision, email, push, retailer or financial integration calls",
+      "Staging or production access and deployments",
+      "API writes, account creation, transactions or production-data changes",
+      "Git inspection, commits or pushes",
+      "Independent source-hash or deployed-revision verification",
+      "Post-write rereading or verification of this report"
+    ],
+    "limitations": [
+      "Implementation evidence describes inspected local source, not confirmed shipped or deployed behavior.",
+      "Absence from an inspected path is not a repository-wide nonexistence claim.",
+      "Existing files, schemas, tool definitions and previously written tests do not establish successful customer outcomes.",
+      "Exact blueprint route and feature-flag bindings remain unverified in this bounded capability audit.",
+      "Role/object authorization, provider recovery, cross-domain replay and staging acceptance journeys remain unverified."
+    ]
+  },
+  "firstFoundationDependency": {
+    "id": "parent-owned-capability-execution-matrix",
+    "status": "PENDING",
+    "owner": "parent",
+    "priority": "P1",
+    "description": "The matrix/foundation dependency remains pending. Agree the shared capability-to-route/flag/tool/domain-service mapping and execution envelope before implementing capability slices.",
+    "reuse": [
+      "lib/ai/tools/registry.ts",
+      "lib/ai/tools/legacy-adapter.ts",
+      "lib/ai/assistant-engine.ts",
+      "Existing domain services and trust/approval integration"
+    ],
+    "evidence": [
+      {"path": "lib/ai/tools/registry.ts", "line": 21, "observation": "Registry imports calendar, tasks, groceries, reminders, family and notifications tool sets, not most assigned capability-level tool families."},
+      {"path": "lib/ai/assistant-engine.ts", "line": 186, "observation": "The assistant combines legacy, action and registry bridges; existing CRUD/action capability must be reused rather than discarded."}
+    ],
+    "firstSafeSlice": "Parent establishes the mapping and reusable typed read/propose/write contract: domain/object authorization, exact approval, idempotency, canonical persistence, AgentRun/source/result evidence and recovery. This audit implements none of that foundation.",
+    "doesNotAuthorize": ["Feature changes", "Global navigation changes", "Provider actions", "Deployment"]
+  },
+  "capabilities": [
+    {
+      "id": "3.1",
+      "packetId": "34.1",
+      "name": "Chief of Staff",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/home",
+        "featureFlag": "feature_chief_of_staff",
+        "tools": ["goal.plan", "goal.execute", "brief.generate"],
+        "customerOutcome": "A broad household goal becomes a persisted cross-domain dependency plan, safe completed actions, exact approvals and an explainable progress record.",
+        "uiDataIntegrations": "Goal composition, plan editing, per-step approval/status/source timeline and failed-step recovery over canonical household records and linked AgentRuns."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/command-center/page.tsx",
+        "app/(app)/dashboard/family-coo/page.tsx",
+        "lib/ai/assistant-engine.ts",
+        "lib/assistant/tools.ts",
+        "lib/ai/tools/registry.ts",
+        "lib/ai/tools/legacy-adapter.ts"
+      ],
+      "evidence": [
+        {"path": "app/(app)/dashboard/command-center/page.tsx", "line": 112, "observation": "Command-center signals link to existing modules rather than presenting an executable household dependency plan."},
+        {"path": "lib/ai/assistant-engine.ts", "line": 242, "observation": "The inspected execution path persists conversation messages and tool results; this is not evidence of persisted goal dependency nodes and per-node recovery."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "OUTCOME_NOT_EVIDENCED", "description": "Prepare-next-week and handle-everything workflows are not evidenced as persisted dependency-aware plans with exact approvals and failed-step-only retry."},
+        {"priority": "P2", "kind": "TOOL_WIRING_GAP", "description": "The typed registry does not register the required goal.plan, goal.execute and brief.generate capability family; existing individual action tools are not equivalent proof."}
+      ],
+      "firstSafeSlice": "After the parent foundation is agreed, connect a bounded next-week goal to existing calendar/task/meal services using persisted plan nodes, approval decisions, result IDs and retryable step state. Do not rebuild existing CRUD screens.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Broad-goal execution", "Approval-bound execution", "Partial-failure recovery", "Staging acceptance journey"]}
+    },
+    {
+      "id": "3.2",
+      "packetId": "34.2",
+      "name": "Household Autopilot",
+      "assessment": "CONFIRMED_STATIC_GAP",
+      "priority": "P1",
+      "required": {
+        "route": "/automations",
+        "featureFlag": "feature_household_autopilot",
+        "tools": ["automation.propose", "automation.enable", "automation.run", "automation.pause", "automation.skip"],
+        "customerOutcome": "Repeated household sequences become approved, bounded workflows that execute real steps and support pause, skip, run-now, history and drift handling.",
+        "uiDataIntegrations": "Editable workflow/template UI, scoped approval, step/run history and limits integrated with calendar, gear, meals, drivers, tasks and reminders."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/autopilot/page.tsx",
+        "app/(app)/dashboard/family-automation/page.tsx",
+        "components/modules/autopilot-module.tsx",
+        "lib/autopilot/engine.ts",
+        "lib/autopilot/scan.ts"
+      ],
+      "evidence": [
+        {"path": "lib/autopilot/engine.ts", "line": 405, "observation": "Missing dinner plans generate a plan_meals suggestion with a Plan dinners action."},
+        {"path": "components/modules/autopilot-module.tsx", "line": 90, "observation": "The approval handler performs a domain insert only for create_reminder, then marks other action types approved and reports that Bubaly handled the action."},
+        {"path": "lib/autopilot/scan.ts", "line": 200, "observation": "The scan auto-executes reminder and grocery actions; the inspected scan does not provide a plan_meals execution path that repairs the approval handler's missing action."},
+        {"path": "app/(app)/dashboard/family-automation/page.tsx", "line": 77, "observation": "The rule form captures name, trigger, action and approval configuration; it does not evidence the required visual multi-step execution and recovery workflow."}
+      ],
+      "gaps": [
+        {"priority": "P1", "kind": "FALSE_COMPLETION", "description": "Approving Plan dinners can mark the suggestion handled without creating a meal plan. This is a static call-path finding, not a runtime reproduction."},
+        {"priority": "P2", "kind": "OUTCOME_NOT_EVIDENCED", "description": "Repeated-sequence mining, editable multi-step workflows, per-step history, pause/skip and drift recovery are not evidenced as a connected customer workflow."}
+      ],
+      "firstSafeSlice": "After the foundation mapping is agreed, dispatch plan_meals to the existing meal domain service and persist verified output IDs before any handled status. Unsupported actions must remain actionable rather than report success; then extend reusable workflow controls.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Plan dinners approval reproduction", "Scheduled scan", "Workflow pause/skip/run-now", "Provider or notification delivery"]}
+    },
+    {
+      "id": "3.3",
+      "packetId": "34.3",
+      "name": "Family CFO",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/finances",
+        "featureFlag": "feature_family_cfo",
+        "tools": ["finance.explain", "finance.forecast", "finance.scenario"],
+        "customerOutcome": "Explain bills before payday and affordability of future commitments using deterministic, sourced forecasts and editable assumptions.",
+        "uiDataIntegrations": "Role-private balances, inflows, bills, goals, calendar/trip/project costs, forecast/scenario UI and correction/provenance records."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/family-cfo/page.tsx",
+        "lib/finance/timeline-load.ts",
+        "lib/finance/timeline.ts",
+        "lib/finance/hub.ts"
+      ],
+      "evidence": [
+        {"path": "lib/finance/timeline-load.ts", "line": 27, "observation": "The inspected loader reads bills, goals, account balances and calendar titles/times, without income schedules or priced trip/project commitments."},
+        {"path": "lib/finance/timeline.ts", "line": 239, "observation": "The running balance subtracts outflows; calendar events are contextual labels rather than quantified commitments."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "DATA_AND_WORKFLOW_GAP", "description": "The inspected forecast cannot substantiate payday-aware affordability or include unrecorded future trip/project spend."},
+        {"priority": "P2", "kind": "UNVERIFIED_REQUIREMENT", "description": "Scenario assumption editing, required finance tools, finance-specific role privacy and source-linked correction journeys remain unverified."}
+      ],
+      "firstSafeSlice": "Extend the existing deterministic timeline with explicit income schedules and canonical future commitments, then expose one sourced bills-before-payday scenario with editable assumptions. Preserve existing finance UI and permission boundaries.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Forecast calculations against fixtures", "Affordability scenario journey", "Finance-role isolation", "Financial-provider access"]}
+    },
+    {
+      "id": "3.4",
+      "packetId": "34.4",
+      "name": "Spending Intelligence",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/finances/spending",
+        "featureFlag": "feature_spending_intelligence",
+        "tools": ["spending.explain", "spending.categorize", "spending.correct", "spending.anomaly"],
+        "customerOutcome": "Explain exact spending changes with transaction citations, household/seasonal baselines and corrections that improve later categorization.",
+        "uiDataIntegrations": "Normalized merchants, transfer/refund treatment, anomaly and driver UI, editable categories, persisted corrections and source-linked financial records."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/family-cfo/page.tsx",
+        "app/(app)/dashboard/expenses/page.tsx",
+        "components/modules/expenses-module.tsx",
+        "lib/finance/hub.ts"
+      ],
+      "evidence": [
+        {"path": "app/(app)/dashboard/family-cfo/page.tsx", "line": 55, "observation": "The inspected CFO surface computes current-month category sums, not an explanation against an adaptive historical baseline."},
+        {"path": "components/modules/expenses-module.tsx", "line": 40, "observation": "The Expenses surface reads expense splits and shares for settlement, rather than supplying the spending-intelligence workflow."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "OUTCOME_NOT_EVIDENCED", "description": "Transaction-cited variance drivers, household/seasonal baselines and learned merchant/category corrections are not evidenced in the inspected finance and expense paths."},
+        {"priority": "P2", "kind": "UNVERIFIED_REQUIREMENT", "description": "Correct treatment of transfers/refunds in the required spending-analysis workflow remains unverified; this is not a confirmed refund-calculation defect."}
+      ],
+      "firstSafeSlice": "Use existing finance records to define normalized spend semantics and persistent corrections, then deliver one category-change explanation with exact contributing transaction IDs and baseline assumptions. Do not rebuild expense splitting.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Variance explanation journey", "Transfer/refund fixtures", "Category-correction learning", "Transaction import or provider calls"]}
+    },
+    {
+      "id": "3.5",
+      "packetId": "34.8",
+      "name": "AI Meal Planner",
+      "assessment": "CONFIRMED_STATIC_GAP",
+      "priority": "P1",
+      "required": {
+        "route": "/food/meals",
+        "featureFlag": "feature_ai_meal_planner",
+        "tools": ["meals.generate", "meals.swap", "meals.regenerate", "meals.grocery_delta"],
+        "customerOutcome": "Produce safe, calendar-feasible meals that respect hard household restrictions and yield approved, deduplicated grocery changes.",
+        "uiDataIntegrations": "Meal-plan approval/editing and swap UI tied to stored allergies/preferences, cooking windows, recipes, pantry, leftovers, feedback and grocery deltas."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/meals/page.tsx",
+        "app/api/ai/meals/plan/route.ts",
+        "lib/meals/planner.ts"
+      ],
+      "evidence": [
+        {"path": "app/api/ai/meals/plan/route.ts", "line": 48, "observation": "Dietary constraints in the inspected plan route come from the request; the path does not load stored member allergies as a mandatory server constraint."},
+        {"path": "lib/meals/planner.ts", "line": 51, "observation": "Dietary compliance is requested in the model prompt."},
+        {"path": "lib/meals/planner.ts", "line": 108, "observation": "Response parsing validates dates, meal types, references and duplicates but does not deterministically exclude allergens; generated dishes can lack ingredient evidence."},
+        {"path": "app/api/ai/meals/plan/route.ts", "line": 149, "observation": "The inspected persistence path writes meal-plan rows without implementing an approved grocery-delta workflow."}
+      ],
+      "gaps": [
+        {"priority": "P1", "kind": "HARD_CONSTRAINT_ENFORCEMENT_GAP", "description": "Prompt-only dietary instructions do not satisfy the required deterministic allergy exclusion. The inspected write path can accept output without proving compliance."},
+        {"priority": "P2", "kind": "INTEGRATION_GAP", "description": "Calendar cooking windows, pantry/leftover constraints, feedback-driven swaps and approved grocery deltas are not evidenced as a connected planning outcome in the inspected route."}
+      ],
+      "firstSafeSlice": "Load authoritative household restrictions server-side and apply a deterministic eligibility gate before plan persistence, including generated dishes and unknown ingredients. Then connect calendar cooking windows and reuse existing grocery services for explicit approved deltas.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Allergy or ingredient fixtures", "AI meal generation", "Calendar-change swap", "Approved grocery-delta replay", "Staging meal journey"]}
+    },
+    {
+      "id": "3.6",
+      "packetId": "34.14",
+      "name": "Grocery Optimizer",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/food/groceries",
+        "featureFlag": "feature_grocery_optimizer",
+        "tools": ["grocery.optimize", "grocery.substitute", "grocery.lock", "grocery.estimate"],
+        "customerOutcome": "Turn household-sized recipes into a pantry-adjusted, consolidated, budget-aware basket with explainable substitutions and realistic store choices.",
+        "uiDataIntegrations": "Quantity/unit conversion, pantry subtraction, price source/freshness, substitution locks, budget estimates and store splitting that includes travel/time costs; no unapproved purchasing."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/grocery/page.tsx",
+        "components/modules/shopping-module.tsx",
+        "lib/ai/tools/groceries.ts",
+        "lib/grocery/retailers.ts"
+      ],
+      "evidence": [
+        {"path": "app/(app)/dashboard/grocery/page.tsx", "line": 1, "observation": "The grocery route renders ShoppingModule."},
+        {"path": "components/modules/shopping-module.tsx", "line": 54, "observation": "The routed screen reads grocery lists/items and provides list CRUD and checking rather than a price/pantry optimization pipeline."},
+        {"path": "lib/ai/tools/groceries.ts", "line": 27, "observation": "Existing registered grocery tools cover add/list/check/clear operations and provide reusable validation and deduplication behavior."},
+        {"path": "lib/grocery/retailers.ts", "line": 1, "observation": "Retailer support is explicitly links/copying, not ordering or a price-observation integration."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "INTEGRATION_GAP", "description": "The inspected primary screen and registered tools do not deliver pantry subtraction, unit consolidation, source-dated budget optimization, substitution locks or travel-aware store splitting."},
+        {"priority": "P2", "kind": "UNVERIFIED_REQUIREMENT", "description": "Real price-provider availability and truthful unavailable/stale estimate handling remain unverified."}
+      ],
+      "firstSafeSlice": "Build a deterministic recipe-quantity to pantry-adjusted consolidated basket service over existing groceries. Add explicit price provenance/freshness and locked substitutions before any optional retailer handoff; never simulate ordering or price availability.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Unit-conversion/pantry fixtures", "Budget optimization", "Price-provider calls", "Retailer handoff or purchase"]}
+    },
+    {
+      "id": "3.7",
+      "packetId": "34.16",
+      "name": "Universal Inbox",
+      "assessment": "CONFIRMED_STATIC_GAP",
+      "priority": "P2",
+      "required": {
+        "route": "/inbox",
+        "featureFlag": "feature_universal_inbox",
+        "tools": ["inbox.ingest", "inbox.classify", "inbox.extract", "inbox.confirm", "inbox.undo"],
+        "customerOutcome": "One captured source produces reviewed, linked canonical outcomes without duplicate writes, with preserved source evidence and reversible batch confirmation.",
+        "uiDataIntegrations": "Email/image/PDF/voice/share ingestion, validation/OCR, entity resolution, confidence/edit UI, source-linked output batches, deduplication, replay and undo."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/inbox/page.tsx",
+        "components/modules/inbox-module.tsx",
+        "app/api/ai/import/route.ts",
+        "lib/capture/parse.ts",
+        "lib/capture/save.ts",
+        "app/(app)/dashboard/paperwork/actions.ts"
+      ],
+      "evidence": [
+        {"path": "components/modules/inbox-module.tsx", "line": 694, "observation": "Inbox AI import reduces returned proposals to summary strings and stores them as communication action_items, dropping typed action arguments."},
+        {"path": "components/modules/inbox-module.tsx", "line": 710, "observation": "Save to Hub inserts family_communications; it does not invoke the existing confirmed-action execution branch."},
+        {"path": "app/api/ai/import/route.ts", "line": 69, "observation": "A separate confirmation branch already evaluates trust and dispatches approved actions, providing an implementation path to reuse."},
+        {"path": "lib/capture/save.ts", "line": 126, "observation": "The inspected capture undo deletes captured rows in one table, not a source-linked multi-domain import batch."},
+        {"path": "app/(app)/dashboard/paperwork/actions.ts", "line": 108, "observation": "Paperwork materializes an action before separately stamping its materialized ID; this is not atomic replay-safe batch confirmation."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "UI_TO_SERVICE_WIRING_GAP", "description": "Saving an inbox import does not materialize the extracted typed proposals, despite the existing confirmation endpoint."},
+        {"priority": "P2", "kind": "PERSISTENCE_AND_RECOVERY_GAP", "description": "Source-linked batch confirmation, cross-source deduplication, atomic replay protection and multi-domain undo are not established by the inspected capture/paperwork paths."},
+        {"priority": "P2", "kind": "UNVERIFIED_REQUIREMENT", "description": "The unified attachment/OCR/voice/entity-resolution journey remains unverified; separate capture mechanisms are not proof of that outcome."}
+      ],
+      "firstSafeSlice": "Preserve typed proposals and source IDs in an import batch, then wire the existing parse/confirm flow to idempotent canonical writes with result IDs and compensating or atomic batch undo. Reuse existing capture and trust integrations.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Inbox parse/confirm journey", "OCR/voice/email ingestion", "Entity resolution", "Duplicate/retry replay", "Batch undo"]}
+    },
+    {
+      "id": "3.8",
+      "packetId": "34.18",
+      "name": "Wardrobe Assistant",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/family/wardrobe",
+        "featureFlag": "feature_wardrobe_assistant",
+        "tools": ["wardrobe.catalog", "wardrobe.recommend", "wardrobe.pack"],
+        "customerOutcome": "Recommend usable event- and weather-appropriate outfits and packing plans, including optional photo inventory, laundry availability and size changes.",
+        "uiDataIntegrations": "Editable vision attributes, event dress requirements, weather, garment availability, size/growth reminders and linked trip packing/shopping tasks, without body inference."
+      },
+      "existingImplementationPaths": [
+        "components/modules/closet-module.tsx",
+        "supabase/migrations/0240_closet_outfits.sql",
+        "components/ai/ai-insight.tsx"
+      ],
+      "evidence": [
+        {"path": "components/modules/closet-module.tsx", "line": 49, "observation": "The module reads wardrobe items, outfits and wear logs and includes weather-assisted suggestions."},
+        {"path": "components/modules/closet-module.tsx", "line": 99, "observation": "Outfit suggestion context comes from member, temperature, manually selected occasion and date, rather than an integrated event dress-requirement or trip workflow."},
+        {"path": "components/modules/closet-module.tsx", "line": 404, "observation": "Photo handling uploads and stores an image path; editable garment attributes are manually entered rather than extracted by vision."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "INTEGRATION_GAP", "description": "Photo-to-editable inventory, calendar-specific dress requirements and recommendation-to-trip-packing outcomes are not connected in the inspected module."},
+        {"priority": "P2", "kind": "UNVERIFIED_REQUIREMENT", "description": "Child/object privacy, size-change reminders and the required wardrobe tool family remain unverified as complete customer workflows."}
+      ],
+      "firstSafeSlice": "Extend the existing inventory with reviewed vision attributes and event/weather context, then connect recommendations to existing packing or shopping records. Keep manual inventory optional and enforce role/privacy constraints through the parent foundation.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Vision cataloging", "Weather-provider call", "Event-specific outfit journey", "Packing task creation", "Child/privacy acceptance journey"]}
+    },
+    {
+      "id": "3.9",
+      "packetId": "34.19",
+      "name": "Decluttering",
+      "assessment": "GAPS_AND_UNVERIFIED_OUTCOMES",
+      "priority": "P2",
+      "required": {
+        "route": "/home/declutter",
+        "featureFlag": "feature_decluttering",
+        "tools": ["declutter.analyze", "declutter.reset", "declutter.assign"],
+        "customerOutcome": "A privacy-reviewed room photo becomes a realistic timed reset, age-appropriate assignments and a recorded before/after outcome.",
+        "uiDataIntegrations": "Photo crop/review, 15/30/60-minute plans, timers/checkoff, after-photo and estimate feedback, recurring rooms, donate/sell/store decisions and canonical chore/inventory links."
+      },
+      "existingImplementationPaths": [
+        "components/modules/declutter-module.tsx"
+      ],
+      "evidence": [
+        {"path": "components/modules/declutter-module.tsx", "line": 39, "observation": "The module reads declutter zones, missions and sessions, providing existing persistence to extend."},
+        {"path": "components/modules/declutter-module.tsx", "line": 66, "observation": "Weekly plan assignment receives member IDs without age/role context, so this call does not establish age-appropriate assignment policy."},
+        {"path": "components/modules/declutter-module.tsx", "line": 431, "observation": "Completion updates a mission and logs a session; the inspected form does not implement a photo-to-canonical-chore reset workflow."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "WORKFLOW_GAP", "description": "The inspected module does not connect privacy-reviewed photo analysis to a timed task plan, policy-aware assignments and an after-photo outcome."},
+        {"priority": "P2", "kind": "INTEGRATION_GAP", "description": "Age/permission context and linked canonical chore/inventory outcomes are not established by the current weekly-plan and completion calls."}
+      ],
+      "firstSafeSlice": "Reuse zones/missions/sessions for a reviewed photo-to-task proposal, with age/role-aware assignment and linked canonical chores. Add timed completion and after-photo evidence before claiming the reset outcome.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Photo analysis", "Timed reset journey", "Age-appropriate assignment", "Chore/inventory linking", "After-photo feedback"]}
+    },
+    {
+      "id": "3.10",
+      "packetId": "34.20",
+      "name": "Accountability",
+      "assessment": "CONFIRMED_STATIC_GAP",
+      "priority": "P2",
+      "required": {
+        "route": "/plan/focus",
+        "featureFlag": "feature_accountability",
+        "tools": ["accountability.decompose", "accountability.nudge", "accountability.reschedule"],
+        "customerOutcome": "Help a person start and complete a difficult task through blocker-aware microsteps, focus sessions and bounded personalized follow-up rather than an ephemeral checklist.",
+        "uiDataIntegrations": "Persisted defer/blocker outcomes, decomposition, focus timer, user-controlled nudge frequency, permission-aware rescheduling/escalation and outcome learning over existing tasks/reminders."
+      },
+      "existingImplementationPaths": [
+        "app/(app)/dashboard/focus/page.tsx",
+        "components/modules/focus-module.tsx"
+      ],
+      "evidence": [
+        {"path": "components/modules/focus-module.tsx", "line": 36, "observation": "The focus screen builds a queue from today's events, chores and todos."},
+        {"path": "components/modules/focus-module.tsx", "line": 94, "observation": "Completion invokes a handler only where supplied and otherwise advances local state; todo items have a persistence handler, while the inspected chore items do not."},
+        {"path": "components/modules/focus-module.tsx", "line": 165, "observation": "Skip advances the local queue rather than persisting a defer reason or rescheduling outcome."}
+      ],
+      "gaps": [
+        {"priority": "P2", "kind": "WORKFLOW_GAP", "description": "The inspected focus screen lacks persisted blocker/defer learning, microstep decomposition, a focus timer and adaptive bounded follow-up."},
+        {"priority": "P2", "kind": "TOOL_AND_INTEGRATION_GAP", "description": "Required accountability tools and permission-aware rescheduling/escalation are not evidenced through this queue UI."}
+      ],
+      "firstSafeSlice": "Persist blocker/defer outcomes against existing tasks and connect microstep decomposition plus a real focus session. Add opt-in bounded nudges and explicit rescheduling permissions through existing reminder services, not a new isolated task store.",
+      "runtimeEvidence": {"executed": false, "notExecuted": ["Focus timer journey", "Task decomposition", "Adaptive nudge delivery", "Rescheduling/escalation permission checks", "Cross-session outcome persistence"]}
+    }
+  ],
+  "recommendedSequence": [
+    "Parent resolves the pending capability execution matrix/foundation contract; no foundation implementation is authorized by this report.",
+    "Address deterministic meal restriction enforcement and Autopilot false handled outcomes as the highest-impact capability slices.",
+    "Connect source-linked, replay-safe inbox confirmation as a reusable multi-domain persistence path.",
+    "Implement the remaining bounded capability slices against existing modules and canonical records rather than duplicating functionality."
+  ],
+  "writeScope": {
+    "changedPaths": ["docs/traceability/capability-audit-01-10.json"],
+    "featureImplementationPerformed": false,
+    "globalNavigationChanged": false,
+    "testsRun": false,
+    "productionAccessed": false,
+    "providerActionsPerformed": false,
+    "commitsOrPushesPerformed": false,
+    "goalControlsChanged": false,
+    "agentsSpawned": false,
+    "reportReadBackOrValidated": false
+  }
+}

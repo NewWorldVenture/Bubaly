@@ -1,0 +1,402 @@
+{
+  "audit_id": "bubaly-capability-audit-11-20",
+  "audit_type": "read_only_requirement_audit",
+  "source_sha256": "9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3",
+  "source_sha256_basis": "Provided by the parent; not independently rechecked during persistence.",
+  "source_document_handling": "Private blueprint; source_sha256 and section references identify it.",
+  "repository_root": ".",
+  "status": "FAIL",
+  "evidence_status": "unproven",
+  "status_meaning": "Partial implementations and concrete gaps were identified by static inspection. Customer-ready behavior has not been established. File existence and test existence do not establish completion.",
+  "path_convention": "Implementation and source-copy paths are relative to repository_root unless absolute.",
+  "source_reading_coverage": {
+    "directory": ".next/blueprint-sections",
+    "completely_read_file_count": 43,
+    "capability_sections": ["3.11", "3.12", "3.13", "3.14", "3.15", "3.16", "3.17", "3.18", "3.19", "3.20"],
+    "capability_files": ["3_11.md", "3_12.md", "3_13.md", "3_14.md", "3_15.md", "3_16.md", "3_17.md", "3_18.md", "3_19.md", "3_20.md"],
+    "packet_sections": ["34.21", "34.23", "34.26", "34.27", "34.30", "34.31", "34.33", "34.34", "34.37", "34.38"],
+    "packet_files": ["34_21.md", "34_23.md", "34_26.md", "34_27.md", "34_30.md", "34_31.md", "34_33.md", "34_34.md", "34_37.md", "34_38.md"],
+    "global_contract_sections": ["1", "9", "19", "30", "93", "95", "96", "98", "99", "100", "101", "102", "103", "104", "105", "106", "107", "108", "109", "110", "111", "112", "113"],
+    "global_contract_files": ["1.md", "9.md", "19.md", "30.md", "93.md", "95.md", "96.md", "98.md", "99.md", "100.md", "101.md", "102.md", "103.md", "104.md", "105.md", "106.md", "107.md", "108.md", "109.md", "110.md", "111.md", "112.md", "113.md"],
+    "obsolete_split_used": false
+  },
+  "scope_and_evidence_limits": {
+    "method": "Bounded static inspection of the assigned blueprint sections and selected existing implementation paths.",
+    "test_execution": "not_executed",
+    "customer_journey_execution": "not_executed",
+    "staging_execution": "not_executed",
+    "rls_execution": "not_executed",
+    "provider_execution": "not_executed",
+    "production_requests_in_revised_audit": "not_executed",
+    "provider_configuration": "not_inspected",
+    "migration_sql": "not_audited",
+    "limitations": [
+      "No capability is considered complete from implementation paths or test files alone.",
+      "Missing workflow evidence is distinguished from observed limitations in inspected code.",
+      "No external credential or provider-access dependency was established as the cause of these implementation gaps.",
+      "The parent owns global contracts, shared foundation decisions, credentials, commits, pushes, deployment and goal controls.",
+      "Persistence of this audit changes only docs/traceability/capability-audit-11-20.json; no implementation or navigation changes are included."
+    ]
+  },
+  "first_foundation_dependency": {
+    "status": "FAIL",
+    "evidence_status": "unproven",
+    "priority": "P1",
+    "owner": "parent",
+    "requirement": "Connect the assigned domains to the existing typed service/tool execution path, carrying server-created actor context, object permissions, validated proposals, source provenance, AgentRun linkage and idempotent domain events.",
+    "observed_evidence": {
+      "path": "lib/ai/tools/registry.ts",
+      "line": 56,
+      "finding": "The closed registry registers calendar, tasks, groceries, reminders, family and notifications. The assigned specialist tool sets are absent; calendar has only partial coverage of its packet."
+    },
+    "existing_extension_points": [
+      { "path": "lib/ai/tools/registry.ts", "inspection": "content_read", "role": "Closed capability registration and lookup." },
+      { "path": "lib/ai/tools/calendar.ts", "inspection": "content_read", "role": "Existing typed tool, service delegation, risk, idempotency and result-verification example." },
+      { "path": "lib/services/calendar/index.ts", "inspection": "selected_content_read", "role": "Existing service scope, family-scoped persistence, structured errors and activity example." },
+      { "path": "lib/services/scope.ts", "inspection": "path_identified_not_content_audited", "role": "Existing scope extension point to reconcile with the blueprint ActorContext contract." },
+      { "path": "lib/services/types.ts", "inspection": "path_identified_not_content_audited", "role": "Existing service request/result contract extension point." },
+      { "path": "lib/services/idempotency.ts", "inspection": "path_identified_not_content_audited", "role": "Existing idempotency extension point; behavior was not audited here." },
+      { "path": "lib/ai/tools/types.ts", "inspection": "path_identified_not_content_audited", "role": "Existing capability definition extension point." },
+      { "path": "lib/ai/tools/execute.ts", "inspection": "path_identified_not_content_audited", "role": "Existing execution extension point; behavior was not audited here." },
+      { "path": "lib/services/activity/index.ts", "inspection": "path_identified_not_content_audited", "role": "Existing activity integration extension point." }
+    ],
+    "first_safe_vertical_slice": "Parent-led, provider-free extension of calendar conflict analysis using existing calendar and ride records: resolve the actor on the server, permission-filter the inputs, return a typed proposal with evidence and unknown travel assumptions, and expose it through the existing registry. Establish denied-access and structured-result evidence in an isolated environment before adding domain writes or external actions.",
+    "implementation_performed": false,
+    "test_and_journey_evidence": "not_executed"
+  },
+  "capabilities": [
+    {
+      "requirement_id": "BUBALY-CAP-3-11",
+      "source_sections": ["3.11", "34.21"],
+      "source_files": [".next/blueprint-sections/3_11.md", ".next/blueprint-sections/34_21.md"],
+      "top_50_rank": 21,
+      "capability": "Family Travel Agent",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/trips",
+      "required_feature_flag": "feature_travel_agent",
+      "required_tools": ["travel.plan", "travel.compare", "travel.import", "travel.pack", "travel.replan"],
+      "required_workflow": "Goal and constraints to options, chosen trip, itinerary, reservations, preparation, travel-day operation, disruption handling and archive.",
+      "required_integrations": ["calendar", "email", "maps", "weather", "travel search/providers", "finance", "documents"],
+      "existing_routes": ["/dashboard/vacations/[id]/ai-assistant", "/api/vacations/ai"],
+      "existing_records": ["vacations", "vacation_members", "vacation_reservations", "vacation_activities", "vacation_itinerary_days", "vacation_itinerary_items", "vacation_budgets", "vacation_expenses", "vacation_packing_items", "vacation_documents", "vacation_weather_snapshots"],
+      "existing_implementation": [
+        { "path": "app/api/vacations/ai/route.ts", "line": 111, "evidence": "The builder persists activities, itinerary items, budgets and packing; recommendations consume trip context and rule helpers." },
+        { "path": "app/(app)/dashboard/vacations/[id]/ai-assistant/page.tsx", "line": 4, "evidence": "The trip AI page gates access and renders TripConcierge for a vacation ID." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "The builder uses JSON.parse on model text without a runtime output schema; concierge calls the provider with no tools.", "path": "app/api/vacations/ai/route.ts", "line": 120 },
+        { "kind": "missing_workflow_evidence", "finding": "Source-preserving confirmation import, timestamped provider availability and disruption replanning were not established." },
+        { "kind": "observed_registry_gap", "finding": "The travel tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Implement travel.import from a non-production confirmation fixture to reviewed, source-linked reservation and itinerary records, with runtime schemas and idempotency. Add a proposal-only travel.replan path using recorded facts; bookings remain outside this slice.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Import a confirmation fixture, correct a material field, retain the original source, replay without duplicates, and propose a disruption adjustment without booking."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-12",
+      "source_sections": ["3.12", "34.23"],
+      "source_files": [".next/blueprint-sections/3_12.md", ".next/blueprint-sections/34_23.md"],
+      "top_50_rank": 23,
+      "capability": "Family Schedule Intelligence",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/plan/calendar",
+      "required_feature_flag": "feature_schedule_intelligence",
+      "required_tools": ["calendar.import", "calendar.conflicts", "calendar.transport", "calendar.departure", "calendar.resolve"],
+      "required_workflow": "Event ingestion and member resolution to conflicts, travel calculation, assignment validation, preparation and change propagation.",
+      "required_integrations": ["Google/Apple/Microsoft calendar where supported", "maps", "school/sports ingestion", "notifications"],
+      "existing_routes": ["/dashboard/calendar"],
+      "existing_records": ["calendar_events", "school_events", "sports_events"],
+      "existing_implementation": [
+        { "path": "app/(app)/dashboard/calendar/page.tsx", "line": 6, "evidence": "The route renders the existing CalendarModule." },
+        { "path": "lib/ai/tools/calendar.ts", "line": 47, "evidence": "Typed calendar CRUD, conflict, free-slot and busy-evening tools delegate to services." },
+        { "path": "lib/services/calendar/index.ts", "line": 256, "evidence": "Conflict input contains event times and assignee; free-slot analysis also reads school and sports events." },
+        { "path": "lib/rides/schedule.ts", "line": 46, "evidence": "Driver conflict detection compares the same driver, date and exact pickup time." },
+        { "path": "lib/sync/capabilities.ts", "line": 40, "evidence": "Provider capability definitions describe supported calendar mechanisms; live integration behavior was not tested." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "Different pickup times can still be physically incompatible; exact pickup-time matching does not establish travel feasibility.", "path": "lib/rides/schedule.ts", "line": 51 },
+        { "kind": "observed_implementation_gap", "finding": "The inspected calendar conflict service does not include transport or preparation dependencies in its conflict inputs.", "path": "lib/services/calendar/index.ts", "line": 263 },
+        { "kind": "missing_workflow_evidence", "finding": "The packet's transport/departure/resolution tools and downstream assignment-change propagation were not established." }
+      ],
+      "first_safe_vertical_slice": "Extend the existing calendar service and registry with permission-filtered event/ride dependency analysis. Return an evidence-backed departure and driver proposal using explicit or recorded travel buffers; then validate resolution and change propagation in an isolated environment without sending notifications.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Detect two differently timed pickups that cannot both be driven, explain the travel/preparation conflict, propose another owner and verify dependent changes under isolated fixtures."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-13",
+      "source_sections": ["3.13", "34.26"],
+      "source_files": [".next/blueprint-sections/3_13.md", ".next/blueprint-sections/34_26.md"],
+      "top_50_rank": 26,
+      "capability": "Parent Copilot",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/family/parent",
+      "required_feature_flag": "feature_parent_copilot",
+      "required_tools": ["parent.routine", "parent.handoff", "parent.responsibilities"],
+      "required_workflow": "Parenting issue to scoped household context, operational plan, optional routine/tasks and user-selected follow-up.",
+      "required_integrations": ["calendar", "tasks/chores", "school", "notifications"],
+      "existing_routes": ["/parent", "/dashboard/family-operations"],
+      "existing_records": ["routine_templates", "routine_template_items", "calendar_events"],
+      "existing_implementation": [
+        { "path": "app/(app)/parent/page.tsx", "line": 3, "evidence": "The parent route redirects to Family Operations." },
+        { "path": "app/(app)/dashboard/family-operations/page.tsx", "line": 30, "evidence": "The dashboard gathers family signals and renders operational counts and next-action links." },
+        { "path": "components/modules/routines-panel.tsx", "line": 118, "evidence": "Saved routine templates materialize concrete calendar events." }
+      ],
+      "gaps": [
+        { "kind": "missing_workflow_evidence", "finding": "No traced fix-our-morning workflow combines school departure, responsibilities, household preferences and selected follow-up." },
+        { "kind": "missing_workflow_evidence", "finding": "Permissioned caregiver handoffs and durable parenting rules/preferences were not established in the inspected path." },
+        { "kind": "observed_registry_gap", "finding": "The parent routine, handoff and responsibility tools are absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Add parent.routine to produce a reviewable, owner-assigned morning plan from existing school/calendar constraints. Persist approved routine steps, household preferences and handoff visibility through the shared service path in an isolated environment; do not send caregiver messages.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Request a less chaotic morning, edit the proposed responsibilities, persist and reload the routine, and verify a restricted caregiver cannot read private handoff notes."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-14",
+      "source_sections": ["3.14", "34.27"],
+      "source_files": [".next/blueprint-sections/3_14.md", ".next/blueprint-sections/34_27.md"],
+      "top_50_rank": 27,
+      "capability": "Family Entertainment Decider",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/family/entertainment",
+      "required_feature_flag": "feature_entertainment_decider",
+      "required_tools": ["entertainment.recommend", "entertainment.rate", "entertainment.restrictions"],
+      "required_workflow": "Participants and available time to available catalog, guardian restrictions, ranking, explained picks and saved outcome.",
+      "required_integrations": ["streaming metadata providers", "calendar"],
+      "existing_routes": ["/dashboard/watchlist"],
+      "existing_records": ["watchlist_titles", "watchlist_votes", "watch_sessions"],
+      "existing_implementation": [
+        { "path": "app/(app)/dashboard/watchlist/page.tsx", "line": 7, "evidence": "The route gates access and renders WatchlistModule." },
+        { "path": "components/modules/watchlist-module.tsx", "line": 52, "evidence": "Audience, available minutes and service selectors feed the deterministic picker; the module persists votes and watch sessions." },
+        { "path": "lib/watchlist/picker.ts", "line": 79, "evidence": "The picker filters and ranks existing household titles using known audience ages, runtime, service and votes." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "Unknown audience ages are ignored; when no age is known, the picker applies no age filter.", "path": "lib/watchlist/picker.ts", "line": 69 },
+        { "kind": "observed_implementation_gap", "finding": "Availability relies on manually entered service metadata rather than a dated catalog availability result.", "path": "components/modules/watchlist-module.tsx", "line": 274 },
+        { "kind": "missing_workflow_evidence", "finding": "Guardian-controlled server restrictions and the complete entertainment tool workflow were not established." }
+      ],
+      "first_safe_vertical_slice": "Enforce guardian restrictions in a server service, clarify unknown ages and return typed entertainment.recommend results. Validate the normalized catalog adapter with recorded fixtures, including unknown/stale availability; perform no live provider actions.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Choose an audience including a child with unknown age, enforce guardian restrictions, reject stale availability claims and persist feedback on an allowed pick."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-15",
+      "source_sections": ["3.15", "34.30"],
+      "source_files": [".next/blueprint-sections/3_15.md", ".next/blueprint-sections/34_30.md"],
+      "top_50_rank": 30,
+      "capability": "Home Digital Twin and Predictive Maintenance",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P2",
+      "required_route": "/home",
+      "required_feature_flag": "feature_home_digital_twin",
+      "required_tools": ["home.capture", "home.identify", "home.maintenance", "home.service", "home.issue"],
+      "required_workflow": "Asset capture, identification and confirmation to source documents, maintenance schedule, reminders, service history and future interval updates.",
+      "required_integrations": ["documents", "calendar/tasks", "weather/climate", "shopping/service marketplaces when enabled"],
+      "existing_routes": ["/dashboard/home", "/dashboard/home/maintenance", "/dashboard/home/warranties", "/api/ai/home/forecast"],
+      "existing_records": ["home_assets", "home_warranties", "home_contractors", "home_service_records", "maintenance_tasks", "documents", "home_ai_logs"],
+      "existing_implementation": [
+        { "path": "components/modules/home-module.tsx", "line": 117, "evidence": "The module reads assets/tasks/documents and supports asset and maintenance-task operations." },
+        { "path": "app/(app)/dashboard/home/actions.ts", "line": 93, "evidence": "Actions persist service records and schedule recommended maintenance from deterministic cadences." },
+        { "path": "lib/home/maintenance.ts", "line": 63, "evidence": "Helpers define category-based maintenance cadences and asset life/warranty calculations." },
+        { "path": "app/api/ai/home/forecast/route.ts", "line": 30, "evidence": "The forecast endpoint creates narrative advice from supplied asset data." }
+      ],
+      "gaps": [
+        { "kind": "missing_workflow_evidence", "finding": "No traced photo/manual to confirmed asset fields to source-backed maintenance to updated future interval workflow was established." },
+        { "kind": "observed_implementation_gap", "finding": "The inspected forecast is narrative output from supplied assets, without manufacturer-source evidence or validated structured maintenance proposals.", "path": "app/api/ai/home/forecast/route.ts", "line": 45 },
+        { "kind": "observed_registry_gap", "finding": "The home specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Implement home.capture/identify with a non-production appliance-label/manual fixture, editable field confirmation and provenance. Link the confirmed asset to a maintenance plan and verify service completion updates its lifecycle without contacting contractors.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Capture an appliance, correct its model, retain the supporting source, accept a maintenance plan and record service with an updated future interval."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-16",
+      "source_sections": ["3.16", "34.31"],
+      "source_files": [".next/blueprint-sections/3_16.md", ".next/blueprint-sections/34_31.md"],
+      "top_50_rank": 31,
+      "capability": "Relationship and Occasion Planner",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P2",
+      "required_route": "/family/occasions",
+      "required_feature_flag": "feature_occasion_planner",
+      "required_tools": ["occasion.plan", "occasion.gift", "occasion.owner", "occasion.outcome"],
+      "required_workflow": "Date detection to lead-time signal, owner, proposed plan, optional approved commerce/reservation and remembered outcome.",
+      "required_integrations": ["contacts", "calendar", "shopping", "restaurant/reservation providers when enabled"],
+      "existing_routes": ["/dashboard/relationship"],
+      "existing_records": ["relationship_profile", "relationship_gift_ideas", "wishlist_items"],
+      "existing_implementation": [
+        { "path": "app/(app)/dashboard/relationship/page.tsx", "line": 7, "evidence": "The authenticated route renders RelationshipModule." },
+        { "path": "components/modules/relationship-module.tsx", "line": 201, "evidence": "The module persists gift statuses and supports manual, wishlist and AI gift ideas alongside relationship dates/preferences." },
+        { "path": "lib/relationship/gifts.ts", "line": 92, "evidence": "Digest inputs include upcoming dates, partner preferences, budget and wishlist." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "The AI digest input lacks past gift outcomes, preventing grounded repeat avoidance within this path.", "path": "lib/relationship/gifts.ts", "line": 92 },
+        { "kind": "missing_workflow_evidence", "finding": "Shared occasion ownership, preparation checklists, per-occasion budget and remembered outcome orchestration were not established." },
+        { "kind": "observed_registry_gap", "finding": "The occasion specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Link an occasion to its recipient, owner, budget, checklist and existing gift outcomes. Add occasion.plan/owner/outcome and a lead-time signal using isolated records; exclude purchases, reservations and messages.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Plan a birthday using last year's recorded gift, assign one owner, avoid duplicate selection and retain this year's outcome for future recall."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-17",
+      "source_sections": ["3.17", "34.33"],
+      "source_files": [".next/blueprint-sections/3_17.md", ".next/blueprint-sections/34_33.md"],
+      "top_50_rank": 33,
+      "capability": "Extended Family Care Coordinator",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/family/care",
+      "required_feature_flag": "feature_care_coordinator",
+      "required_tools": ["care.circle", "care.coordinate", "care.assign", "care.handoff", "care.share"],
+      "required_workflow": "Care circle, invitation/consent and visibility to schedules/tasks, responsibility assignment, handoff and audited access.",
+      "required_integrations": ["calendar", "contacts", "documents", "notifications"],
+      "existing_routes": ["/dashboard/care"],
+      "existing_records": ["care_log", "family_members"],
+      "existing_implementation": [
+        { "path": "app/(app)/dashboard/care/page.tsx", "line": 7, "evidence": "The feature-gated route renders CareModule." },
+        { "path": "components/modules/care-module.tsx", "line": 52, "evidence": "Current family members are selectable recipients; care_log stores check-ins, notes, wellbeing and appointment-type entries." }
+      ],
+      "gaps": [
+        { "kind": "missing_workflow_evidence", "finding": "The care log does not establish consent-based, multi-household care circles or granular note sharing." },
+        { "kind": "missing_workflow_evidence", "finding": "Who is taking Dad lacks a traced task/transport assignment and authorized handoff workflow." },
+        { "kind": "observed_registry_gap", "finding": "The care specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Establish care-circle consent and object permissions using isolated household fixtures, then add care.assign/handoff/share with access auditing and permission-filtered summaries. No live invitations, notifications or care-provider actions are included.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Authorize a caregiver for one appointment, assign transport, generate an allowed handoff and demonstrate that private notes and revoked access are excluded."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-18",
+      "source_sections": ["3.18", "34.34"],
+      "source_files": [".next/blueprint-sections/3_18.md", ".next/blueprint-sections/34_34.md"],
+      "top_50_rank": 34,
+      "capability": "Household Document Intelligence",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/documents",
+      "required_feature_flag": "feature_document_intelligence",
+      "required_tools": ["document.classify", "document.extract", "document.summarize", "document.compare", "document.ask", "document.actions"],
+      "required_workflow": "Ingestion and file security checks to OCR/parser, classification, confidence-validated facts, summary, linked action proposals and required confirmation.",
+      "required_integrations": ["email", "files/storage", "calendar/tasks", "finance/home"],
+      "existing_routes": ["/dashboard/documents", "/api/ai/import"],
+      "existing_records": ["documents"],
+      "existing_implementation": [
+        { "path": "components/modules/documents-module.tsx", "line": 267, "evidence": "Local upload stores a file and inserts document metadata, including an optional expiry date." },
+        { "path": "components/modules/documents-module.tsx", "line": 237, "evidence": "Download uses the existing signed-document URL helper." },
+        { "path": "app/api/ai/import/route.ts", "line": 104, "evidence": "Magic Import parses pasted text into proposed actions; the confirmation phase evaluates trust before execution." },
+        { "path": "tests/documents-import-actions.test.ts", "line": 6, "evidence": "The inspected test checks UI source strings for supported local actions and removal of disconnected cloud actions. It was not executed and is not customer-journey proof." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "The inspected upload path ends after file/metadata persistence; it does not enqueue classification/extraction or establish source-located factual records.", "path": "components/modules/documents-module.tsx", "line": 267 },
+        { "kind": "missing_workflow_evidence", "finding": "Immutable version comparison, cited document questions and reviewed document-obligation execution were not established." },
+        { "kind": "observed_registry_gap", "finding": "The document specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Connect an immutable source/version fixture to bounded extraction, reviewable fields and approved linked task/event proposals through document tools. Use recorded parser/provider fixtures in an isolated environment; do not submit forms or contact external services.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Upload a bill fixture, inspect the source location of amount/date, correct a field, approve one obligation and replay without duplicate tasks."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-19",
+      "source_sections": ["3.19", "34.37"],
+      "source_files": [".next/blueprint-sections/3_19.md", ".next/blueprint-sections/34_37.md"],
+      "top_50_rank": 37,
+      "capability": "Pantry Intelligence and Food-Waste Reduction",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P2",
+      "required_route": "/food/pantry",
+      "required_feature_flag": "feature_pantry_intelligence",
+      "required_tools": ["pantry.capture", "pantry.consume", "pantry.expiring", "pantry.recipe_match"],
+      "required_workflow": "Capture and normalized quantities/expiry to meal consumption, confirmed decrement, expiry signals and recipe suggestions.",
+      "required_integrations": ["meals", "groceries", "receipts", "camera"],
+      "existing_routes": ["/dashboard/pantry", "/api/ai/pantry-chef"],
+      "existing_records": ["pantry_items", "grocery_lists", "grocery_items", "meals", "meal_plans"],
+      "existing_implementation": [
+        { "path": "components/modules/pantry-module.tsx", "line": 42, "evidence": "The module reads pantry inventory, adjusts quantities and adds low-stock items to groceries." },
+        { "path": "lib/pantry/logic.ts", "line": 35, "evidence": "Helpers derive expiry labels and expiring-item order from expires_at." },
+        { "path": "app/api/ai/pantry-chef/route.ts", "line": 56, "evidence": "Fridge Chef provides photo-based recipe suggestions and paths that create meals, meal plans and grocery items." },
+        { "path": "lib/food/leftovers.ts", "line": 32, "evidence": "Separate pure helpers classify leftover urgency and produce use-first nudges." }
+      ],
+      "gaps": [
+        { "kind": "missing_workflow_evidence", "finding": "Photo-to-recipe does not establish photo-to-persisted inventory or a meal-driven consumption ledger." },
+        { "kind": "observed_implementation_gap", "finding": "The inspected expiry-label helper receives a date without distinguishing estimated from source-provided expiry.", "path": "lib/pantry/logic.ts", "line": 35 },
+        { "kind": "observed_registry_gap", "finding": "The pantry specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Add pantry.capture with recorded receipt/photo extraction fixtures, editable quantities and expiry provenance, then idempotent pantry.consume linked to a meal and batch. Reuse expiring-item and recipe helpers without making food-safety guarantees or live provider calls.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Review captured items, correct a quantity and estimated expiry, consume a meal once despite replay, and obtain a source-aware use-first suggestion."
+      }
+    },
+    {
+      "requirement_id": "BUBALY-CAP-3-20",
+      "source_sections": ["3.20", "34.38"],
+      "source_files": [".next/blueprint-sections/3_20.md", ".next/blueprint-sections/34_38.md"],
+      "top_50_rank": 38,
+      "capability": "Household Subscription Control Center",
+      "status": "FAIL",
+      "evidence_status": "unproven",
+      "priority": "P1",
+      "required_route": "/finances/subscriptions",
+      "required_feature_flag": "feature_subscription_center",
+      "required_tools": ["subscription.detect", "subscription.confirm", "subscription.review", "subscription.cancellation_help"],
+      "required_workflow": "Recurring-charge candidate to confirmation, plan/renewal enrichment, price monitoring, review and truthful cancellation guidance or supported approved action.",
+      "required_integrations": ["finance", "email receipts", "calendar", "legitimately available streaming/account metadata"],
+      "existing_routes": ["/dashboard/subscriptions"],
+      "existing_records": ["subscriptions_tracked"],
+      "existing_implementation": [
+        { "path": "components/modules/subscriptions-module.tsx", "line": 33, "evidence": "The module persists manually tracked subscriptions, usage/status and renewal dates." },
+        { "path": "lib/finance/subscriptions.ts", "line": 12, "evidence": "Helpers calculate annual/monthly costs and stale-subscription totals." },
+        { "path": "components/modules/subscriptions-module.tsx", "line": 122, "evidence": "The UI labels stale rows unused and missing last_used as never used." }
+      ],
+      "gaps": [
+        { "kind": "observed_implementation_gap", "finding": "Missing last_used is treated as stale and displayed as unused/never used instead of unknown usage.", "path": "lib/finance/subscriptions.ts", "line": 43 },
+        { "kind": "missing_workflow_evidence", "finding": "Recurring-charge confirmation, member dependencies, price-history review and truthful cancellation guidance were not established in the inspected workflow." },
+        { "kind": "observed_registry_gap", "finding": "The subscription specialist tool set is absent from the inspected central registry." }
+      ],
+      "first_safe_vertical_slice": "Distinguish unknown usage and ask the household before classifying waste. Add subscription.detect/confirm/review over isolated normalized-charge fixtures, member dependencies and price history; cancellation_help remains guidance without account changes or payment calls.",
+      "test_and_journey_evidence": {
+        "tests": "not_executed",
+        "journey": "not_executed",
+        "next_journey": "Confirm an uncertain recurring charge, answer an unknown-usage question, identify a recorded price increase and preserve another member's dependency when reviewing cancellation."
+      }
+    }
+  ]
+}

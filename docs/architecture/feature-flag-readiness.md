@@ -1,0 +1,114 @@
+# Feature-flag readiness for the expanded AI runtime
+
+## Scope and evidence standard
+
+- Date: 2026-09-05.
+- Source blueprint SHA256: `9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3` (user supplied; not recomputed).
+- Supplied baseline commit: `01881fb279589d7a90acb8302817bb385fbe036d` (not independently checked; the reviewed working files are not asserted to match that commit or production).
+- This is a documentation-only, static control-flow audit. Code behavior below is supported by inspected branches, not by file existence, comments claiming tests passed, or runtime execution.
+- The parent reports full blueprint reading complete and retains the global contracts and matrix foundation. This task does not repeat that work, rebuild an index, retry the stopped index agent, or claim independent coverage of all 113 sections.
+- Previously completed assigned reading: `3.21` through `3.29`, and `34.40`, `34.41`, `34.43`, `34.44`, `34.45`, `34.47`, `34.48`, `34.49`, `34.50`. The cached findings in `docs/traceability/capability-audit-21-29.json` supply this group's requirement identifiers.
+- No production settings, deployed flag values, provider credentials, database policies, or active account entitlements were queried. Defaults below are code defaults, not claims about live configuration.
+- Readiness conclusion: material enforcement gaps remain. No capability or release receives PASS, and unwritten work is not labeled BLOCKED.
+
+## Highest-impact findings
+
+| Priority | Supported finding | Customer/operator consequence | First safe scope, proposed only |
+| --- | --- | --- | --- |
+| P1 | `loadTrustInputs` discards returned query errors and substitutes empty policies/grants/delegations. `lib/trust/server.ts:60`, `:71`; role fallback in `lib/trust/engine.ts:296`. | A failed policy read can discard a household's explicit automation-off decision and evaluate a parent/adult scheduling action against permissive role defaults. The dispatcher catches thrown errors, but these returned errors never reach that catch. | Make the four policy-context reads explicitly error-aware and stop evaluation on unavailable context. Preserve genuine successful empty results as a distinct case. Start with `lib/trust/server.ts`; consume the parent's error/actor contract. |
+| P1 | The reviewed chat API and cached briefing API use authentication and request limits without resolving catalog tiers or complete account entitlement. `app/api/ai/chat/route.ts:19`, `:140`; `app/api/ai/briefing/route.ts:11`, `:227`. Middleware performs login checks only: `middleware.ts:91`. | A page being hidden, Plus-gated, or catalog-off is not a server-side denial of these AI requests. Authenticated access and rate limits do not establish paid access or account-open status. No live bypass was attempted. | Introduce a non-redirecting server decision using verified family context, strict entitlement, and stable capability keys; wire these two request boundaries before context gathering/provider invocation. Keep deterministic briefing fallback policy explicit. |
+| P1 | Catalog `off` is not an unconditional operator kill switch: failed override reads restore defaults, super-admins bypass it, unknown routes are allowed, and shared routes merge permissively. `lib/server/feature-tiers.ts:32`; `lib/supabase/auth.ts:209`, `:218`; `lib/features/tiers.ts:94`. | An operator cannot infer that all execution has stopped merely by setting one catalog feature to off. A settings outage or another catalog key on the same route can defeat that expectation. | Keep public catalog fallback separate from strict execution policy. Define a parent-owned runtime stop that cannot be bypassed by preview privileges, emergency trust elevation, approvals, or `skipTrust`. Do not alter current flag values. |
+| P1 | `executeTool` validates tools and trust but has no rollout/entitlement decision; its `skipTrust` and ordinary-read branches return before trust evaluation. `lib/ai/tools/execute.ts:292`, `:450`; tool metadata at `lib/ai/tools/types.ts:34`. Cron and continuation also lack their own capability/entitlement checks before dispatch. | Expanded tools can inherit action authorization without a separately enforced entitlement, feature rollout decision, or operator stop. Approved replay and reads need the same independent runtime policy boundary. | Put a reusable access decision before trust bypasses and service execution, then integrate it at continuation and worker boundaries. Recheck before new side effects; preserve pause/cancel access while execution is disabled. |
+| P1 | The no-policy dial helper returns ask, while the accepted-plan execution path evaluates generic role defaults and can select auto. `lib/autonomy/loop.ts:51`; `app/(app)/dashboard/concierge/actions.ts:175`; `lib/trust/engine.ts:305`. | For a parent/adult scheduling action with no matching policy or emergency, the default used for presenting the dial and the default used to act can disagree. This is a static branch mismatch, not an observed UI session. | Align the absent-policy execution decision with the documented ask-first default, without creating policies or enabling capabilities during this task. Limit follow-up scope to the concierge decision boundary and its pure helper. |
+| P2 | Tier updates read and replace one shared override object without compare-and-set and do not attach an actor/reason/history record in the reviewed writer. `lib/server/feature-tiers.ts:54`; `app/(app)/admin/tier-features/actions.ts:20`. | Concurrent operator edits can overwrite one another; an off decision can be lost. Application-level change provenance is not established by this code. Database-side auditing was not inspected. | Follow the existing guarded admin-action pattern, adding versioned/atomic override updates and actor/reason audit metadata under the parent's settings contract. No admin UI or settings changes now. |
+
+## Existing control layers and defaults
+
+| Layer | Supported implementation and defaults | Authority and actual coverage | Limit |
+| --- | --- | --- | --- |
+| Catalog tiers | `lib/constants/feature-catalog.ts:22` contains 102 definitions: 39 free, 42 basic, 21 plus, zero default-off. `lib/features/tiers.ts:33` merges valid overrides. | One global `app_settings` value keyed `feature_tiers`; valid tiers are `off/free/basic/plus`. Unknown override keys are discarded by `lib/server/feature-tiers.ts:12`. | These are subscription/catalog controls, not the blueprint's named capability rollout flags. Adding an unknown flag to this JSON would not enable or disable it. |
+| Tier operator actions | `app/(app)/admin/tier-features/actions.ts:20` requires a signed-in super-admin before constructing the service client. Key/tier inputs are validated. | Global catalog operator, not an ordinary household owner. Reset restores code defaults. Revalidation targets pricing and dashboard rendering. | No account/UI action was performed. Setting one tier off does not cancel existing runs or gate all APIs. |
+| Page feature guard | `lib/supabase/auth.ts:205` resolves active-family plan and route tier; normal users receive not-found for off or a billing redirect below the required level. | Server-side page enforcement is real at callers that use this helper. | Super-admin bypass precedes lookup; unknown routes pass. A page guard does not wrap a separate API handler or cron. |
+| Route aliases | `lib/features/tiers.ts:94` selects the most permissive tier across shared hrefs. Catalog pairs: parent/family dashboards; auto-care/auto; family-tax-center/auto-bill-pay. | For example, turning `auto-care` off leaves `auto` able to expose the same route at Plus. | Individual-key off is not route-wide or operation-wide revocation. Shared navigation was not changed or inspected for redesign. |
+| Subscription resolution | `lib/server/plan.ts:30` uses a trusted family ID, reads all active/trialing subscriptions, takes the highest level, includes the Basic trial, and throws on read error/missing family. | A useful strict server-read pattern already exists. `computeEntitlement` handles closed, expired-trial, grandfathered, paid and super-admin states in `lib/server/entitlement.ts:27`. | `resolveFamilyPlanLevel` returns only the numeric level, dropping locked/closed. The separate `resolveEntitlement` intentionally fails open and also ignores returned query errors (`:66`). Do not reuse its unlocked fallback for expanded AI execution. |
+| AI provider readiness | `lib/ai/settings.ts:25` resolves stored configuration with environment fallback and forces OpenAI; provider exports at `lib/ai/provider.ts:494`, `:516`, `:531` construct/fallback/check configuration. | `app/(app)/admin/ai/actions.ts:10` restricts saves to super-admins. No explicit runtime-enable/disable field exists in the reviewed settings type. | Configuration presence is not entitlement or a kill switch. Blank key submission preserves a stored key; environment fallback remains possible. No credential was read, modified, removed, or reported. The admin connection-test action was inspected, never invoked. |
+| Request and usage limits | Chat sets local/shared limits of 20 requests per user per 60 seconds; cached briefing requests use 10. `lib/server/request-rate-limit.ts:9` composes local and shared guards. `lib/ai/usage.ts:87` records usage best-effort. | These mechanisms bound request frequency and record metrics at their callers. | Usage recording is not a family spending reservation, hard allowance, subscription check, or stop mechanism. The underlying rate-limit storage implementation was not audited here. |
+| Tool authorization | `lib/ai/tools/execute.ts:450` denies unknown tools, parses schemas, applies trust/risk decisions, reserves write idempotency, and invokes services. | Concrete reusable safety behavior exists; it is not merely a registry file. | `ToolDefinition` contains trust capability/risk but no rollout key, minimum entitlement, or stop policy. Trust capability names such as automate/view are not product feature flags. |
+
+## Capability-group flag mapping
+
+The nine exact required identifiers below do not appear in the fully read catalog. The prior capability audit also recorded no matches for these exact identifiers in its targeted implementation search. This task does not extend that negative result into a claim that every file in the repository has been searched. Existing manual features must not be disabled merely because expanded AI rollout remains incomplete.
+
+| Blueprint sections | Required rollout identifier | Closest existing catalog control and code default | Supported gap |
+| --- | --- | --- | --- |
+| 3.21 / 34.40 | `feature_pet_os` | `pets`: basic, `/dashboard/pets`; `lib/constants/feature-catalog.ts:64`. | No distinct Pet OS rollout decision for extraction, routines, sitter access or replenishment. |
+| 3.22 / 34.41 | `feature_workload_manager` | `tasks-chores`: free, `/dashboard/chores`; `:27`. No workload href in this catalog. | Chore visibility does not establish gating of AI assignment/rebalancing/swaps. |
+| 3.23 / 34.43 | `feature_relationship_graph` | `contacts`: free, `/dashboard/contacts`; `:56`. No relationship href in this catalog. | Contact access is not a rollout/privacy decision for derived relationship memory or follow-ups. |
+| 3.24 / 34.44 | `feature_digital_vault` | `documents`: free, `/dashboard/documents`; `:76`. The existing files-vault route has no href entry here. | A document vault is not a gated digital-account/recovery/estate capability. |
+| 3.25 / 34.45 | `feature_moving_project` | `move-planner`: basic, `/dashboard/moving`; `:70`. | No separate access decision for move planning/recalculation and provider-sensitive transitions. |
+| 3.26 / 34.47 | `feature_purchase_advisor` | `groceries`: free, `/dashboard/grocery`; `:46`. | Grocery-list access is not authorization to search providers, compare products or propose purchases. |
+| 3.27 / 34.48 | `feature_visual_inventory` | `home-inventory-finder`: basic, `/dashboard/inventory`; `:67`. | No visual-intake/search/hide rollout control established; ordinary inventory access remains distinct. |
+| 3.28 / 34.49 | `feature_daily_brief` | `daily-briefing`: plus, `/dashboard/briefing`; `:35`. | The API does not consume that catalog tier; no separate member-scoped brief generation/delivery rollout decision is established. |
+| 3.29 / 34.50 | `feature_home_project_manager` | `home-projects`: basic, `/dashboard/projects`; `:71`. | Project tracking does not establish rollout gates for AI scope, quote comparison or completion handoffs. |
+
+Additional runtime-facing catalog defaults are `ai-assistant`, `ai-concierge`, `trip-intelligence`, and `ai-front-desk` at basic; `weekly-briefing`, `autopilot`, `command-center`, `family-missions`, and `conflict-resolution` at plus (`lib/constants/feature-catalog.ts:31`). This is catalog coverage only; their individual routes/providers were not exhaustively audited.
+
+## Owner and operator stop behavior
+
+| Control | Supported scope and authorization | Default/precedence and missing guarantee |
+| --- | --- | --- |
+| Household concierge dial | `setConciergeAutopilotAction` requires parent/adult manager status, validates auto/ask/off, and writes one enabled AI scheduling/automate policy at priority 10. `app/(app)/dashboard/concierge/actions.ts:311`; `lib/constants/roles.ts:25`; `lib/autonomy/loop.ts:19`. | Off maps to deny. It covers matching scheduling automation, not every domain, read, provider call, or queued approval. Higher-priority policies and the engine's earlier emergency elevation can override it. The no-policy helper/execution mismatch is recorded above. |
+| General trust policy | `lib/trust/engine.ts:249` evaluates emergency elevation, grants, ordered policies and role defaults. `lib/trust/server.ts:56` reads household-scoped inputs. | This is conditional action authorization, not an unconditional owner/operator stop. No-policy parent/adult automation can be allowed for ordinary domains. A runtime stop must be evaluated independently and before trust overrides. |
+| Per-run pause/cancel | `lib/ai/runs/controls.ts:36` permits managers or the requesting member; rerun/edit are manager-only. Pause/cancel write run state; cancellation also attempts to close pending approvals and unstarted steps. Audit/event writes are present. | Executor excerpts show pause/cancel checks before execution and between passes (`lib/ai/runs/executor.ts:308`, `:385`). Already in-flight work is not proven interruptible. These are per-run controls, not a household-wide or global kill switch. |
+| Run-control reachability | A names-only search for pauseRun/cancelRun/resumeRun/rerunStep/editStepInput in app/lib returned no application caller outside the reviewed controls; other matches were store/states. | This is evidence of an integration gap, not proof that every possible dynamic caller was inspected. No customer-facing/API control path was established or exercised. Service functions alone do not establish an owner-reachable stop. |
+| Queued concierge approval | `executeQueuedRunAction` checks manager status and household-owned pending run/plan, then calls the materializer. `app/(app)/dashboard/concierge/actions.ts:220`, `:242`. | It does not reread the current dial/trust decision or entitlement before execution. A previously queued approval is not proven to honor a later off choice. |
+| Cron/continuation | `app/api/cron/ai-runs/route.ts:33` checks cron authorization and dispatches leased runs with bounded time budgets. `lib/ai/runs/continue.ts:41` claims a run before dispatch. | Neither reviewed entry point checks a global/operator stop or a family capability entitlement itself. Full executor/store/RPC enforcement was not established in this bounded audit. Cron authorization is not a feature rollout decision. |
+| Provider disable | The reviewed provider settings have model/key configuration and fallback, not a dedicated stop value. | Missing configuration can prevent provider work, but credential removal is not a supported, independent operational stop and was not attempted. Stops must also cover deterministic tool writes, not only model calls. |
+
+## Safe small implementation slices, not executed
+
+1. **Policy-read failure handling first.** Scope: `lib/trust/server.ts`. Check returned errors for policies, grants, delegations and emergencies; preserve the distinction between unavailable context and a successful empty result. Return/throw the parent's supported unavailable-context outcome before evaluation. This tightens an existing guard without enabling any capability, altering live flags, changing schemas, or invoking a provider.
+2. **Align the absent-policy concierge default.** Scope: the decision boundary in `app/(app)/dashboard/concierge/actions.ts` and, only if needed, `lib/autonomy/loop.ts`. Ensure no stored decision means ask first in both presentation and execution. Do not seed policies, change user choices, or broaden this into a concierge rewrite.
+3. **Strict access adapter for two sampled APIs.** Scope: a parent-approved server helper beside `lib/server/feature-tiers.ts` and `lib/server/plan.ts`, then `app/api/ai/chat/route.ts` and `app/api/ai/briefing/route.ts`. Resolve stable capability keys, verified family, closed/locked status, paid/trial entitlement, rollout permission and stop state before family-context collection/provider work. Unknown capability and unavailable policy must not become allowed execution. Keep public pricing fallback unchanged.
+4. **Runtime stop integration after the matrix contract is ready.** Scope candidates: `lib/ai/tools/execute.ts`, `lib/ai/runs/continue.ts`, `app/api/cron/ai-runs/route.ts`, and the executor's step dispatch. Use the parent's single policy contract, not a second catalog/index. Check stops independently of `skipTrust`, approvals, emergency elevation and super-admin preview. Allow read-only status and pause/cancel controls even when starting/resuming work is disabled. Define explicit semantics for already in-flight effects; do not claim retroactive cancellation.
+5. **Operator update durability as a separate slice.** Scope: `lib/server/feature-tiers.ts` plus its guarded action. Use atomic/versioned updates and actor/reason metadata. Do not combine this with feature enablement, a settings UI redesign, or shared navigation work.
+
+The proposed runtime decision should keep separate inputs for catalog entitlement, rollout permission, household automation consent, global/operator stop, per-run state and action authorization. None substitutes for another. Newly expanded AI capabilities should require explicit, parent-approved readiness/enablement; this is a proposal, not a claim about current defaults or an authorization to change them.
+
+## Future evidence needed before readiness claims
+
+- Isolated fake-client checks for every trust-input read error and for successful empty policy results.
+- Parent/adult versus restricted-role decisions with no policy, explicit off, higher-priority policies, and emergency elevation.
+- Direct API requests in an authorized non-production environment for free, Basic, Plus, active trial, expired trial, closed family, unknown capability, catalog-off and settings-read failure.
+- Stops applied to a queued run, approved replay, a resumed run, cron dispatch and an already-running multi-step operation; evidence that no new prohibited side effect starts after the stop boundary.
+- Reachable and authorized owner pause/cancel paths, including audit records and cross-family denial.
+- Operator concurrency/history evidence and confirmation that a public-catalog fallback cannot become an execution authorization.
+
+These are future acceptance scenarios only. No tests, accounts, requests, policy mutations, or provider calls were executed here, and a mocked unit result alone would not establish deployed end-to-end readiness.
+
+## Read coverage and limitations
+
+Fully reviewed once in this documentation task:
+
+| Area | Repo-relative files |
+| --- | --- |
+| Catalog/entitlement/auth | `lib/constants/feature-catalog.ts`; `lib/features/tiers.ts`; `lib/server/feature-tiers.ts`; `lib/server/entitlement.ts`; `lib/server/plan.ts`; `lib/supabase/auth.ts`; `middleware.ts` |
+| Operator actions/settings | `app/(app)/admin/tier-features/actions.ts`; `app/(app)/admin/ai/actions.ts`; `lib/ai/settings.ts` |
+| AI request/accounting | `app/api/ai/chat/route.ts`; `lib/ai/usage.ts`; `lib/server/ai-rate-limit.ts`; `lib/server/request-rate-limit.ts` |
+| Tool/trust | `lib/ai/tools/execute.ts`; `lib/ai/tools/types.ts`; `lib/trust/engine.ts`; `lib/trust/server.ts`; `lib/assistant/trust-wrapper.ts`; `lib/constants/roles.ts` |
+| Runtime/household controls | `lib/ai/runs/controls.ts`; `lib/ai/runs/continue.ts`; `app/api/cron/ai-runs/route.ts`; `app/(app)/dashboard/concierge/actions.ts`; `lib/autonomy/loop.ts` |
+
+Cached prior reads reused without reopening files: `lib/ai/tools/registry.ts`, `app/api/ai/briefing/route.ts`, and the supported capability report content. Cached evidence is not a fresh assertion that those files have not changed.
+
+Partial evidence only: an oversized initial core-read response truncated the executor's middle and part of the model-visible provider output. Only returned/cached excerpts were used, including executor pause/cancel and provider configuration exports. Neither file was reopened; neither receives a full-file coverage claim. `supabase/migrations/0250_ai_runtime_core.sql`, `lib/ai/routing.ts`, and `lib/assistant/tools.ts` had only path/size discovery, not content review. Store/RPC behavior, all other AI routes, public gift AI, voice, third-party integrations, deployment wiring and direct database settings policies remain outside this bounded coverage.
+
+Executed: local names-only targeted discovery, one-time source reads, in-memory analysis of already returned content/catalog declarations, a pre-write new-file guard, and the two authorized documentation changes. No source index was built or stored.
+
+Not executed: tests, builds, lint, typechecking, browser/account/UI actions, HTTP/API/provider calls, database queries or migrations, flag/settings changes, feature implementation, deployments, git operations, goal changes, agent spawning, or post-write file reads/validation.
+
+Documentation changes only:
+
+- `docs/traceability/capability-audit-21-29.json`: replace the machine-specific repository root with `.` and remove the machine-specific canonical-source location using cached content. Preserve source SHA, section coverage, supported gaps and the separate earlier pricing UX evidence.
+- `docs/architecture/feature-flag-readiness.md`: this new report.
+
+Earlier pricing screenshots/findings remain historical read-only UX evidence in the capability audit, not proof of capability flags or entitlement enforcement.

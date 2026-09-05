@@ -1,0 +1,4682 @@
+{
+  "schemaVersion": 1,
+  "artifact": "environment-registry",
+  "scope": "G0 documentation only",
+  "sourceSHA256": "9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3",
+  "sourceSHAEvidence": "User-supplied blueprint SHA; not recomputed and not a hash of the environment template or current source tree.",
+  "status": "PARTIAL_STATIC_INVENTORY",
+  "safety": {
+    "featureCode": "HELD",
+    "production": "HELD",
+    "matrixFoundationDependency": "PENDING_PARENT_OWNED",
+    "networkUsed": false,
+    "actualEnvironmentFilesRead": false,
+    "processEnvironmentValuesRead": false,
+    "credentialStoresRead": false,
+    "providerAccountsAccessed": false,
+    "githubSecretValuesRead": false,
+    "variableValuesIncluded": false,
+    "testsOrApplicationScriptsExecuted": false,
+    "postWriteChecksPerformed": false
+  },
+  "classificationPolicy": {
+    "secret": "Credential, signing or encryption material; never expose in public/client configuration.",
+    "publicConfig": "Non-credential configuration, public key or identifier. This is a classification, not permission to disclose internal identifiers, contacts, allowlists or endpoints.",
+    "unverified": "Missing behavior/provider evidence is explicitly unverified. A template declaration or TypeScript non-null assertion alone does not prove a variable is required, an integration works or a capability passes."
+  },
+  "coverage": {
+    "templates": [
+      {
+        "path": ".env.example",
+        "namesExtracted": 73,
+        "method": "One names-only extraction of assignment keys; values and comments were not retained.",
+        "trackedStatus": "unverified; git was not inspected"
+      }
+    ],
+    "sourceRoots": [
+      "app",
+      "lib",
+      "scripts",
+      ".github"
+    ],
+    "sourceExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "mjs",
+      "cjs",
+      "mts",
+      "cts",
+      "sh",
+      "ps1",
+      "yml",
+      "yaml",
+      "py"
+    ],
+    "sourceScanStatistics": [
+      {
+        "root": "lib",
+        "filesSearched": 498,
+        "filesWithLexicalMatches": 74,
+        "matchingLines": 203
+      },
+      {
+        "root": "app",
+        "filesSearched": 644,
+        "filesWithLexicalMatches": 54,
+        "matchingLines": 101
+      },
+      {
+        "root": "scripts",
+        "filesSearched": 30,
+        "filesWithLexicalMatches": 25,
+        "matchingLines": 96
+      },
+      {
+        "root": ".github",
+        "filesSearched": 5,
+        "filesWithLexicalMatches": 5,
+        "matchingLines": 45
+      }
+    ],
+    "sourceReadMethod": "One lexical source scan per root with bounded, value-suppressed context. These statistics do not mean that complete source files or runtime behavior were reviewed.",
+    "priorReadExclusionPatterns": [
+      "app/(app)/dashboard/autopilot/page.tsx",
+      "app/(app)/dashboard/command-center/page.tsx",
+      "app/(app)/dashboard/expenses/page.tsx",
+      "app/(app)/dashboard/family-automation/page.tsx",
+      "app/(app)/dashboard/family-cfo/page.tsx",
+      "app/(app)/dashboard/family-coo/page.tsx",
+      "app/(app)/dashboard/finances/page.tsx",
+      "app/(app)/dashboard/focus/page.tsx",
+      "app/(app)/dashboard/grocery/page.tsx",
+      "app/(app)/dashboard/inbox/page.tsx",
+      "app/(app)/dashboard/meals/page.tsx",
+      "app/(app)/dashboard/paperwork/actions.ts",
+      "app/(app)/dashboard/paperwork/page.tsx",
+      "app/api/ai/import/route.ts",
+      "app/api/ai/insights/route.ts",
+      "app/api/ai/meals/plan/route.ts",
+      "lib/ai/assistant-engine.ts",
+      "lib/ai/insights.ts",
+      "lib/ai/tools/groceries.ts",
+      "lib/ai/tools/legacy-adapter.ts",
+      "lib/ai/tools/registry.ts",
+      "lib/assistant/tools.ts",
+      "lib/autopilot/engine.ts",
+      "lib/autopilot/scan.ts",
+      "lib/capture/parse.ts",
+      "lib/capture/save.ts",
+      "lib/capture/shortcut.ts",
+      "lib/capture/shortcuts.ts",
+      "lib/career/hub.ts",
+      "lib/constants/feature-catalog.ts",
+      "lib/database.types.ts",
+      "lib/features/tiers.ts",
+      "lib/finance/hub.ts",
+      "lib/finance/timeline-load.ts",
+      "lib/finance/timeline.ts",
+      "lib/grocery/retailers.ts",
+      "lib/language/practice.ts",
+      "lib/meals/planner.ts",
+      "lib/projects/planner.ts",
+      "lib/server/feature-tiers.ts",
+      "lib/services/descriptions.ts",
+      "lib/supabase/auth.ts"
+    ],
+    "retainedPriorOutput": {
+      "sourcePathsReused": [
+        "app/(app)/dashboard/command-center/page.tsx",
+        "app/(app)/dashboard/family-coo/page.tsx",
+        "app/(app)/dashboard/autopilot/page.tsx",
+        "app/(app)/dashboard/family-automation/page.tsx",
+        "app/(app)/dashboard/family-cfo/page.tsx",
+        "app/(app)/dashboard/expenses/page.tsx",
+        "app/(app)/dashboard/meals/page.tsx",
+        "app/(app)/dashboard/grocery/page.tsx",
+        "app/(app)/dashboard/inbox/page.tsx",
+        "app/(app)/dashboard/paperwork/page.tsx",
+        "app/(app)/dashboard/focus/page.tsx",
+        "app/(app)/dashboard/finances/page.tsx",
+        "lib/autopilot/scan.ts",
+        "lib/ai/tools/registry.ts",
+        "lib/ai/tools/legacy-adapter.ts",
+        "lib/assistant/tools.ts",
+        "lib/ai/assistant-engine.ts",
+        "app/api/ai/meals/plan/route.ts",
+        "lib/meals/planner.ts",
+        "lib/capture/save.ts",
+        "lib/capture/parse.ts",
+        "app/(app)/dashboard/paperwork/actions.ts",
+        "lib/autopilot/engine.ts",
+        "lib/grocery/retailers.ts",
+        "lib/ai/tools/groceries.ts",
+        "lib/finance/timeline-load.ts",
+        "lib/finance/timeline.ts",
+        "lib/finance/hub.ts"
+      ],
+      "literalEnvironmentReferencesRecovered": 0,
+      "note": "Retained source output was processed without filesystem rereads. Some older reads were only partial excerpts."
+    },
+    "dynamicOrInheritedEnvironmentSites": [
+      {
+        "path": "lib/ai/routing.ts",
+        "line": 73,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "lib/social/capabilities.ts",
+        "line": 311,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "lib/social/connectors.ts",
+        "line": 80,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "app/api/health/route.ts",
+        "line": 26,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "app/api/sync/[provider]/callback/route.ts",
+        "line": 41,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "app/api/sync/[provider]/auth/route.ts",
+        "line": 28,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "scripts/seed-client.mjs",
+        "line": 4,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      },
+      {
+        "path": "scripts/run-e2e.mjs",
+        "line": 7,
+        "reason": "Dynamic lookup, environment-map alias or inherited environment; literal-name closure not established."
+      }
+    ],
+    "variableCount": 100,
+    "templateVariableCount": 73,
+    "sourceOnlyNames": [
+      "APPLE_CALDAV_BASE_URL",
+      "APPLE_SYNC_ENABLED",
+      "APPLY_RELEASE",
+      "CI",
+      "CONTACT_CENTER_INBOUND_SECRET",
+      "CRON_BASE_URL",
+      "EXPO_NO_TELEMETRY",
+      "GITHUB_ENV",
+      "GITHUB_FEEDBACK_REPO",
+      "GITHUB_FEEDBACK_TOKEN",
+      "GITHUB_REPO",
+      "GITHUB_TOKEN",
+      "NEXT_PUBLIC_BUILD_ID",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
+      "NODE_ENV",
+      "NODE_OPTIONS",
+      "PLAYWRIGHT_EXTERNAL_SERVER",
+      "PLAYWRIGHT_SKIP_BUILD",
+      "ROUTE",
+      "SUPABASE_ACCESS_TOKEN",
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_PROJECT_REF",
+      "SUPABASE_SECRET_KEY",
+      "SUPABASE_URL",
+      "VERCEL_ENV",
+      "VERCEL_REGION"
+    ],
+    "noCapturedConsumerNames": [
+      "CAP_SERVER_URL",
+      "E2E_ALLOW_REMOTE_SUPABASE",
+      "SEED_CREATED_BY_USER_ID"
+    ],
+    "limitations": [
+      "This is not a whole-repository index, a full environment dependency graph or a deployment-readiness claim.",
+      "Only root/scoped example or template names and the requested source roots were considered; root build/mobile/test configuration and tests were not inspected.",
+      "JSON files, actual environment files, token/credential stores and provider/account state were excluded.",
+      "Dynamic helper arguments, aliases, generated names and inherited environment maps are not exhaustively resolved.",
+      "Previously read source paths were excluded from fresh filesystem reads. Available retained excerpts do not guarantee complete environment-reference coverage of those files.",
+      "Lexical searching respects ignored files; checked-in status and the current source revision were not independently established.",
+      "Requiredness is scoped to the captured caller. Missing key checks, fallback operators and configuration presence do not prove working integrations.",
+      "Three template-only names have no captured consumer. Source-only names are not automatically template defects, because many are CI/platform bindings.",
+      "No runtime, network, provider, build, test or post-write checks were performed."
+    ]
+  },
+  "variables": [
+    {
+      "name": "AI_CITATION_API_KEY",
+      "provider": "AI citation integration",
+      "purpose": "Credential for AI-citation synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 140,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 124,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "The synchronization path checks endpoint and key together and writes state on missing configuration. Provider identity and final status are unverified.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 124
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "AI_CITATION_API_URL",
+      "provider": "AI citation integration",
+      "purpose": "Configured endpoint for AI-citation synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 139,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 123,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "The synchronization path checks endpoint and key together and writes state on missing configuration. Provider identity and final status are unverified.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 123
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "AI_MODEL",
+      "provider": "OpenAI routing",
+      "purpose": "AI model-selection override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 62,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 41,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 64,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/provider.ts",
+          "line": 502,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 56,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "Settings can prefer a stored model; getProvider accepts a recognized model or falls back to DEFAULT_OPENAI_MODEL. Dynamic task-model environment aliases remain unresolved.",
+        "evidence": {
+          "path": "lib/ai/provider.ts",
+          "line": 502
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "provider": "Anthropic setting",
+      "purpose": "Credential retained in AI configuration and readiness displays.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 60,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/guardian/settings/page.tsx",
+          "line": 67,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/ai/health/coach/route.ts",
+          "line": 22,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 32,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 57,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 59,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 114,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 116,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 184,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 186,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/scam-ai.ts",
+          "line": 74,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/scam-ai.ts",
+          "line": 93,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/scam-ai.ts",
+          "line": 95,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Configuration/status reads are evidenced. The inspected provider factory creates an OpenAIProvider; active Anthropic request usage is not established.",
+        "evidence": {
+          "path": "lib/ai/settings.ts",
+          "line": 32
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "APPLE_CALDAV_BASE_URL",
+      "provider": "Apple CalDAV",
+      "purpose": "CalDAV endpoint override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/apple.ts",
+          "line": 37,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The provider defines a literal endpoint fallback.",
+        "evidence": {
+          "path": "lib/sync/providers/apple.ts",
+          "line": 37
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "APPLE_SYNC_ENABLED",
+      "provider": "Apple CalDAV",
+      "purpose": "Apple sync configuration gate.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/apple.ts",
+          "line": 47,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "isAppleSyncConfigured compares this variable to a literal. The enabled literal and actual configured state are not reproduced.",
+        "evidence": {
+          "path": "lib/sync/providers/apple.ts",
+          "line": 47
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "APPLY_RELEASE",
+      "provider": "Release workflow",
+      "purpose": "Workflow condition selecting an apply branch.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 29,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 39,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "A workflow condition compares this binding to a literal. Input defaults and downstream authorization are unverified; release execution remains held.",
+        "evidence": {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 39
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "BING_WEBMASTER_API_KEY",
+      "provider": "Bing Webmaster",
+      "purpose": "Credential for webmaster synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 138,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 98,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "The captured missing-key branch writes synchronization state. Its precise final status and return behavior are not established by the bounded context.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 98
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CAP_SERVER_URL",
+      "provider": "unverified",
+      "purpose": "unverified: name appears in the example, but a purpose-defining consumer was not captured.",
+      "purposeStatus": "unverified",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 169,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "No purpose-defining source consumer was captured within the bounded allowed scan.",
+        "evidence": null
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CHILD_LOGIN_SECRET",
+      "provider": "Bubaly authentication",
+      "purpose": "Secret used by child-login configuration and sign-in.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 32,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/dashboard/family-access/page.tsx",
+          "line": 38,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/family/child-login-actions.ts",
+          "line": 18,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(auth)/actions.ts",
+          "line": 62,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-operation",
+        "observation": "childSignInAction returns an unsuccessful result when the secret is missing.",
+        "evidence": {
+          "path": "app/(auth)/actions.ts",
+          "line": 62
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CI",
+      "provider": "CI / local script guard",
+      "purpose": "CI-mode input and workflow binding.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 92,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 129,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/ci-dedupe-migration-versions.mjs",
+          "line": 83,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "The migration-version helper exits when CI is absent and dry-run is not selected. Other CI uses do not establish a global application requirement.",
+        "evidence": {
+          "path": "scripts/ci-dedupe-migration-versions.mjs",
+          "line": 83
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CONTACT_CENTER_INBOUND_SECRET",
+      "provider": "Bubaly contact center",
+      "purpose": "Shared secret checked by inbound-email authorization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/api/contact-center/email/route.ts",
+          "line": 29,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "When absent, authorization depends on NODE_ENV rather than failing uniformly. The mode literal and complete deployment behavior are not documented from the value-suppressed extract.",
+        "evidence": {
+          "path": "app/api/contact-center/email/route.ts",
+          "line": 29
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CONTACT_INBOX",
+      "provider": "Bubaly contact form",
+      "purpose": "Destination mailbox configuration for contact submissions.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 77,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/contact/route.ts",
+          "line": 42,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The contact route provides a literal fallback destination. No destination value or delivery was inspected.",
+        "evidence": {
+          "path": "app/api/contact/route.ts",
+          "line": 42
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CRON_BASE_URL",
+      "provider": "Bubaly scheduled jobs",
+      "purpose": "Base URL for the cron-dispatch script.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 57,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/cron-dispatch.mjs",
+          "line": 134,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The script supplies a fallback base URL. This inventory does not authorize dispatching to any endpoint.",
+        "evidence": {
+          "path": "scripts/cron-dispatch.mjs",
+          "line": 134
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "CRON_SECRET",
+      "provider": "Bubaly scheduled jobs",
+      "purpose": "Scheduled-request authorization and Guardian fallback credential.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 152,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 56,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 55,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/escalate/route.ts",
+          "line": 23,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/cron-auth.ts",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/cron-dispatch.mjs",
+          "line": 133,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "hasCronAuthorization requires a nonempty secret; cron-dispatch returns before dispatch when missing. Guardian escalation can use it as an alternative secret.",
+        "evidence": {
+          "path": "lib/server/cron-auth.ts",
+          "line": 5
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "E2E_ALLOW_REMOTE_SUPABASE",
+      "provider": "unverified",
+      "purpose": "unverified: name appears in the example, but a purpose-defining consumer was not captured.",
+      "purposeStatus": "unverified",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 148,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "No purpose-defining source consumer was captured within the bounded allowed scan.",
+        "evidence": null
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "E2E_AUTHENTICATED",
+      "provider": "CI E2E configuration",
+      "purpose": "Authenticated-test environment binding in the CI workflow.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 145,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 186,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The workflow declares the binding. Test consumers are outside the requested source scope; authentication behavior and requiredness are unverified.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 186
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "E2E_AUTH_EMAIL",
+      "provider": "CI E2E configuration",
+      "purpose": "Authenticated-test environment binding in the CI workflow.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 146,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 187,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The workflow declares the binding. Test consumers are outside the requested source scope; authentication behavior and requiredness are unverified.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 187
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "E2E_AUTH_PASSWORD",
+      "provider": "CI E2E configuration",
+      "purpose": "Authenticated-test environment binding in the CI workflow.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 147,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 188,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The workflow declares the binding. Test consumers are outside the requested source scope; authentication behavior and requiredness are unverified.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 188
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "EMAIL_FROM",
+      "provider": "Resend / Bubaly email",
+      "purpose": "Sender-address configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 75,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/email.ts",
+          "line": 21,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "FROM_EMAIL provides a literal fallback; no sender value or verified-domain state was inspected.",
+        "evidence": {
+          "path": "lib/email.ts",
+          "line": 21
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "EXPO_NO_TELEMETRY",
+      "provider": "CI / Expo configuration",
+      "purpose": "Telemetry-related CI environment binding.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 93,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The workflow declares this name. Downstream Expo consumption and actual telemetry behavior were not inspected.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 93
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "FCM_SERVER_KEY",
+      "provider": "Firebase Cloud Messaging",
+      "purpose": "Credential for the FCM sending path.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 165,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/server/push.ts",
+          "line": 42,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/push.ts",
+          "line": 46,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "fcmConfigured checks presence and sendFcm returns false when no key is available.",
+        "evidence": {
+          "path": "lib/server/push.ts",
+          "line": 46
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GIPHY_API_KEY",
+      "provider": "Giphy",
+      "purpose": "Server credential for GIF search.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 132,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/gif/search/route.ts",
+          "line": 26,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-operation",
+        "observation": "The GIF search route returns 503 when the key is missing.",
+        "evidence": {
+          "path": "app/api/gif/search/route.ts",
+          "line": 26
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GITHUB_ENV",
+      "provider": "GitHub Actions workflow",
+      "purpose": "Environment-export handoff variable referenced by CI shell commands.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 147,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 148,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 149,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 150,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 151,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 152,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Workflow commands reference the variable while exporting environment bindings. Its path value and runner state were never read.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 147
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GITHUB_FEEDBACK_REPO",
+      "provider": "GitHub feedback integration",
+      "purpose": "Target-repository configuration or alias for feedback integration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/integrations/github.ts",
+          "line": 20,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "githubRepo prefers GITHUB_FEEDBACK_REPO, then GITHUB_REPO, then a literal fallback. No configured repository value was inspected.",
+        "evidence": {
+          "path": "lib/integrations/github.ts",
+          "line": 20
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GITHUB_FEEDBACK_TOKEN",
+      "provider": "GitHub feedback integration",
+      "purpose": "Authentication credential or alias for the feedback integration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/integrations/github.ts",
+          "line": 17,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "githubToken prefers GITHUB_TOKEN, then GITHUB_FEEDBACK_TOKEN, then a literal fallback. No GitHub secret store or account was accessed.",
+        "evidence": {
+          "path": "lib/integrations/github.ts",
+          "line": 17
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GITHUB_REPO",
+      "provider": "GitHub feedback integration",
+      "purpose": "Target-repository configuration or alias for feedback integration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/integrations/github.ts",
+          "line": 20,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "githubRepo prefers GITHUB_FEEDBACK_REPO, then GITHUB_REPO, then a literal fallback. No configured repository value was inspected.",
+        "evidence": {
+          "path": "lib/integrations/github.ts",
+          "line": 20
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GITHUB_TOKEN",
+      "provider": "GitHub feedback integration",
+      "purpose": "Authentication credential or alias for the feedback integration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "lib/integrations/github.ts",
+          "line": 17,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "githubToken prefers GITHUB_TOKEN, then GITHUB_FEEDBACK_TOKEN, then a literal fallback. No GitHub secret store or account was accessed.",
+        "evidence": {
+          "path": "lib/integrations/github.ts",
+          "line": 17
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_CLIENT_ID",
+      "provider": "Google OAuth",
+      "purpose": "Legacy OAuth client identifier and Google Sync fallback.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 97,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 52,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 12,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 29,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 49,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 28,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "Legacy OAuth construction consumes it directly; Google Sync can use it when GOOGLE_SYNC_CLIENT_ID is absent. End-to-end configuration validation is unverified.",
+        "evidence": {
+          "path": "lib/google.ts",
+          "line": 12
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_CLIENT_SECRET",
+      "provider": "Google OAuth",
+      "purpose": "Legacy OAuth token-exchange credential and Google Sync fallback.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 98,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/google.ts",
+          "line": 30,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 50,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 31,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "Legacy token requests consume it; Google Sync falls back to it from GOOGLE_SYNC_CLIENT_SECRET. End-to-end missing-credential handling is unverified.",
+        "evidence": {
+          "path": "lib/google.ts",
+          "line": 30
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN",
+      "provider": "Google Search Console",
+      "purpose": "Preferred direct credential for search-console synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 137,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 38,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "tokenForGoogle prefers this input and otherwise considers the legacy key. Overall provider-sync requiredness is unverified.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 38
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SEARCH_CONSOLE_KEY",
+      "provider": "Google Search Console",
+      "purpose": "Legacy search-console credential input and settings readiness indicator.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 136,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/marketing/settings/page.tsx",
+          "line": 22,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 40,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "The provider considers it after the direct access token and accepts only a format-conditioned value. Accepted values and account state were not inspected.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 40
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_CALENDAR_READONLY_SCOPE",
+      "provider": "Google Sync",
+      "purpose": "Inputs to the Google synchronization scope builder.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 117,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 44,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The scope builder reads and combines configured inputs. Effective scopes, provider consent and missing-input behavior beyond the captured context are unverified.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 44
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_CALENDAR_SCOPES",
+      "provider": "Google Sync",
+      "purpose": "Inputs to the Google synchronization scope builder.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 116,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 43,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The scope builder reads and combines configured inputs. Effective scopes, provider consent and missing-input behavior beyond the captured context are unverified.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 43
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_CLIENT_ID",
+      "provider": "Google Sync",
+      "purpose": "Dedicated OAuth client identifier for calendar/task synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 111,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 28,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "The helper falls back to GOOGLE_CLIENT_ID and then a literal fallback. A valid effective configuration was not tested.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 28
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_CLIENT_SECRET",
+      "provider": "Google Sync",
+      "purpose": "Dedicated OAuth credential for calendar/task synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 112,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 31,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "The helper falls back to GOOGLE_CLIENT_SECRET and then a literal fallback. A valid effective configuration was not tested.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 31
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_REDIRECT_URI",
+      "provider": "Google Sync",
+      "purpose": "OAuth redirect override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 113,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 38,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The redirect helper supplies a fallback; no redirect value or provider registration was inspected.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 38
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GOOGLE_SYNC_TASKS_SCOPES",
+      "provider": "Google Sync",
+      "purpose": "Inputs to the Google synchronization scope builder.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 118,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/google.ts",
+          "line": 45,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The scope builder reads and combines configured inputs. Effective scopes, provider consent and missing-input behavior beyond the captured context are unverified.",
+        "evidence": {
+          "path": "lib/sync/providers/google.ts",
+          "line": 45
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "GUARDIAN_INTERNAL_SECRET",
+      "provider": "Bubaly Guardian",
+      "purpose": "Authorization secret for internal Guardian escalation.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 33,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/guardian/escalate/route.ts",
+          "line": 23,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Guardian escalation falls back to CRON_SECRET and returns 401 if no effective secret or matching authorization is present.",
+        "evidence": {
+          "path": "app/api/guardian/escalate/route.ts",
+          "line": 23
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "INTERNAL_SECRET",
+      "provider": "Bubaly internal services",
+      "purpose": "Internal-request authorization secret and unsubscribe-signing fallback.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 79,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/unsubscribe.ts",
+          "line": 9,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/cron-auth.ts",
+          "line": 9,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "hasInternalSecret returns false without a secret. Marketing unsubscribe signing can use this as a fallback to MARKETING_UNSUB_SECRET.",
+        "evidence": {
+          "path": "lib/server/cron-auth.ts",
+          "line": 9
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MARKETING_UNSUB_SECRET",
+      "provider": "Bubaly marketing",
+      "purpose": "Unsubscribe-signing secret.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 85,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/unsubscribe.ts",
+          "line": 8,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Signing falls back through INTERNAL_SECRET and SUPABASE_SERVICE_ROLE_KEY. A NODE_ENV-conditioned error branch exists when all are absent; no fallback secret values are reproduced.",
+        "evidence": {
+          "path": "lib/marketing/unsubscribe.ts",
+          "line": 8
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MICROSOFT_SYNC_CLIENT_ID",
+      "provider": "Microsoft Sync",
+      "purpose": "OAuth application identifier.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 124,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 30,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The client-ID helper has a literal fallback. Complete configuration validation and provider behavior were not captured.",
+        "evidence": {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 30
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MICROSOFT_SYNC_CLIENT_SECRET",
+      "provider": "Microsoft Sync",
+      "purpose": "OAuth client credential.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 125,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 33,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The client-secret helper has a literal fallback. Complete configuration validation and provider behavior were not captured.",
+        "evidence": {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 33
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MICROSOFT_SYNC_REDIRECT_URI",
+      "provider": "Microsoft Sync",
+      "purpose": "OAuth redirect override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 128,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 39,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The redirect helper supplies a fallback; no provider registration was inspected.",
+        "evidence": {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 39
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MICROSOFT_SYNC_SCOPES",
+      "provider": "Microsoft Sync",
+      "purpose": "OAuth synchronization scope override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 129,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 43,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The scope helper falls back to DEFAULT_SCOPES. Exact scopes and consent were not inspected as configured values.",
+        "evidence": {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 43
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "MICROSOFT_SYNC_TENANT",
+      "provider": "Microsoft Sync",
+      "purpose": "OAuth authority tenant selector.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 126,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 24,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "Authority construction uses an environment value or literal fallback.",
+        "evidence": {
+          "path": "lib/sync/providers/microsoft.ts",
+          "line": 24
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_APP_URL",
+      "provider": "Bubaly application",
+      "purpose": "Application origin used in links, callbacks and local test-runner configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 27,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 63,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 62,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/billing/change-plan/route.ts",
+          "line": 121,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/billing/checkout/route.ts",
+          "line": 77,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/billing/portal/route.ts",
+          "line": 39,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/sms/route.ts",
+          "line": 17,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/voice/route.ts",
+          "line": 17,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/voice/transcription/route.ts",
+          "line": 17,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/cron/admin-digest/route.ts",
+          "line": 51,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/google/calendar/callback/route.ts",
+          "line": 29,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/escalate/route.ts",
+          "line": 16,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/escalate/twiml/route.ts",
+          "line": 10,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/sms/route.ts",
+          "line": 17,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/voice/route.ts",
+          "line": 21,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/whatsapp/route.ts",
+          "line": 18,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/screen/route.ts",
+          "line": 22,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/status/voicemail/route.ts",
+          "line": 15,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/contact-center/server.ts",
+          "line": 14,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/email.ts",
+          "line": 25,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/feedback/notify.ts",
+          "line": 16,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 13,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "lib/google.ts",
+          "line": 31,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 10,
+          "kind": "source-binding-or-alias-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-in-observed-fallbacks",
+        "observation": "Multiple inspected consumers provide a fallback. Email URL selection falls back through NEXT_PUBLIC_SITE_URL. This does not prove every URL-dependent journey works without configuration.",
+        "evidence": {
+          "path": "lib/email.ts",
+          "line": 25
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_BUILD_ID",
+      "provider": "Build diagnostics",
+      "purpose": "Public build identifier used on the display error screen.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/(app)/display/error.tsx",
+          "line": 21,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-display-override",
+        "observation": "The error screen prefers the commit identifier, then NEXT_PUBLIC_BUILD_ID, then a literal fallback. No current identifier value was inspected.",
+        "evidence": {
+          "path": "app/(app)/display/error.tsx",
+          "line": 21
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_SITE_URL",
+      "provider": "Bubaly marketing",
+      "purpose": "Site origin used in marketing URLs and provider synchronization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 28,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/marketing/reviews/page.tsx",
+          "line": 14,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/marketing/surveys/[id]/page.tsx",
+          "line": 18,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(marketing)/blog/[slug]/page.tsx",
+          "line": 13,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(marketing)/blog/page.tsx",
+          "line": 24,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "app/(marketing)/lp/[slug]/page.tsx",
+          "line": 54,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "app/(marketing)/lp/[slug]/page.tsx",
+          "line": 59,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "app/layout.tsx",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/onboarding/actions.ts",
+          "line": 492,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/onboarding/actions.ts",
+          "line": 692,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/robots.ts",
+          "line": 3,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/sitemap.ts",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/email.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 32,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/public-pages.tsx",
+          "line": 10,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/seo.ts",
+          "line": 10,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Several URL consumers have fallbacks, but provider-sync siteUrl throws when this variable is missing.",
+        "evidence": {
+          "path": "lib/marketing/provider-sync.ts",
+          "line": 32
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+      "provider": "Stripe",
+      "purpose": "Client publishable-key configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 38,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/stripe/settings.ts",
+          "line": 34,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-environment-fallback",
+        "observation": "effectivePublishableKey prefers a stored setting, then this variable, then null. Downstream missing-key behavior is unverified.",
+        "evidence": {
+          "path": "lib/stripe/settings.ts",
+          "line": 34
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "provider": "Supabase",
+      "purpose": "Public anonymous client key for browser/server clients and selected tooling.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 10,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 61,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 148,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "app/api/health/route.ts",
+          "line": 28,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/blog/posts.ts",
+          "line": 47,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/aeo.ts",
+          "line": 28,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/seo.ts",
+          "line": 15,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/stats.ts",
+          "line": 14,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/bearer.ts",
+          "line": 27,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/client.ts",
+          "line": 8,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/server.ts",
+          "line": 11,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-auth.mjs",
+          "line": 50,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-schema.mjs",
+          "line": 106,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 15,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 13,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 14,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-platform.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-public-access.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Client factories use a TypeScript non-null assertion, not runtime validation. Tooling can select alternative keys; global requiredness is not established.",
+        "evidence": {
+          "path": "lib/supabase/client.ts",
+          "line": 8
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "provider": "Supabase",
+      "purpose": "Publishable-key probe input and CI environment binding.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 150,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 17,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The probe reads a fallback value and CI exports the name. Primary application adoption and missing-key validation were not established.",
+        "evidence": {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 17
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_SUPABASE_URL",
+      "provider": "Supabase",
+      "purpose": "Database API URL for browser/server clients and tooling.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 9,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 60,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 147,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 26,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 40,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 48,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 61,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/users/page.tsx",
+          "line": 66,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/feedback/feedback-attachment-upload.tsx",
+          "line": 42,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/feedback/feedback-attachment-upload.tsx",
+          "line": 55,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/health/route.ts",
+          "line": 27,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/sitemap.ts",
+          "line": 60,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/blog/posts.ts",
+          "line": 46,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/aeo.ts",
+          "line": 27,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/seo.ts",
+          "line": 14,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/stats.ts",
+          "line": 13,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/storage/marketplace-photos.ts",
+          "line": 39,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/bearer.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/client.ts",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/server.ts",
+          "line": 10,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/server.ts",
+          "line": 33,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-auth.mjs",
+          "line": 49,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-schema.mjs",
+          "line": 102,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-asset-provenance.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-coverage.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-image-provenance.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-pages.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 13,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 11,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 12,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 47,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-assets-remote.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-coverage-remote.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-platform.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-public-access.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-runtime-remote.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Client factories pass it without a local runtime guard. Seed tooling requires this URL or SUPABASE_URL; schema-audit tooling also guards the URL.",
+        "evidence": {
+          "path": "lib/supabase/client.ts",
+          "line": 7
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_VAPID_PUBLIC_KEY",
+      "provider": "Web Push / VAPID",
+      "purpose": "Public key for push subscription and server VAPID configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 158,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/push/web-client.ts",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/push.ts",
+          "line": 24,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Server VAPID initialization checks both public and private keys; the browser helper also exposes this public key input. Delivery was not exercised.",
+        "evidence": {
+          "path": "lib/server/push.ts",
+          "line": 24
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
+      "provider": "Build diagnostics",
+      "purpose": "Public build identifier used on the display error screen.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Public-prefixed name; actual exposure depends on consumer/build usage.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/(app)/display/error.tsx",
+          "line": 20,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-display-override",
+        "observation": "The error screen prefers the commit identifier, then NEXT_PUBLIC_BUILD_ID, then a literal fallback. No current identifier value was inspected.",
+        "evidence": {
+          "path": "app/(app)/display/error.tsx",
+          "line": 20
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NODE_ENV",
+      "provider": "Bubaly / runtime",
+      "purpose": "Runtime-mode input to authorization, fallback and diagnostic branches.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 60,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/system/page.tsx",
+          "line": 83,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/email/route.ts",
+          "line": 30,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/sms/route.ts",
+          "line": 34,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/voice/route.ts",
+          "line": 29,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/contact-center/voice/transcription/route.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/google/calendar/auth/route.ts",
+          "line": 20,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/escalate/twiml/route.ts",
+          "line": 17,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/sms/route.ts",
+          "line": 25,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/voice/route.ts",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/inbound/whatsapp/route.ts",
+          "line": 32,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/screen/route.ts",
+          "line": 36,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/guardian/status/voicemail/route.ts",
+          "line": 27,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/sync/[provider]/auth/route.ts",
+          "line": 36,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/sync/google/auth/route.ts",
+          "line": 24,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/unsubscribe.ts",
+          "line": 12,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional-unverified",
+        "observation": "Inspected consumers use different mode-dependent branches. Global absence behavior and configured mode are unverified.",
+        "evidence": {
+          "path": "app/api/contact-center/email/route.ts",
+          "line": 30
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "NODE_OPTIONS",
+      "provider": "CI / Node configuration",
+      "purpose": "Node runtime-options binding in CI.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 41,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 56,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 185,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The workflow declares this binding; option values and runner behavior were not inspected.",
+        "evidence": {
+          "path": ".github/workflows/ci.yml",
+          "line": 41
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "provider": "OpenAI",
+      "purpose": "AI credential used by provider resolution, readiness checks and embeddings.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 59,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 40,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/guardian/settings/page.tsx",
+          "line": 67,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/ai/flyer/route.ts",
+          "line": 110,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/ai/health/coach/route.ts",
+          "line": 22,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/ai/pantry-chef/route.ts",
+          "line": 138,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/provider.ts",
+          "line": 212,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/provider.ts",
+          "line": 496,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/provider.ts",
+          "line": 503,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/provider.ts",
+          "line": 532,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/routing.ts",
+          "line": 137,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 33,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 47,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 58,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 60,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/chores/ai.ts",
+          "line": 39,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 124,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/ai-screen.ts",
+          "line": 127,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "lib/guardian/scam-ai.ts",
+          "line": 74,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/platform.ts",
+          "line": 331,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/health.ts",
+          "line": 63,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-runtime-remote.mjs",
+          "line": 37,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Settings/provider paths can prefer stored credentials. The embeddings helper throws without an effective key. No credential store or provider account was accessed.",
+        "evidence": {
+          "path": "lib/marketing/platform.ts",
+          "line": 331
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "OPENAI_EMBEDDING_MODEL",
+      "provider": "OpenAI",
+      "purpose": "Embedding-model override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 141,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/marketing/platform.ts",
+          "line": 333,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The embeddings helper provides a literal model fallback.",
+        "evidence": {
+          "path": "lib/marketing/platform.ts",
+          "line": 333
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "OPENAI_TRANSCRIBE_MODEL",
+      "provider": "OpenAI",
+      "purpose": "Voice-transcription model override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 65,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/ai/voice/transcribe/route.ts",
+          "line": 51,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The transcription route provides a literal model fallback.",
+        "evidence": {
+          "path": "app/api/ai/voice/transcribe/route.ts",
+          "line": 51
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "OPENAI_TTS_MODEL",
+      "provider": "OpenAI",
+      "purpose": "Speech-synthesis model override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 67,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/ai/voice/speak/route.ts",
+          "line": 40,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The speech route provides a literal model fallback.",
+        "evidence": {
+          "path": "app/api/ai/voice/speak/route.ts",
+          "line": 40
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "OPENAI_TTS_VOICE",
+      "provider": "OpenAI",
+      "purpose": "Speech voice input passed to voice normalization.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 68,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/ai/voice/speak/route.ts",
+          "line": 47,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "A request voice takes precedence over the environment input. The normalizer's missing-input contract was not captured.",
+        "evidence": {
+          "path": "app/api/ai/voice/speak/route.ts",
+          "line": 47
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "PLAYWRIGHT_EXTERNAL_SERVER",
+      "provider": "Local E2E runner",
+      "purpose": "Child-process environment binding in the E2E launcher.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 9,
+          "kind": "source-binding-or-alias-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The runner sets the binding, but the downstream consumer is outside the captured source evidence.",
+        "evidence": {
+          "path": "scripts/run-e2e.mjs",
+          "line": 9
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "PLAYWRIGHT_PORT",
+      "provider": "Local E2E runner",
+      "purpose": "Port input forwarded to the E2E child environment.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 144,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 5,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 8,
+          "kind": "source-binding-or-alias-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "run-e2e provides a literal fallback port.",
+        "evidence": {
+          "path": "scripts/run-e2e.mjs",
+          "line": 5
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "PLAYWRIGHT_SKIP_BUILD",
+      "provider": "Local E2E runner",
+      "purpose": "Build-step control for the E2E launcher.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 77,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-switch",
+        "observation": "The runner executes its build branch unless the variable equals a literal. The switch value is omitted and no build ran.",
+        "evidence": {
+          "path": "scripts/run-e2e.mjs",
+          "line": 77
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "RESEND_API_KEY",
+      "provider": "Resend",
+      "purpose": "Email API credential and email-readiness input.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 72,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/marketing/email/page.tsx",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/marketing/settings/page.tsx",
+          "line": 18,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 50,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/email.ts",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/email.ts",
+          "line": 12,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/send.ts",
+          "line": 107,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "lib/server/email.ts",
+          "line": 19,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "lib/server/health.ts",
+          "line": 55,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "emailEnabled returns its presence and getResend passes it to the client. Complete missing-key behavior across all sending callers is unverified.",
+        "evidence": {
+          "path": "lib/email.ts",
+          "line": 7
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "RESEND_WEBHOOK_SECRET",
+      "provider": "Resend",
+      "purpose": "Webhook signature-verification secret.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 82,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 54,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/webhooks/resend/route.ts",
+          "line": 19,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-verification",
+        "observation": "The webhook verifier returns false when this secret is missing.",
+        "evidence": {
+          "path": "app/api/webhooks/resend/route.ts",
+          "line": 19
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "ROUTE",
+      "provider": "Cron workflow",
+      "purpose": "Optional route selector forwarded to the cron-dispatch script.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 58,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 60,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 61,
+          "kind": "workflow-name-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-filter",
+        "observation": "The workflow forwards a route argument only when the binding is nonempty.",
+        "evidence": {
+          "path": ".github/workflows/cron-dispatch.yml",
+          "line": 60
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SEATGEEK_CLIENT_ID",
+      "provider": "SeatGeek",
+      "purpose": "Server-side credential/identifier enabling SeatGeek discovery.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 134,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/weekend/discover/route.ts",
+          "line": 68,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-provider-branch",
+        "observation": "The discovery route enters this provider branch only when the identifier is present. Treat as a private integration credential conservatively.",
+        "evidence": {
+          "path": "app/api/weekend/discover/route.ts",
+          "line": 68
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SEED_CONFIRM_FAMILY_ID",
+      "provider": "Bubaly seed tooling",
+      "purpose": "Confirmation of the intended seed-family target.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 18,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 29,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-operation",
+        "observation": "requireEnv rejects absence; requireSeedScope rejects a confirmation that differs from the target family ID.",
+        "evidence": {
+          "path": "scripts/seed-client.mjs",
+          "line": 29
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SEED_CREATED_BY_USER_ID",
+      "provider": "unverified",
+      "purpose": "unverified: name appears in the example, but a purpose-defining consumer was not captured.",
+      "purposeStatus": "unverified",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 19,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "No purpose-defining source consumer was captured within the bounded allowed scan.",
+        "evidence": null
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SEED_ENVIRONMENT",
+      "provider": "Bubaly seed tooling",
+      "purpose": "Explicit seed-environment safety selector.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 16,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 23,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-operation",
+        "observation": "requireEnv rejects absence and requireSeedScope checks an allowlist. No allowed values are reproduced and no seeding was performed.",
+        "evidence": {
+          "path": "scripts/seed-client.mjs",
+          "line": 23
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SEED_FAMILY_ID",
+      "provider": "Bubaly seed tooling",
+      "purpose": "Explicit family target for seed operations.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 17,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 28,
+          "kind": "environment-helper-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-operation",
+        "observation": "requireUuid delegates to requireEnv and UUID validation; the captured seed scope uses this name.",
+        "evidence": {
+          "path": "scripts/seed-client.mjs",
+          "line": 28
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_MONEY_WEBHOOK_SECRET",
+      "provider": "Stripe",
+      "purpose": "Dedicated signature-verification secret for the money webhook.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 45,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/money/route.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe/capabilities.ts",
+          "line": 117,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "The money webhook falls back to STRIPE_WEBHOOK_SECRET and returns 503 when neither is available.",
+        "evidence": {
+          "path": "app/api/webhooks/money/route.ts",
+          "line": 26
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_BASIC_ANNUAL",
+      "provider": "Stripe",
+      "purpose": "Subscription-plan price identifier and legacy/current plan alias.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 49,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 28,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 37,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Basic and family identifiers fall back to one another in the plan map. The webhook also compares identifiers; valid configured prices and checkout readiness are unverified.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 31
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_BASIC_MONTHLY",
+      "provider": "Stripe",
+      "purpose": "Subscription-plan price identifier and legacy/current plan alias.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 48,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 27,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 30,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 36,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Basic and family identifiers fall back to one another in the plan map. The webhook also compares identifiers; valid configured prices and checkout readiness are unverified.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 30
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_FAMILY_ANNUAL",
+      "provider": "Stripe",
+      "purpose": "Subscription-plan price identifier and legacy/current plan alias.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 55,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 31,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 37,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Basic and family identifiers fall back to one another in the plan map. The webhook also compares identifiers; valid configured prices and checkout readiness are unverified.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 31
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_FAMILY_MONTHLY",
+      "provider": "Stripe",
+      "purpose": "Subscription-plan price identifier and legacy/current plan alias.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 54,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 30,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 30,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 36,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Basic and family identifiers fall back to one another in the plan map. The webhook also compares identifiers; valid configured prices and checkout readiness are unverified.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 30
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_PLUS_ANNUAL",
+      "provider": "Stripe",
+      "purpose": "Plus subscription-plan price identifier.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 51,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 33,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The plan map reads the identifier with a literal fallback and the webhook compares it. A usable price and missing-configuration checkout behavior were not established.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 33
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_PRICE_PLUS_MONTHLY",
+      "provider": "Stripe",
+      "purpose": "Plus subscription-plan price identifier.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 50,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 25,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 32,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The plan map reads the identifier with a literal fallback and the webhook compares it. A usable price and missing-configuration checkout behavior were not established.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 32
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_SECRET_KEY",
+      "provider": "Stripe",
+      "purpose": "Server-side payment API credential.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Server payment API credential; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 37,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/marketing/settings/page.tsx",
+          "line": 21,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 49,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/admin/stripe/page.tsx",
+          "line": 104,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/server/health.ts",
+          "line": 44,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe.ts",
+          "line": 10,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe/capabilities.ts",
+          "line": 116,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe/settings.ts",
+          "line": 24,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "getStripe throws if the environment key is absent; effectiveSecretKey in the settings helper can instead prefer a stored setting. Requiredness differs by caller.",
+        "evidence": {
+          "path": "lib/stripe.ts",
+          "line": 6
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "provider": "Stripe",
+      "purpose": "Signature-verification secret for the subscription webhook and money-webhook fallback.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 40,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/webhooks/money/route.ts",
+          "line": 26,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 105,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe/capabilities.ts",
+          "line": 117,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/stripe/settings.ts",
+          "line": 29,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-subscription-webhook",
+        "observation": "The subscription webhook returns 503 when this environment secret is absent. A separate settings helper supports stored values; that does not establish use by this route.",
+        "evidence": {
+          "path": "app/api/webhooks/stripe/route.ts",
+          "line": 105
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_ACCESS_TOKEN",
+      "provider": "Supabase",
+      "purpose": "Management credential passed to migration-state and forward-release tooling.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 24,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 38,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 60,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-schema-audit.yml",
+          "line": 19,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/apply-production-forward-release.mjs",
+          "line": 224,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-production-migration-state.mjs",
+          "line": 101,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Source passes the token into administrative operations; the complete validator was not captured. No administrative script was executed.",
+        "evidence": {
+          "path": "scripts/audit-production-migration-state.mjs",
+          "line": 101
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_ANON_KEY",
+      "provider": "Supabase",
+      "purpose": "Alternative anonymous API key in schema/public-access tooling.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 28,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 42,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 63,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/audit-supabase-schema.mjs",
+          "line": 107,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-public-access.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Schema audit selects service-role, public-anon, then this alias; the public-access script prefers this alias over NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        "evidence": {
+          "path": "scripts/audit-supabase-schema.mjs",
+          "line": 107
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_PROJECT_REF",
+      "provider": "Supabase",
+      "purpose": "Project selector passed to migration-state and release tooling.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 25,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 26,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 39,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 40,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 61,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 73,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-schema-audit.yml",
+          "line": 20,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/apply-production-forward-release.mjs",
+          "line": 223,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-production-migration-state.mjs",
+          "line": 100,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Administrative scripts and workflow declarations reference this selector. Requiredness and target safeguards beyond captured references are unverified.",
+        "evidence": {
+          "path": "scripts/audit-production-migration-state.mjs",
+          "line": 100
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_SECRET_KEY",
+      "provider": "Supabase",
+      "purpose": "Secret-key probe input and CI environment binding.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 146,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 151,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 18,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The probe and CI reference the name. Requiredness and missing-key behavior outside the captured reads are unverified.",
+        "evidence": {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 18
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "provider": "Supabase",
+      "purpose": "Privileged server and administrative-script credential.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 11,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 62,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 145,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 149,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-forward-release.yml",
+          "line": 27,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 41,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": ".github/workflows/supabase-production-migrations.yml",
+          "line": 62,
+          "kind": "workflow-name-reference"
+        },
+        {
+          "path": "app/(app)/admin/users/page.tsx",
+          "line": 63,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/sitemap.ts",
+          "line": 60,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/marketing/unsubscribe.ts",
+          "line": 10,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/supabase/server.ts",
+          "line": 34,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-auth.mjs",
+          "line": 51,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/audit-supabase-schema.mjs",
+          "line": 105,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-asset-provenance.mjs",
+          "line": 8,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-coverage.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-image-provenance.mjs",
+          "line": 8,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/backfill-marketing-pages.mjs",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/probe-supabase-rest.mjs",
+          "line": 16,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 15,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "scripts/run-e2e.mjs",
+          "line": 16,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 50,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-assets-remote.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-coverage-remote.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-platform.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-public-access.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        },
+        {
+          "path": "scripts/verify-marketing-runtime-remote.mjs",
+          "line": 6,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-seed-helper",
+        "observation": "createSeedClient passes this name through requireEnv, which throws when missing. Server client construction also consumes it; other paths have different fallback behavior.",
+        "evidence": {
+          "path": "scripts/seed-client.mjs",
+          "line": 50
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPABASE_URL",
+      "provider": "Supabase",
+      "purpose": "Alternative database URL in the guarded seed client.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "scripts/seed-client.mjs",
+          "line": 47,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-alias",
+        "observation": "Seed tooling prefers NEXT_PUBLIC_SUPABASE_URL, falls back to SUPABASE_URL, and throws if neither is available.",
+        "evidence": {
+          "path": "scripts/seed-client.mjs",
+          "line": 47
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SUPER_ADMIN_EMAILS",
+      "provider": "Bubaly authorization",
+      "purpose": "Email-list input to the super-administrator allowlist helper.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 31,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/constants/super-admins.ts",
+          "line": 13,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "The helper normalizes a configured or fallback string. Complete resulting authorization behavior was not captured; do not publish this access-control configuration.",
+        "evidence": {
+          "path": "lib/constants/super-admins.ts",
+          "line": 13
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "SYNC_TOKEN_KEY",
+      "provider": "Bubaly sync encryption",
+      "purpose": "Encryption key for stored sync credentials and feed-token signing input.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 105,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 56,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/sync/crypto.ts",
+          "line": 19,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/sync/crypto.ts",
+          "line": 69,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/sync/feed-token.ts",
+          "line": 19,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "required-for-encryption",
+        "observation": "loadKey throws on absence. signFeedToken separately uses a literal fallback; uniform fail-closed behavior is not established by these differing consumers.",
+        "evidence": {
+          "path": "lib/sync/crypto.ts",
+          "line": 19
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "THEMEALDB_API_KEY",
+      "provider": "TheMealDB",
+      "purpose": "Recipe-provider key override.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 135,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/recipes/providers/themealdb.ts",
+          "line": 8,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The provider supplies a literal key fallback. Its current entitlement and provider availability were not checked.",
+        "evidence": {
+          "path": "lib/recipes/providers/themealdb.ts",
+          "line": 8
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "TICKETMASTER_API_KEY",
+      "provider": "Ticketmaster",
+      "purpose": "Credential enabling the Ticketmaster discovery branch.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 133,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/weekend/discover/route.ts",
+          "line": 50,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-provider-branch",
+        "observation": "The discovery route enters this provider branch only when the key is present.",
+        "evidence": {
+          "path": "app/api/weekend/discover/route.ts",
+          "line": 50
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "provider": "Twilio",
+      "purpose": "Account identifier consumed by Guardian and concierge-call readiness.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 88,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/guardian/settings/page.tsx",
+          "line": 64,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/concierge-calls/place/route.ts",
+          "line": 36,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 7,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 12,
+          "kind": "source-binding-or-alias-reference"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 17,
+          "kind": "source-binding-or-alias-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Concierge providerReady requires this identifier, TWILIO_AUTH_TOKEN and TWILIO_CALLER_NUMBER together. Subsequent missing-provider behavior was not fully captured.",
+        "evidence": {
+          "path": "app/api/concierge-calls/place/route.ts",
+          "line": 36
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "provider": "Twilio",
+      "purpose": "Authentication credential used by Guardian and concierge-call readiness.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 89,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/settings/page.tsx",
+          "line": 53,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/(app)/guardian/settings/page.tsx",
+          "line": 65,
+          "kind": "environment-read"
+        },
+        {
+          "path": "app/api/concierge-calls/place/route.ts",
+          "line": 36,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 8,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 12,
+          "kind": "source-binding-or-alias-reference"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Concierge readiness checks this token with account and caller configuration. Guardian constructs authentication from the account and token; no requests were sent.",
+        "evidence": {
+          "path": "lib/guardian/twilio.ts",
+          "line": 8
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "TWILIO_CALLER_NUMBER",
+      "provider": "Twilio",
+      "purpose": "Outbound concierge caller-number configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 91,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/api/concierge-calls/place/route.ts",
+          "line": 36,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Concierge providerReady requires this number with the account identifier and token.",
+        "evidence": {
+          "path": "app/api/concierge-calls/place/route.ts",
+          "line": 36
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "TWILIO_PHONE_NUMBER",
+      "provider": "Twilio",
+      "purpose": "Guardian phone-number configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 90,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "app/(app)/guardian/settings/page.tsx",
+          "line": 66,
+          "kind": "environment-read"
+        },
+        {
+          "path": "lib/guardian/twilio.ts",
+          "line": 9,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "unverified",
+        "observation": "Guardian reads a literal fallback and the settings UI checks presence. The captured context does not establish the operational requirement.",
+        "evidence": {
+          "path": "lib/guardian/twilio.ts",
+          "line": 9
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "VAPID_PRIVATE_KEY",
+      "provider": "Web Push / VAPID",
+      "purpose": "Private signing key for server push configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "secret",
+      "classificationBasis": "Conservative credential/signing/encryption classification from the variable role or name; no value inspected.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 159,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/server/push.ts",
+          "line": 25,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "conditional",
+        "observation": "Server VAPID initialization checks both public and private keys before configuring the sender.",
+        "evidence": {
+          "path": "lib/server/push.ts",
+          "line": 25
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "VAPID_SUBJECT",
+      "provider": "Web Push / VAPID",
+      "purpose": "VAPID subject/contact configuration.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 160,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/server/push.ts",
+          "line": 26,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-override",
+        "observation": "The push helper supplies a literal subject fallback. No subject value was inspected.",
+        "evidence": {
+          "path": "lib/server/push.ts",
+          "line": 26
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "VERCEL_ENV",
+      "provider": "Vercel / administration",
+      "purpose": "Environment label shown in the administration system view.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/system/page.tsx",
+          "line": 83,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-display-override",
+        "observation": "The view falls back through NODE_ENV and then a literal label.",
+        "evidence": {
+          "path": "app/(app)/admin/system/page.tsx",
+          "line": 83
+        }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "VERCEL_REGION",
+      "provider": "Vercel / administration",
+      "purpose": "Region label shown in the administration system view.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "Non-credential configuration or public key/identifier; this label does not authorize public or browser disclosure.",
+      "sensitiveConfiguration": false,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [],
+      "consumers": [
+        {
+          "path": "app/(app)/admin/system/page.tsx",
+          "line": 84,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-display-override",
+        "observation": "The view supplies a literal fallback label.",
+        "evidence": {
+          "path": "app/(app)/admin/system/page.tsx",
+          "line": 84
+        }
+      },
+      "configuredState": "not-inspected"
+    }
+  ],
+  "documentationFindings": [
+    {
+      "priority": "P1-review",
+      "topic": "Mixed key-source and missing-configuration behavior",
+      "evidence": [
+        {
+          "path": "lib/sync/crypto.ts",
+          "line": 19
+        },
+        {
+          "path": "lib/sync/feed-token.ts",
+          "line": 19
+        }
+      ],
+      "observation": "SYNC_TOKEN_KEY is guarded in the encryption loader but a separate signing path uses a literal fallback. Uniform environment policy remains unverified; no code change is made."
+    },
+    {
+      "priority": "P2-review",
+      "topic": "Inbound authorization configuration",
+      "evidence": [
+        {
+          "path": "app/api/contact-center/email/route.ts",
+          "line": 29
+        }
+      ],
+      "observation": "CONTACT_CENTER_INBOUND_SECRET is consumed by an authorization path, is absent from the observed example declarations, and has mode-dependent missing-secret behavior. Actual deployment configuration was not inspected."
+    },
+    {
+      "priority": "P2-review",
+      "topic": "Environment versus stored settings",
+      "evidence": [
+        {
+          "path": "lib/stripe.ts",
+          "line": 6
+        },
+        {
+          "path": "lib/stripe/settings.ts",
+          "line": 24
+        },
+        {
+          "path": "lib/ai/settings.ts",
+          "line": 31
+        }
+      ],
+      "observation": "Some consumers require environment inputs while other helpers prefer stored configuration. This registry does not inspect those stores or declare one global required/optional policy."
+    }
+  ],
+  "authorizedWrites": {
+    "sanitizeExisting": {
+      "path": "docs/traceability/capability-audit-01-10.json",
+      "removeFields": [
+        "repository",
+        "sourceAttachment",
+        "sourceReadDirectory"
+      ]
+    },
+    "createOnly": [
+      "docs/architecture/environment-registry.json",
+      "docs/architecture/environment-registry.md"
+    ]
+  },
+  "nextSafeAction": "Parent may review the named variables and unresolved mappings against the pending foundation matrix. Do not provision credentials, activate integrations, run release/seed scripts, change application code or access production from this registry."
+}
