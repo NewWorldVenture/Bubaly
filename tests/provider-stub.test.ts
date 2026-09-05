@@ -172,3 +172,27 @@ describe('the shipped scripts', () => {
     expect(events).toEqual(['action', 'delta']);
   });
 });
+
+describe('isAIConfigured', () => {
+  const saved = { stub: process.env.AI_PROVIDER_STUB, key: process.env.OPENAI_API_KEY, vercel: process.env.VERCEL_ENV, e2e: process.env.E2E_PROVIDER_STUB };
+  afterEach(() => {
+    for (const [k, v] of [['AI_PROVIDER_STUB', saved.stub], ['OPENAI_API_KEY', saved.key], ['VERCEL_ENV', saved.vercel], ['E2E_PROVIDER_STUB', saved.e2e]] as const) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it('counts the scripted provider as configured, so every gated surface agrees with routing', async () => {
+    const { isAIConfigured } = await import('@/lib/ai/provider');
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.VERCEL_ENV;
+    process.env.AI_PROVIDER_STUB = '1';
+    expect(await isAIConfigured()).toBe(true);
+  });
+
+  it('is false with the stub off and no key or settings client', async () => {
+    const { isAIConfigured } = await import('@/lib/ai/provider');
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.AI_PROVIDER_STUB;
+    expect(await isAIConfigured()).toBe(false);
+  });
+});

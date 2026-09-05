@@ -287,4 +287,44 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     expect(foreign.ok).toBe(true);
     if (foreign.ok) expect(foreign.data).toBeNull();
   });
+
+  it('never runs a plan for a request the intake already gave up on (the planner-deadline race)', async () => {
+    // The intake marks a request failed at its planner deadline and tells the
+    // person to try again. If the model was still thinking, its late plan must
+    // not become a live run — otherwise the retry and this plan both execute.
+    const { planRequest } = await import('@/lib/ai/planner');
+    const { buildContext } = await import('@/lib/ai/context/builder');
+    const { resolveProviderForTask } = await import('@/lib/ai/routing');
+    const late = '00000000-0000-4000-8000-00000000req9';
+    await client.from('ai_requests').insert({ id: late, family_id: FAMILY, requested_by: USER, requested_by_member_id: PARENT, kind: 'concierge', request_text: 'Plan our week', status: 'queued' });
+
+    const scripted = await resolveProviderForTask('plan');
+    // The intake's deadline fires while the model is "thinking".
+    const slow = {
+      ...scripted,
+      id: scripted.id, model: scripted.model,
+      complete: scripted.complete.bind(scripted),
+      runTools: scripted.runTools.bind(scripted),
+      runToolsStream: scripted.runToolsStream.bind(scripted),
+      structuredCompletion: async (input: Parameters<typeof scripted.structuredCompletion>[0]) => {
+        await client.from('ai_requests').update({ status: 'failed', error: 'planner_timeout' }).eq('id', late);
+        return scripted.structuredCompletion(input);
+      },
+    } as typeof scripted;
+
+    const context = await buildContext(scope(), { intent: 'plan_week', requestId: late });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+    const res = await planRequest(scope(), { requestId: late, requestText: 'Plan our week', intent: 'plan_week', context: context.data, conversationId: null }, { provider: slow, db: client, now: NOW });
+    expect(res.ok).toBe(false);
+
+    const request = db.table('ai_requests').find((r) => r.id === late);
+    expect(request?.status).toBe('failed');
+    const lateRuns = db.table('family_automation_runs').filter((r) => r.request_id === late);
+    expect(lateRuns).toHaveLength(1);
+    expect(lateRuns[0].state).toBe('cancelled');
+    expect(db.table('ai_run_events').filter((e) => e.run_id === lateRuns[0].id).map((e) => e.event_type)).toContain('cancelled');
+    // No tool ran and the household is untouched: still exactly three meal plans from the real run.
+    expect(db.table('meal_plans')).toHaveLength(3);
+  });
 });

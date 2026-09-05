@@ -51,7 +51,7 @@ export async function askBubalyAction(input: {
   const supabase = await createServer();
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) return { ok: false, error: access.status === 404 ? 'Ask Bubaly is not available for your family.' : access.error, code: access.code };
-  if (process.env.AI_PROVIDER_STUB !== '1' && !(await isAIConfigured())) {
+  if (!(await isAIConfigured())) {
     return { ok: false, error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', code: 'not_configured' };
   }
 

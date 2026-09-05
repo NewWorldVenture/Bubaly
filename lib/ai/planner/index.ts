@@ -33,7 +33,8 @@ import type { AiStepType, Database, Json } from '@/lib/database.types';
 import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/context/builder';
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
-import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
+import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, updateRequestWhereStatus, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
+import { legacyStatusFor } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
 import { scopeNow } from '@/lib/services/scope';
@@ -337,7 +338,22 @@ export async function planRequest(
       agent: template?.agent ?? null,
     } as Json,
   }, { db: ledger });
-  await updateRequest(scope, requestId, { status: 'ready', error: null }, { db: ledger });
+  // Compare-and-set, not a plain update: the intake gives up on a slow
+  // planner at its deadline, marks the request failed and tells the person
+  // to try again. If that happened while the model was still thinking, the
+  // request is no longer `planning` and the plan we just saved must never
+  // run — otherwise the retry and this late plan would both execute (twice
+  // the dinners, twice the reminders). Cancel the run so no claim can take it.
+  const claimed = await updateRequestWhereStatus(scope, requestId, 'planning', { status: 'ready', error: null }, { db: ledger });
+  if (!claimed.ok || !claimed.data) {
+    await updateRun(scope, run.data.id, { state: 'cancelled', status: legacyStatusFor('cancelled'), completed_at: now.toISOString() }, { db: ledger });
+    await appendEvent(scope, run.data.id, {
+      eventType: 'cancelled',
+      requestId,
+      message: 'Planning finished after the request had been abandoned, so nothing will run.',
+    }, { db: ledger });
+    return fail('That request was abandoned before planning finished.', { code: SERVICE_CODES.invalidInput });
+  }
 
   return ok({
     kind: 'plan',

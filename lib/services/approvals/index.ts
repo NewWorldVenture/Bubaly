@@ -81,7 +81,7 @@ export type { ApprovalCardData, EditableField, ClassifiedPayload } from '@/lib/a
 export { classifyPayload, editableFieldsFor } from '@/lib/approvals/card-data';
 
 export type DecideResult = { status: string; executed: boolean; resumedRunId: string | null; summary: string };
-export type EditResult = { status: string; resumedRunId: string | null };
+export type EditResult = { status: 'modified' | 'pending'; resumedRunId: string | null; summary?: string };
 
 /** Card data for one row; `requestedBy` is resolved by the caller so this stays pure. */
 export function toCardData(row: ApprovalRow, opts: { requestedBy: string | null; canEdit: boolean }): ApprovalCardData {
@@ -747,7 +747,32 @@ export async function editAndApprove(
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
   const prior = priorVotes(row);
+  if (prior.some((v) => v.member_id === memberId)) {
+    return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
+  }
   const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso }];
+  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
+
+  // An edit is still one vote. A two-parent rule stays a two-parent rule:
+  // record the edited payload and this approval, and wait for the rest.
+  const approvedCount = votes.filter((v) => v.decision === 'approved').length;
+  const required = Math.max(1, row.required_approvals ?? 1);
+  if (approvedCount < required) {
+    const held = await flipStatus(scope, approvalId, {
+      edited_payload: merged as Json,
+      approvals: votes as unknown as Json,
+      review_note: cleanNote ?? undefined,
+    });
+    if (!held.ok) return held;
+    if (!held.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changed.length ? changed.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, votes: votes.length, required });
+    const remaining = required - approvedCount;
+    return ok({
+      status: 'pending', resumedRunId: null,
+      summary: `Your edits and approval are recorded — ${remaining} more ${remaining === 1 ? 'person needs' : 'people need'} to approve.`,
+    });
+  }
+
   const flipped = await flipStatus(scope, approvalId, {
     status: 'modified',
     edited_payload: merged as Json,
@@ -760,7 +785,6 @@ export async function editAndApprove(
   if (!flipped.ok) return flipped;
   if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
 
-  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
   await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changed.length ? changed.join(', ') : 'nothing'} and approved.`, { changed });
 
   const done = await performApproved(scope, row, classified, merged, 'modified');

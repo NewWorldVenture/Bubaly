@@ -114,7 +114,7 @@ describe('result card components', () => {
 
   it('reads a run detail response defensively', () => {
     const fallback = runStatusCard({ runId: 'r1', status: 'queued' });
-    expect(cardFromRunDetail('r1', { run: { state: 'executing' }, plan: { reasoning_summary: 'Filling the week' }, steps: [{ state: 'completed' }, { state: 'skipped' }, { state: 'queued' }] }, fallback))
+    expect(cardFromRunDetail('r1', { run: { status: 'executing' }, plan: { reasoning_summary: 'Filling the week' }, steps: [{ status: 'completed' }, { status: 'skipped' }, { status: 'queued' }] }, fallback))
       .toMatchObject({ status: 'executing', summary: 'Filling the week', steps_done: 2, steps_total: 3, title: 'Bubaly is working on it' });
     expect(cardFromRunDetail('r1', null, fallback)).toMatchObject({ status: 'queued', steps_total: null });
     expect(cardFromRunDetail('r1', { run: { status: 'completed' }, steps: 'nope' }, fallback).status).toBe('completed');

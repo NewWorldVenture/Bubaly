@@ -15,6 +15,7 @@
 // contractor the family removed does not come back as a recommendation.
 import 'server-only';
 import type { Priority, Tables } from '@/lib/database.types';
+import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
@@ -119,6 +120,16 @@ export function normalizeTrade(input: string | null | undefined): string | null 
 
 // ── contractors ───────────────────────────────────────────────────────────────
 
+/** Phone and email are for the adults who manage the family; the vendors context slice hides them the same way. */
+export function canSeeContactDetails(scope: ServiceScope): boolean {
+  return scope.role === 'system' || isManager(scope.role);
+}
+
+/** The row as a given caller may see it. */
+export function contractorForViewer(scope: ServiceScope, c: ContractorRow): ContractorRow {
+  return canSeeContactDetails(scope) ? c : { ...c, phone: null, email: null };
+}
+
 export async function listContractors(scope: ServiceScope, input: { trade?: string | null; limit?: number } = {}): Promise<ServiceResult<ContractorRow[]>> {
   const trade = input.trade ? normalizeTrade(input.trade) : null;
   if (input.trade && !trade) return fail(`"${input.trade}" is not a trade Bubaly knows.`, { code: SERVICE_CODES.invalidInput });
@@ -137,7 +148,7 @@ export async function listContractors(scope: ServiceScope, input: { trade?: stri
     console.error('[service:home] contractors read failed', error);
     return fail(describeDbError(error, 'Could not load your saved contractors.'), { code: SERVICE_CODES.db });
   }
-  return ok(data ?? []);
+  return ok((data ?? []).map((c) => contractorForViewer(scope, c)));
 }
 
 export type SaveContractorInput = {
@@ -272,10 +283,10 @@ export async function lastServiceByTrade(scope: ServiceScope, tradeInput: string
 
   for (const record of records.data ?? []) {
     const contractor = record.contractor_id ? contractorById.get(record.contractor_id) ?? null : null;
-    if (contractor?.trade === trade) return ok({ record, contractor, matchedBy: 'contractor_trade' });
-    if (record.asset_id && assetTrade.get(record.asset_id) === trade) return ok({ record, contractor, matchedBy: 'asset_category' });
+    if (contractor?.trade === trade) return ok({ record, contractor: contractor ? contractorForViewer(scope, contractor) : null, matchedBy: 'contractor_trade' });
+    if (record.asset_id && assetTrade.get(record.asset_id) === trade) return ok({ record, contractor: contractor ? contractorForViewer(scope, contractor) : null, matchedBy: 'asset_category' });
     const text = ` ${[record.title, record.provider, record.description].filter(Boolean).join(' ').toLowerCase()} `;
-    if (text.includes(trade) || words.some((w) => text.includes(w))) return ok({ record, contractor, matchedBy: 'text' });
+    if (text.includes(trade) || words.some((w) => text.includes(w))) return ok({ record, contractor: contractor ? contractorForViewer(scope, contractor) : null, matchedBy: 'text' });
   }
   return ok(null);
 }

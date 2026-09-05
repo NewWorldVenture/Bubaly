@@ -181,13 +181,15 @@ describe('POST /api/ai/requests — feature gate', () => {
     expect(await res.json()).toMatchObject({ code: 'plan_required', needLevel: 2 });
   });
 
-  it('503s when no provider is configured, unless the scripted provider is on', async () => {
+  it('503s when no provider is configured — one check, isAIConfigured(), which is itself stub-aware', async () => {
     isAIConfigured.mockResolvedValue(false);
     const { POST } = await import('@/app/api/ai/requests/route');
     expect((await POST(post({ text: 'Plan our week' }))).status).toBe(503);
+    // The route must not consult AI_PROVIDER_STUB itself: the scripted provider
+    // makes isAIConfigured() true, so the surfaces cannot disagree.
     process.env.AI_PROVIDER_STUB = '1';
     try {
-      expect((await POST(post({ text: 'Plan our week' }))).status).toBe(202);
+      expect((await POST(post({ text: 'Plan our week' }))).status).toBe(503);
     } finally {
       delete process.env.AI_PROVIDER_STUB;
     }

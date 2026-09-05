@@ -533,6 +533,13 @@ export async function resolveProvider(): Promise<AIProvider> {
  * fast-fail with an honest 503 before doing any work.
  */
 export async function isAIConfigured(): Promise<boolean> {
+  // The scripted provider (tests, CI e2e, local development only — it refuses
+  // to enable itself in a Vercel production deploy) counts as configured, so
+  // every surface that gates on this agrees with the routing layer.
+  try {
+    const { isProviderStubEnabled } = await import('@/lib/ai/provider-stub');
+    if (isProviderStubEnabled()) return true;
+  } catch { /* the stub module is optional */ }
   if (process.env.OPENAI_API_KEY) return true;
   try {
     const { getAIConfig } = await import('@/lib/ai/settings');

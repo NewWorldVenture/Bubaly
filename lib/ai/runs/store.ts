@@ -153,6 +153,34 @@ export async function updateRequest(
 
 // ─── Plans and steps ────────────────────────────────────────────────────────
 
+/**
+ * Compare-and-set on the request's status. Returns `true` when the row was in
+ * `expectedStatus` and is now patched, `false` when someone else moved it
+ * first (the intake giving up on a slow planner, a cancellation). Callers
+ * that persist work on behalf of a request use this so a late result can
+ * never revive a request the family was already told had failed.
+ */
+export async function updateRequestWhereStatus(
+  scope: ServiceScope,
+  requestId: string,
+  expectedStatus: NonNullable<Database['public']['Tables']['ai_requests']['Row']['status']>,
+  patch: Database['public']['Tables']['ai_requests']['Update'],
+  opts?: StoreOpts,
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await ledgerClient(scope, opts)
+    .from('ai_requests')
+    .update(patch)
+    .eq('id', requestId)
+    .eq('family_id', scope.familyId)
+    .eq('status', expectedStatus)
+    .select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the request conditionally', error);
+    return fail(describeDbError(error, 'Could not update the request.'), { code: SERVICE_CODES.db });
+  }
+  return ok((data ?? []).length > 0);
+}
+
 export type PlanStepInput = {
   /** Planner-local identifier; `dependsOn` refers to these, never to uuids. */
   key: string;

@@ -102,6 +102,14 @@ describe('contractors', () => {
     expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', deleted_at: null, trade: 'plumbing' });
   });
 
+  it('shows phone and email to a parent but not to a teen', async () => {
+    const { db } = makeDb(() => ({ data: [CONTRACTOR], error: null }));
+    const parent = await listContractors(scopeWith(db));
+    expect(parent).toMatchObject({ ok: true, data: [{ phone: '555-0100' }] });
+    const teen = await listContractors(scopeWith(db, { role: 'teen', memberId: 'member-3' }));
+    expect(teen).toMatchObject({ ok: true, data: [{ id: 'c-1', name: 'Bob Pipes', phone: null, email: null }] });
+  });
+
   it('refuses an unknown trade rather than returning everyone', async () => {
     const { db, calls } = makeDb(() => ({ data: [], error: null }));
     expect(await listContractors(scopeWith(db), { trade: 'wizardry' })).toMatchObject({ ok: false, code: 'invalid_input' });
@@ -157,6 +165,12 @@ describe('lastServiceByTrade', () => {
     const { db } = makeDb((call) => (call.table === 'home_assets' ? { data: [], error: null } : respond(call)));
     const res = await lastServiceByTrade(scopeWith(db), 'sink is leaking');
     expect(res).toMatchObject({ ok: true, data: { record: { id: 'r-1' }, contractor: { name: 'Bob Pipes' }, matchedBy: 'contractor_trade' } });
+  });
+
+  it('masks the matched contractor\'s contact details for a non-manager', async () => {
+    const { db } = makeDb((call) => (call.table === 'home_assets' ? { data: [], error: null } : respond(call)));
+    const res = await lastServiceByTrade(scopeWith(db, { role: 'child', memberId: 'member-3' }), 'sink is leaking');
+    expect(res).toMatchObject({ ok: true, data: { record: { id: 'r-1' }, contractor: { name: 'Bob Pipes', phone: null, email: null } } });
   });
 
   it('falls back to the record text and returns null honestly when nothing matches', async () => {

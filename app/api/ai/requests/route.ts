@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     if (!access.ok) return accessDeniedResponse(access);
 
     // The scripted provider (AI_PROVIDER_STUB) needs no key; see lib/ai/provider-stub.ts.
-    if (process.env.AI_PROVIDER_STUB !== '1' && !(await isAIConfigured())) {
+    if (!(await isAIConfigured())) {
       return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', code: 'not_configured' }, { status: 503 });
     }
 

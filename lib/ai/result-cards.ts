@@ -13,6 +13,7 @@
 // `cardFromToolResult` is the one place the translation from tool output to
 // card happens, so every surface renders the same outcome for the same result.
 import { z } from 'zod';
+import { runPagePath } from '@/lib/ai/chat-request';
 
 // ─── Card kinds ─────────────────────────────────────────────────────────────
 
@@ -217,8 +218,9 @@ export function parseResultCard(value: unknown): ResultCard | null {
 // ─── Stream + persistence contracts ─────────────────────────────────────────
 
 /** The run detail page — spelled once so every card links to the same place. */
+/** The run page for a run id — one spelling, shared with the Ask bar and the home sections. */
 export function runHref(runId: string): string {
-  return `/dashboard/concierge/runs/${encodeURIComponent(runId)}`;
+  return runPagePath(runId);
 }
 
 /**

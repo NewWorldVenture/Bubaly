@@ -182,6 +182,19 @@ describe('recallFacts', () => {
     expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', category: 'preference', member_id: 'member-2' });
   });
 
+  it('hides medical and account facts from a child, even when asked for them by category', async () => {
+    const rows = [FACT(), FACT({ id: 'fact-3', category: 'medical', label: 'Allergy', value: 'peanuts' }), FACT({ id: 'fact-4', category: 'account', label: 'Bank', value: 'acct 1234' })];
+    const { db } = makeDb(() => ({ data: rows, error: null }));
+    // The recorder fake ignores the category filter, so assert on what must
+    // never come back rather than on the exact list.
+    const child = await recallFacts(scopeWith(db, { role: 'child', memberId: 'member-2' }), { category: 'medical' });
+    expect(child.ok && child.data.every((f) => f.category !== 'medical' && f.category !== 'account')).toBe(true);
+    const childAll = await recallFacts(scopeWith(db, { role: 'child', memberId: 'member-2' }));
+    expect(childAll.ok && childAll.data.map((f) => f.id)).toEqual(['fact-1']);
+    const parent = await recallFacts(scopeWith(db));
+    expect(parent.ok && parent.data.map((f) => f.id).sort()).toEqual(['fact-1', 'fact-3', 'fact-4']);
+  });
+
   it('puts pinned facts first when there is no query', async () => {
     const { db } = makeDb(() => ({ data: [FACT(), FACT({ id: 'fact-2', label: 'Shoe size', value: 'US 3', is_pinned: true })], error: null }));
     const res = await recallFacts(scopeWith(db));

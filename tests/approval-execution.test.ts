@@ -428,6 +428,28 @@ describe('editAndApprove', () => {
     expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['modified', 'approved_execution']);
   });
 
+  it('keeps a two-parent rule: an edit is one vote, nothing executes until the second parent approves', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+    });
+    holder.service = store.db;
+
+    const first = await editAndApprove(scopeWith(store.db), 'appr-1', { title: 'Soccer practice' });
+    expect(first).toMatchObject({ ok: true, data: { status: 'pending', resumedRunId: null } });
+    const row = store.tables.approval_requests[0];
+    expect(row.status).toBe('pending');
+    expect(row.edited_payload).toEqual({ title: 'Soccer practice', starts_at: '2026-09-06T13:00:00Z' });
+    expect(executed.calls).toHaveLength(0);
+
+    // The same parent cannot vote twice by editing again.
+    expect(await editAndApprove(scopeWith(store.db), 'appr-1', { title: 'Soccer' })).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(executed.calls).toHaveLength(0);
+
+    const second = await decide(scopeWith(store.db, { memberId: 'member-2', userId: 'auth-user-2' }), 'appr-1', 'approved');
+    expect(second).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(executed.calls).toHaveLength(1);
+  });
+
   it('rejects edits the tool schema cannot accept before anything is written', async () => {
     const store = makeStore({
       approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } } })],

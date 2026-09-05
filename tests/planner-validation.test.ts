@@ -300,7 +300,7 @@ describe('validatePlan: risk and the pure trust dry run', () => {
 // ── planRequest end to end against a fake ledger ────────────────────────────
 
 type Row = Record<string, unknown>;
-type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete'; payload?: unknown; filters: Record<string, unknown> };
+type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete'; payload?: unknown; filters: Record<string, unknown>; returning?: boolean };
 
 /**
  * A PostgREST fake that accepts any builder chain, records every write, and
@@ -326,7 +326,14 @@ function makeLedger(tables: Record<string, Row[]> = {}) {
     const builder: Record<string, unknown> = {};
     const proxy: unknown = new Proxy(builder, {
       get(_target, prop: string) {
-        if (prop === 'then') return (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => Promise.resolve(call.kind === 'select' ? { data: rows(), error: null } : { data: null, error: null }).then(resolve, reject);
+        if (prop === 'then') return (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => Promise.resolve(
+          call.kind === 'select' ? { data: rows(), error: null }
+            // `.update().select()` answers with the rows it touched, like PostgREST;
+            // this recorder does not track state, so it reports the targeted row as matched.
+            : call.kind === 'update' && call.returning ? { data: [{ id: call.filters['eq:id'] ?? 'row-1' }], error: null }
+              : { data: null, error: null },
+        ).then(resolve, reject);
+        if (prop === 'select') return () => { call.returning = true; return proxy; };
         if (prop === 'single' || prop === 'maybeSingle') return () => Promise.resolve(one());
         if (prop === 'insert' || prop === 'update' || prop === 'upsert') return (payload: unknown) => { call.kind = prop; call.payload = payload; return proxy; };
         if (prop === 'delete') return () => { call.kind = 'delete'; return proxy; };

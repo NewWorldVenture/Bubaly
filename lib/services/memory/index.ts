@@ -27,6 +27,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Tables } from '@/lib/database.types';
+import { isManager } from '@/lib/constants/roles';
 import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
@@ -268,7 +269,11 @@ export async function recallFacts(scope: ServiceScope, input: RecallInput = {}):
     console.error('[service:memory] recall failed', error);
     return fail(describeDbError(error, 'Could not read what I remember.'), { code: SERVICE_CODES.db });
   }
-  const matched = filterFacts(data ?? [], { q: input.query ?? '' });
+  // Same rule as the memory context slice: medical and account facts are for
+  // the adults who manage the family, whatever tool or page asks.
+  const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
+  const visible = (data ?? []).filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+  const matched = filterFacts(visible, { q: input.query ?? '' });
   return ok(matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
 }
 

@@ -34,8 +34,12 @@ export function cardFromRunDetail(runId: string, detail: unknown, fallback: RunS
   const run = rec.run && typeof rec.run === 'object' ? (rec.run as Record<string, unknown>) : {};
   const plan = rec.plan && typeof rec.plan === 'object' ? (rec.plan as Record<string, unknown>) : {};
   const steps = Array.isArray(rec.steps) ? rec.steps : [];
-  const status = typeof run.state === 'string' ? run.state : typeof run.status === 'string' ? run.status : fallback.status;
-  const done = steps.filter((s) => s && typeof s === 'object' && ['completed', 'skipped'].includes(String((s as Record<string, unknown>).state))).length;
+  // ai_plan_steps and family_automation_runs both expose the execution state
+  // as `status` in the run view (`state` is the run's newer column, kept as a
+  // fallback); reading the wrong field showed "0 of N" for every live run.
+  const status = typeof run.status === 'string' ? run.status : typeof run.state === 'string' ? run.state : fallback.status;
+  const stepState = (s: Record<string, unknown>) => String(s.status ?? s.state);
+  const done = steps.filter((s) => s && typeof s === 'object' && ['completed', 'skipped'].includes(stepState(s as Record<string, unknown>))).length;
   const summary = typeof plan.reasoning_summary === 'string' && plan.reasoning_summary
     ? plan.reasoning_summary
     : typeof plan.objective === 'string' && plan.objective ? plan.objective : fallback.summary;

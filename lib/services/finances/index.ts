@@ -105,10 +105,11 @@ export function monthBounds(monthKey: string): DateRange {
 export function resolveRange(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<DateRange> {
   const today = dayKeyInTz(scopeNow(scope), scope.tz);
   const to = input?.to ?? today;
+  // Validate `to` before deriving `from` from it: addDaysKey on a bad key
+  // would throw a RangeError instead of returning this friendly failure.
+  if (!DAY_KEY.test(to)) return fail('Dates must be given as YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
   const from = input?.from ?? addDaysKey(to, -29);
-  if (!DAY_KEY.test(from) || !DAY_KEY.test(to)) {
-    return fail('Dates must be given as YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
-  }
+  if (!DAY_KEY.test(from)) return fail('Dates must be given as YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
   if (Date.parse(`${to}T00:00:00Z`) < Date.parse(`${from}T00:00:00Z`)) {
     return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
   }
