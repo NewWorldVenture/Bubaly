@@ -1,80 +1,105 @@
-# Pending production migrations — apply checklist
+# Production release status and historical feature inventory
 
-**Why this exists:** a lot of recently-shipped work (Marketplace, Voice Control,
-the Family Knowledge Base, recurring-routine templates, the wallet child-ledger,
-journey telemetry, the consolidated RLS-drift repair) lives in **additive
-migrations that are on `main` but may not yet be applied to the production
-Supabase database**. Until they're applied, those features render empty / 404 /
-"coming soon" in prod even though the code is deployed. The `AGENT_HANDOFF.md`
-scatters these as `⚠️ apply to prod` notes; this file is the single, ordered,
-authoritative list.
+**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`):**
+All four GitHub Production secrets exist and connectivity works. The secret
+names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
+`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
+in this document, logs, or reports. Production's migration ledger records only
+`0001-0003` despite existing schema. A missing ledger entry does **not** establish
+that the corresponding schema or feature is absent.
 
-> **Agents cannot apply migrations to prod** (no prod DB credentials in the
-> sandbox). This is a **human-owned** task. This doc exists so it's one paste,
-> not a scavenger hunt.
+The one-time, hash-pinned `0240-0254` atomic release is defined in
+[PRODUCTION_FORWARD_RELEASE.md](PRODUCTION_FORWARD_RELEASE.md) and
+[supabase-forward-release.yml](../.github/workflows/supabase-forward-release.yml).
+**Preview run `33987762363` passed for `0240-0254`, but that release is HELD.**
+Do not apply the previewed bundle: new requester-privacy and core-execution
+findings remain unresolved, and generation of the complete traceability matrix
+did not finish. `0255` is **PLANNED, not written or applied**. A corrected release,
+a new successful preview, completed matrix and review evidence, and explicit
+parent authorization are required before any production apply.
 
-## 🔴 SECURITY MIGRATIONS — APPLY FIRST (launch-blocking)
+`0253` closes AI worker grant drift and `0254` closes wallet RLS drift in the
+reviewed code. Their presence on main and passing code/CI checks do not establish
+that those production controls have been applied or resolve the new findings.
 
-**These are the migrations that gate GO. Apply them before the feature bundle below.**
-They are additive + idempotent; each is PG16-verified live (see the linked PLA/LB
-entry). Order within this list does not matter (they touch disjoint tables), but the
-whole group should land before launch. `supabase db push` applies them in numeric
-order automatically.
+Parent owns commits, pushes, production deployments, credentials, and goal
+controls. Credential availability is a capability fact, not authorization for
+an agent to change production. This document records status and dependencies;
+the linked forward release runbook and workflow define the release procedure.
 
-| Sev | Mig | Fixes (until applied, prod is exploitable) | Coupled app code? | Post-apply check (run in SQL editor) |
-|-----|-----|--------------------------------------------|-------------------|--------------------------------------|
-| **P0** | `0217` | **Wallet money-minting** — any member incl. a child can INSERT a completed credit into `wallet_transactions` and mint spendable money (LB-010/PLA-0580). | No (RLS only) | As a member session, an INSERT of a `completed` credit into `wallet_transactions` must be **rejected**; the manager-gated write policy exists: `select polname,cmd from pg_policies where tablename='wallet_transactions';` |
-| **P0** | `0224` | **Wallet audit trail tamperable** — `wallet_audit_logs` was child-writable/erasable; 0224 makes it append-only, service-role-managed (LB-010 related/PLA-0622). | No | non-service-role UPDATE/DELETE on `wallet_audit_logs` → 0 rows / denied |
-| **P1** | `0219` | **Cross-tenant PII leak** — `support_tickets` (requester name/email + issue text) and `admin_users` (emails/roles) are world-readable by any signed-in user (LB-011/PLA-0600). | No | `set role authenticated; set request.jwt.claim.sub='<any-user-uuid>'; select count(*) from support_tickets;` → **0**; same for `admin_users`; `reset role;` |
-| **P2** | `0221` | **Marketplace bid-as-any-family IDOR** — `marketplace_place_bid_unchecked` is `authenticated`-executable via a rename that carried the grant; lets a user bid as another family (LB-012/PLA-0610). | ⚠️ ships with the marketplace-auth deploy | `select has_function_privilege('authenticated','public.marketplace_place_bid_unchecked(uuid,uuid,numeric)','execute');` → **false** |
-| P2 | `0222` `0223` | **Chore forge** — a child could flip `chore_submissions`/`chore_assignments` to `approved` directly, faking the family accountability loop (PLA-0612/0613). Mints no money (0217 decoupled it). | 0222 pairs with the `submitProofAction` service-role routing (already on `main`) | non-manager UPDATE of a submission to `status='approved'` → denied by the decision-guard trigger |
-| P2 | `0216` | **family-media bucket** — defines the bucket + family-folder write RLS (LB-009). Read stays public until the signed-URL decision. | No | `select public from storage.buckets where id='family-media';` (bucket exists) |
-| **P1** | `0249` | **Families cannot be deleted** — since 0134, deleting a family with any member/pet/vehicle/document row fails with `family_model_dirty_family_id_fkey` (the dirty-flag trigger fires on the cascaded deletes after the family row is gone), so account closure / family removal breaks. 0249 makes `mark_model_dirty()` skip vanished families. | No (trigger function only) | `delete from families where id = <throwaway family with one member>` succeeds |
-| P2 | `0218` | **Economy token mint** — child could INSERT economy-token credits directly; 0218 locks writes to managers (PLA-0590). | No | non-manager INSERT into the economy ledger → denied |
+**Blueprint scope:** the current goal is the full 113-section `goal-objective.md`
+(handoff SHA-256 `9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3`).
+The full requirement-to-code/test traceability matrix required by sections 19,
+30, and 113 was not completed. Matrix generation did not complete; the gate
+before further feature implementation remains unresolved.
+This file is a bounded release-status correction and historical feature
+inventory, not that matrix or a claim that the expanded blueprint is complete.
+Under sections 9, 96, 111, and 113, requirement PASS claims need the applicable
+implementation, migration/RLS, automated-test, and executed staging/customer
+journey evidence. This documentation change and the passed release preview do
+not establish those results or production application.
 
-**Fastest safe path:** run `supabase db push` (applies ALL pending migrations, security + feature, in order — every one is additive/idempotent). If applying by hand, do the P0 rows above **first**. After applying, the behavioral RLS proofs for each are recorded in `docs/PRODUCT_LAUNCH_AUDIT.md` (the linked PLA entries) — this table's checks are the quick confirmations, not the full proof.
+## Production procedure and evidence
 
-> Also required for full function (not security-blocking): set `CRON_SECRET` (all 19 cron jobs 401 without it — see the env section below) and apply the `0118–0135` feature bundle so Marketplace/Voice/Knowledge/etc. populate.
+- **Release held:** do not apply the previewed `0240-0254` bundle. Before any
+  apply, parent must have a corrected hash-pinned release reflected in the
+  runbook and workflow, a new successful preview, review evidence addressing
+  requester privacy and core execution, and the completed traceability matrix.
+  Explicit parent authorization is still required. `0255` is planned only;
+  neither its implementation nor its application is established. Preserve the
+  corrected release's atomicity; this inventory is not an execution sequence.
+- The original `supabase-production-migrations.yml` workflow deliberately
+  blocks historical replay against the incomplete ledger. Its block must not
+  be bypassed or treated as a missing-credentials failure.
+- Do not use a blind `supabase db push`, `--include-all`, production resets,
+  blanket migration repair/stamping, historical SQL bundle pastes, or replay
+  of historic migrations or seeds to reconcile the ledger. Guards such as
+  `IF NOT EXISTS` and local idempotency tests do not make replay safe against
+  existing production schema, policies, or data.
+- Code review, tests, PG16 harness results, and the successful preview are
+  code/CI evidence. Production application requires a successful authorized
+  apply run and the production verification evidence required by the runbook.
+  Record the applied revision/hashes and run evidence before changing the
+  status above; do not infer application from a merge, preview, or page refresh.
+- Runtime dependencies such as `CRON_SECRET` still matter, but their names in
+  this inventory do not establish that they are currently missing. Parent
+  owns credential configuration; checks and reports must not expose values.
 
-## How to apply (pick one)
+## Security controls requiring production evidence
 
-- **GitHub Actions (automated, once secrets exist):** the `Supabase production
-  migrations` workflow (`.github/workflows/supabase-production-migrations.yml`)
-  runs `supabase db push` on every push to `main` that touches
-  `supabase/migrations/**` and can be started by hand from the Actions tab
-  (`workflow_dispatch`). **It has failed at its first step on every run so far**
-  (latest: the two `main` merges on 2026-09-05) because the GitHub `production`
-  environment has none of the four secrets it validates: `SUPABASE_ACCESS_TOKEN`,
-  `SUPABASE_PROJECT_REF`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
-  (see `docs/MARKETING_PLATFORM_PRODUCTION_RUNBOOK.md`). Add them, re-run the
-  workflow, and the whole pending ledger below (currently through `0249`) lands
-  in one ordered push, followed by the marketing backfills and remote verifies.
-- **Supabase CLI (recommended):** `supabase db push` — applies every pending
-  migration in order. Safe: every migration below is **additive + idempotent**
-  (guarded with `IF NOT EXISTS` / `EXCEPTION WHEN duplicate_object` / drift-safe
-  policy re-creates), so re-running an already-applied one is a no-op.
-- **Supabase SQL editor — ONE paste (easiest):** open
-  **`supabase/APPLY_PENDING_0118-0135.sql`**, copy the whole file, paste into the
-  SQL editor, and Run. It's all 18 migrations concatenated in order inside a single
-  `BEGIN/COMMIT` (verified free of transaction-hostile statements), so it either
-  fully applies or rolls back cleanly with nothing half-done. Re-running is a no-op.
-- **Supabase SQL editor (per file):** paste each file below **in numeric order**
-  and Run. Order matters only in that later migrations may reference earlier
-  tables; applying 0118 → 0135 in sequence is always safe.
+Historical identifiers below explain the risks and their original fixes. They
+are not instructions to replay those files or proof of current production
+exposure. Consult the linked PLA/LB entries in `docs/PRODUCT_LAUNCH_AUDIT.md` for
+recorded behavioral evidence, keeping its environment distinct from production.
+Write/delete regression scenarios belong in isolated tests; production checks
+must follow the approved forward release procedure.
 
-> **Agents cannot execute this** — there are no prod DB credentials or Supabase
-> CLI in the build sandbox (verified). Applying to prod is human-owned; the
-> consolidated bundle exists so it's one paste, not a scavenger hunt.
+| Reference | Risk addressed | Required control / useful security note |
+|-----------|----------------|-----------------------------------------|
+| `0217`, forward `0254` | **Wallet money-minting** (LB-010/PLA-0580): child/member writes could mint completed credits. | Manager-gated ledger writes; `0254` closes wallet RLS drift. Confirm production policies through the forward release verification. |
+| `0224` | **Wallet audit trail tampering** (PLA-0622). | Members may SELECT/INSERT audit entries; client UPDATE/DELETE is denied. Service-role retention remains available. |
+| `0219` | **Cross-tenant PII exposure** on `support_tickets` and `admin_users` (LB-011/PLA-0600). | Client roles default-deny; service-role access stays behind the super-admin application gate. |
+| `0221` | **Marketplace bid-as-any-family IDOR** (LB-012/PLA-0610). | `authenticated` cannot execute `marketplace_place_bid_unchecked`; the checked wrapper remains the client entry point. Coupled marketplace authorization code is required. |
+| `0222`, `0223` | **Forged chore decisions** (PLA-0612/0613). | Decision guards restrict approval/rejection to managers or trusted service paths; `submitProofAction` service-role routing is coupled code. |
+| `0216` | **Family-media write isolation** (LB-009). | Family-folder write RLS is required. Reads remain public pending the signed-URL decision and stored-URL migration. |
+| `0249` | **Family deletion failure** caused by `family_model_dirty_family_id_fkey`. | `mark_model_dirty()` skips vanished families during cascades. Confirm function state through approved verification; do not delete production families as a smoke test. |
+| `0218`, `0220` | **Economy token / investing ledger minting** (PLA-0590/0600). | Manager-only ledger writes; member requests remain distinct from manager approval. |
+| Forward `0253` | **AI worker grant drift**. | Include the grant closure and its verification in the atomic release. Preview success alone does not establish production protection. |
 
-After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
-`/dashboard/knowledge`, the calendar Routines panel, `/wallet/activity`, and
-`/dashboard/journeys` should all populate.
+## Historical feature inventory (reference only)
 
-## The list (apply in this order)
+Preserved entries describe feature dependencies and recorded development/test
+results, not a reliable production pending-migration ledger. Throughout this
+inventory, "PG16-verified", "idempotent", seed counts, and test counts refer to
+the recorded test context unless separate production apply evidence is cited.
+"Safe before apply" describes an application's fallback, not a security
+clearance. Historical apply, seed, backfill, and environment notes are not
+current production instructions; the procedure and pending status above govern.
+Do not replay referenced seeds or infer empty production tables from this list.
 
 | # | File | Adds | Feature it unblocks |
 |---|------|------|---------------------|
-| 0118 | `0118_rls_drift_repair.sql` | Re-enables RLS + heals missing family-scoped SELECT/INSERT/UPDATE/DELETE policies on every drifted table (never weakens custom/stricter policies) | Fixes silently-empty pages caused by prod RLS drift — **apply this first** |
+| 0118 | `0118_rls_drift_repair.sql` | Historical RLS repair: re-enables RLS and restores family-scoped SELECT/INSERT/UPDATE/DELETE policies | Explains silently-empty pages caused by RLS drift. Do not replay this broad historical repair over existing production policies; use the approved forward release. |
 | 0119 | `0119_family_credentials.sql` | `family_credentials` (Wi-Fi & passwords vault) | Family Vault `/dashboard/passwords` |
 | 0120 | `0120_marketplace.sql` | `marketplace_listings`, `marketplace_offers` | Marketplace `/dashboard/marketplace` |
 | 0121 | `0121_voice_commands.sql` | `voice_commands` history log | Voice Control `/dashboard/voice` recent-commands |
@@ -92,9 +117,9 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0133 | `0133_onboarding_events.sql` | `onboarding_events` | Onboarding funnel `/dashboard/onboarding-funnel` (super-admin) |
 | 0134 | `0134_model_dirty.sql` | `family_model_dirty` + `mark_model_dirty()` triggers | Event-driven twin/prep refresh (the `model-refresh` cron; also needs `CRON_SECRET`) |
 | 0135 | `0135_network_aggregates.sql` | `network_contributions`, `network_aggregates` | Intelligence Network insights `/dashboard/intelligence` (the `network-aggregate` cron; also needs `CRON_SECRET`) |
-| 0137 | `0137_child_login_throttle.sql` | `child_login_throttle` (per-username brute-force lockout) | Hardens **Kid Logins** (`/kid-login`) — child PIN sign-in is rate-limited/locked after repeated failures. Safe before apply: sign-in still works, just un-throttled until the table exists. |
+| 0137 | `0137_child_login_throttle.sql` | `child_login_throttle` (per-username brute-force lockout) | Hardens **Kid Logins** (`/kid-login`) — child PIN sign-in is rate-limited/locked after repeated failures. If the table is absent, sign-in still works without this durable throttle; that fallback is not a security clearance. Production control status requires production evidence. |
 | 0138 | `0138_onboarding_imports.sql` | `onboarding_imports` | Records the **value-first onboarding** first-brief moment (T1): the imported calendar's event/conflict/action/time-saved counts + brief summary. Seeds the TTFV metric (T10). Safe before apply: onboarding still works and imported events still land in `calendar_events`; only the durable import record is skipped (best-effort insert) until the table exists. |
-| 0138 ⚠️ | `0138_demo_sessions.sql` | `demo_sessions` (shared "Bubaly Demo" account session + 5-min clock) | Powers the **one-click live demo** (pricing → "Demo Account"): tracks each running demo + its `expires_at` so the top-left countdown and auto-reset work. Self-scoped RLS (a visitor reads only their own session row; all writes go through the service role). **⚠️ DUPLICATE NUMBER** — shares `0138` with `0138_onboarding_imports.sql` above. Both are additive + idempotent and apply cleanly via the SQL-editor paste path (files run in filename order: `demo_sessions` before `onboarding_imports`), but `supabase db push` tracks one version per number and will reject the second — if you use the CLI, apply one of the two by hand (or renumber `demo_sessions`). Apply **with 0161 below**. Safe before apply: `app-frame` treats a missing table as "not a demo", so the app is unaffected until applied. PG16-verified (idempotent ×2). |
+| 0138 ⚠️ | `0138_demo_sessions.sql` | `demo_sessions` (shared "Bubaly Demo" account session + 5-min clock) | Powers the **one-click live demo** (pricing → "Demo Account"): tracks each running demo + its `expires_at` so the top-left countdown and auto-reset work. Self-scoped RLS (a visitor reads only their own session row; all writes go through the service role). **Historical numbering conflict:** this inventory lists `0138` for both demo sessions and onboarding imports; it is not a production execution ledger. Do not work around ledger discrepancies with manual historical SQL, renumbering, or stamping. Related feature dependency: `0161`. If the table is missing, `app-frame` treats the session as "not a demo". Recorded PG16 evidence: idempotent ×2; not production apply evidence. |
 | 0139 | `0139_meal_ideas.sql` | `meal_ideas` (curated dinner catalog, reference data) | Powers the **3 dinner ideas** in the first-run briefing (T2). Reference data, readable by any signed-in user; populated by `seed_meal_ideas.sql` (500 rows). Safe before apply: the briefing simply shows no dinner ideas until the table exists + is seeded (best-effort read). |
 | 0140 | `0140_home_briefs.sql` | `home_briefs` (daily home outcome snapshot) | Powers the **outcome-first home** (T3): when the home would otherwise be empty, it shows readiness + next-best steps + dinner ideas, and persists a daily snapshot (home-side TTFV signal). Family-scoped; seeded by `seed_home_briefs.sql` (500 days). Safe before apply: the outcome still renders live; only the durable snapshot upsert is skipped (best-effort) until the table exists. |
 | 0141 | `0141_daily_insights.sql` | `daily_insights` (the one insight of the day) | Powers the **insight of the day** (T4): the home surfaces one ranked proactive insight above the fold; dismissing sticks and the next-best surfaces. Family-scoped; seeded by `seed_daily_insights.sql` (500 rows). Safe before apply: the home simply shows no insight hero (wrapped in try/catch) until the table exists. |
@@ -289,11 +314,11 @@ Vault, the Knowledge Graph, Decisions, Prep Plans, and the Onboarding funnel
 | 0165 | `0165_family_app_store.sql` | `family_apps` (catalog) + `family_app_installs` (family-scoped RLS) | **Family App Store** (`/dashboard/app-store`) — the industry-first #10 gap: an open catalog of one-tap AI extensions families install into their workflows. Catalog readable by any signed-in user; installs family-scoped. Seed `seed_family_apps.sql` (500 apps across 12 categories) in `SEED_ALL.sql`. Additive/idempotent. Safe before apply: the page reads best-effort (empty catalog until seeded). PG16-verified (184 migrations apply, 500 rows, RLS on, idempotent re-seed). |
 | 0215 | `0215_safety_write_rls_hardening.sql` | Manager-only WRITE RLS on `family_places` + `guardian_routing_rules` | **Defense-in-depth for the child-safety authz bugs (PLA-0470/0520).** These safety tables shipped with `is_family_member` FOR ALL, so RLS alone did not stop a signed-in child from deleting/disabling the geofences and call/message-screening rules protecting them — the app-level gate was the only barrier. Keeps SELECT open to all members (a child device must read geofences to detect arrivals) but restricts INSERT/UPDATE/DELETE to `can_manage_family()` (parent/adult). Service-role writes (AI learning) bypass RLS, unaffected; `member_locations` (self) + `chore_submissions` (child inserts) intentionally untouched. Additive/idempotent (`drop policy if exists` → create). **PG16-verified** (applies fail=0; live proof on `family_places`: child read OK, INSERT→RLS error, UPDATE/DELETE→0 rows, parent write OK, 0 survivors; guardian rules use the identical policy shape). Guard test `tests/safety-write-rls-hardening.test.ts` (5). |
 | 0216 | `0216_family_media_bucket.sql` | `family-media` Storage bucket + family-folder write RLS on `storage.objects` | **Brings a live-only bucket into version control (LB-009/PLA-0461).** Photos, Create-Memory, Message attachments, and Reminder attachments all upload to `family-media`, but it was created out-of-band in the dashboard — so a fresh project / the PG16 harness had NO bucket and every upload failed. Idempotent bucket create (`on conflict do nothing`; 25 MB limit; **public=true** to preserve the `getPublicUrl` contract that the app + already-stored URLs depend on) + family-folder write RLS (insert/update/delete + authenticated select scoped to `is_family_member(foldername[1])`), mirroring the private `documents` bucket (0007). **PG16-verified** (applies + idempotent ×2; cross-family write PROVEN blocked — family A member allowed into A's folder, blocked from B's; authenticated select family-scoped). Safe before apply: prod already has the bucket, and `on conflict do nothing` never mutates it — the migration only adds/refreshes the write policies. **Residual (LB-009, owner):** reads stay public; a private+signed-URL switch needs a data-migration of stored public URLs. Guard `tests/a11-family-media-bucket.test.ts`. |
-| 0217 | `0217_wallet_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the wallet money tables | **CRITICAL money-integrity fix (PLA-0580 / LB-010).** `wallet_transactions` (and the wallet_* tables) shipped `is_family_member` FOR ALL, so a signed-in child could INSERT a `completed` `credit` via PostgREST and MINT spendable money. 0217 keeps SELECT open to members but restricts INSERT/UPDATE/DELETE to `can_manage_family()`; trusted writes (cron/webhooks/reserve RPC + chore auto-approve, now routed via service-role) bypass RLS. **Apply ASAP — prod is exploitable until then.** Additive/idempotent. **PG16-verified** (child mint→RLS error, manager+service writes OK, idempotent ×2). Guard `tests/wallet-ledger-write-rls.test.ts`. |
-| 0218 | `0218_economy_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the family ECONOMY (token) ledger | **Money-integrity fix (PLA-0590), sibling of 0217.** `currency_transactions` (+ economy tables) shipped `is_family_member` FOR ALL, so a child could INSERT a token `credit` via PostgREST and mint currency redeemable for parent-defined rewards. 0218 restricts currency ledger + config + rewards writes to `can_manage_family()`; token debits go via the manager action or the service-role `loyalty_redeem_reward` RPC. **Exception**: `economy_redemptions` keeps member INSERT (a child requests a pending redemption); only approve/deny (UPDATE/DELETE) are manager-only. Apply with 0217. Additive/idempotent. **PG16-verified** (child mint→RLS error, child redemption request→OK, manager award→OK, idempotent ×2). Guard `tests/economy-ledger-write-rls.test.ts`. |
-| 0219 | `0219_admin_tables_service_role_rls_lockdown.sql` | Service-role-only RLS on `admin_users` + `support_tickets` | **P1 tenant-isolation fix (PLA-0600 / LB-011).** Migration 0010 created both tables with policies `using(true) with check(true)` and NO `to service_role`, so they defaulted to `TO public` — any signed-in user could read every family's support tickets (requester name/email + issue text) and the full admin roster (`admin_users`: emails/roles/permissions), and tamper with `admin_users`. 0218 recreates both `service_role_all` policies `to service_role` (client roles ⇒ default deny). The admin console uses the service-role client (BYPASSRLS) behind an `isSuperAdmin` gate, so nothing user-facing changes. Additive/idempotent (`drop policy if exists` → create). **PG16-verified** (idempotent ×2; family-A member read 11→0 tickets, 12→0 admins, INSERT blocked; service-role still full access). Guard `tests/admin-tables-service-role-rls.test.ts`. **Apply to prod — exploitable until then.** |
-| 0220 | `0220_invest_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the KID INVESTING ledger | **Money-integrity fix (PLA-0600), 3rd of the ledger trilogy (0217 wallet / 0218 economy / 0220 invest).** `invest_holdings` shipped `is_family_member` FOR ALL, so a child could INSERT holdings and mint shares. 0220 restricts invest_holdings writes to `can_manage_family()` (the SECURITY DEFINER `invest_decide_order` RPC bypasses RLS, so approvals work). Exception: `invest_orders` keeps member INSERT (a child places a pending order); approve/cancel are manager-only. Apply with 0217/0218. Additive/idempotent. **PG16-verified** (child holdings-mint→RLS error, child order placement→allowed, idempotent ×2). Guard `tests/invest-ledger-write-rls.test.ts`. |
-| 0221 | `0221_revoke_place_bid_unchecked_from_authenticated.sql` | Revoke EXECUTE on `marketplace_place_bid_unchecked` from `authenticated` | **P2 marketplace-integrity IDOR (PLA-0610 / LB-012).** 0184 renamed the raw bid fn → `_unchecked` + added a checked `marketplace_place_bid` wrapper, but the rename carried 0183's `authenticated` grant and `revoke ... from public` didn't drop it — so any signed-in user could call `_unchecked` directly (SECURITY DEFINER) with a spoofed `p_bidder_member_id`/`p_bidder_family_id` and bid AS another family, bypassing the wrapper's `auth.uid()` checks. 0221 revokes it from `authenticated` (service_role + the definer wrapper only). Idempotent. **PG16-verified** (direct member call permitted pre-0221 → "permission denied" post; checked wrapper still works ×2). Guard `tests/marketplace-bid-unchecked-revoke.test.ts`. **Apply to prod — exploitable until then.** |
+| 0217 | `0217_wallet_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the wallet money tables | **CRITICAL money-integrity fix (PLA-0580 / LB-010).** `wallet_transactions` (and the wallet_* tables) shipped `is_family_member` FOR ALL, so a signed-in child could INSERT a `completed` `credit` via PostgREST and MINT spendable money. 0217 keeps SELECT open to members but restricts INSERT/UPDATE/DELETE to `can_manage_family()`; trusted writes (cron/webhooks/reserve RPC + chore auto-approve, now routed via service-role) bypass RLS. **Forward `0254` closes wallet RLS drift; production apply remains pending.** Recorded **PG16** evidence (child mint→RLS error, manager+service writes OK, idempotent ×2) is not proof of production policy state. Guard `tests/wallet-ledger-write-rls.test.ts`. |
+| 0218 | `0218_economy_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the family ECONOMY (token) ledger | **Money-integrity fix (PLA-0590), sibling of 0217.** `currency_transactions` (+ economy tables) shipped `is_family_member` FOR ALL, so a child could INSERT a token `credit` via PostgREST and mint currency redeemable for parent-defined rewards. 0218 restricts currency ledger + config + rewards writes to `can_manage_family()`; token debits go via the manager action or the service-role `loyalty_redeem_reward` RPC. **Exception**: `economy_redemptions` keeps member INSERT (a child requests a pending redemption); only approve/deny (UPDATE/DELETE) are manager-only. Historical relationship to `0217`, not a replay instruction. **PG16-verified** (child mint→RLS error, child redemption request→OK, manager award→OK, idempotent ×2). Guard `tests/economy-ledger-write-rls.test.ts`. |
+| 0219 | `0219_admin_tables_service_role_rls_lockdown.sql` | Service-role-only RLS on `admin_users` + `support_tickets` | **P1 tenant-isolation fix (PLA-0600 / LB-011).** Migration 0010 created both tables with policies `using(true) with check(true)` and NO `to service_role`, so they defaulted to `TO public` — any signed-in user could read every family's support tickets (requester name/email + issue text) and the full admin roster (`admin_users`: emails/roles/permissions), and tamper with `admin_users`. 0219 recreates both `service_role_all` policies `to service_role` (client roles ⇒ default deny). The admin console uses the service-role client (BYPASSRLS) behind an `isSuperAdmin` gate, so nothing user-facing changes. **PG16-verified** (idempotent ×2; family-A member read 11→0 tickets, 12→0 admins, INSERT blocked; service-role still full access). Guard `tests/admin-tables-service-role-rls.test.ts`. Production policy state requires separate evidence through the approved release verification; this entry is not a historical replay instruction. |
+| 0220 | `0220_invest_ledger_write_lockdown.sql` | Manager-only WRITE RLS on the KID INVESTING ledger | **Money-integrity fix (PLA-0600), 3rd of the ledger trilogy (0217 wallet / 0218 economy / 0220 invest).** `invest_holdings` shipped `is_family_member` FOR ALL, so a child could INSERT holdings and mint shares. 0220 restricts invest_holdings writes to `can_manage_family()` (the SECURITY DEFINER `invest_decide_order` RPC bypasses RLS, so approvals work). Exception: `invest_orders` keeps member INSERT (a child places a pending order); approve/cancel are manager-only. Historical relationship to `0217`/`0218`, not a replay instruction. **PG16-verified** (child holdings-mint→RLS error, child order placement→allowed, idempotent ×2). Guard `tests/invest-ledger-write-rls.test.ts`. |
+| 0221 | `0221_revoke_place_bid_unchecked_from_authenticated.sql` | Revoke EXECUTE on `marketplace_place_bid_unchecked` from `authenticated` | **P2 marketplace-integrity IDOR (PLA-0610 / LB-012).** 0184 renamed the raw bid fn → `_unchecked` + added a checked `marketplace_place_bid` wrapper, but the rename carried 0183's `authenticated` grant and `revoke ... from public` didn't drop it — so any signed-in user could call `_unchecked` directly (SECURITY DEFINER) with a spoofed `p_bidder_member_id`/`p_bidder_family_id` and bid AS another family, bypassing the wrapper's `auth.uid()` checks. 0221 revokes it from `authenticated` (service_role + the definer wrapper only). **PG16-verified** (direct member call permitted pre-0221 → "permission denied" post; checked wrapper still works ×2). Guard `tests/marketplace-bid-unchecked-revoke.test.ts`. Production grants require separate evidence through the approved release verification; this entry is not a historical replay instruction. |
 | 0224 | `0224_wallet_audit_log_append_only.sql` | Makes `wallet_audit_logs` append-only for clients (member SELECT+INSERT; no UPDATE/DELETE) | **A-08 money-audit integrity (PLA-0622).** `wallet_audit_logs` shipped `"Members manage" FOR ALL is_family_member` (0088) and was missed by the 0217 ledger lockdown, so a child could UPDATE/DELETE money-audit rows — rewriting/erasing the history a parent reviews (no money moves; the ledger is locked by 0217). Drops the FOR-ALL policy, keeps `is_family_member` SELECT + INSERT (all ~10 app appends still work), grants no UPDATE/DELETE to `authenticated` (service-role retention only). Additive/idempotent. **PG16-verified** (child SELECT+INSERT OK; child UPDATE/DELETE → 0 rows; service-role UPDATE/DELETE OK). Guard `tests/wallet-audit-log-append-only.test.ts`. |
 | 0225 | `0225_pin_definer_search_path.sql` | Pins `set search_path = public` on the last 2 SECURITY DEFINER functions | **Definer-function hardening (linter compliance + defense-in-depth).** An audit of all 61 SECURITY DEFINER functions found 59 already pin search_path; only 0014's `sync_album_photo_count` + `update_conversation_last_message` did not (the Supabase `function_search_path_mutable` lint). Both are safe today (all table refs schema-qualified; only built-ins called), so this is defense-in-depth, not a live exploit — but it closes the class and a ratchet (`tests/definer-search-path-pinned.test.ts`) keeps any future definer function from omitting it. `create or replace` preserves the trigger bindings. Additive/idempotent. **PG16-verified** (both now `proconfig={search_path=public}`; the photo-count trigger still fires 0→1). |
 | 0223 | `0223_chore_assignment_decision_guard.sql` | BEFORE INSERT/UPDATE trigger on `chore_assignments` restricting `approved`/`rejected` to managers/service-role | **A-07 integrity defense-in-depth (PLA-0613), sibling of 0222.** `chore_assignments` shipped `is_family_member` FOR ALL, so a child could `update ... set status='approved'` directly and forge the COMPLETION of their own chore (the status the dashboard reads as done/approved). Mints no money (reward is credited in `finalizeApproval` under 0217). The only decision-status writers already run as service-role/manager, so the trigger breaks no legitimate flow; members keep `todo`/`in_progress`/`submitted`/`done`. Additive/idempotent. **PG16-verified** (child approved+rejected → blocked; child in_progress → OK; manager + service-role approved → OK). Guard `tests/chore-assignment-decision-guard.test.ts`. |
@@ -302,15 +327,17 @@ Vault, the Knowledge Graph, Decisions, Prep Plans, and the Onboarding funnel
 | 0227 | `0227_blog_post_saves.sql` | `blog_post_saves` (per-user article bookmarks) + own-rows-only RLS | **Sign-in-gated blog save (PLA-0780).** The blog heart is now an account feature: clicking requires sign-in and persists a per-user save. New table with RLS `user_id = auth.uid()` on select/insert/delete (`TO authenticated`); the aggregate save count on the heart is produced by the service role only (no cross-user exposure). Backs `/api/blog/save` (401 for signed-out POSTs) + the reworked `HeartButton` (routes signed-out readers to `/login?redirect=…`). Additive/idempotent. **PG16-verified** (table + 3 own-rows policies; RLS on; full bootstrap fail=0). Guard `tests/blog-save-auth-gate.test.ts` (4). |
 | 0228 | `0228_marketing_public_aeo_and_content_registry.sql` | Public SELECT on published `marketing_aeo_questions` + register blogs in `marketing_content_items` | **Marketing closed loop (PLA-0790).** (1) Published AEO questions become world-readable (published only; drafts stay admin-only) so the public FAQ/Knowledge Center + blog FAQ blocks + FAQPage schema render the same answers the admin AEO console manages. (2) Registers every published, non-synthetic blog post as a content item (kind='blog', idempotent by metadata slug) so the whole blog is listed + wired in /admin/marketing/content. Additive/idempotent. **PG16-verified** (public sees 754 published, drafts hidden; 545 blogs registered; re-run 0 dupes). |
 | 0229 | `0229_seed_marketing_aeo_seo.sql` | Seed 754 themed AEO questions (published) + 191 SEO keywords + 19 SEO pages | **Marketing AEO/SEO seed (PLA-0790).** On-brand, deterministic (scripts/generate-marketing-seed.mjs) content positioning Bubaly as "The AI Family Operating System": AEO Q&A across 24 topics × personas × patterns, head/long-tail/semantic keyword clusters, and per-route SEO records for every public page + blog category tab. Idempotent (seed-tag delete + ON CONFLICT). Feeds the public FAQ/Knowledge Center + every blog article. **PG16-verified** (754/191/19; idempotent x2). Safe before apply: public pages just show fewer answers until applied. |
-| 0230 | `0230_blog_per_post_aeo_and_seo_public_read.sql` | Per-post blog AEO (auto) + public read on `marketing_seo_pages` | **Marketing engine, part 2 (PLA-0795).** (1) Every published blog post gets its own AEO questions (source_path=/blog/<slug>), derived in-DB from title+excerpt (1,090 rows; idempotent seed tag blog_aeo_v1); the admin publish action generates the same for new posts. (2) `marketing_seo_pages` active rows become public-readable so 7 marketing routes drive title/description from the admin SEO store (code fallback). Additive/idempotent. **PG16-verified** (bootstrap fail=0; 1090 per-post AEO; policy present). NOTE: 0229 was also regenerated (scaled to 2,344 AEO / 1,603 keywords) — re-apply it (idempotent) alongside 0230. |
+| 0230 | `0230_blog_per_post_aeo_and_seo_public_read.sql` | Per-post blog AEO (auto) + public read on `marketing_seo_pages` | **Marketing engine, part 2 (PLA-0795).** (1) Every published blog post gets its own AEO questions (source_path=/blog/<slug>), derived in-DB from title+excerpt (1,090 rows; idempotent seed tag blog_aeo_v1); the admin publish action generates the same for new posts. (2) `marketing_seo_pages` active rows become public-readable so 7 marketing routes drive title/description from the admin SEO store (code fallback). **PG16-verified** (bootstrap fail=0; 1090 per-post AEO; policy present). Historical inventory note: 0229 was regenerated to 2,344 AEO / 1,603 keywords. These are recorded development counts, not production targets or authorization to re-run that historic seed. |
 | 0234 | `0234_blog_500_more_articles.sql` | +503 new blog articles (batch 2) + self-wire into content registry & per-post AEO | **Blog batch 2 (PLA-0810).** 503 brand-new, distinct-topic articles (0 slug overlap with batch 1; ON CONFLICT DO NOTHING never overwrites). Stores NO hero URL — renders the bespoke `<BlogCover>` (free, unique, on-brand), consistent with the LoremFlickr-removal (0231). Self-wires: re-runs the content-registry + per-post-AEO INSERT…SELECT (idempotent) so the new posts appear in /admin/marketing/content + the AEO Knowledge Center. Additive/idempotent. **PG16-verified** (bootstrap fail=0; 1,048 published / 1,048 registered / 2,096 per-post AEO). |
 | 0235 | `0235_blog_batch2_hero_photos.sql` | Real free (CC0) Lorem Picsum hero photo for every image-less (batch-2) article | **Batch-2 hero photos (PLA-0820).** Sets each NULL-hero published post's image to `picsum.photos/seed/<slug>/1600/900` (real, CC0, always-resolves, one distinct URL per post) so batch-2 no longer renders the identical generated cover. Same CC0 source batch-1 uses as fallback. Idempotent (only fills NULL heroes). **PG16-verified** (1,048 published / 0 null-hero / 1,048 distinct URLs). Not topic-curated (image sources are network-blocked in the build env) — upgradeable to matched photos via the batch-1 pattern when image access / an API key is available. |
 | 0236 | `0236_seed_blog_seo_registry.sql` | Register all 1,048 blog articles in the SEO Page Registry (marketing_seo_pages) | **SEO Page Registry buildout (PLA-0830).** One registry row per published blog post (path=/blog/<slug>) with SEO title, bounded meta description, score, index policy, and metadata (category/cluster, keyword cluster from hashtags, canonical, search_intent, BlogPosting type). Registry grows 19 → 1,067 pages. The article generateMetadata resolves through the registry (admin edits override the rendered page). Idempotent (ON CONFLICT (path) DO UPDATE). **PG16-verified** (1,067 pages / 1,048 blogs / all keyworded; public RLS read OK). |
-| 0237 | `0237_marketing_platform_spine.sql` | Canonical marketing page registry, durable regeneration queue, embeddings, provider observations, and media provenance | **Marketing engine spine.** Versioned canonical pages, durable edit queue, provider-health observations, vector storage, public published-only route families, and service-role Super Admin control-center actions. Additive/idempotent; apply before enabling the canonical marketing route families. |
-| 0238 | `0238_blog_image_provenance.sql` | Blog hero-image license, attribution, source URL/hash, trigger validation, and unique-source indexes | **Blog asset integrity.** Enforces HTTPS source URLs, approved free-use licenses, attribution, and source-level uniqueness for public blog hero images. Pair with `marketing:backfill:image-provenance`. |
+| 0237 | `0237_marketing_platform_spine.sql` | Canonical marketing page registry, durable regeneration queue, embeddings, provider observations, and media provenance | **Marketing engine spine.** Versioned canonical pages, durable edit queue, provider-health observations, vector storage, public published-only route families, and service-role Super Admin control-center actions. Canonical marketing routes depend on the corresponding schema; confirm production readiness through the approved forward release evidence. |
+| 0238 | `0238_blog_image_provenance.sql` | Blog hero-image license, attribution, source URL/hash, trigger validation, and unique-source indexes | **Blog asset integrity.** Enforces HTTPS source URLs, approved free-use licenses, attribution, and source-level uniqueness for public blog hero images. Historical tooling reference: `marketing:backfill:image-provenance`; this inventory does not authorize a production backfill. |
 
-Post-migration coverage reconciliation is additive and does not consume a
-migration number. Run `marketing:backfill:coverage -- --apply` to repair
-canonical SEO/AEO payloads, remove placeholder questions, and register citable
-answers for every published canonical page; verify with
-`marketing:verify:coverage:remote`.
+Marketing coverage and image-provenance backfills can change production data.
+Do not run historical backfills or seeds merely because the ledger is incomplete
+or a local verification passed. Any necessary production reconciliation belongs
+to a separately scoped, parent-owned procedure; the current release scope and
+verification are defined in `docs/PRODUCTION_FORWARD_RELEASE.md` and
+`.github/workflows/supabase-forward-release.yml`. Preview run `33987762363`
+passed; production application of the atomic `0240-0254` release remains pending.
