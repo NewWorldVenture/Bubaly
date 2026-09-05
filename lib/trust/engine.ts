@@ -194,7 +194,7 @@ export type Decision = {
   approvalModel?: ApprovalModel;
   requiredApprovals?: number;
   /** the rule path that produced this, for explainability */
-  basis: 'emergency' | 'deny_grant' | 'policy' | 'allow_grant' | 'delegation' | 'role_default' | 'fallback';
+  basis: 'emergency' | 'deny_grant' | 'policy' | 'allow_grant' | 'delegation' | 'role_default' | 'risk_tier' | 'fallback';
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -347,4 +347,134 @@ export function trustBand(score: number): 'low' | 'building' | 'trusted' | 'high
   if (score >= 65) return 'trusted';
   if (score >= 40) return 'building';
   return 'low';
+}
+
+// ── Risk tiers for AI tool calls (§12) ───────────────────────────────────────
+// `evaluateAction` above answers "may this actor touch this domain at all".
+// It does not know how big the thing being asked for is: adding a soccer game
+// and deleting the family's entire calendar are both `calendar` × `automate`.
+// The tool registry attaches an honest risk tier to every tool
+// (`lib/ai/tools/types.ts`), and `riskToDecision` turns that tier plus the
+// family's autonomy behaviour into a decision.
+//
+// WHERE IT SITS IN THE ORDER — this is the whole point of returning `null`:
+// the caller (`lib/ai/tools/execute.ts`) applies it only when
+// `evaluateAction` landed on `role_default` or `fallback`. A household's own
+// policy, an explicit grant, a delegation or an emergency elevation is a
+// decision the family made deliberately and it always wins; the risk tier
+// speaks only where the answer would otherwise have come from the generic
+// role matrix. `null` means "the tier has nothing to add here" and leaves the
+// engine's decision standing — it can tighten, never loosen.
+//
+// It is pure, so a planner can dry-run it without writing an audit row.
+
+/** `family_ai_settings.behavior` (§11): what the family has told Bubaly it may do unasked. */
+export type AutonomyBehavior = 'recommend' | 'prepare' | 'execute';
+
+export type RiskDecisionInput = {
+  /** The tool's declared tier, after any per-family `risk_overrides`. */
+  risk: 'low' | 'medium' | 'high';
+  actor: Actor;
+  domain: string;
+  /** `automate` for AI writes, `view` for reads — the capability actually evaluated. */
+  capability: Capability;
+  /**
+   * The family's autonomy setting for this tool's category. Optional because
+   * the storage for it (`family_ai_settings`, migration 0253) arrives with
+   * P3-04; until then a family expresses the same intent through the
+   * `subject_kind='ai'` trust policies the autopilot dial already writes, and
+   * those are matched a whole layer earlier — so an absent behaviour means
+   * "no household preference recorded", not "assume the most permissive one".
+   */
+  behavior?: AutonomyBehavior;
+  /** True when an explicit allow policy/grant already matched this action. */
+  explicitAllow?: boolean;
+  /** Tools whose READ output is private even inside the family (finances, documents, health). */
+  sensitiveRead?: boolean;
+};
+
+/** Roles a household would not hand a private read to without saying so. */
+const RESTRICTED_READ_ROLES: TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
+
+function isSensitiveDomainFor(role: TrustRole, domain: string): boolean {
+  const def = ROLE_DEFAULTS[role];
+  return HIGH_STAKES_AI_DOMAINS.includes(domain) || (def ? def.sensitiveDomains.includes(domain) : false);
+}
+
+/**
+ * The risk tier's contribution, or `null` when it has none.
+ *
+ * Order inside the function matters as much as the function's place in the
+ * chain: the view rule runs first because a read that should never have
+ * happened cannot be undone by a later gate, then `high` (which is
+ * unconditional), then the behaviour-driven `medium`, then `low`.
+ */
+export function riskToDecision(input: RiskDecisionInput): Decision | null {
+  const { actor, domain, capability, risk } = input;
+  const role = actor.role;
+  const label = DOMAIN_LABELS[domain] ?? domain;
+
+  // View-sensitivity (§4.2). ROLE_DEFAULTS grants `view` to every role in
+  // every domain and its `sensitiveDomains` carve-out only bites on writes, so
+  // without this a child could read the family's transactions through any
+  // read tool. An explicit allow (a parent deliberately sharing the domain
+  // with a teen) still wins, because it was matched before we got here.
+  if (capability === 'view') {
+    if (!input.explicitAllow && RESTRICTED_READ_ROLES.includes(role) && (input.sensitiveRead || isSensitiveDomainFor(role, domain))) {
+      return {
+        effect: 'deny',
+        reason: `${label} details are private to the adults in this family. Ask a parent if you need them.`,
+        basis: 'risk_tier',
+      };
+    }
+    return null;
+  }
+
+  // High risk is destructive, expensive or hard to undo. A person decides,
+  // every time, unless the family wrote a policy that says otherwise.
+  if (risk === 'high') {
+    if (input.explicitAllow) return null;
+    return {
+      effect: 'require_approval',
+      reason: `This is a big change to ${label} — Bubaly wants a person to say yes first.`,
+      approvalModel: 'single',
+      requiredApprovals: 1,
+      basis: 'risk_tier',
+    };
+  }
+
+  if (risk === 'medium') {
+    // 'recommend' means Bubaly may suggest and never act; 'prepare' means it
+    // may stage the work for a person to release. 'execute' adds nothing here
+    // — the role matrix (which still guards sensitive and high-stakes
+    // domains) gets the final word.
+    if (input.behavior === 'recommend') {
+      return {
+        effect: 'deny',
+        reason: `Bubaly is set to recommend only, so it can suggest this ${label} change but not make it.`,
+        basis: 'risk_tier',
+      };
+    }
+    if (input.behavior === 'prepare') {
+      return {
+        effect: 'require_approval',
+        reason: `Bubaly is set to prepare work for you, so this ${label} change is waiting on your yes.`,
+        approvalModel: 'single',
+        requiredApprovals: 1,
+        basis: 'risk_tier',
+      };
+    }
+    return null;
+  }
+
+  // Low risk: the small, reversible work a family wants done without being
+  // asked twice — but never inside a domain the role treats as sensitive, and
+  // never in a high-stakes one, where `evaluateAction`'s own gate must stand.
+  if (isSensitiveDomainFor(role, domain)) return null;
+  const def = ROLE_DEFAULTS[role];
+  if (!def) return null;
+  if (def.automationTrusted || role === 'teen') {
+    return { effect: 'allow', reason: `A small, reversible ${label} change — Bubaly can just do it.`, basis: 'risk_tier' };
+  }
+  return null;
 }
