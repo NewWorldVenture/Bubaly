@@ -75,6 +75,30 @@ export type GradeType = 'test' | 'quiz' | 'homework' | 'project' | 'final' | 'pa
 export type ThemePref = 'dark' | 'light' | 'system';
 export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
+// AI runtime (0250/0251). `AiRunState` is the §10 lifecycle shared by
+// ai_requests.status and family_automation_runs.state; the legacy free-text
+// `family_automation_runs.status` keeps its own 0022 vocabulary and stays `string`.
+export type AiRunState =
+  | 'queued' | 'planning' | 'awaiting_context' | 'awaiting_approval' | 'ready' | 'executing'
+  | 'verifying' | 'scheduled_followup' | 'completed' | 'partially_completed' | 'blocked'
+  | 'failed' | 'cancelled';
+export type AiRunLifecycleState = AiRunState | 'paused';
+export type AiStepState = AiRunState | 'skipped';
+export type AiRequestKind = 'concierge' | 'feature' | 'routine' | 'trigger' | 'handle_it';
+export type AiRunType = 'concierge' | 'routine' | 'trigger' | 'handle_it' | 'concierge_plan';
+export type AiPlanStatus =
+  | 'draft' | 'approved' | 'executing' | 'completed' | 'partially_completed' | 'failed' | 'cancelled' | 'superseded';
+export type AiStepType = 'retrieve' | 'act' | 'verify' | 'notify' | 'approval' | 'followup' | 'replan';
+export type AiRiskLevel = 'low' | 'medium' | 'high';
+export type AiActorKind = 'ai' | 'member' | 'system';
+export type AiToolCallState = 'reserved' | 'succeeded' | 'failed';
+export type AiConversationState = 'open' | 'archived';
+export type AiApprovalPayloadKind = 'tool' | 'plan_steps' | 'concierge_plan';
+export type AiRunEventType =
+  | 'run_started' | 'planned' | 'step_started' | 'step_completed' | 'step_failed' | 'step_retried'
+  | 'step_skipped' | 'approval_requested' | 'approval_decided' | 'clarification_asked'
+  | 'clarification_answered' | 'verified' | 'verification_failed' | 'model_call' | 'notified'
+  | 'paused' | 'resumed' | 'blocked' | 'cancelled' | 'run_completed' | 'run_failed' | 'followup_scheduled';
 export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
@@ -1077,14 +1101,48 @@ export interface Database {
         Partial<{ is_read: boolean; sent_at: string | null; pushed_at: string | null }>
       >;
       ai_conversations: T<
-        { id: string; family_id: string; user_id: string | null; title: string; provider: string; model: string | null } & Stamps,
-        { id?: string; family_id: string; user_id?: string | null; title?: string; provider?: string; model?: string | null },
-        Partial<{ title: string; model: string | null }>
+        { id: string; family_id: string; user_id: string | null; title: string; provider: string; model: string | null; state: AiConversationState; prompt_version: string | null } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; title?: string; provider?: string; model?: string | null; state?: AiConversationState; prompt_version?: string | null },
+        Partial<{ title: string; model: string | null; state: AiConversationState; prompt_version: string | null }>
       >;
       ai_messages: T<
-        { id: string; family_id: string; conversation_id: string; role: AiRole; content: string; tool_calls: Json | null; tool_results: Json | null; created_at: string },
-        { id?: string; family_id: string; conversation_id: string; role: AiRole; content?: string; tool_calls?: Json | null; tool_results?: Json | null },
-        Partial<{ content: string; tool_calls: Json | null; tool_results: Json | null }>
+        { id: string; family_id: string; conversation_id: string; role: AiRole; content: string; tool_calls: Json | null; tool_results: Json | null; structured_content: Json | null; model: string | null; usage: Json | null; request_id: string | null; sender_member_id: string | null; created_at: string },
+        { id?: string; family_id: string; conversation_id: string; role: AiRole; content?: string; tool_calls?: Json | null; tool_results?: Json | null; structured_content?: Json | null; model?: string | null; usage?: Json | null; request_id?: string | null; sender_member_id?: string | null },
+        Partial<{ content: string; tool_calls: Json | null; tool_results: Json | null; structured_content: Json | null; model: string | null; usage: Json | null; request_id: string | null }>
+      >;
+      // ── AI runtime core (0250): request → plan → steps → run → events/tool calls.
+      // The ledgers below are written exclusively by the service client; the
+      // Insert/Update shapes exist for that server code, not for browser writes
+      // (RLS grants members SELECT only — see 0250's header).
+      ai_requests: T<
+        { id: string; family_id: string; conversation_id: string | null; requested_by: string | null; requested_by_member_id: string | null; kind: AiRequestKind; feature: string | null; request_text: string; interpreted_intent: string | null; intent_confidence: number | null; status: AiRunState; priority: number; context_stats: Json; clarifications: Json; model: string | null; prompt_tokens: number | null; completion_tokens: number | null; latency_ms: number | null; error: string | null; source_rule_id: string | null; started_at: string | null; completed_at: string | null } & Stamps,
+        { id?: string; family_id: string; conversation_id?: string | null; requested_by?: string | null; requested_by_member_id?: string | null; kind?: AiRequestKind; feature?: string | null; request_text?: string; interpreted_intent?: string | null; intent_confidence?: number | null; status?: AiRunState; priority?: number; context_stats?: Json; clarifications?: Json; model?: string | null; prompt_tokens?: number | null; completion_tokens?: number | null; latency_ms?: number | null; error?: string | null; source_rule_id?: string | null; started_at?: string | null; completed_at?: string | null },
+        Partial<{ status: AiRunState; interpreted_intent: string | null; intent_confidence: number | null; context_stats: Json; clarifications: Json; model: string | null; prompt_tokens: number | null; completion_tokens: number | null; latency_ms: number | null; error: string | null; started_at: string | null; completed_at: string | null }>
+      >;
+      ai_request_context: T<
+        { request_id: string; family_id: string; snapshot: Json; sensitive_omitted: string[] } & Stamps,
+        { request_id: string; family_id: string; snapshot?: Json; sensitive_omitted?: string[] },
+        Partial<{ snapshot: Json; sensitive_omitted: string[] }>
+      >;
+      ai_plans: T<
+        { id: string; family_id: string; request_id: string | null; version: number; objective: string | null; reasoning_summary: string | null; status: AiPlanStatus; risk_level: AiRiskLevel; estimated_actions: number; requires_approval: boolean; planner_model: string | null; planner_prompt_version: string | null } & Stamps,
+        { id?: string; family_id: string; request_id?: string | null; version?: number; objective?: string | null; reasoning_summary?: string | null; status?: AiPlanStatus; risk_level?: AiRiskLevel; estimated_actions?: number; requires_approval?: boolean; planner_model?: string | null; planner_prompt_version?: string | null },
+        Partial<{ status: AiPlanStatus; risk_level: AiRiskLevel; objective: string | null; reasoning_summary: string | null; estimated_actions: number; requires_approval: boolean }>
+      >;
+      ai_plan_steps: T<
+        { id: string; family_id: string; plan_id: string; parent_step_id: string | null; sequence: number; step_type: AiStepType; tool_name: string | null; description: string | null; input_json: Json; dependency_ids: string[]; condition: Json | null; status: AiStepState; approval_required: boolean; approval_id: string | null; risk_level: AiRiskLevel; retry_count: number; max_retries: number; result_json: Json | null; error: string | null; started_at: string | null; completed_at: string | null } & Stamps,
+        { id?: string; family_id: string; plan_id: string; parent_step_id?: string | null; sequence?: number; step_type?: AiStepType; tool_name?: string | null; description?: string | null; input_json?: Json; dependency_ids?: string[]; condition?: Json | null; status?: AiStepState; approval_required?: boolean; approval_id?: string | null; risk_level?: AiRiskLevel; retry_count?: number; max_retries?: number; result_json?: Json | null; error?: string | null; started_at?: string | null; completed_at?: string | null },
+        Partial<{ status: AiStepState; approval_required: boolean; approval_id: string | null; retry_count: number; result_json: Json | null; error: string | null; started_at: string | null; completed_at: string | null; input_json: Json; description: string | null }>
+      >;
+      ai_run_events: T<
+        { id: string; family_id: string; run_id: string; request_id: string | null; step_id: string | null; event_type: AiRunEventType; tool_name: string | null; message: string; payload: Json; actor_kind: AiActorKind; actor_member_id: string | null } & Stamps,
+        { id?: string; family_id: string; run_id: string; request_id?: string | null; step_id?: string | null; event_type: AiRunEventType; tool_name?: string | null; message?: string; payload?: Json; actor_kind?: AiActorKind; actor_member_id?: string | null },
+        Partial<{ message: string; payload: Json }>
+      >;
+      ai_tool_calls: T<
+        { id: string; family_id: string; run_id: string | null; plan_step_id: string | null; request_id: string | null; conversation_id: string | null; message_id: string | null; tool_name: string; requested_by: string | null; requested_by_member_id: string | null; actor_kind: AiActorKind; inputs: Json; outputs: Json | null; state: AiToolCallState; attempt: number; locked_at: string | null; duration_ms: number | null; error: string | null; idempotency_key: string; resource_table: string | null; resource_id: string | null; finished_at: string | null } & Stamps,
+        { id?: string; family_id: string; run_id?: string | null; plan_step_id?: string | null; request_id?: string | null; conversation_id?: string | null; message_id?: string | null; tool_name: string; requested_by?: string | null; requested_by_member_id?: string | null; actor_kind?: AiActorKind; inputs?: Json; outputs?: Json | null; state?: AiToolCallState; attempt?: number; locked_at?: string | null; duration_ms?: number | null; error?: string | null; idempotency_key: string; resource_table?: string | null; resource_id?: string | null; finished_at?: string | null },
+        Partial<{ state: AiToolCallState; outputs: Json | null; attempt: number; locked_at: string | null; duration_ms: number | null; error: string | null; resource_table: string | null; resource_id: string | null; finished_at: string | null }>
       >;
       audit_logs: T<
         { id: string; family_id: string | null; actor_id: string | null; action: string; resource: string; resource_id: string | null; metadata: Json | null; created_at: string },
@@ -1335,9 +1393,9 @@ export interface Database {
         Partial<{ domains: string[]; reason: string | null; expires_at: string; revoked_at: string | null; updated_at: string }>
       >;
       approval_requests: T<
-        { id: string; family_id: string; domain: string; capability: string; requested_by_kind: string; requested_by_member_id: string | null; agent: string | null; title: string; summary: string | null; payload: Json; amount_cents: number | null; confidence: number | null; policy_id: string | null; reasoning: string | null; approval_model: string; required_approvals: number; approvals: Json; status: string; priority: string; decided_by: string | null; decided_at: string | null; expires_at: string | null; executed_at: string | null; execution_result: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; domain: string; capability?: string; requested_by_kind?: string; requested_by_member_id?: string | null; agent?: string | null; title: string; summary?: string | null; payload?: Json; amount_cents?: number | null; confidence?: number | null; policy_id?: string | null; reasoning?: string | null; approval_model?: string; required_approvals?: number; approvals?: Json; status?: string; priority?: string; expires_at?: string | null },
-        Partial<{ status: string; approvals: Json; decided_by: string | null; decided_at: string | null; executed_at: string | null; execution_result: string | null; priority: string; updated_at: string }>
+        { id: string; family_id: string; domain: string; capability: string; requested_by_kind: string; requested_by_member_id: string | null; agent: string | null; title: string; summary: string | null; payload: Json; amount_cents: number | null; confidence: number | null; policy_id: string | null; reasoning: string | null; approval_model: string; required_approvals: number; approvals: Json; status: string; priority: string; decided_by: string | null; decided_at: string | null; expires_at: string | null; executed_at: string | null; execution_result: string | null; request_id: string | null; run_id: string | null; plan_step_id: string | null; plan_step_ids: string[]; consequences: Json; evidence: Json | null; edited_payload: Json | null; payload_kind: AiApprovalPayloadKind | null; reviewed_by: string | null; review_note: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; domain: string; capability?: string; requested_by_kind?: string; requested_by_member_id?: string | null; agent?: string | null; title: string; summary?: string | null; payload?: Json; amount_cents?: number | null; confidence?: number | null; policy_id?: string | null; reasoning?: string | null; approval_model?: string; required_approvals?: number; approvals?: Json; status?: string; priority?: string; expires_at?: string | null; request_id?: string | null; run_id?: string | null; plan_step_id?: string | null; plan_step_ids?: string[]; consequences?: Json; evidence?: Json | null; edited_payload?: Json | null; payload_kind?: AiApprovalPayloadKind | null },
+        Partial<{ status: string; approvals: Json; decided_by: string | null; decided_at: string | null; executed_at: string | null; execution_result: string | null; priority: string; expires_at: string | null; edited_payload: Json | null; consequences: Json; reviewed_by: string | null; review_note: string | null; updated_at: string }>
       >;
       trust_scores: T<
         { id: string; family_id: string; actor_kind: string; actor_id: string; score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string; created_at: string },
@@ -1842,10 +1900,13 @@ export interface Database {
         { id?: string; family_id: string; name: string; trigger_type: string; trigger_config?: Json; action_type: string; action_config?: Json; is_enabled?: boolean; requires_approval?: boolean; last_run_at?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
         Partial<{ name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; updated_by: string | null }>
       >;
+      // Also the AI run + continuation queue (0250). `status` is the legacy 0022
+      // free-text column the concierge/autopilot surfaces still read and write;
+      // `state` is the constrained §10 lifecycle the executor owns.
       family_automation_runs: T<
-        { id: string; family_id: string; rule_id: string | null; trigger_type: string | null; status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; rule_id?: string | null; trigger_type?: string | null; status?: string; summary?: string | null; result?: Json; approved_by?: string | null; approved_at?: string | null; metadata?: Json; created_by?: string | null },
-        Partial<{ status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json }>
+        { id: string; family_id: string; rule_id: string | null; trigger_type: string | null; status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json; created_by: string | null; request_id: string | null; plan_id: string | null; requested_by_member_id: string | null; run_type: AiRunType; state: AiRunLifecycleState; current_step_id: string | null; progress: Json; started_at: string | null; completed_at: string | null; error: string | null; cancel_requested_at: string | null; paused_at: string | null; run_after: string; lease_owner: string | null; lease_expires_at: string | null; attempt: number; max_attempts: number; idempotency_key: string | null } & Stamps,
+        { id?: string; family_id: string; rule_id?: string | null; trigger_type?: string | null; status?: string; summary?: string | null; result?: Json; approved_by?: string | null; approved_at?: string | null; metadata?: Json; created_by?: string | null; request_id?: string | null; plan_id?: string | null; requested_by_member_id?: string | null; run_type?: AiRunType; state?: AiRunLifecycleState; current_step_id?: string | null; progress?: Json; started_at?: string | null; completed_at?: string | null; error?: string | null; cancel_requested_at?: string | null; paused_at?: string | null; run_after?: string; lease_owner?: string | null; lease_expires_at?: string | null; attempt?: number; max_attempts?: number; idempotency_key?: string | null },
+        Partial<{ status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json; plan_id: string | null; state: AiRunLifecycleState; current_step_id: string | null; progress: Json; started_at: string | null; completed_at: string | null; error: string | null; cancel_requested_at: string | null; paused_at: string | null; run_after: string; lease_owner: string | null; lease_expires_at: string | null; attempt: number }>
       >;
       family_knowledge_nodes: T<
         { id: string; family_id: string; member_id: string | null; node_type: string; label: string; ref_table: string | null; ref_id: string | null; weight: number; status: string; metadata: Json; created_by: string | null } & Stamps,
@@ -2566,6 +2627,8 @@ export interface Database {
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
+      // Executor lease (0250): returns the ids it just leased. service_role only.
+      claim_ai_runs: { Args: { p_limit?: number; p_lease_seconds?: number }; Returns: string[] };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
       is_super_admin: { Args: Record<string, never>; Returns: boolean };
