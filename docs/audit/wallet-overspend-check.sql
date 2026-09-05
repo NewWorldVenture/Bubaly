@@ -6,7 +6,7 @@
 -- anchor family, runs a fixed auth sequence, and RAISE EXCEPTIONs on any breach.
 --
 --   bash docs/audit/verify-pg.sh up
---   PGHOST=/tmp/pgaudit_db PGPORT=54399 PGUSER=postgres PGDATABASE=familyos \
+--   PGHOST=/tmp/pgaudit_db PGPORT=54399 PGUSER=postgres PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/wallet-overspend-check.sql
 
 do $$

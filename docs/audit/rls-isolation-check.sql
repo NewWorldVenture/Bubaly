@@ -6,7 +6,7 @@
 -- family-scoped table has RLS enabled.
 --
 --   bash docs/audit/verify-pg.sh up
---   PGHOST=/tmp/pgaudit_db PGPORT=54399 PGUSER=postgres PGDATABASE=familyos \
+--   PGHOST=/tmp/pgaudit_db PGPORT=54399 PGUSER=postgres PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/rls-isolation-check.sql
 --
 -- Exit is non-zero (via RAISE EXCEPTION) if any invariant fails.

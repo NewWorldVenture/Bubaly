@@ -6094,7 +6094,13 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
   host `(www\.)?theagoras\.com` → `https://www.bubaly.com/:path*` (308 permanent).
   NOTE: that redirect only fires once the domain is actually attached to this Vercel
   project. If `theagoras.com` shows `DEPLOYMENT_NOT_FOUND`, attach/redirect it in
-  Vercel → familyos project → Settings → Domains (or point it at www.bubaly.com there).
+  Vercel → Bubaly project → Settings → Domains (or point it at www.bubaly.com there).
+- The Vercel project was renamed `familyos` → `Bubaly` (2026-09-05). Custom domains,
+  env vars, crons, and the Git integration are bound to the project ID, not its name,
+  so production was unaffected. What DID change: the generated alias
+  `familyos.vercel.app` was released and previews moved to `bubaly-*.vercel.app`.
+  Never point an integration at a `*.vercel.app` alias — see
+  `docs/runbooks/vercel-project-rename.md`.
 
 ## Git workflow (IMPORTANT — the branch is shared & gets polluted)
 - Designated dev branch: **`claude/funny-darwin-gkmptm`**. Never push to `main` directly

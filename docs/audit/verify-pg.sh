@@ -21,7 +21,7 @@ BIN=/usr/lib/postgresql/16/bin
 ANCHOR_EMAIL=newworldventurellc@gmail.com
 ANCHOR_UID=00000000-0000-4000-8000-000000000001
 ANCHOR_FID=00000000-0000-4000-8000-0000000000f1
-export PGHOST=$PGROOT PGPORT=$PORT PGUSER=postgres PGDATABASE=familyos
+export PGHOST=$PGROOT PGPORT=$PORT PGUSER=postgres PGDATABASE=bubaly
 
 cmd=${1:-up}
 
@@ -30,7 +30,7 @@ up() {
   rm -rf "$PGROOT"; mkdir -p "$DATA"; chown -R ubuntu:ubuntu "$PGROOT"
   sudo -u ubuntu "$BIN/initdb" -D "$DATA" -U postgres --auth=trust >/dev/null
   sudo -u ubuntu "$BIN/pg_ctl" -D "$DATA" -l "$PGROOT/pg.log" -o "-p $PORT -k $PGROOT" -w start
-  PGDATABASE=postgres psql -qc "create database familyos;"
+  PGDATABASE=postgres psql -qc "create database bubaly;"
   # Supabase shims
   psql -v ON_ERROR_STOP=1 -q <<'SQL'
 create extension if not exists pgcrypto;
@@ -81,7 +81,7 @@ grant select on all tables in schema public to authenticated, anon;
 grant usage on all sequences in schema public to authenticated, anon;
 SQL
   psql -v ON_ERROR_STOP=0 -q -f "$ROOT/supabase/SEED_ALL.sql" 2>&1 | grep -iE "^psql.*ERROR" | grep -viE "No families found|anchored account" | head -20 || true
-  echo "== harness up: db=familyos host=$PGROOT port=$PORT anchor_family=$ANCHOR_FID migration_fail=$fail =="
+  echo "== harness up: db=bubaly host=$PGROOT port=$PORT anchor_family=$ANCHOR_FID migration_fail=$fail =="
 }
 
 case "$cmd" in

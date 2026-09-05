@@ -181,7 +181,7 @@ jobs:
           # run-e2e.mjs runs `next build` first — same heap need as the Build step.
           NODE_OPTIONS: --max-old-space-size=4096
           E2E_AUTHENTICATED: '1'
-          E2E_AUTH_EMAIL: familyos-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
+          E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
 
       - name: Stop isolated Supabase

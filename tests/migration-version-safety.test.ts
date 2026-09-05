@@ -21,7 +21,7 @@ describe('Supabase migration filename safety', () => {
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'familyos-migrations-'));
+    const directory = mkdtempSync(join(tmpdir(), 'bubaly-migrations-'));
     try {
       writeFileSync(join(directory, '0194_first.sql'), 'select 1;');
       writeFileSync(join(directory, '0194_second.sql'), 'select 1;');
