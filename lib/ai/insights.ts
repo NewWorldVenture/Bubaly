@@ -57,7 +57,8 @@ export type InsightKind =
   | 'watchlist'
   | 'inventory'
   | 'sleep'
-  | 'declutter';
+  | 'declutter'
+  | 'moving';
 
 export type InsightMember = { id: string; name: string };
 
@@ -701,6 +702,31 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         .join('\n') || 'No missions yet.';
       const sessions = cap(r(d, 'declutter_sessions'), 12).shown.map((s) => `- ${day(s.started_at)} ${who(s.member_id)}: ${s.minutes} min, ${s.items_removed} items removed`).join('\n') || 'No sessions yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nZones:\n${zones}\n\nRecent missions:\n${missions}\n\nRecent sessions:\n${sessions}\n\nGive: (1) the three zones to hit first and why, (2) a 7-day plan of one 10–15 minute mission per day with a suggested person, (3) one habit that would stop the worst zone refilling.${q(d)}`;
+    },
+  },
+
+  moving: {
+    label: 'AI move planner',
+    title: 'AI Move Planner',
+    blurb: 'What to do this week for the move, what is slipping, and a day-one plan from the box list.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a calm, experienced relocation coordinator for a family. Work ONLY from the move, tasks and boxes provided. ' +
+      'Be concrete about dates relative to move day, flag overdue steps first, keep kids and pets in mind, and never invent movers or prices. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const mv = r(d, 'moves')[0];
+      const move = mv
+        ? `${mv.title}: ${mv.from_address ?? '?'} → ${mv.to_address ?? '?'} on ${day(mv.move_date)} (${mv.move_kind}, status ${mv.status}${mv.has_kids ? ', kids' : ''}${mv.has_pets ? ', pets' : ''}${mv.is_renting_out ? ', renting out the old home' : ''}). Budget ${mv.budget_cents == null ? 'not set' : money(Number(mv.budget_cents))}, spent ${money(Number(mv.spent_cents))}, mover quote ${mv.mover_quote_cents == null ? 'none yet' : money(Number(mv.mover_quote_cents))}${mv.mover_name ? ` from ${mv.mover_name}` : ''}.`
+        : 'No move planned yet.';
+      const tasks = cap(r(d, 'move_tasks'), 40).shown
+        .map((t) => `- [${t.status}] ${t.title} (${t.category}${t.due_date ? `, due ${day(t.due_date)}` : ''}${t.assignee_id ? `, ${who(t.assignee_id)}` : ''})`)
+        .join('\n') || 'No tasks yet.';
+      const boxes = cap(r(d, 'move_boxes'), 30).shown
+        .map((b) => `- #${b.box_number} ${b.label} → ${b.to_room ?? 'unassigned'} [${b.status}${b.is_fragile ? ', fragile' : ''}${b.is_essential ? ', essentials' : ''}]${Array.isArray(b.contents) && b.contents.length ? `: ${b.contents.slice(0, 6).join(', ')}` : ''}`)
+        .join('\n') || 'No boxes yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nMove:\n${move}\n\nTasks:\n${tasks}\n\nBoxes:\n${boxes}\n\nGive: (1) the three things to do this week in order, with who, (2) anything overdue or missing for this family's situation, (3) a first-night / day-one plan from the essentials boxes, (4) one budget observation.${q(d)}`;
     },
   },
 

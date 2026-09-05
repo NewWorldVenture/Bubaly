@@ -139,6 +139,16 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { declutter_zones: zones.data ?? [], declutter_missions: missions.data ?? [], declutter_sessions: sessions.data ?? [] };
     }
+    case 'moving': {
+      const live = await eq(sb, 'moves', familyId).neq('status', 'cancelled').order('move_date', { ascending: false }).limit(1);
+      const mv = live.data?.[0];
+      if (!mv) return { moves: [], move_tasks: [], move_boxes: [] };
+      const [tasks, boxes] = await Promise.all([
+        eq(sb, 'move_tasks', familyId).eq('move_id', mv.id).order('due_date', { ascending: true, nullsFirst: false }).limit(80),
+        eq(sb, 'move_boxes', familyId).eq('move_id', mv.id).order('box_number').limit(80),
+      ]);
+      return { moves: [mv], move_tasks: tasks.data ?? [], move_boxes: boxes.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };
