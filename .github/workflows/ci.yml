@@ -36,6 +36,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+        env:
+          # The standalone check needs the same schema/type heap as next build.
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Lint
         run: npm run lint

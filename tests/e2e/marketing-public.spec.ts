@@ -17,6 +17,7 @@ test('Get started reaches the welcome page before sign-in', async ({ page }) => 
 test('each homepage feature leads to its existing detail card', async ({ page }) => {
   const links = page.getByRole('navigation', { name: 'Explore family tools' }).getByRole('link');
   await expect(links).toHaveCount(6);
+  expect(await links.first().evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
   const destinations = await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')!));
   expect(new Set(destinations).size).toBe(6);
   await links.first().click();
@@ -54,8 +55,11 @@ test('the mobile menu supports keyboard dismissal and returns focus', async ({ p
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation).toBeVisible();
+  const firstLink = navigation.getByRole('link', { name: 'Features', exact: true });
+  expect(await firstLink.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
   await page.keyboard.press('Tab');
-  await expect(navigation.getByRole('link', { name: 'Features', exact: true })).toBeFocused();
+  await expect(firstLink).toBeFocused();
+  expect(await firstLink.evaluate((node) => getComputedStyle(node).boxShadow)).not.toBe('none');
   await page.keyboard.press('Escape');
   await expect(navigation).toBeHidden();
   await expect(toggle).toBeFocused();

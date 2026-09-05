@@ -109,3 +109,13 @@ configured as `SUPABASE_PROJECT_REF` and `SUPABASE_ANON_KEY` in GitHub's
 `production` environment. The two remaining missing private credentials are
 `SUPABASE_ACCESS_TOKEN` and `SUPABASE_SERVICE_ROLE_KEY`. Add them through GitHub
 environment secrets, not chat, before running the existing migration workflow.
+
+The `72521edd` follow-up deployed successfully and passed all 100 live public
+browser checks, including the PIN control in both themes, plus all 4,229 unit
+tests. The final release inspection found two additional items: the standalone
+GitHub TypeScript process exhausted its default heap (job `101318447319`), and
+the shared `focus-ring` class paints an unconditional ring. The quality job now
+gives typechecking the existing build's 4 GB heap allowance. This increment's
+public links and PIN controls use `focus-visible:focus-ring`, with browser
+assertions covering both idle and keyboard-focused appearance. The shared
+global CSS helper and app sidebar are unchanged.
