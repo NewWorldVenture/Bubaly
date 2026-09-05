@@ -115,7 +115,7 @@ test.describe('authenticated first-value journey', () => {
     if (!admin || !testUser) throw new Error('E2E account was not initialized.');
     const { data: membership, error: membershipError } = await admin
       .from('family_members')
-      .select('family_id')
+      .select('family_id, id')
       .eq('user_id', testUser.id)
       .single();
     if (membershipError) throw membershipError;
@@ -129,5 +129,56 @@ test.describe('authenticated first-value journey', () => {
       if (error) throw error;
       return count;
     }).toBe(1);
+
+    await test.step('database rejects forged AI execution and approval authority', async () => {
+      const service = admin!;
+      const user = testUser!;
+      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+      if (!publicKey) throw new Error('The isolated RLS checks require a public Supabase key.');
+      const member = createClient(supabaseUrl, publicKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { error: signInError } = await member.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
+      const familyId = membership.family_id;
+      const { data: plan, error: planError } = await service.from('ai_plans')
+        .insert({ family_id: familyId, objective: 'Isolated permission probe' }).select('id').single();
+      if (planError) throw planError;
+      const run = { family_id: familyId, trigger_type: 'plan_accepted', created_by: user.id, summary: 'Isolated permission probe' };
+      const approval = { family_id: familyId, domain: 'calendar', title: 'Isolated permission probe' };
+      const request = { family_id: familyId, requested_by: user.id, requested_by_member_id: membership.id };
+      const forbidden: Array<[string, Record<string, unknown>]> = [
+        ['family_automation_runs', { ...run, state: 'ready', status: 'approved' }],
+        ['family_automation_runs', { ...run, state: 'queued', plan_id: plan.id }],
+        ['family_automation_runs', { ...run, state: 'queued', requested_by_member_id: membership.id }],
+        ['approval_requests', { ...approval, status: 'approved' }],
+        ['approval_requests', { ...approval, approvals: [{ member_id: membership.id, decision: 'approved' }] }],
+        ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id, status: 'approved' }],
+        ['ai_requests', { ...request, status: 'completed' }],
+        ['ai_requests', { ...request, prompt_tokens: -100 }],
+      ];
+      for (const [table, row] of forbidden) {
+        const { error } = await member.from(table).insert(row);
+        expect(error?.code, `${table} must reject forged authority`).toBe('42501');
+      }
+
+      const allowed: Array<[string, Record<string, unknown>]> = [
+        ['family_automation_runs', { ...run, status: 'pending' }],
+        ['family_automation_runs', { ...run, status: 'executed' }],
+        ['approval_requests', approval],
+        ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id }],
+        ['ai_requests', request],
+      ];
+      for (const [table, row] of allowed) {
+        const { error } = await member.from(table).insert(row);
+        expect(error, `${table} must preserve ordinary request creation`).toBeNull();
+      }
+
+      // The trusted executor may persist runtime-linked work. Leave it paused
+      // so this isolated test never schedules or executes any household action.
+      const { error: trustedError } = await service.from('family_automation_runs')
+        .insert({ ...run, plan_id: plan.id, requested_by_member_id: membership.id, state: 'paused' });
+      expect(trustedError).toBeNull();
+    });
   });
 });
