@@ -12,11 +12,17 @@ The one-time, hash-pinned `0240-0254` atomic release is defined in
 [PRODUCTION_FORWARD_RELEASE.md](PRODUCTION_FORWARD_RELEASE.md) and
 [supabase-forward-release.yml](../.github/workflows/supabase-forward-release.yml).
 **Preview run `33987762363` passed for `0240-0254`, but that release is HELD.**
-Do not apply the previewed bundle: new requester-privacy and core-execution
-findings remain unresolved, and generation of the complete traceability matrix
-did not finish. `0255` is **PLANNED, not written or applied**. A corrected release,
-a new successful preview, completed matrix and review evidence, and explicit
-parent authorization are required before any production apply.
+Do not apply the previewed bundle: requester-privacy and core-execution findings
+and the required traceability/review evidence remain unresolved. `0255`
+(`0255_ai_runtime_lockdown.sql`) implements runtime INSERT lockdown,
+conversation/message ownership and client-request deduplication. It is not the
+broader raw request/context/plan/run/tool/event privacy closure; that gap requires
+a separate reviewed follow-up and is not implemented by this migration.
+`0255` is outside the unchanged pinned bundle. Code presence and prior test
+reports do not establish completed review or production application. A separately
+reviewed hash-pinned release, a new successful preview, the required matrix and
+review evidence, and explicit parent authorization are required before any
+production apply. No future release range is authorized by this inventory.
 
 `0253` closes AI worker grant drift and `0254` closes wallet RLS drift in the
 reviewed code. Their presence on main and passing code/CI checks do not establish
@@ -45,8 +51,10 @@ not establish those results or production application.
   apply, parent must have a corrected hash-pinned release reflected in the
   runbook and workflow, a new successful preview, review evidence addressing
   requester privacy and core execution, and the completed traceability matrix.
-  Explicit parent authorization is still required. `0255` is planned only;
-  neither its implementation nor its application is established. Preserve the
+  Explicit parent authorization is still required. `0255` and its combined
+  regression guards are code under PR reconciliation, not evidence of complete
+  requester privacy or production application. Parent owns validation of the
+  reconciled changes; the pinned bundle does not include `0255`. Preserve the
   corrected release's atomicity; this inventory is not an execution sequence.
 - The original `supabase-production-migrations.yml` workflow deliberately
   blocks historical replay against the incomplete ledger. Its block must not
@@ -169,7 +177,8 @@ Do not replay referenced seeds or infer empty production tables from this list.
 All additive + idempotent, family-scoped RLS via `is_family_member`, `updated_at`
 triggers, realtime publication. Each has a matching `npm run db:seed:<module>`
 script that loads 250 rows per table for the target family (idempotent, tagged
-`[seed:<module>]`). Apply in order; `supabase db push` does it in one go.
+`[seed:<module>]`). These are isolated-development fixture descriptions, not
+production apply or seed instructions; the production release remains HELD.
 
 | # | File | Adds | Feature it unblocks |
 |---|------|------|---------------------|
@@ -192,7 +201,7 @@ script that loads 250 rows per table for the target family (idempotent, tagged
 > = true` in `supabase/config.toml`, revokes those defaults and would need explicit
 > `GRANT`s — see the comment in `config.toml`.
 
-### AI runtime core (0250–0252) — the Family OS concierge spine
+### AI runtime core (0250–0251, forward 0252–0255) — the Family OS concierge spine
 
 Additive + idempotent, verified on a Postgres 18 (PGlite) harness: the full
 ordered migration set applies clean, 0250/0251 re-apply as a no-op, `claim_ai_runs`
@@ -203,7 +212,10 @@ injection, run-event forgery and self-approval. Guard: `tests/ai-runtime-schema.
 |---|------|------|---------------------|
 | 0250 | `0250_ai_runtime_core.sql` | `ai_requests`, `ai_request_context`, `ai_plans`, `ai_plan_steps`, `ai_run_events`, `ai_tool_calls`; extends `family_automation_runs` into the run + continuation queue (`state`, `run_type`, `request_id`/`plan_id`, lease + attempt columns, `idempotency_key`); extends `ai_conversations`/`ai_messages` (`state`, `structured_content`, `model`, `usage`, `request_id`, `sender_member_id`); `claim_ai_runs(int, int)` RPC (service-role only); realtime on `ai_run_events`, `ai_plan_steps`, `family_automation_runs` | The concierge run pipeline: request → plan → steps → executed run with a live timeline (`/dashboard/concierge`, run detail, "Working on" / "Completed by Bubaly"), the §30 duplicate guard, and per-family AI usage accounting |
 | 0251 | `0251_ai_trust_hardening.sql` | `approval_requests` run/step linkage + `consequences`, `evidence`, `edited_payload`, `payload_kind`, `reviewed_by`, `review_note`, 48h `expires_at` default (+ backfill of pending rows); widened `trust_audit_logs.decision` CHECK; manager-only UPDATE/DELETE RLS on `approval_requests`, `family_automation_runs` and `parent_approvals`, plus a requester-only self-cancel policy | Approval cards with real consequences and an Edit flow, expiring approvals, and the write-side lockdown that stops a signed-in child approving their own request or marking a run `executed` |
-| 0255 | `0255_ai_runtime_lockdown.sql` | Runtime INSERT lockdown preserving main's pending-decision, accounting, active-member, current-step, lease-expiry and idempotency guards alongside requester/link restrictions; adds `ai_requests.client_request_id` + unique `(family_id, client_request_id)`; makes `ai_conversations`/`ai_messages` owner-only | **HELD.** This is runtime write-lockdown with conversation/message ownership, not the previously planned broader requester-privacy fix. The raw request/context/plan/run/tool/event privacy gap requires a separate reviewed follow-up and is not implemented here. No production apply is authorized; the pinned release bundle remains unchanged and held. |
+| 0252 | `0252_ai_insert_authority.sql` | Pins what a member's INSERT may claim on `family_automation_runs` (queued, unlinked, unleased), `approval_requests` (pending, undecided, unexecuted), `parent_approvals` (pending, undecided) and `ai_requests` (own, queued, unaccounted) | A client INSERT can no longer manufacture executor authority (a ready run, a decided approval, a completed request). Guard: `tests/ai-insert-authority.test.ts` |
+| 0253 | `0253_ai_worker_execute_lockdown.sql` | Revokes `claim_ai_runs(int, int)` from `public`, `anon` and `authenticated`; grants it to `service_role` only, and verifies | Only the server worker (`/api/cron/ai-runs`) can claim the global run queue. Guard: `tests/production-security-boundaries.test.ts` |
+| 0254 | `0254_wallet_write_policy_drift.sql` | Drops the legacy permissive wallet write policies and adds restrictive manager guards on the five wallet tables | Closes the wallet RLS drift (LB-010/PLA-0580) so a child cannot mint completed credits. Guard: `tests/production-security-boundaries.test.ts` |
+| 0255 | `0255_ai_runtime_lockdown.sql` | Runtime INSERT lockdown preserving main's pending-decision, accounting, active-member, current-step, lease-expiry and idempotency guards; approvals require a non-null active caller member and no request/run/step/payload linkage; adds `ai_requests.client_request_id` + unique `(family_id, client_request_id)`; makes `ai_conversations`/`ai_messages` owner-only | **HELD.** This is runtime write-lockdown with conversation/message ownership, not the previously planned broader requester-privacy fix. The raw request/context/plan/run/tool/event privacy gap requires a separate reviewed follow-up and is not implemented here. No production apply is authorized; the pinned release bundle remains unchanged and held. |
 
 **Read the RLS change before applying.** 0251 replaces the permissive `FOR ALL
 is_family_member` policies on `family_automation_runs` (0022) and
@@ -224,10 +236,10 @@ select polname, cmd from pg_policies
 select count(*) from public.approval_requests where status = 'pending' and expires_at is null; -- 0
 ```
 
-If prod is further behind than 0118, `supabase db push` will also pick up any
-earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
-safe to re-run. When in doubt, **run the full push**: idempotent migrations make
-a superset apply harmless.
+This historical inventory is not a replay plan. Do not use a full push or an
+incomplete production ledger to infer that older migrations should run again.
+Idempotency does not establish replay safety; the HELD status and parent-owned
+reviewed forward-release procedure above govern production changes.
 
 ## ⚠️ Note for whoever maintains the migration folder
 
