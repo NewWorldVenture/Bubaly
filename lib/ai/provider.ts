@@ -1,5 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
+import { modelCapabilities } from '@/lib/ai/models';
+import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -26,15 +28,19 @@ export type AIMessage = {
 export type AICompletion = {
   text: string;
   toolCalls: { name: string; args: Record<string, unknown> }[];
+  /** Token counts reported by the provider, or null when it sent none. */
+  usage?: TokenUsage | null;
 };
 
 type OpenAIChatResponse = {
   choices?: Array<{
     message?: {
       content?: string;
+      refusal?: string | null;
       tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
     };
   }>;
+  usage?: unknown;
 };
 
 /** A tool the model can call, paired with a server-side executor. */
@@ -45,7 +51,7 @@ export type ToolSpec = AITool & {
 /** A tool the model actually invoked this turn, with its result. */
 export type ExecutedAction = { name: string; args: Record<string, unknown>; result: unknown };
 
-export type ToolRunResult = { text: string; actions: ExecutedAction[] };
+export type ToolRunResult = { text: string; actions: ExecutedAction[]; usage?: TokenUsage | null };
 
 export type RunToolsInput = {
   system: string;
@@ -54,6 +60,10 @@ export type RunToolsInput = {
   maxTokens?: number;
   /** Safety cap on tool-call rounds. Default 6. */
   maxRounds?: number;
+  /** Caller cancellation. Combined with the transport deadline, never replacing it. */
+  signal?: AbortSignal;
+  /** Fired once per model round with that round's token counts (see lib/ai/usage.ts). */
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 function toolExecutionFailure(name: string, error: unknown): { ok: false; error: string } {
@@ -72,7 +82,38 @@ export type AICompleteInput = {
   tools: AITool[];
   /** Max output tokens. Defaults to 1024. */
   maxTokens?: number;
+  /** Caller cancellation. Combined with the transport deadline, never replacing it. */
+  signal?: AbortSignal;
 };
+
+/** A strict-JSON-schema completion request. The schema is JSON Schema, not zod. */
+export type AIStructuredInput = {
+  system: string;
+  messages: AIMessage[];
+  /** Schema name OpenAI echoes back; must match /^[a-zA-Z0-9_-]+$/. */
+  schemaName: string;
+  /** Strict JSON Schema — build it with lib/ai/schema-to-json.ts. */
+  jsonSchema: Record<string, unknown>;
+  maxTokens?: number;
+  signal?: AbortSignal;
+};
+
+/**
+ * The raw structured turn. Validation belongs to the caller (lib/ai/structured.ts)
+ * so the provider stays schema-library agnostic. `refusal` is OpenAI's explicit
+ * "I won't answer that" channel and is never valid JSON — it must be surfaced,
+ * not parsed.
+ */
+export type AIStructuredCompletion = { text: string; refusal: string | null; usage: TokenUsage | null };
+
+/**
+ * The text emitted when a stream breaks after tools have already run and even the
+ * tool-free recovery summary fails. Callers must never re-run the tool loop in
+ * that situation (see `runToolsStream`), so the provider always produces closing
+ * text of its own.
+ */
+export const STREAM_INTERRUPTED_AFTER_ACTIONS =
+  'I finished those updates, but the connection dropped before I could write the summary.';
 
 export interface AIProvider {
   readonly id: string;
@@ -88,8 +129,20 @@ export interface AIProvider {
    * Same agentic loop as runTools, but yields incrementally: `action` events as
    * tools execute and `delta` events as the final reply streams in. Lets the UI
    * render the answer token-by-token.
+   *
+   * INVARIANT (§29, duplicate-write hazard): once any tool has executed, this
+   * generator never throws — it always yields at least one `delta` and returns
+   * normally. Callers historically fell back to a full non-streaming `runTools`
+   * run whenever the stream produced no text, which re-executed every tool the
+   * broken stream had already run and double-wrote the family's data. Throwing
+   * only before the first tool call keeps that fallback safe.
    */
   runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent>;
+  /**
+   * One turn constrained to a strict JSON schema. Agent decisions must never be
+   * regex-scraped out of prose (§5), so planners and classifiers go through here.
+   */
+  structuredCompletion(input: AIStructuredInput): Promise<AIStructuredCompletion>;
 }
 
 /** Build a concise Error from a non-OK OpenAI response (parses the JSON error message). */
@@ -104,7 +157,11 @@ async function openAIError(res: Response): Promise<Error> {
     const j = JSON.parse(body);
     detail = j?.error?.message || j?.error?.code || j?.error?.type || body;
   } catch { /* not JSON */ }
-  return new Error(`OpenAI error ${res.status}: ${String(detail).slice(0, 240)}`);
+  const error = new Error(`OpenAI error ${res.status}: ${String(detail).slice(0, 240)}`);
+  // lib/ai/retry.ts reads `status` first and only falls back to the message, so a
+  // status carried on the error survives any future message rewording.
+  Object.defineProperty(error, 'status', { value: res.status, enumerable: false });
+  return error;
 }
 
 /**
@@ -116,6 +173,8 @@ export function describeAIError(err: unknown): { code: string; message: string; 
   const raw = err instanceof Error ? err.message : String(err ?? '');
   const detail = raw.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer …').slice(0, 280);
   const has = (re: RegExp) => re.test(raw);
+  if (err instanceof Error && err.name === 'AbortError')
+    return { code: 'cancelled', message: 'That request was cancelled.', detail };
   if (has(/not configured|missing.*key|no api key/i))
     return { code: 'unconfigured', message: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', detail };
   if (has(/insufficient_quota|exceeded your current quota|billing|payment required|\b402\b/i))
@@ -131,16 +190,52 @@ export function describeAIError(err: unknown): { code: string; message: string; 
   return { code: 'unknown', message: 'Something went wrong while answering. Please try again.', detail };
 }
 
+const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_TIMEOUT_MS = 60_000;
+const OPENAI_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Combine a caller's cancellation with the transport deadline. Returning
+ * undefined lets `fetchExternal` install its own timeout, so a caller that
+ * passes no signal keeps exactly the previous behaviour.
+ */
+function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal | undefined {
+  if (!signal) return undefined;
+  const combine = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof combine !== 'function') return signal;
+  return combine.call(AbortSignal, [signal, AbortSignal.timeout(timeoutMs)]);
+}
+
 // --- OpenAI (ChatGPT) implementation ---
 export class OpenAIProvider implements AIProvider {
   id = 'openai';
   constructor(public model = 'gpt-4o', private apiKey = process.env.OPENAI_API_KEY ?? '') {}
 
-  async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
+  /**
+   * o-series Chat Completions reject `max_tokens` and require
+   * `max_completion_tokens`; sending the wrong one 400s every call for a model
+   * the admin dropdown happily offers (`lib/ai/models.ts` lists `o4-mini`).
+   */
+  private tokenParam(): 'max_tokens' | 'max_completion_tokens' {
+    return modelCapabilities(this.model)?.maxTokensParam ?? (/^o\d/i.test(this.model) ? 'max_completion_tokens' : 'max_tokens');
+  }
+
+  private chatBody(body: Record<string, unknown>, maxTokens: number): string {
+    return JSON.stringify({ model: this.model, [this.tokenParam()]: maxTokens, ...body });
+  }
+
+  private post(body: string, signal?: AbortSignal): Promise<Response> {
+    return fetchExternal(OPENAI_CHAT_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+      body,
+      signal: withDeadline(signal, OPENAI_TIMEOUT_MS),
+    }, OPENAI_TIMEOUT_MS);
+  }
+
+  async complete({ system, messages, tools, maxTokens = 1024, signal }: AICompleteInput): Promise<AICompletion> {
     if (!this.apiKey) throw new Error('OpenAI API key is not configured');
     const body: Record<string, unknown> = {
-      model: this.model,
-      max_tokens: maxTokens,
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
@@ -166,13 +261,9 @@ export class OpenAIProvider implements AIProvider {
     if (tools.length) {
       body.tools = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
     }
-    const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify(body),
-    }, 60_000);
+    const res = await this.post(this.chatBody(body, maxTokens), signal);
     if (!res.ok) throw await openAIError(res);
-    const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
+    const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
     const msg = data.choices?.[0]?.message ?? {};
     const text = msg.content ?? '';
     const toolCalls = (msg.tool_calls ?? []).map((c: { function: { name: string; arguments: string } }) => {
@@ -180,10 +271,34 @@ export class OpenAIProvider implements AIProvider {
       try { args = JSON.parse(c.function.arguments || '{}'); } catch { /* ignore */ }
       return { name: c.function.name, args };
     });
-    return { text, toolCalls };
+    return { text, toolCalls, usage: usageFromOpenAI(data.usage) };
   }
 
-  async runTools({ system, messages, tools, maxTokens = 1024, maxRounds = 6 }: RunToolsInput): Promise<ToolRunResult> {
+  async structuredCompletion({ system, messages, schemaName, jsonSchema, maxTokens = 1024, signal }: AIStructuredInput): Promise<AIStructuredCompletion> {
+    if (!this.apiKey) throw new Error('OpenAI API key is not configured');
+    const caps = modelCapabilities(this.model);
+    if (caps && !caps.jsonSchema) {
+      // Fail loudly rather than degrade to json_object: silently dropping the
+      // schema is how free-text parsing crept back in everywhere else.
+      throw new Error(`OpenAI error 400: model ${this.model} does not support strict json_schema output`);
+    }
+    const body = this.chatBody({
+      messages: [
+        ...(system ? [{ role: 'system', content: system }] : []),
+        ...messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ role: m.role, content: m.content })),
+      ],
+      response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema: jsonSchema } },
+    }, maxTokens);
+    const res = await this.post(body, signal);
+    if (!res.ok) throw await openAIError(res);
+    const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
+    const msg = data.choices?.[0]?.message ?? {};
+    return { text: msg.content ?? '', refusal: msg.refusal ?? null, usage: usageFromOpenAI(data.usage) };
+  }
+
+  async runTools({ system, messages, tools, maxTokens = 1024, maxRounds = 6, signal, onUsage }: RunToolsInput): Promise<ToolRunResult> {
     if (!this.apiKey) throw new Error('OpenAI API key is not configured');
     const byName = new Map(tools.map((t) => [t.name, t]));
     // OpenAI's running message log (native function-calling format).
@@ -197,26 +312,29 @@ export class OpenAIProvider implements AIProvider {
       ? tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
       : undefined;
     const actions: ExecutedAction[] = [];
+    let total: TokenUsage | null = null;
+    const account = (usage: TokenUsage | null) => {
+      if (!usage) return;
+      onUsage?.(usage);
+      total = total
+        ? { inputTokens: total.inputTokens + usage.inputTokens, outputTokens: total.outputTokens + usage.outputTokens, totalTokens: total.totalTokens + usage.totalTokens }
+        : usage;
+    };
 
     for (let round = 0; round < maxRounds; round++) {
       const last = round === maxRounds - 1;
-      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: maxTokens,
-          messages: convo,
-          // Drop tools on the final round so the model must answer in prose.
-          ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
-        }),
-      }, 60_000);
+      const res = await this.post(this.chatBody({
+        messages: convo,
+        // Drop tools on the final round so the model must answer in prose.
+        ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
+      }, maxTokens), signal);
       if (!res.ok) throw await openAIError(res);
-      const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
+      const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
+      account(usageFromOpenAI(data.usage));
       const msg = data.choices?.[0]?.message ?? {};
       const calls: { id: string; function: { name: string; arguments: string } }[] = msg.tool_calls ?? [];
 
-      if (!calls.length) return { text: msg.content ?? '', actions };
+      if (!calls.length) return { text: msg.content ?? '', actions, usage: total };
 
       // Record the assistant turn (with its tool_calls) then execute each call.
       convo.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
@@ -232,16 +350,30 @@ export class OpenAIProvider implements AIProvider {
       }
     }
     // Exhausted rounds — ask once more for a plain summary.
-    const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.model, max_tokens: maxTokens, messages: convo }),
-    }, 60_000);
-    const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024) : null;
-    return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions };
+    const res = await this.post(this.chatBody({ messages: convo }, maxTokens), signal);
+    const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES) : null;
+    account(usageFromOpenAI(data?.usage));
+    return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions, usage: total };
   }
 
-  async *runToolsStream({ system, messages, tools, maxTokens = 1024, maxRounds = 6 }: RunToolsInput): AsyncGenerator<StreamEvent> {
+  /**
+   * One tool-free, non-streaming turn used to close out a run whose stream died
+   * after tools had already executed. Sending no tools is what makes it safe:
+   * the model physically cannot re-run a write that already happened.
+   */
+  private async closingSummary(convo: Record<string, unknown>[], maxTokens: number, signal?: AbortSignal): Promise<string> {
+    try {
+      const res = await this.post(this.chatBody({ messages: convo }, maxTokens), signal);
+      if (!res.ok) return '';
+      const data = await readBoundedResponseJson<OpenAIChatResponse>(res, OPENAI_MAX_RESPONSE_BYTES);
+      return data.choices?.[0]?.message?.content ?? '';
+    } catch (error) {
+      console.error('[ai-provider] closing summary after stream failure failed', error);
+      return '';
+    }
+  }
+
+  async *runToolsStream({ system, messages, tools, maxTokens = 1024, maxRounds = 6, signal, onUsage }: RunToolsInput): AsyncGenerator<StreamEvent> {
     if (!this.apiKey) throw new Error('OpenAI API key is not configured');
     const byName = new Map(tools.map((t) => [t.name, t]));
     const convo: Record<string, unknown>[] = [
@@ -251,53 +383,76 @@ export class OpenAIProvider implements AIProvider {
     const toolDefs = tools.length
       ? tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
       : undefined;
+    // Tools executed so far in THIS run. Everything about failure handling below
+    // keys off this counter: before the first execution a caller may safely retry
+    // the whole turn, after it a retry would double-write.
+    let executed = 0;
 
     for (let round = 0; round < maxRounds; round++) {
       const last = round === maxRounds - 1;
-      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-        body: JSON.stringify({
-          model: this.model, max_tokens: maxTokens, messages: convo, stream: true,
-          ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
-        }),
-      }, 60_000);
-      if (!res.ok) throw await openAIError(res);
-      if (!res.body) throw new Error('OpenAI error: no stream body');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
       let content = '';
-      const acc: Record<number, { id: string; name: string; args: string }> = {};
+      let calls: { id: string; name: string; args: string }[] = [];
 
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t.startsWith('data:')) continue;
-          const payload = t.slice(5).trim();
-          if (payload === '[DONE]') continue;
-          let json: { choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] };
-          try { json = JSON.parse(payload); } catch { continue; }
-          const delta = json.choices?.[0]?.delta;
-          if (!delta) continue;
-          if (delta.content) { content += delta.content; yield { type: 'delta', text: delta.content }; }
-          for (const tc of delta.tool_calls ?? []) {
-            const i = tc.index ?? 0;
-            acc[i] ??= { id: '', name: '', args: '' };
-            if (tc.id) acc[i].id = tc.id;
-            if (tc.function?.name) acc[i].name = tc.function.name;
-            if (tc.function?.arguments) acc[i].args += tc.function.arguments;
+      try {
+        const res = await this.post(this.chatBody({
+          messages: convo,
+          stream: true,
+          // Streamed responses omit `usage` unless it is asked for explicitly.
+          stream_options: { include_usage: true },
+          ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
+        }, maxTokens), signal);
+        if (!res.ok) throw await openAIError(res);
+        if (!res.body) throw new Error('OpenAI error: no stream body');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        const acc: Record<number, { id: string; name: string; args: string }> = {};
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t.startsWith('data:')) continue;
+            const payload = t.slice(5).trim();
+            if (payload === '[DONE]') continue;
+            let json: {
+              usage?: unknown;
+              choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[];
+            };
+            try { json = JSON.parse(payload); } catch { continue; }
+            // The usage chunk arrives last and carries an empty `choices` array.
+            if (json.usage) { const u = usageFromOpenAI(json.usage); if (u) onUsage?.(u); }
+            const delta = json.choices?.[0]?.delta;
+            if (!delta) continue;
+            if (delta.content) { content += delta.content; yield { type: 'delta', text: delta.content }; }
+            for (const tc of delta.tool_calls ?? []) {
+              const i = tc.index ?? 0;
+              acc[i] ??= { id: '', name: '', args: '' };
+              if (tc.id) acc[i].id = tc.id;
+              if (tc.function?.name) acc[i].name = tc.function.name;
+              if (tc.function?.arguments) acc[i].args += tc.function.arguments;
+            }
           }
         }
+        calls = Object.values(acc).filter((c) => c.name);
+      } catch (streamError) {
+        // Nothing has been written yet: the caller's retry/fallback is safe, so
+        // give it the real error.
+        if (executed === 0) throw streamError;
+        // Tools already ran. Re-running the loop here (or letting the caller do
+        // it, which it will if we hand back no text) would execute those writes a
+        // second time. Close the turn ourselves with a tool-free summary instead.
+        console.error('[ai-provider] stream failed after tools executed; closing without re-running them', streamError);
+        const summary = await this.closingSummary(convo, maxTokens, signal);
+        yield { type: 'delta', text: summary || STREAM_INTERRUPTED_AFTER_ACTIONS };
+        return;
       }
 
-      const calls = Object.values(acc).filter((c) => c.name);
       if (calls.length === 0) return; // streamed the final answer already
 
       convo.push({ role: 'assistant', content: content || null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args } })) });
@@ -308,6 +463,7 @@ export class OpenAIProvider implements AIProvider {
         let result: unknown;
         try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${c.name}` }; }
         catch (e) { result = toolExecutionFailure(c.name, e); }
+        executed += 1;
         yield { type: 'action', name: c.name, args, result };
         convo.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(result) });
       }
@@ -352,6 +508,10 @@ export function getProvider(): AIProvider {
  * Settings-backed provider resolution. Reads the admin-configured AI engine from
  * app_settings (key `ai_provider`) and falls back to environment variables.
  * Use this in route handlers so the in-app AI Engine setting takes effect.
+ *
+ * For work with a known shape (planning, classification, vision) prefer
+ * `resolveProviderForTask(task)` from lib/ai/routing.ts, which picks the right
+ * model for the job instead of the one global default.
  */
 export async function resolveProvider(): Promise<AIProvider> {
   try {
