@@ -16,20 +16,32 @@ import { briefRow, briefSchema, type Brief, type BriefKind } from './build';
 
 type DB = SupabaseClient<Database>;
 
-/** Save (or refresh) today's brief. Returns the row id either way. */
+/**
+ * Save (or refresh) today's brief. Returns the row id either way.
+ *
+ * Never throws: a brief is something a family reads, and filing it is a side
+ * effect of showing it. A storage problem — a client without `upsert`, a
+ * dropped connection, a table that has not been migrated yet — must cost the
+ * row, never the briefing, so everything here comes back as a ServiceResult.
+ */
 export async function saveBrief(scope: ServiceScope, brief: Brief, opts?: { db?: DB }): Promise<ServiceResult<{ id: string }>> {
   const db = opts?.db ?? scope.db;
   const row = briefRow(brief, scope.familyId, scope.userId);
-  const { data, error } = await db
-    .from('home_briefs')
-    .upsert(row as never, { onConflict: 'family_id,as_of_date,kind' })
-    .select('id')
-    .single();
-  if (error || !data) {
-    console.error('[briefing] could not save the brief', error);
-    return fail(describeDbError(error, 'Bubaly could not save your brief.'), { code: SERVICE_CODES.db, retryable: true });
+  try {
+    const { data, error } = await db
+      .from('home_briefs')
+      .upsert(row as never, { onConflict: 'family_id,as_of_date,kind' })
+      .select('id')
+      .single();
+    if (error || !data) {
+      console.error('[briefing] could not save the brief', error);
+      return fail(describeDbError(error, 'Bubaly could not save your brief.'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    return ok({ id: data.id });
+  } catch (error) {
+    console.error('[briefing] the brief could not be filed', error);
+    return fail('Bubaly could not save your brief.', { code: SERVICE_CODES.db, retryable: true });
   }
-  return ok({ id: data.id });
 }
 
 /** Today's brief for this family, or null. Validated, so a corrupt row reads as absent rather than crashing a page. */

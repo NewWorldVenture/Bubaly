@@ -339,9 +339,73 @@ describe('Daily Brief route schema boundary', () => {
   it.each(['morning', 'evening', 'weekly'])('preserves valid %s output and the public response envelope', async (type) => {
     const response = await requestBriefing(type);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: validBriefing(), digest, generatedAt: now.toISOString() });
+    // Every field the model wrote survives EXCEPT `completed`: "Completed
+    // Today" is evidence, so the route replaces the model's list with the runs
+    // that really finished. Here no run has, so the honest answer is none.
+    expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tools: [], maxTokens: 2000 }));
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── "Completed Today" is evidence ───────────────────────────────────────
+  // The system prompt asks the model to populate `completed`, and that list is
+  // rendered as what Bubaly did for the family. So the route replaces it with
+  // the runs that really reached a terminal state: the model may describe the
+  // day, it does not decide what happened.
+  describe('what Bubaly claims to have done', () => {
+    const runs = [
+      { id: 'run-done', summary: 'Planned the week', state: 'completed', progress: { total: 8, completed: 8 }, completed_at: '2026-09-05T11:00:00.000Z', updated_at: '2026-09-05T11:00:00.000Z' },
+      { id: 'run-partial', summary: 'Prepared the trip', state: 'partially_completed', progress: { total: 8, completed: 6 }, completed_at: '2026-09-05T11:30:00.000Z', updated_at: '2026-09-05T11:30:00.000Z' },
+    ];
+
+    function withRuns(rows: unknown[]) {
+      mocks.from.mockImplementation((table: string) => queryResult(
+        table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
+          : table === 'calendar_events' ? [event]
+          : table === 'family_automation_runs' ? rows
+          : [],
+      ));
+    }
+
+    it('reports the runs that finished, not the list the model wrote', async () => {
+      withRuns(runs);
+      mocks.complete.mockResolvedValue({ text: JSON.stringify({ ...validBriefing(), completed: ['Booked a holiday nobody asked for'] }), toolCalls: [] });
+
+      const body = await (await requestBriefing('evening')).json();
+      // Newest first, and the partial one is labelled as partial — a run that
+      // did six of eight things must not read like one that did all eight.
+      expect(body.briefing.completed).toEqual(['Prepared the trip — partly done', 'Planned the week']);
+      expect(body.briefing.completed).not.toContain('Booked a holiday nobody asked for');
+      // Everything else the model wrote is still its own.
+      expect(body.briefing.greeting).toBe(validBriefing().greeting);
+    });
+
+    it('says nothing rather than something when no run finished', async () => {
+      withRuns([]);
+      mocks.complete.mockResolvedValue({ text: JSON.stringify({ ...validBriefing(), completed: ['Tidied the whole house'] }), toolCalls: [] });
+      const body = await (await requestBriefing('evening')).json();
+      expect(body.briefing.completed).toEqual([]);
+    });
+
+    it('ignores runs that did not reach a terminal state', async () => {
+      withRuns([
+        ...runs,
+        { id: 'run-going', summary: 'Still working', state: 'executing', progress: { total: 4, completed: 1 }, completed_at: null, updated_at: '2026-09-05T11:45:00.000Z' },
+        { id: 'run-failed', summary: 'Did not work', state: 'failed', progress: { total: 4, completed: 0 }, completed_at: null, updated_at: '2026-09-05T11:50:00.000Z' },
+      ]);
+      const body = await (await requestBriefing('evening')).json();
+      expect(body.briefing.completed).toHaveLength(2);
+      expect(body.briefing.completed.join(' ')).not.toMatch(/Still working|Did not work/);
+    });
+
+    it('still answers when the brief cannot be filed', async () => {
+      // The fake client has no `upsert`; a storage problem must cost the row,
+      // never the briefing.
+      withRuns(runs);
+      const response = await requestBriefing('evening');
+      expect(response.status).toBe(200);
+      expect((await response.json()).briefing.completed).toHaveLength(2);
+    });
   });
 
   it.each([
@@ -357,7 +421,7 @@ describe('Daily Brief route schema boundary', () => {
     mocks.complete.mockResolvedValue({ text, toolCalls: [] });
     const response = await requestBriefing();
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: expectedFallback(), digest, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(), completed: [] }, digest, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -366,7 +430,7 @@ describe('Daily Brief route schema boundary', () => {
     mocks.isAIConfigured.mockResolvedValue(false);
     const response = await requestBriefing(type);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: expectedFallback(type), digest, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(type), completed: [] }, digest, generatedAt: now.toISOString() });
     expect(mocks.resolveProvider).not.toHaveBeenCalled();
     expect(mocks.complete).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
