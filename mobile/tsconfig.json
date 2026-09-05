@@ -1,9 +1,21 @@
 {
-  "extends": "expo/tsconfig.base",
+  "$comment": "Self-contained on purpose (no `extends: expo/tsconfig.base`): the root vitest suite imports the pure modules under src/ and Vite resolves this file even when mobile/node_modules is not installed (CI's web job). Options mirror expo/tsconfig.base for SDK 57.",
   "compilerOptions": {
+    "allowJs": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ESNext"],
+    "module": "preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "target": "ESNext",
     "strict": true,
-    "noUncheckedIndexedAccess": false,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts", ".expo/types/**/*.ts"],
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "android", "ios"]
 }
