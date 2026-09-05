@@ -41,6 +41,8 @@ export type CareerWorkMode = 'remote' | 'hybrid' | 'onsite' | 'any';
 export type CareerEmploymentType = 'full_time' | 'part_time' | 'contract' | 'internship' | 'first_job' | 'any';
 export type CareerStatus = 'exploring' | 'active_search' | 'interviewing' | 'offer' | 'employed' | 'paused';
 export type JobStage = 'saved' | 'applied' | 'screening' | 'interview' | 'offer' | 'accepted' | 'rejected' | 'withdrawn';
+export type CefrLevel = 'A0' | 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+export type LanguageSessionKind = 'conversation' | 'vocab' | 'listening' | 'reading' | 'writing' | 'grammar' | 'lesson' | 'tutor' | 'immersion';
 export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -2532,6 +2534,21 @@ export interface Database {
         { id: string; family_id: string; profile_id: string; title: string; target_role: string | null; body: string; keywords: string[]; ats_score: number | null; matched_keywords: string[]; missing_keywords: string[]; is_primary: boolean; file_path: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; profile_id: string; title: string; target_role?: string | null; body?: string; keywords?: string[]; ats_score?: number | null; matched_keywords?: string[]; missing_keywords?: string[]; is_primary?: boolean; file_path?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ title: string; target_role: string | null; body: string; keywords: string[]; ats_score: number | null; matched_keywords: string[]; missing_keywords: string[]; is_primary: boolean; file_path: string | null; notes: string | null }>
+      >;
+      language_goals: T<
+        { id: string; family_id: string; member_id: string; language_code: string; language_label: string; current_level: CefrLevel; target_level: Exclude<CefrLevel, 'A0'>; weekly_minutes: number; reason: string | null; started_on: string; is_active: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; language_code: string; language_label: string; current_level?: CefrLevel; target_level?: Exclude<CefrLevel, 'A0'>; weekly_minutes?: number; reason?: string | null; started_on?: string; is_active?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; language_code: string; language_label: string; current_level: CefrLevel; target_level: Exclude<CefrLevel, 'A0'>; weekly_minutes: number; reason: string | null; started_on: string; is_active: boolean; notes: string | null }>
+      >;
+      language_sessions: T<
+        { id: string; family_id: string; goal_id: string; member_id: string | null; kind: LanguageSessionKind; minutes: number; score: number | null; topic: string | null; corrections: string[]; practiced_on: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; goal_id: string; member_id?: string | null; kind?: LanguageSessionKind; minutes?: number; score?: number | null; topic?: string | null; corrections?: string[]; practiced_on?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: LanguageSessionKind; minutes: number; score: number | null; topic: string | null; corrections: string[]; practiced_on: string; notes: string | null }>
+      >;
+      vocab_cards: T<
+        { id: string; family_id: string; goal_id: string; term: string; translation: string; example: string | null; part_of_speech: string | null; tags: string[]; ease: number; interval_days: number; repetitions: number; lapses: number; due_on: string; last_reviewed_on: string | null; is_suspended: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; goal_id: string; term: string; translation: string; example?: string | null; part_of_speech?: string | null; tags?: string[]; ease?: number; interval_days?: number; repetitions?: number; lapses?: number; due_on?: string; last_reviewed_on?: string | null; is_suspended?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ term: string; translation: string; example: string | null; part_of_speech: string | null; tags: string[]; ease: number; interval_days: number; repetitions: number; lapses: number; due_on: string; last_reviewed_on: string | null; is_suspended: boolean; notes: string | null }>
       >;
     };
     Views: { [_ in never]: never };

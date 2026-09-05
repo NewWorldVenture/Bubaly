@@ -60,7 +60,8 @@ export type InsightKind =
   | 'declutter'
   | 'moving'
   | 'projects'
-  | 'career';
+  | 'career'
+  | 'language';
 
 export type InsightMember = { id: string; name: string };
 
@@ -775,6 +776,31 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         return `${who(p.member_id)} — ${p.title} (${p.status}, ${p.employment_type}, ${p.work_mode}${p.location ? `, ${p.location}` : ''}${p.salary_target_cents ? `, target ${money(Number(p.salary_target_cents))}` : ''}). Target roles: ${arr(p.target_roles).join(', ') || 'none'}. Skills: ${arr(p.skills).join(', ') || 'none'}. Wants ${p.weekly_goal} applications a week.\n  Applications:\n${appLines}\n${resumeLine}`;
       }).join('\n\n') || 'No job searches yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\n${profiles}\n\nFor each search give: (1) three rewritten resume bullets that add the missing keywords and a number, (2) what to do about each application that is waiting or stalled, with the exact message to send, (3) a skills-gap roadmap: the two skills to learn next and how, (4) one honest observation about the target.${q(d)}`;
+    },
+  },
+
+  language: {
+    label: 'AI language tutor',
+    title: 'AI Language Tutor',
+    blurb: 'A short conversation in the target language, corrections you can keep, and this week’s plan from the deck and the log.',
+    maxTokens: 800,
+    allowQuestion: true,
+    system:
+      'You are a warm, patient language tutor for a family. Work ONLY from the goals, sessions and cards provided. ' +
+      'When the learner writes in the target language, reply in that language at their CEFR level with a short English gloss, then list at most three gentle corrections. ' +
+      'Never shame mistakes; celebrate streaks; keep every suggestion under fifteen minutes. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const arr = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x)) : []);
+      const goals = cap(r(d, 'language_goals').filter((g) => g.is_active), 4).shown.map((g) => {
+        const sessions = r(d, 'language_sessions').filter((s) => s.goal_id === g.id).slice(0, 10);
+        const cards = r(d, 'vocab_cards').filter((c) => c.goal_id === g.id);
+        const dueCards = cards.filter((c) => !c.is_suspended && String(c.due_on) <= String(d.now).slice(0, 10));
+        const weak = cards.filter((c) => Number(c.lapses) > 0).slice(0, 8).map((c) => `${c.term} (${c.translation})`).join(', ');
+        const log = sessions.map((s) => `${day(s.practiced_on)} ${s.kind} ${s.minutes} min${s.score != null ? ` score ${s.score}` : ''}${s.topic ? ` — ${s.topic}` : ''}${arr(s.corrections).length ? ` [corrections: ${arr(s.corrections).join('; ')}]` : ''}`).join('\n  ') || '(no sessions yet)';
+        return `${who(g.member_id)} — ${g.language_label} (${g.language_code}), ${g.current_level} → ${g.target_level}, ${g.weekly_minutes} min/week${g.reason ? `, because: ${g.reason}` : ''}.\n  Deck: ${cards.length} cards, ${dueCards.length} due today${weak ? `; tricky words: ${weak}` : ''}.\n  Recent practice:\n  ${log}`;
+      }).join('\n\n') || 'No language goals yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\n${goals}\n\nFor each learner: (1) open with two or three lines of conversation in their language at their level (with an English gloss) that uses their tricky words, (2) a fifteen-minute plan for today, (3) one pattern from their own corrections to fix this week, (4) an encouraging note on their streak or minutes. If the learner asks a question in the language, answer in the language with gentle corrections.${q(d)}`;
     },
   },
 

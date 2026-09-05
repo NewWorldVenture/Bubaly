@@ -175,6 +175,7 @@ UX tiers come from the graded 136-page designer audit in `todo.md` ("SITE-WIDE U
 | `/dashboard/kitchen` | `app/(app)/dashboard/kitchen` | auth |  |
 | `/dashboard/knowledge` | `app/(app)/dashboard/knowledge` | auth |  |
 | `/dashboard/knowledge/seed` | `app/(app)/dashboard/knowledge/seed` | auth |  |
+| `/dashboard/language` | `app/(app)/dashboard/language` | auth |  |
 | `/dashboard/life-events` | `app/(app)/dashboard/life-events` | auth |  |
 | `/dashboard/locator` | `app/(app)/dashboard/locator` | auth | plan-gated |
 | `/dashboard/meals` | `app/(app)/dashboard/meals` | auth | plan-gated |

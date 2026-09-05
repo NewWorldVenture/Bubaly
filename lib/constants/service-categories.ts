@@ -73,7 +73,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     tint: 'bg-amber-500/15 text-amber-300',
     countLabel: 'tools',
     hrefs: [
-      '/dashboard/school', '/dashboard/timetable', '/dashboard/homework',
+      '/dashboard/school', '/dashboard/timetable', '/dashboard/homework', '/dashboard/language',
       '/dashboard/signups', '/dashboard/sports', '/dashboard/behavior',
       '/dashboard/screen-time', '/dashboard/rewards', '/dashboard/chores',
       '/missions', '/dashboard/habits', '/dashboard/family-school',
