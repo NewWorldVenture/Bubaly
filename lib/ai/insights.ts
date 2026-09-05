@@ -55,7 +55,8 @@ export type InsightKind =
   | 'votes'
   | 'closet'
   | 'watchlist'
-  | 'inventory';
+  | 'inventory'
+  | 'sleep';
 
 export type InsightMember = { id: string; name: string };
 
@@ -654,6 +655,29 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const rooms = cap(locs.filter((l) => !l.parent_id), 20).shown.map((l) => `- ${l.name} (${l.kind})`).join('\n') || 'No rooms yet.';
       const moves = cap(r(d, 'inventory_moves'), 10).shown.map((m) => `- ${day(m.moved_at)}: item ${m.item_id} → ${path(m.to_location_id)}${m.reason ? ` (${m.reason})` : ''}`).join('\n') || 'No moves logged.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nRooms:\n${rooms}\n\nCatalog:\n${items}\n\nRecent moves:\n${moves}\n\nGive: (1) anything lent out or missing that needs chasing, (2) warranties ending in the next two months, (3) the three highest-value categories and whether the home looks under-documented for insurance, (4) where unlocated items probably belong.${q(d)}`;
+    },
+  },
+
+  sleep: {
+    label: 'AI sleep coach',
+    title: 'AI Sleep Coach',
+    blurb: 'A 7-day behavioural sleep program for each member, built from their own nights and check-ins.',
+    maxTokens: 800,
+    allowQuestion: true,
+    system:
+      'You are a warm, evidence-based family sleep coach (behavioural sleep medicine, not medication). Work ONLY from the logs, routines and check-ins provided. ' +
+      'Use age-appropriate targets (school-age 9–12h, teens 8–10h, adults 7–9h), respect what the family already does well, and give one small change at a time. ' +
+      'If a member logs frequent awakenings or very short sleep for weeks, suggest talking to a clinician — never diagnose. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const who = nameMap(d.members);
+      const logs = cap(r(d, 'sleep_logs'), 40).shown
+        .map((l) => `- ${day(l.sleep_date)} ${who(l.member_id)}: ${Math.floor(Number(l.duration_min) / 60)}h ${Number(l.duration_min) % 60}m, bed ${String(l.bedtime).slice(11, 16)}, quality ${l.quality ?? '?'}/5, ${l.awakenings ?? 0} awakenings`)
+        .join('\n') || 'No nights logged yet.';
+      const routines = r(d, 'bedtime_routines').filter((x) => x.is_active).map((x) => `- ${who(x.member_id)}: bed ${String(x.target_bedtime).slice(0, 5)}, wake ${String(x.target_wake).slice(0, 5)}, wind-down ${x.wind_down_min} min, steps: ${(x.steps as string[] | null)?.join(' → ') || 'none'}`).join('\n') || 'No routines set.';
+      const checkins = cap(r(d, 'sleep_checkins'), 20).shown
+        .map((c) => `- ${day(c.checkin_date)} ${who(c.member_id)}: energy ${c.energy}/5, mood ${c.mood}/5${c.caffeine_after_2pm ? ', late caffeine' : ''}${c.screens_in_bed ? ', screens in bed' : ''}${c.exercised ? ', exercised' : ''}`)
+        .join('\n') || 'No check-ins yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nRecent nights:\n${logs}\n\nRoutines:\n${routines}\n\nCheck-ins:\n${checkins}\n\nGive, per member with data: (1) how their week compares with their age target, (2) the single habit most worth changing, with the evidence from their own nights, (3) a 7-day program (one line per day). Then one family-wide tip.${q(d)}`;
     },
   },
 

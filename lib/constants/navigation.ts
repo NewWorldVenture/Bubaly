@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -157,6 +157,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/marketplace', label: 'Marketplace', icon: Store, minLevel: 0 },
       { href: '/display', label: 'Kitchen Display', icon: Monitor, minLevel: 1 },
       { href: '/dashboard/health', label: 'Health', icon: HeartPulse, minLevel: 1 },
+      { href: '/dashboard/sleep', label: 'Sleep Coach', icon: MoonStar, minLevel: 0 },
       { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine, minLevel: 1 },
       { href: '/dashboard/medical', label: 'Medical', icon: Stethoscope, minLevel: 1 },
       { href: '/dashboard/medications', label: 'Medications', icon: Pill, minLevel: 1 },

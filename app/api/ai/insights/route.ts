@@ -123,6 +123,14 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       ]);
       return { home_locations: locations.data ?? [], inventory_items: items.data ?? [], inventory_moves: moves.data ?? [] };
     }
+    case 'sleep': {
+      const [logs, routines, checkins] = await Promise.all([
+        eq(sb, 'sleep_logs', familyId).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
+        eq(sb, 'bedtime_routines', familyId).eq('is_active', true).limit(30),
+        eq(sb, 'sleep_checkins', familyId).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
+      ]);
+      return { sleep_logs: logs.data ?? [], bedtime_routines: routines.data ?? [], sleep_checkins: checkins.data ?? [] };
+    }
     case 'calendar': {
       const ev = await eq(sb, 'calendar_events', familyId).gte('starts_at', since(1)).order('starts_at').limit(60);
       return { calendar_events: ev.data ?? [] };
