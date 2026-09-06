@@ -242,6 +242,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },
   { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
+  { href: '/admin/ai-activity', label: 'AI Activity', icon: Bot },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
   { href: '/admin/feedback', label: 'Feedback & Ideas', icon: MessagesSquare },

@@ -17,6 +17,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type ToolSpec } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import { buildActionTools, mergeToolSets } from '@/lib/ai/action-tools';
@@ -88,6 +89,15 @@ export type PreparedAssistantTurn = {
   context: ContextBundle;
   /** Member names and currency, so a card says "Dan" and "$40", never an id or a bare number. */
   cardContext: CardContext;
+  /**
+   * The scope `prepareAssistantTurn` already built, carried through so both
+   * transports can open an `ai_requests` row without rebuilding it. It holds the
+   * resolved `family_members.id`, which the route's own context does not reach
+   * — the roster lookup happens here. `createRequest` reads only `familyId`,
+   * `userId` and `memberId` from it, so the row is attributed to the person who
+   * typed the message even though `actorKind` is 'ai' for the tool writes.
+   */
+  scope: ServiceScope;
 };
 
 /** Pull a friendly summary + ok flag out of a tool result for the UI. */
@@ -307,7 +317,7 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
     members: Object.fromEntries(memberRows.map((m) => [m.id, m.display_name])),
     currency: context.data.header.currency,
   };
-  return { ok: true, turn: { system, messages, tools, provider, intent, context: context.data, cardContext } };
+  return { ok: true, turn: { system, messages, tools, provider, intent, context: context.data, cardContext, scope } };
 }
 
 // ─── Outcomes: cards, runs, approvals ───────────────────────────────────────
@@ -430,23 +440,41 @@ async function collectOutcomes(input: AssistantTurnInput, prepared: PreparedAssi
 /** Non-streaming transport: run the whole turn and return one JSON-friendly result. */
 export async function runAssistantTurn(input: AssistantTurnInput, prepared: PreparedAssistantTurn): Promise<AssistantTurnResult> {
   const { system, messages, tools, provider } = prepared;
-  const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
-  const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
-  const content = finalizeAssistantContent(result.text, actions);
-  const { cards, runIds } = await collectOutcomes(input, prepared, actions);
-  const persisted = await persistAssistantTurn(input.supabase, {
-    familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-    assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
-  });
-  return {
-    content,
-    actions: actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })),
-    cards,
-    runIds,
-    persisted: persisted.ok,
-    ...(persisted.ok ? {} : { persistenceError: persisted.error }),
-    model: provider.model,
-  };
+  // The wrapper spans the persistence too, not just the model call. A turn that
+  // answers correctly and then fails to save is one the family will meet again
+  // as a conversation that lost its last exchange, and the only trace today is
+  // a `persistenceError` field the client may never show.
+  return withAiRequest(
+    prepared.scope,
+    // Kind stays the default 'feature'. 'chat' is not an AiRequestKind, and
+    // `createRequest` silently coerces an unknown one to 'concierge' — which
+    // would file every assistant turn under the concierge planner, a different
+    // surface entirely. The `feature` string is what names this one.
+    { feature: 'assistant.turn', text: input.message, conversationId: input.conversationId },
+    async (obs) => {
+      const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
+      obs.used(provider.model, result.usage);
+      const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
+      const content = finalizeAssistantContent(result.text, actions);
+      const { cards, runIds } = await collectOutcomes(input, prepared, actions);
+      const persisted = await persistAssistantTurn(input.supabase, {
+        familyId: input.familyId, conversationId: input.conversationId, message: input.message,
+        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+      });
+      // Partial, not failed: the family got their answer, the conversation did
+      // not keep it.
+      if (!persisted.ok) obs.failed(new Error(`Turn not persisted: ${persisted.error}`), { partial: true });
+      return {
+        content,
+        actions: actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })),
+        cards,
+        runIds,
+        persisted: persisted.ok,
+        ...(persisted.ok ? {} : { persistenceError: persisted.error }),
+        model: provider.model,
+      };
+    },
+  );
 }
 
 /**
@@ -463,62 +491,98 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
-      let content = '';
-      const actions: ExecutedAssistantAction[] = [];
-      const cards: ResultCard[] = [];
-      const runIds: string[] = [];
-      // The card follows its action on the wire, so a client that renders as
-      // it reads shows the line first and the card the moment it exists. The
-      // approval read is the only await; the provider generator waits for it.
-      const pushAction = async (name: string, args: Record<string, unknown>, result: unknown) => {
-        actions.push({ name, args, result });
-        send({ type: 'action', name, ...summarizeToolResult(result) });
-        const outcome = outcomeOfAction(name, args, result, prepared.cardContext);
-        if (outcome.card) { cards.push(outcome.card); send({ type: 'card', card: outcome.card }); }
-        if (outcome.runId) {
-          if (!runIds.includes(outcome.runId)) runIds.push(outcome.runId);
-          send({ type: 'run', runId: outcome.runId, href: runHref(outcome.runId), status: outcome.runStatus ?? 'queued', summary: summarizeToolResult(result).summary });
-        }
-        const approvalId = approvalIdFromToolResult(result);
-        if (approvalId) {
-          const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
-          if (card) { cards.push(card); send({ type: 'card', card }); }
-        }
-      };
-      try {
-        for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
-          if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
-          else await pushAction(ev.name, ev.args, ev.result);
-        }
-      } catch (streamErr) {
-        console.error('[assistant-engine] stream error:', streamErr);
-        if (!content) {
-          try {
-            const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
-            for (const a of result.actions) {
-              if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
+      // The wrapper lives INSIDE `start`, not around the call that builds this
+      // stream. `withAiRequest` settles when its body resolves, and the function
+      // returning a ReadableStream resolves before a single token exists — every
+      // row would read `completed` for a turn that had not begun. The chat route
+      // solves it the same way.
+      await withAiRequest(
+        prepared.scope,
+        { feature: 'assistant.stream', text: input.message, conversationId: input.conversationId },
+        async (obs) => {
+          const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+          let content = '';
+          const actions: ExecutedAssistantAction[] = [];
+          const cards: ResultCard[] = [];
+          const runIds: string[] = [];
+          // The card follows its action on the wire, so a client that renders as
+          // it reads shows the line first and the card the moment it exists. The
+          // approval read is the only await; the provider generator waits for it.
+          const pushAction = async (name: string, args: Record<string, unknown>, result: unknown) => {
+            actions.push({ name, args, result });
+            send({ type: 'action', name, ...summarizeToolResult(result) });
+            const outcome = outcomeOfAction(name, args, result, prepared.cardContext);
+            if (outcome.card) { cards.push(outcome.card); send({ type: 'card', card: outcome.card }); }
+            if (outcome.runId) {
+              if (!runIds.includes(outcome.runId)) runIds.push(outcome.runId);
+              send({ type: 'run', runId: outcome.runId, href: runHref(outcome.runId), status: outcome.runStatus ?? 'queued', summary: summarizeToolResult(result).summary });
             }
-            if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
-          } catch (fallbackErr) {
-            console.error('[assistant-engine] fallback error:', fallbackErr);
-            send({ type: 'error', error: describeAIError(fallbackErr).message });
-            controller.close();
-            return;
+            const approvalId = approvalIdFromToolResult(result);
+            if (approvalId) {
+              const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
+              if (card) { cards.push(card); send({ type: 'card', card }); }
+            }
+          };
+          try {
+            for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
+              if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
+              else await pushAction(ev.name, ev.args, ev.result);
+            }
+            // `runToolsStream` yields deltas and actions, never a usage total — only
+            // the JSON transport's `ToolRunResult` carries one. So the row gets the
+            // model that answered and no token counts, which is the honest record
+            // rather than a zero that reads like a free turn.
+            obs.used(provider.model, undefined);
+          } catch (streamErr) {
+            console.error('[assistant-engine] stream error:', streamErr);
+            if (!content) {
+              try {
+                const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
+                // The turn recovered and the family gets a whole answer, so this
+                // settles `completed`. The stream break is in the log, not the row:
+                // a status of `failed` would describe a turn nobody experienced as
+                // one. The fallback DOES carry usage.
+                obs.used(provider.model, result.usage);
+                for (const a of result.actions) {
+                  if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
+                }
+                if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
+              } catch (fallbackErr) {
+                console.error('[assistant-engine] fallback error:', fallbackErr);
+                // Both attempts failed and the family got nothing. One `used` for a
+                // model that was reached twice undercounts the attempts, but neither
+                // returned a usage total to count — naming the model that was
+                // failing is the diagnostic worth keeping.
+                obs.used(provider.model, undefined);
+                obs.failed(fallbackErr);
+                send({ type: 'error', error: describeAIError(fallbackErr).message });
+                controller.close();
+                return;
+              }
+            } else {
+              // Text reached the family before the stream broke. The tokens were
+              // spent and the answer is half an answer: `partially_completed`.
+              obs.used(provider.model, undefined);
+              obs.failed(streamErr, { partial: true });
+              send({ type: 'error', error: describeAIError(streamErr).message });
+            }
           }
-        } else {
-          send({ type: 'error', error: describeAIError(streamErr).message });
-        }
-      }
 
-      const assistantContent = finalizeAssistantContent(content, actions);
-      const persisted = await persistAssistantTurn(input.supabase, {
-        familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-        assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
-      });
-      if (!persisted.ok) send({ type: 'error', error: persisted.error });
-      send({ type: 'done', content: assistantContent, persisted: persisted.ok });
-      controller.close();
+          const assistantContent = finalizeAssistantContent(content, actions);
+          const persisted = await persistAssistantTurn(input.supabase, {
+            familyId: input.familyId, conversationId: input.conversationId, message: input.message,
+            assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+          });
+          if (!persisted.ok) {
+            // The answer was streamed and then not saved: the family will meet this
+            // as a conversation missing its last exchange. Partial, not failed.
+            obs.failed(new Error(`Turn not persisted: ${persisted.error}`), { partial: true });
+            send({ type: 'error', error: persisted.error });
+          }
+          send({ type: 'done', content: assistantContent, persisted: persisted.ok });
+          controller.close();
+        },
+      );
     },
   });
 }
