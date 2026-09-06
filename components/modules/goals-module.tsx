@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { deleteGoalAction, saveGoalAction, setGoalProgressAction } from '@/app/(app)/dashboard/goals/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -42,20 +43,23 @@ export function GoalsModule() {
 
   function remove(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('goals').delete().eq('id', id);
-      if (error) throw error;
+      const res = await deleteGoalAction(id);
+      if (!res.ok) throw new Error(res.error);
       success('Goal removed');
       void refresh();
     });
   }
 
   function updateProgress(goal: Goal, progress: number) {
-    // Clamp to a valid 0–100 range before writing.
     const clamped = Math.max(0, Math.min(100, Math.round(progress)));
     return run(`progress:${goal.id}`, async () => {
       const isComplete = clamped >= 100;
-      const { error } = await createClient().from('goals').update({ progress: clamped, is_complete: isComplete }).eq('id', goal.id);
-      if (error) throw error;
+      // `is_complete` is DERIVED by the service now. It used to be sent from
+      // here, and three readers filter on it — the active/completed split,
+      // lib/operating-index/server.ts and the digital-twin page — so a caller
+      // that sent the two out of step desynchronised all three.
+      const res = await setGoalProgressAction(goal.id, clamped);
+      if (!res.ok) throw new Error(res.error);
       if (isComplete) success('Goal completed! 🎉');
       void refresh();
     });
@@ -199,16 +203,12 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
     }
     setLoading(true);
     try {
-      const supabase = createClient();
-      const payload = {
+      const res = await saveGoalAction(goal?.id ?? null, {
         title,
         description: String(form.get('description') ?? '').trim() || null,
-        target_date: targetDate,
-      };
-      const { error } = goal
-        ? await supabase.from('goals').update(payload).eq('id', goal.id)
-        : await supabase.from('goals').insert({ family_id: familyId, created_by: userId, ...payload, progress: 0, is_complete: false });
-      if (error) { toastError(describeDbError(error)); return; }
+        targetDate,
+      });
+      if (!res.ok) { toastError(res.error); return; }
       success(goal ? 'Goal updated' : 'Goal created');
       onSaved();
     } catch (err) {
