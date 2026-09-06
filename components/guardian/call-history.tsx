@@ -7,6 +7,7 @@ import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/
 import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { SCAM_TYPE_LABELS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Communication = {
   id: string;
@@ -56,6 +57,7 @@ function formatDuration(secs: number): string {
 }
 
 export function CallHistory({ communications }: { communications: Communication[] }) {
+  const t = useTranslations();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'calls' | 'sms' | 'scams' | 'blocked'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function CallHistory({ communications }: { communications: Communication[
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search history…"
+            placeholder={t('callHistory.searchHistory')}
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
@@ -113,7 +115,7 @@ export function CallHistory({ communications }: { communications: Communication[
       {/* Grouped list */}
       {groups.size === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 py-12 text-center text-sm text-muted">
-          No communications match your filter.
+          {t('callHistory.noCommunicationsMatchYourFilter')}
         </div>
       ) : (
         Array.from(groups.entries()).map(([date, comms]) => (

@@ -21,6 +21,7 @@ import { RecommendationActions } from '@/components/family/record-actions';
 import type { ApprovalCardData } from '@/lib/approvals/card-data';
 import type { NeedItem } from '@/lib/home/needs-attention';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type NeedRenderMeta = { icon: React.ComponentType<{ className?: string }>; iconBg: string; cta: string; subtitle: string };
 
@@ -60,15 +61,16 @@ export type NeedsAttentionProps = {
 const ID_PREFIX = /^[a-z_]+:/;
 
 export function NeedsAttention({ items, more, headline, approvals, moneyApprovalKinds, recommendationBodies, canDecide, className }: NeedsAttentionProps) {
+  const t = useTranslations();
   return (
     <section aria-labelledby="needs-you-heading" className={cn('space-y-3', className)}>
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
-        <h2 id="needs-you-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2>
+        <h2 id="needs-you-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">{t('needsAttention.needsYourAttention')}</h2>
       </div>
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
-          Nothing needs you right now. Bubaly will flag anything that does.
+          {t('needsAttention.nothingNeedsYouRightNowBubaly')}
         </p>
       ) : (
         <>

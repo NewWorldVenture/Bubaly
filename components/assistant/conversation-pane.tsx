@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp, History, MessageSquare, Pencil, Plus, Trash2 } 
 import { Button } from '@/components/ui/button';
 import { ErrorState, SkeletonText } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type ConversationSummary = { id: string; title: string; updated_at: string };
 
@@ -33,6 +34,7 @@ export type ConversationPaneProps = {
 };
 
 export function ConversationPane({ conversations, activeId, loading = false, error = null, onSelect, onNew, onRename, onDelete, onRetry, children, className }: ConversationPaneProps) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const active = conversations.find((c) => c.id === activeId);
 
@@ -51,7 +53,7 @@ export function ConversationPane({ conversations, activeId, loading = false, err
           <span className="ml-auto shrink-0 text-xs font-medium text-muted">{conversations.length > 0 ? `${conversations.length} saved` : ''}</span>
           {open ? <ChevronUp className="h-4 w-4 shrink-0 text-muted" aria-hidden /> : <ChevronDown className="h-4 w-4 shrink-0 text-muted" aria-hidden />}
         </button>
-        <Button type="button" variant="outline" size="sm" onClick={onNew} className="coarse:min-h-11 shrink-0" aria-label="New chat">
+        <Button type="button" variant="outline" size="sm" onClick={onNew} className="coarse:min-h-11 shrink-0" aria-label={t('conversationPane.newChat')}>
           <Plus className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">New</span>
         </Button>
       </div>
@@ -62,7 +64,7 @@ export function ConversationPane({ conversations, activeId, loading = false, err
         ) : error ? (
           <ErrorState message={error} onRetry={onRetry} />
         ) : conversations.length === 0 ? (
-          <p className="px-2 py-3 text-center text-xs text-muted">No saved chats yet.</p>
+          <p className="px-2 py-3 text-center text-xs text-muted">{t('conversationPane.noSavedChatsYet')}</p>
         ) : (
           <ul className="max-h-64 space-y-0.5 overflow-y-auto overscroll-contain">
             {conversations.map((c) => (

@@ -15,6 +15,7 @@ import { dismissMomentAction } from '@/app/(app)/dashboard/moments/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import type { MomentKey } from '@/lib/moments/organizer';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export interface OrganizerMoment {
   key: string; label: string; blurb: string; reason: string;
@@ -27,6 +28,7 @@ const ICON: Record<MomentKey, React.ComponentType<{ className?: string }>> = {
 };
 
 export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
+  const t = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -54,7 +56,7 @@ export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <Compass className="h-4 w-4 text-brand-text" />
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Right now</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('momentOrganizer.rightNow')}</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {shown.map((m) => {

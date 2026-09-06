@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Campaigns', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning'> =
 };
 
 export default async function CampaignsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: campaigns, error: campaignsError } = await supabase.from('marketing_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (campaignsError) {
@@ -27,12 +29,12 @@ export default async function CampaignsPage() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">{(campaigns ?? []).length} campaign{(campaigns ?? []).length === 1 ? '' : 's'}</p>
         <Link href="/admin/marketing/campaigns/new" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
-          <Plus className="h-4 w-4" /> New campaign
+          <Plus className="h-4 w-4" /> {t('adminMarketingCampaigns.newCampaign')}
         </Link>
       </div>
 
       {(campaigns ?? []).length === 0 ? (
-        <EmptyState icon={Send} title="No campaigns yet" description="Create your first marketing campaign to get started." />
+        <EmptyState icon={Send} title={t('adminMarketingCampaigns.noCampaignsYet')} description="Create your first marketing campaign to get started." />
       ) : (
         <div className="space-y-3">
           {(campaigns ?? []).map((c) => (

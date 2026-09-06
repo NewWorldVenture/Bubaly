@@ -26,8 +26,16 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
-const CATEGORIES: EventCategory[] = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
-const RECURRENCES: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
+/**
+ * The values `calendar_events.category` / `.recurrence` accept, exported so a
+ * caller holding a string from a form can narrow to the enum instead of casting
+ * it. A cast would compile and then hand PostgREST a value the enum rejects.
+ */
+export const EVENT_CATEGORIES: readonly EventCategory[] = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
+export const EVENT_RECURRENCES: readonly RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
+
+const CATEGORIES = EVENT_CATEGORIES;
+const RECURRENCES = EVENT_RECURRENCES;
 
 /** Default length assumed for an event with no end, matching `detectConflicts`. */
 const DEFAULT_DURATION_MIN = 60;
@@ -149,6 +157,15 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that event.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  // The same range check `createEvent` makes, for the edit that used to have it
+  // only in the browser. Deliberately limited to a patch carrying BOTH sides —
+  // which is what the edit modal sends, since it renders both fields — because
+  // cross-checking a patch that moves only the end would mean reading the row
+  // first, an extra round trip on every edit to guard a shape no caller sends.
+  if (update.starts_at && update.ends_at && Date.parse(update.ends_at) < Date.parse(update.starts_at)) {
+    return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
   }
 
   const { data, error } = await scope.db

@@ -10,6 +10,7 @@ import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
 import { ErrorState } from '@/components/ui/states';
 import { fmtRelative, firstName } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family COO' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default async function FamilyCooPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -61,12 +63,12 @@ export default async function FamilyCooPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family COO"
+        title={tr('dashboardFamilyCoo.familyCoo')}
         description="Run the household: tasks, routines, shopping and maintenance in one place."
         action={
           <QuickAdd
             table="family_routines"
-            title="New routine"
+            title={tr('dashboardFamilyCoo.newRoutine')}
             members={members ?? []}
             fields={[
               { name: 'title', label: 'Routine', type: 'text', required: true, placeholder: 'Morning checklist' },
@@ -80,14 +82,14 @@ export default async function FamilyCooPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile href="/dashboard/chores" label="Open tasks" value={openChores?.length ?? 0} icon={CheckSquare} accent="bg-emerald-600" sublabel="Chores" />
-        <StatTile href="/dashboard/grocery" label="Grocery items" value={grocery?.length ?? 0} icon={ShoppingCart} accent="bg-blue-600" sublabel="Shopping" />
-        <StatTile href="/dashboard/calendar" label="Events (7d)" value={events?.length ?? 0} icon={CalendarDays} accent="bg-violet-600" sublabel="Calendar" />
-        <StatTile href="/dashboard/home" label="Maintenance" value={maint?.length ?? 0} icon={Wrench} accent="bg-orange-500" sublabel="Home" />
+        <StatTile href="/dashboard/chores" label={tr('dashboardFamilyCoo.openTasks')} value={openChores?.length ?? 0} icon={CheckSquare} accent="bg-emerald-600" sublabel="Chores" />
+        <StatTile href="/dashboard/grocery" label={tr('dashboardFamilyCoo.groceryItems')} value={grocery?.length ?? 0} icon={ShoppingCart} accent="bg-blue-600" sublabel="Shopping" />
+        <StatTile href="/dashboard/calendar" label={tr('dashboardFamilyCoo.events7d')} value={events?.length ?? 0} icon={CalendarDays} accent="bg-violet-600" sublabel="Calendar" />
+        <StatTile href="/dashboard/home" label={tr('dashboardFamilyCoo.maintenance')} value={maint?.length ?? 0} icon={Wrench} accent="bg-orange-500" sublabel="Home" />
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="Task Assignments" viewAllHref="/dashboard/chores">
+        <SectionCard title={tr('dashboardFamilyCoo.taskAssignments')} viewAllHref="/dashboard/chores">
           {openChores && openChores.length > 0 ? (
             <ul className="divide-y divide-border">
               {openChores.map((t) => {
@@ -105,7 +107,7 @@ export default async function FamilyCooPage() {
           ) : <MiniEmpty icon={CheckSquare} text="No open tasks — nicely done." />}
         </SectionCard>
 
-        <SectionCard title="Household Routines" description="Recurring rhythms that keep things running">
+        <SectionCard title={tr('dashboardFamilyCoo.householdRoutines')} description="Recurring rhythms that keep things running">
           {routines && routines.length > 0 ? (
             <ul className="divide-y divide-border">
               {routines.map((r) => {
@@ -128,7 +130,7 @@ export default async function FamilyCooPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="This Week" viewAllHref="/dashboard/calendar">
+        <SectionCard title={tr('dashboardFamilyCoo.thisWeek')} viewAllHref="/dashboard/calendar">
           {events && events.length > 0 ? (
             <ul className="space-y-2.5">
               {events.map((e) => {
@@ -144,7 +146,7 @@ export default async function FamilyCooPage() {
           ) : <MiniEmpty icon={CalendarDays} text="Nothing scheduled this week." />}
         </SectionCard>
 
-        <SectionCard title="Shopping List" viewAllHref="/dashboard/grocery">
+        <SectionCard title={tr('dashboardFamilyCoo.shoppingList')} viewAllHref="/dashboard/grocery">
           {grocery && grocery.length > 0 ? (
             <ul className="grid grid-cols-2 gap-2 text-sm">
               {grocery.map((g) => (
@@ -153,7 +155,7 @@ export default async function FamilyCooPage() {
             </ul>
           ) : (
             <div className="py-6 text-center">
-              <Link href="/dashboard/grocery" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-text">Build a list <ArrowRight className="h-3.5 w-3.5" /></Link>
+              <Link href="/dashboard/grocery" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-text">{tr('dashboardFamilyCoo.buildAList')} <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
           )}
         </SectionCard>

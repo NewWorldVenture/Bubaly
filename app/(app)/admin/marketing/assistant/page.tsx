@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Sparkles, Copy, Check } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Task =
   | 'analyze' | 'campaign_plan' | 'seo_plan' | 'aeo_plan' | 'content_calendar'
@@ -21,6 +22,7 @@ const TASKS: { key: Task; label: string; placeholder: string }[] = [
 ];
 
 export default function MarketingAssistantPage() {
+  const tr = useTranslations();
   const [task, setTask] = useState<Task>('analyze');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,9 +61,9 @@ export default function MarketingAssistantPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-brand-text" />
-        <h2 className="font-semibold">AI Marketing Assistant</h2>
+        <h2 className="font-semibold">{tr('adminMarketingAssistant.aiMarketingAssistant')}</h2>
       </div>
-      <p className="text-sm text-muted">Grounded in your live customer, segment, and campaign data. Never fabricates metrics.</p>
+      <p className="text-sm text-muted">{tr('adminMarketingAssistant.groundedInYourLiveCustomerSegment')}</p>
 
       <div className="flex flex-wrap gap-2">
         {TASKS.map((t) => (
@@ -94,9 +96,9 @@ export default function MarketingAssistantPage() {
       {output && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Output</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">{tr('adminMarketingAssistant.output')}</span>
             <button onClick={copy} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated">
-              {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy</>}
+              {copied ? <><Check className="h-3.5 w-3.5" /> {tr('adminMarketingAssistant.copied')}</> : <><Copy className="h-3.5 w-3.5" /> {tr('adminMarketingAssistant.copy')}</>}
             </button>
           </div>
           <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6">{output}</pre>

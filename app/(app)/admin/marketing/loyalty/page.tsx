@@ -9,6 +9,7 @@ import { computeTier, TIER_LABELS, DEFAULT_LOYALTY, type Tier } from '@/lib/mark
 import { RewardRow, AddReward, type Reward } from './reward-editor';
 import { RedemptionRow, type Redemption } from './redemption-row';
 import { saveLoyaltySettingsAction, awardPointsAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Loyalty', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 const TIER_TONE: Record<Tier, 'neutral' | 'brand' | 'warning'> = { bronze: 'neutral', silver: 'brand', gold: 'warning' };
 
 export default async function LoyaltyPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await Promise.all([
@@ -58,25 +60,25 @@ export default async function LoyaltyPage() {
       <div className="flex items-center gap-2">
         <Trophy className="h-5 w-5 text-brand-text" />
         <div>
-          <h2 className="text-base font-bold">Loyalty &amp; Rewards</h2>
-          <p className="text-xs text-muted">Reward families with points for signing up, referring, reviewing, and spending — then let them redeem from your catalog.</p>
+          <h2 className="text-base font-bold">{t('adminMarketingLoyalty.loyaltyAmpRewards')}</h2>
+          <p className="text-xs text-muted">{t('adminMarketingLoyalty.rewardFamiliesWithPointsForSigning')}</p>
         </div>
         <Badge tone={set?.enabled ? 'success' : 'neutral'} className="ml-auto">{set?.enabled ? 'Live' : 'Off'}</Badge>
       </div>
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <Card><p className="text-xs font-medium text-muted">Members</p><p className="mt-1 text-3xl font-bold leading-none">{accountRows.length}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">Points outstanding</p><p className="mt-1 text-3xl font-bold leading-none">{totalOutstanding.toLocaleString()}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">Active rewards</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">Pending redemptions</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.members')}</p><p className="mt-1 text-3xl font-bold leading-none">{accountRows.length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsOutstanding')}</p><p className="mt-1 text-3xl font-bold leading-none">{totalOutstanding.toLocaleString()}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.activeRewards')}</p><p className="mt-1 text-3xl font-bold leading-none">{rewardRows.filter((r) => r.is_active).length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('adminMarketingLoyalty.pendingRedemptions')}</p><p className="mt-1 text-3xl font-bold leading-none">{pendingCount}</p></Card>
       </div>
 
       {/* Rewards catalog */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> Rewards catalog</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.rewardsCatalog')}</h3>
         {rewardRows.length === 0 ? (
-          <EmptyState icon={Gift} title="No rewards yet" description="Add your first reward so families have something to redeem." />
+          <EmptyState icon={Gift} title={t('adminMarketingLoyalty.noRewardsYet')} description="Add your first reward so families have something to redeem." />
         ) : (
           <div className="space-y-2">{rewardRows.map((r) => <RewardRow key={r.id} reward={r} />)}</div>
         )}
@@ -85,9 +87,9 @@ export default async function LoyaltyPage() {
 
       {/* Redemptions queue */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> Redemptions {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.redemptions')} {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
         {redemptionView.length === 0 ? (
-          <EmptyState icon={Sparkles} title="No redemptions yet" description="Redemptions from families will appear here for you to fulfill." />
+          <EmptyState icon={Sparkles} title={t('adminMarketingLoyalty.noRedemptionsYet')} description="Redemptions from families will appear here for you to fulfill." />
         ) : (
           <div className="space-y-2">{redemptionView.map((r) => <RedemptionRow key={r.id} redemption={r} />)}</div>
         )}
@@ -95,9 +97,9 @@ export default async function LoyaltyPage() {
 
       {/* Members + manual award */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> Members</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.members')}</h3>
         {accountRows.length === 0 ? (
-          <EmptyState icon={Users} title="No members yet" description="Accounts are created automatically when a family first earns points." />
+          <EmptyState icon={Users} title={t('adminMarketingLoyalty.noMembersYet')} description="Accounts are created automatically when a family first earns points." />
         ) : (
           <div className="space-y-1">
             {accountRows.map((a) => {
@@ -117,32 +119,32 @@ export default async function LoyaltyPage() {
         )}
 
         <form action={awardPointsAction} className="mt-4 grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-4">
-          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">Family</span>
+          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.family')}</span>
             <select name="family_id" required className={inputCls} defaultValue="">
-              <option value="" disabled>Select a family…</option>
+              <option value="" disabled>{t('adminMarketingLoyalty.selectAFamily')}</option>
               {(families ?? []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Points (+/−)</span><input type="number" name="points" required className={inputCls} placeholder="e.g. 250" /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Reason</span><input name="reason" className={inputCls} placeholder="optional" /></label>
-          <div className="sm:col-span-4"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Coins className="h-4 w-4" /> Award / adjust points</button></div>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.points')}</span><input type="number" name="points" required className={inputCls} placeholder={t('adminMarketingLoyalty.eG250')} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.reason')}</span><input name="reason" className={inputCls} placeholder="optional" /></label>
+          <div className="sm:col-span-4"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Coins className="h-4 w-4" /> {t('adminMarketingLoyalty.awardAdjustPoints')}</button></div>
         </form>
       </Card>
 
       {/* Program settings */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> Program settings</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.programSettings')}</h3>
         <form action={saveLoyaltySettingsAction} className="grid gap-3 sm:grid-cols-2">
-          <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2"><input type="checkbox" name="enabled" defaultChecked={set?.enabled ?? false} className="h-4 w-4 rounded border-border" /> Program enabled (visible to families)</label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Program name</span><input name="program_name" defaultValue={set?.program_name ?? DEFAULT_LOYALTY.program_name} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Points label</span><input name="points_label" defaultValue={set?.points_label ?? DEFAULT_LOYALTY.points_label} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Earn on signup</span><input type="number" min="0" name="earn_signup" defaultValue={set?.earn_signup ?? DEFAULT_LOYALTY.earn_signup} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Earn per referral</span><input type="number" min="0" name="earn_referral" defaultValue={set?.earn_referral ?? DEFAULT_LOYALTY.earn_referral} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Earn per review</span><input type="number" min="0" name="earn_review" defaultValue={set?.earn_review ?? DEFAULT_LOYALTY.earn_review} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Earn per $1 spent</span><input type="number" min="0" step="0.01" name="earn_per_dollar" defaultValue={set?.earn_per_dollar ?? DEFAULT_LOYALTY.earn_per_dollar} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Silver tier at (lifetime pts)</span><input type="number" min="0" name="tier_silver_at" defaultValue={set?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Gold tier at (lifetime pts)</span><input type="number" min="0" name="tier_gold_at" defaultValue={set?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at} className={inputCls} /></label>
-          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">Save settings</button></div>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2"><input type="checkbox" name="enabled" defaultChecked={set?.enabled ?? false} className="h-4 w-4 rounded border-border" /> {t('adminMarketingLoyalty.programEnabledVisibleToFamilies')}</label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.programName')}</span><input name="program_name" defaultValue={set?.program_name ?? DEFAULT_LOYALTY.program_name} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.pointsLabel')}</span><input name="points_label" defaultValue={set?.points_label ?? DEFAULT_LOYALTY.points_label} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.earnOnSignup')}</span><input type="number" min="0" name="earn_signup" defaultValue={set?.earn_signup ?? DEFAULT_LOYALTY.earn_signup} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.earnPerReferral')}</span><input type="number" min="0" name="earn_referral" defaultValue={set?.earn_referral ?? DEFAULT_LOYALTY.earn_referral} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.earnPerReview')}</span><input type="number" min="0" name="earn_review" defaultValue={set?.earn_review ?? DEFAULT_LOYALTY.earn_review} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.earnPer1Spent')}</span><input type="number" min="0" step="0.01" name="earn_per_dollar" defaultValue={set?.earn_per_dollar ?? DEFAULT_LOYALTY.earn_per_dollar} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.silverTierAtLifetimePts')}</span><input type="number" min="0" name="tier_silver_at" defaultValue={set?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.goldTierAtLifetimePts')}</span><input type="number" min="0" name="tier_gold_at" defaultValue={set?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at} className={inputCls} /></label>
+          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingLoyalty.saveSettings')}</button></div>
         </form>
       </Card>
     </div>

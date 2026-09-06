@@ -6,11 +6,13 @@ import { RoutingSettings } from '@/components/guardian/routing-settings';
 import { GuardianNumberForm } from '@/components/guardian/guardian-number-form';
 import { Settings, ArrowLeft } from 'lucide-react';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Settings · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianSettingsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const memberId = ctx.active.member.id;
@@ -44,7 +46,7 @@ export default async function GuardianSettingsPage() {
           <Settings className="h-5 w-5 text-brand-text" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">Guardian Settings</h1>
+          <h1 className="text-xl font-bold leading-tight">{t('guardianSettings.guardianSettings')}</h1>
           <p className="text-sm text-muted">For {(member as { display_name?: string } | null)?.display_name ?? 'you'}</p>
         </div>
       </div>
@@ -58,7 +60,7 @@ export default async function GuardianSettingsPage() {
 
       {/* ENV vars checklist */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-2">
-        <h3 className="text-sm font-semibold">Configuration</h3>
+        <h3 className="text-sm font-semibold">{t('guardianSettings.configuration')}</h3>
         <div className="space-y-1.5">
           {[
             { key: 'TWILIO_ACCOUNT_SID', set: !!process.env.TWILIO_ACCOUNT_SID },
@@ -73,7 +75,7 @@ export default async function GuardianSettingsPage() {
           ))}
         </div>
         <p className="text-xs text-muted pt-1">
-          Twilio routes calls to Bubaly. An AI key (Anthropic or OpenAI) powers the screening conversations.
+          {t('guardianSettings.twilioRoutesCallsToBubalyAn')}
         </p>
       </div>
 

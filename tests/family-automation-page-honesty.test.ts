@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
 // The one page that lists a family's routines described them as
 // "When schedule → ai_request" — two column values, no next-run time, and no
@@ -7,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 // eight triggers ("Task overdue", "Bill due", "Stress score high") that no code
 // anywhere evaluates, so every rule it created was inert the moment it was
 // saved. A page that sells automation nothing performs is worse than no page.
-const page = readFileSync('app/(app)/dashboard/family-automation/page.tsx', 'utf8');
+const page = readUiSource('app/(app)/dashboard/family-automation/page.tsx');
 const src = page.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
 
 describe('the family automation page', () => {

@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SearchablePost = {
   slug: string;
@@ -13,6 +14,7 @@ type SearchablePost = {
 };
 
 export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
+  const t = useTranslations();
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,7 +50,7 @@ export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
         <Search className="h-4 w-4 shrink-0 text-white/40" />
         <input
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/40 sm:text-base"
-          placeholder="Search articles..."
+          placeholder={t('blogBlogSearch.searchArticles')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setFocused(true)}
@@ -64,7 +66,7 @@ export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#0c1220] shadow-2xl">
           {results.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-white/40">
-              No articles found for &ldquo;{query}&rdquo;
+              {t('blogBlogSearch.noArticlesFoundForLdquo')}{query}&rdquo;
             </div>
           ) : (
             <ul>

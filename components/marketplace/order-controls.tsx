@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const NEXT_STEPS: Record<string, { status: string; label: string; tone: 'go' | 'stop' }[]> = {
   requested: [{ status: 'confirmed', label: 'Confirm', tone: 'go' }, { status: 'cancelled', label: 'Cancel', tone: 'stop' }],
@@ -55,6 +56,7 @@ export function OrderControls({ orderId, status }: { orderId: string; status: st
 }
 
 export function ReviewForm({ orderId }: { orderId: string }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -62,7 +64,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
   const [pending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
 
-  if (done) return <p className="text-xs text-emerald-600 dark:text-emerald-400">Review sent — thanks!</p>;
+  if (done) return <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('orderControls.reviewSentThanks')}</p>;
   if (!open) {
     return (
       <button
@@ -70,7 +72,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1 rounded-lg border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/20"
       >
-        <Star className="h-3 w-3" /> Leave a review
+        <Star className="h-3 w-3" /> {t('orderControls.leaveAReview')}
       </button>
     );
   }
@@ -85,7 +87,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
 
   return (
     <div className="w-full space-y-2 rounded-xl border border-border bg-surface/60 p-3">
-      <div className="flex items-center gap-1" role="radiogroup" aria-label="Rating">
+      <div className="flex items-center gap-1" role="radiogroup" aria-label={t('orderControls.rating')}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
@@ -100,10 +102,10 @@ export function ReviewForm({ orderId }: { orderId: string }) {
           </button>
         ))}
       </div>
-      <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="How did it go?" />
+      <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder={t('orderControls.howDidItGo')} />
       <div className="flex gap-2">
-        <Button size="sm" onClick={submit} disabled={pending}>Post review</Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+        <Button size="sm" onClick={submit} disabled={pending}>{t('orderControls.postReview')}</Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>{t('orderControls.cancel')}</Button>
       </div>
     </div>
   );

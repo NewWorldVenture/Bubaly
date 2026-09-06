@@ -19,6 +19,7 @@ import {
   WEEK_PATTERN_LABELS, type WeekPattern, type ClassLike,
 } from '@/lib/school/timetable';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SchoolClass = Tables<'school_classes'>;
 
@@ -41,6 +42,7 @@ const blankForm = {
 };
 
 export function TimetableModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -123,16 +125,16 @@ export function TimetableModule() {
   return (
     <div>
       <PageHeader
-        title="Timetable"
+        title={t('timetable.timetable')}
         description="A visual Mon–Fri class schedule for every student — with alternating A/B week support for rotating timetables."
-        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
       />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {/* Member filter */}
         <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 w-auto">
-          <option value="all">All students</option>
+          <option value="all">{t('timetable.allStudents')}</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </Select>
 
@@ -152,9 +154,9 @@ export function TimetableModule() {
       </div>
 
       {totalShown === 0 ? (
-        <EmptyState icon={CalendarRange} title="No classes scheduled"
+        <EmptyState icon={CalendarRange} title={t('timetable.noClassesScheduled')}
           description="Add classes with a day and time to build a visual weekly timetable. Use A/B week patterns for rotating schedules."
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button>} />
+          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           {WEEKDAYS.map((day) => (
@@ -162,7 +164,7 @@ export function TimetableModule() {
               <div className="px-1.5 pb-2 text-sm font-semibold text-fg">{WEEKDAY_LABELS[day]}</div>
               <div className="space-y-2">
                 {grid[day].length === 0 ? (
-                  <div className="px-1.5 py-3 text-xs text-muted">No classes</div>
+                  <div className="px-1.5 py-3 text-xs text-muted">{t('timetable.noClasses')}</div>
                 ) : (
                   grid[day].map((cl) => {
                     const c = classById.get(cl.id)!;
@@ -171,8 +173,8 @@ export function TimetableModule() {
                         <div className="flex items-start justify-between gap-1">
                           <div className="font-semibold text-sm leading-tight">{c.subject}</div>
                           <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity">
-                            <button onClick={() => openEdit(c)} aria-label="Edit" className="p-1 rounded-md hover:bg-black/20"><Pencil className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => remove(c)} aria-label="Remove" className="p-1 rounded-md hover:bg-black/20"><Trash2 className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => openEdit(c)} aria-label={t('timetable.edit')} className="p-1 rounded-md hover:bg-black/20"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => remove(c)} aria-label={t('timetable.remove')} className="p-1 rounded-md hover:bg-black/20"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
                         {c.time_slot && <div className="mt-1 flex items-center gap-1 text-xs opacity-90"><Clock className="h-3 w-3" />{c.time_slot}</div>}
@@ -200,7 +202,7 @@ export function TimetableModule() {
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit class' : 'Add class'}>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Student" required>
+            <Field label={t('timetable.student')} required>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
                   <option value="">Select…</option>
@@ -208,8 +210,8 @@ export function TimetableModule() {
                 </Select>
               )}
             </Field>
-            <Field label="Subject" required>
-              {(id) => <Input id={id} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="Math" autoFocus />}
+            <Field label={t('timetable.subject')} required>
+              {(id) => <Input id={id} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder={t('timetable.math')} autoFocus />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -217,23 +219,23 @@ export function TimetableModule() {
               {(id) => (
                 <Select id={id} value={form.day_of_week} onChange={(e) => setForm((f) => ({ ...f, day_of_week: e.target.value }))}>
                   {WEEKDAYS.map((d) => <option key={d} value={String(d)}>{WEEKDAY_LABELS[d]}</option>)}
-                  <option value="">Every day</option>
+                  <option value="">{t('timetable.everyDay')}</option>
                 </Select>
               )}
             </Field>
-            <Field label="Time">
+            <Field label={t('timetable.time')}>
               {(id) => <Input id={id} value={form.time_slot} onChange={(e) => setForm((f) => ({ ...f, time_slot: e.target.value }))} placeholder="9:00 AM" />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Teacher">
-              {(id) => <Input id={id} value={form.teacher} onChange={(e) => setForm((f) => ({ ...f, teacher: e.target.value }))} placeholder="Ms. Lee" />}
+            <Field label={t('timetable.teacher')}>
+              {(id) => <Input id={id} value={form.teacher} onChange={(e) => setForm((f) => ({ ...f, teacher: e.target.value }))} placeholder={t('timetable.msLee')} />}
             </Field>
-            <Field label="Room">
-              {(id) => <Input id={id} value={form.room} onChange={(e) => setForm((f) => ({ ...f, room: e.target.value }))} placeholder="Room 204" />}
+            <Field label={t('timetable.room')}>
+              {(id) => <Input id={id} value={form.room} onChange={(e) => setForm((f) => ({ ...f, room: e.target.value }))} placeholder={t('timetable.room204')} />}
             </Field>
           </div>
-          <Field label="Repeats">
+          <Field label={t('timetable.repeats')}>
             {(id) => (
               <Select id={id} value={form.week_pattern} onChange={(e) => setForm((f) => ({ ...f, week_pattern: e.target.value as WeekPattern }))}>
                 {(Object.keys(WEEK_PATTERN_LABELS) as WeekPattern[]).map((w) => <option key={w} value={w}>{WEEK_PATTERN_LABELS[w]}</option>)}
@@ -241,7 +243,7 @@ export function TimetableModule() {
             )}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t('timetable.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add class'}</Button>
           </div>
         </form>

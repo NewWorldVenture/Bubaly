@@ -9,8 +9,10 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useApp } from '@/components/app/app-context';
 import { computeTrustScore, TRUST_BAND_LABELS, type TrustScore } from '@/lib/marketplace/trust';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SidebarTrustScore() {
+  const tr = useTranslations();
   const { familyId, selfMember } = useApp();
   const selfId = selfMember?.id ?? null;
   const [trust, setTrust] = useState<TrustScore | null>(null);
@@ -46,7 +48,7 @@ export function SidebarTrustScore() {
 
   return (
     <div className="rounded-xl border border-border bg-surface/60 p-3">
-      <p className="text-xs font-semibold">Your Trust Score</p>
+      <p className="text-xs font-semibold">{tr('sidebarTrustScore.yourTrustScore')}</p>
       <div className="mt-1.5 flex items-center gap-2.5">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-brand/40 bg-brand/10 text-sm font-bold text-brand-text">
           {t.stars.toFixed(1)}

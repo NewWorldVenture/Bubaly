@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ const TRIGGERS = ['customer_created', 'joins_segment', 'form_submitted', 'paymen
 const ACTIONS = ['send_email', 'send_sms', 'add_to_segment', 'remove_from_segment', 'apply_tag', 'create_task', 'notify_admin', 'update_lead_score'];
 
 export default async function AutomationPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const { data: flows, error: flowsError } = await supabase.from('marketing_automation_workflows').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (flowsError) {
@@ -25,7 +27,7 @@ export default async function AutomationPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
       <div className="space-y-3">
         {(flows ?? []).length === 0 ? (
-          <EmptyState icon={Workflow} title="No workflows yet" description="Build your first automation on the right." />
+          <EmptyState icon={Workflow} title={tr('adminMarketingAutomation.noWorkflowsYet')} description="Build your first automation on the right." />
         ) : (
           (flows ?? []).map((w) => {
             const steps = Array.isArray(w.steps) ? w.steps as { action: string }[] : [];
@@ -54,14 +56,14 @@ export default async function AutomationPage() {
         )}
       </div>
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New workflow</h2>
+        <h2 className="mb-3 font-semibold">{tr('adminMarketingAutomation.newWorkflow')}</h2>
         <form action={createAutomation} className="space-y-3 text-sm">
-          <input name="name" required placeholder="Workflow name" className={inputCls} />
-          <label className="block text-xs text-muted">Trigger
+          <input name="name" required placeholder={tr('adminMarketingAutomation.workflowName')} className={inputCls} />
+          <label className="block text-xs text-muted">{tr('adminMarketingAutomation.trigger')}
             <select name="trigger" className={`mt-1 ${inputCls}`}>{TRIGGERS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}</select>
           </label>
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted">Actions (in order)</p>
+            <p className="mb-1.5 text-xs font-medium text-muted">{tr('adminMarketingAutomation.actionsInOrder')}</p>
             <div className="flex flex-wrap gap-2">
               {ACTIONS.map((a) => (
                 <label key={a} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs">
@@ -70,7 +72,7 @@ export default async function AutomationPage() {
               ))}
             </div>
           </div>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create workflow</button>
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingAutomation.createWorkflow')}</button>
         </form>
       </Card>
     </div>

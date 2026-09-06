@@ -19,6 +19,7 @@ import {
   saveDashboardLayoutAction, resetDashboardLayoutAction, logDashboardEventAction,
   saveFamilyDefaultLayoutAction, saveDashboardSettingsAction, resetAllLayoutsAction,
 } from '@/app/(app)/dashboard/customize-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const TIER_LABEL: Record<DashTier, string> = { free: 'Free', basic: 'Basic', plus: 'Plus' };
 
@@ -31,6 +32,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
   canManage?: boolean;           // parent/admin → family controls
   settings?: DashSettings;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState(false);
@@ -88,28 +90,28 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Quick Access</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('quickActions.quickAccess')}</h2>
         {!editing ? (
           <div className="flex items-center gap-1">
             {canManage && (
               <button onClick={() => setFamilyOpen(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-elevated hover:text-fg transition">
-                <Users className="h-3.5 w-3.5" /> Family
+                <Users className="h-3.5 w-3.5" /> {t('quickActions.family')}
               </button>
             )}
             {canCustomize ? (
               <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition">
-                <Settings2 className="h-3.5 w-3.5" /> Customize
+                <Settings2 className="h-3.5 w-3.5" /> {t('quickActions.customize')}
               </button>
             ) : (
-              <span className="flex items-center gap-1 text-[11px] text-muted"><Lock className="h-3 w-3" /> Set by a parent</span>
+              <span className="flex items-center gap-1 text-[11px] text-muted"><Lock className="h-3 w-3" /> {t('quickActions.setByAParent')}</span>
             )}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-1">
-            {canManage && <button onClick={setAsFamilyDefault} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><Users className="h-3.5 w-3.5" /> Set family default</button>}
-            <button onClick={reset} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><RotateCcw className="h-3.5 w-3.5" /> Reset</button>
-            <button onClick={cancel} disabled={saving} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">Cancel</button>
-            <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition"><Check className="h-3.5 w-3.5" /> Save</button>
+            {canManage && <button onClick={setAsFamilyDefault} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><Users className="h-3.5 w-3.5" /> {t('quickActions.setFamilyDefault')}</button>}
+            <button onClick={reset} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><RotateCcw className="h-3.5 w-3.5" /> {t('quickActions.reset')}</button>
+            <button onClick={cancel} disabled={saving} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">{t('quickActions.cancel')}</button>
+            <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition"><Check className="h-3.5 w-3.5" /> {t('quickActions.save')}</button>
           </div>
         )}
       </div>
@@ -149,8 +151,8 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         <Link href="/dashboard/social-feed"
           className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center transition hover:border-brand/20 hover:bg-elevated">
           <div className="grid h-9 w-9 place-items-center rounded-xl bg-elevated text-brand-text"><Rss className="h-4 w-4" /></div>
-          <span className="text-[11px] font-semibold">Social Feed</span>
-          {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">Pinned</span>}
+          <span className="text-[11px] font-semibold">{t('quickActions.socialFeed')}</span>
+          {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">{t('quickActions.pinned')}</span>}
         </Link>
 
         {/* Add tile */}
@@ -162,7 +164,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         )}
       </div>
 
-      {editing && <p className="text-[11px] text-muted">Locked features aren’t shown as primary buttons until you upgrade. The + and AI buttons are fixed.</p>}
+      {editing && <p className="text-[11px] text-muted">{t('quickActions.lockedFeaturesArentShownAsPrimary')}</p>}
 
       {/* Upgrade discovery */}
       {locked.length > 0 && <UnlockMore locked={locked} />}
@@ -182,6 +184,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
 }
 
 function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [allowChild, setAllowChild] = useState(settings.allowChildCustomization);
@@ -218,16 +221,16 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
   );
 
   return (
-    <Modal open onClose={onClose} title="Family dashboard settings">
+    <Modal open onClose={onClose} title={t('quickActions.familyDashboardSettings')}>
       <div className="space-y-3">
-        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label="Allow children to customize" hint="Let kid accounts personalize their own dashboard buttons." />
-        <Toggle on={lockAll} onToggle={() => setLockAll((v) => !v)} label="Use the family default for everyone" hint="Everyone sees the shared default; only parents can change it." />
+        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label={t('quickActions.allowChildrenToCustomize')} hint="Let kid accounts personalize their own dashboard buttons." />
+        <Toggle on={lockAll} onToggle={() => setLockAll((v) => !v)} label={t('quickActions.useTheFamilyDefaultForEveryone')} hint="Everyone sees the shared default; only parents can change it." />
         <button onClick={resetEveryone} disabled={saving} className="flex w-full items-center gap-2 rounded-xl border border-border p-3 text-left text-sm text-muted hover:border-danger/40 hover:text-danger transition">
-          <RotateCcw className="h-4 w-4" /> Reset all members’ dashboards to default
+          <RotateCcw className="h-4 w-4" /> {t('quickActions.resetAllMembersDashboardsToDefault')}
         </button>
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-muted hover:text-fg">Cancel</button>
-          <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition"><Check className="h-4 w-4" /> Save</button>
+          <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-muted hover:text-fg">{t('quickActions.cancel')}</button>
+          <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition"><Check className="h-4 w-4" /> {t('quickActions.save')}</button>
         </div>
       </div>
     </Modal>
@@ -235,10 +238,11 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
 }
 
 function UnlockMore({ locked }: { locked: DashFeature[] }) {
+  const t = useTranslations();
   return (
     <div className="mt-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-500">
-        <Sparkles className="h-3.5 w-3.5" /> Unlock more
+        <Sparkles className="h-3.5 w-3.5" /> {t('quickActions.unlockMore')}
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {locked.slice(0, 6).map((f) => (
@@ -255,7 +259,7 @@ function UnlockMore({ locked }: { locked: DashFeature[] }) {
       </div>
       <Link href="/pricing" onClick={() => { void logDashboardEventAction({ action: 'upgrade_cta_clicked' }); }}
         className="mt-3 block rounded-lg bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-amber-600 transition">
-        See upgrade options
+        {t('quickActions.seeUpgradeOptions')}
       </Link>
     </div>
   );
@@ -264,6 +268,7 @@ function UnlockMore({ locked }: { locked: DashFeature[] }) {
 function FeaturePicker({ mode, features, onClose, onPick }: {
   mode: 'add' | 'replace'; features: DashFeature[]; onClose: () => void; onPick: (key: string) => void;
 }) {
+  const t = useTranslations();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
   const categories = useMemo(() => ['all', ...Array.from(new Set(features.map((f) => f.category)))], [features]);
@@ -277,7 +282,7 @@ function FeaturePicker({ mode, features, onClose, onPick }: {
       <div className="space-y-3">
         <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
           <Search className="h-4 w-4 text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search features…" autoFocus className="w-full bg-transparent text-sm outline-none placeholder:text-muted" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('quickActions.searchFeatures')} autoFocus className="w-full bg-transparent text-sm outline-none placeholder:text-muted" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {categories.map((c) => (
@@ -289,7 +294,7 @@ function FeaturePicker({ mode, features, onClose, onPick }: {
         </div>
         <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="col-span-3 py-6 text-center text-sm text-muted">No features match.</p>
+            <p className="col-span-3 py-6 text-center text-sm text-muted">{t('quickActions.noFeaturesMatch')}</p>
           ) : filtered.map((f) => (
             <button key={f.key} onClick={() => onPick(f.key)}
               className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-3 text-center transition hover:border-brand/40 hover:bg-elevated">

@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { fmtRelative } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Activity' };
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const VERB: Record<string, string> = { create: 'created', update: 'updated', delete: 'removed', approve: 'approved', skip: 'skipped' };
 
 export default async function FamilyActivityPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -24,8 +26,8 @@ export default async function FamilyActivityPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Family Activity" description="A running log of changes across your household." />
-      <SectionCard title="Recent Activity">
+      <PageHeader title={t('familyActivity.familyActivity')} description="A running log of changes across your household." />
+      <SectionCard title={t('familyActivity.recentActivity')}>
         {logs && logs.length > 0 ? (
           <ul className="space-y-1">
             {logs.map((l) => (

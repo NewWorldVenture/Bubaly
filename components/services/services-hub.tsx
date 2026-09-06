@@ -9,6 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { resolveItems } from '@/components/app/nav-shared';
 import { SERVICE_CATEGORIES, navItemsForHrefs } from '@/lib/constants/service-categories';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const QUICK_ACTIONS = [
   { href: '/dashboard/calendar', label: 'Add Event', icon: Calendar, tint: 'bg-violet-500/15 text-violet-300' },
@@ -18,13 +19,14 @@ const QUICK_ACTIONS = [
 ];
 
 export function ServicesHub() {
+  const t = useTranslations();
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <header className="mb-6 text-center sm:mb-7">
-        <h1 className="text-2xl font-bold tracking-tight">All Services</h1>
-        <p className="mt-1 text-sm text-muted">Everything your family needs, all in one place.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t('services.allServices')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('services.everythingYourFamilyNeedsAllIn')}</p>
       </header>
 
       {/* Category cards */}
@@ -69,9 +71,9 @@ export function ServicesHub() {
         >
           <Crown className="h-9 w-9 shrink-0 text-amber-400" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">Upgrade to Plus</p>
+            <p className="text-sm font-bold">{t('services.upgradeToPlus')}</p>
             <p className="mt-0.5 text-xs leading-snug text-muted">
-              Unlock premium features across all services and supercharge your family experience.
+              {t('services.unlockPremiumFeaturesAcrossAllServices')}
             </p>
           </div>
           <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
@@ -80,7 +82,7 @@ export function ServicesHub() {
 
       {/* Quick Actions */}
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-bold">Quick Actions</h2>
+        <h2 className="mb-2 text-sm font-bold">{t('services.quickActions')}</h2>
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
           {QUICK_ACTIONS.map((qa) => {
             const Icon = qa.icon;

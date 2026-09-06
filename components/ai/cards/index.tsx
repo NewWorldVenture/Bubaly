@@ -24,6 +24,7 @@ import { ReadinessCardView } from './readiness';
 import { SummaryCardView } from './summary';
 import { ApprovalResultCardView } from './approval';
 import { RunStatusCardView } from './run-status';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type CardTone = 'brand' | 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -140,11 +141,12 @@ export function CardSkeleton({ compact = false, label = 'Bubaly is working on it
 
 /** A card that could not be shown — the text answer still stands, so this is quiet, not alarming. */
 export function CardError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const t = useTranslations();
   return (
     <div role="alert" className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
       {message}
       {onRetry && (
-        <button type="button" onClick={onRetry} className="focus-ring coarse:min-h-11 ml-2 font-medium underline">Try again</button>
+        <button type="button" onClick={onRetry} className="focus-ring coarse:min-h-11 ml-2 font-medium underline">{t('index.tryAgain')}</button>
       )}
     </div>
   );

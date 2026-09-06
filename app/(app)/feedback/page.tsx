@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, statusTally, kindTally, type IdeaRow } from '@/lib/feedback/board';
 import { cn } from '@/lib/utils/cn';
 import { FeedbackBoard } from './feedback-board';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Feedback' };
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ const STEPS = [
 ];
 
 export default async function FeedbackPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const [admin, ideasRes, votesRes] = await Promise.all([
@@ -47,15 +49,15 @@ export default async function FeedbackPage() {
         </div>
         <div className="relative max-w-2xl">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand-text">
-            <Lightbulb className="h-3.5 w-3.5" /> Idea board
+            <Lightbulb className="h-3.5 w-3.5" /> {t('feedback.ideaBoard')}
           </span>
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">Let&apos;s make life easier—together</h1>
+          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">{t('feedback.letAposSMakeLifeEasier')}</h1>
           <p className="mt-3 text-sm text-muted sm:text-base">
             Bubaly gets better when you tell us what your family needs. Share an idea, upvote the
             ones you love, and watch them roll onto our roadmap.
           </p>
           <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-surface/60 px-3 py-1 text-xs font-semibold text-brand-text ring-1 ring-brand/20">
-            ✨ Small ideas. Big impact.
+            {t('feedback.smallIdeasBigImpact')}
           </p>
         </div>
       </section>
@@ -82,7 +84,7 @@ export default async function FeedbackPage() {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           {/* How it works */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <h3 className="text-sm font-bold">How it works</h3>
+            <h3 className="text-sm font-bold">{t('feedback.howItWorks')}</h3>
             <ol className="mt-3 space-y-3">
               {STEPS.map((s, i) => (
                 <li key={s.title} className="flex gap-3">
@@ -98,7 +100,7 @@ export default async function FeedbackPage() {
 
           {/* Ideas vs bugs */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <h3 className="text-sm font-bold">On the board</h3>
+            <h3 className="text-sm font-bold">{t('feedback.onTheBoard')}</h3>
             <ul className="mt-3 space-y-2.5">
               {KIND_ORDER.map((k) => (
                 <li key={k} className="flex items-center justify-between gap-2">
@@ -111,7 +113,7 @@ export default async function FeedbackPage() {
 
           {/* Status legend */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <h3 className="text-sm font-bold">Status legend</h3>
+            <h3 className="text-sm font-bold">{t('feedback.statusLegend')}</h3>
             <ul className="mt-3 space-y-2.5">
               {LEGEND_STATUSES.map((s) => (
                 <li key={s} className="flex items-center justify-between gap-2">
@@ -129,9 +131,9 @@ export default async function FeedbackPage() {
 
       {/* Footer band */}
       <div className="mt-10 rounded-3xl border border-border bg-gradient-to-r from-brand/10 via-surface/40 to-amber-500/5 px-6 py-8 text-center">
-        <p className="text-lg font-black sm:text-xl">Your ideas. Your life. Our mission.</p>
+        <p className="text-lg font-black sm:text-xl">{t('feedback.yourIdeasYourLifeOurMission')}</p>
         <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted">
-          We&apos;re listening. <Heart className="h-4 w-4 fill-rose-400 text-rose-400" />
+          {t('feedback.weAposReListening')} <Heart className="h-4 w-4 fill-rose-400 text-rose-400" />
         </p>
       </div>
     </div>

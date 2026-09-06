@@ -7,8 +7,10 @@ import { useEffect, useState } from 'react';
 import { Moon, SunMedium } from 'lucide-react';
 import { useTheme } from '@/components/theme/use-theme';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ThemeSwitch() {
+  const t = useTranslations();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -30,7 +32,7 @@ export function ThemeSwitch() {
           resolved === 'dark' ? 'bg-brand/15 font-semibold text-brand-text' : 'text-muted hover:text-fg',
         )}
       >
-        <Moon className="h-4 w-4" /> Dark
+        <Moon className="h-4 w-4" /> {t('themeSwitch.dark')}
       </button>
       <button
         type="button"
@@ -41,7 +43,7 @@ export function ThemeSwitch() {
           resolved === 'light' ? 'bg-brand/15 font-semibold text-brand-text' : 'text-muted hover:text-fg',
         )}
       >
-        <SunMedium className="h-4 w-4" /> Light
+        <SunMedium className="h-4 w-4" /> {t('themeSwitch.light')}
       </button>
     </div>
   );

@@ -5,6 +5,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { LODGING_KINDS, dollars, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Lodging = Tables<'vacation_lodging'>;
 
@@ -24,9 +25,10 @@ const fields: FieldDef[] = [
 ];
 
 export function TripLodging({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <TripCrudSection<Lodging>
-      table="vacation_lodging" vacationId={vacationId} title="Lodging" icon={BedDouble}
+      table="vacation_lodging" vacationId={vacationId} title={t('tripLodging.lodging')} icon={BedDouble}
       fields={fields} emptyText="No lodging yet" addLabel="Add lodging"
       orderBy={(a, b) => (a.check_in ?? '').localeCompare(b.check_in ?? '')}
       renderRow={(l) => {

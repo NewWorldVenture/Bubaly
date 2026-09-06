@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import type { ApprovalCardData } from '@/lib/approvals/card-data';
 import type { FrontDoorPending } from '@/lib/home/front-door';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type PendingApprovalItem = FrontDoorPending & Partial<ApprovalCardData>;
 
@@ -51,13 +52,14 @@ export function PendingApprovals({
   totalCount: number;
   canDecide: boolean;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const [gone, setGone] = useState<Set<string>>(() => new Set());
   const rows = items.filter((p) => !gone.has(p.id));
   const remaining = Math.max(totalCount - gone.size, rows.length);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-muted">All caught up — every request is decided. ✅</p>;
+    return <p className="text-sm text-muted">{t('pendingApprovals.allCaughtUpEveryRequestIs')}</p>;
   }
 
   return (
@@ -78,7 +80,7 @@ export function PendingApprovals({
         ))}
       </ul>
       <Link href="/dashboard/trust" className="mt-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-brand-text hover:underline coarse:min-h-11">
-        Review all{remaining > 3 ? ` (+${remaining - 3} more)` : ''} <ChevronRight className="h-3 w-3" aria-hidden />
+        {t('pendingApprovals.reviewAll')}{remaining > 3 ? ` (+${remaining - 3} more)` : ''} <ChevronRight className="h-3 w-3" aria-hidden />
       </Link>
     </>
   );

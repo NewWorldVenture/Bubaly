@@ -23,6 +23,7 @@ import type { Tables } from '@/lib/database.types';
 import { successProbability, confidenceTier } from '@/lib/autopilot/engine';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAutopilot } from '@/lib/ai/explanation';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 
@@ -38,6 +39,7 @@ function iconFor(kind: string) {
 }
 
 export function AutopilotModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [scanning, setScanning] = useState(false);
@@ -125,7 +127,7 @@ export function AutopilotModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Autopilot"
+        title={t('autopilot.familyAutopilot')}
         description="Mission control. Bubaly predicts what your family needs and quietly handles what it can."
         action={
           <Button variant="ghost" onClick={runScan} loading={scanning}>
@@ -138,35 +140,35 @@ export function AutopilotModule() {
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-gradient-to-br from-brand/10 to-transparent p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <Gauge className="h-4 w-4" /> Today&apos;s success
+            <Gauge className="h-4 w-4" /> {t('autopilot.todayAposSSuccess')}
           </div>
           <p className={cn('text-3xl font-black', probability >= 85 ? 'text-success' : probability >= 60 ? 'text-amber-500' : 'text-danger')}>{probability}%</p>
-          <p className="text-xs text-muted">probability the day runs smoothly</p>
+          <p className="text-xs text-muted">{t('autopilot.probabilityTheDayRunsSmoothly')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <ShieldCheck className="h-4 w-4" /> Handled for you
+            <ShieldCheck className="h-4 w-4" /> {t('autopilot.handledForYou')}
           </div>
           <p className="text-3xl font-black text-fg">{handled.length}</p>
-          <p className="text-xs text-muted">auto-resolved by autopilot</p>
+          <p className="text-xs text-muted">{t('autopilot.autoResolvedByAutopilot')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <AlertTriangle className="h-4 w-4" /> Risk alerts
+            <AlertTriangle className="h-4 w-4" /> {t('autopilot.riskAlerts')}
           </div>
           <p className={cn('text-3xl font-black', highRisks > 0 ? 'text-danger' : 'text-success')}>{highRisks}</p>
-          <p className="text-xs text-muted">high-urgency items needing you</p>
+          <p className="text-xs text-muted">{t('autopilot.highUrgencyItemsNeedingYou')}</p>
         </div>
       </div>
 
       {open.length === 0 && handled.length === 0 ? (
-        <EmptyState icon={Rocket} title="All clear ✨"
+        <EmptyState icon={Rocket} title={t('autopilot.allClear')}
           description="Autopilot scanned your family and found nothing that needs you right now. We'll keep watching."
-          action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> Scan again</Button>} />
+          action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> {t('autopilot.scanAgain')}</Button>} />
       ) : (
         <div className="space-y-6">
           {handled.length > 0 && (
-            <Section icon={Sparkles} title="Bubaly already handled it" tone="success">
+            <Section icon={Sparkles} title={t('autopilot.bubalyAlreadyHandledIt')} tone="success">
               {handled.slice(0, 8).map((s) => (
                 <HandledRow key={s.id} s={s} />
               ))}
@@ -174,7 +176,7 @@ export function AutopilotModule() {
           )}
 
           {approveItems.length > 0 && (
-            <Section icon={ShieldCheck} title="Needs a quick yes" tone="brand">
+            <Section icon={ShieldCheck} title={t('autopilot.needsAQuickYes')} tone="brand">
               {approveItems.map((s) => (
                 <SuggestionRow key={s.id} s={s}
                   onApprove={() => resolve(s, 'approved')} onDismiss={() => resolve(s, 'dismissed')} />
@@ -183,7 +185,7 @@ export function AutopilotModule() {
           )}
 
           {askItems.length > 0 && (
-            <Section icon={AlertTriangle} title="Heads up" tone="muted">
+            <Section icon={AlertTriangle} title={t('autopilot.headsUp')} tone="muted">
               {askItems.map((s) => (
                 <SuggestionRow key={s.id} s={s}
                   onApprove={() => resolve(s, 'approved')} onDismiss={() => resolve(s, 'dismissed')} />
@@ -227,6 +229,7 @@ function HandledRow({ s }: { s: Suggestion }) {
 function SuggestionRow({ s, onApprove, onDismiss }: {
   s: Suggestion; onApprove: () => void; onDismiss: () => void;
 }) {
+  const t = useTranslations();
   const Icon = iconFor(s.kind);
   const urgent = s.urgency === 3;
   return (
@@ -244,7 +247,7 @@ function SuggestionRow({ s, onApprove, onDismiss }: {
             className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
             <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
           </button>
-          <button onClick={onDismiss} aria-label="Dismiss"
+          <button onClick={onDismiss} aria-label={t('autopilot.dismiss')}
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
             <X className="h-3.5 w-3.5" />
           </button>

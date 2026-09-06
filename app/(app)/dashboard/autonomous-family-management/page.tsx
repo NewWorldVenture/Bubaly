@@ -13,6 +13,7 @@ import { SectionCard, MiniEmpty, StatTile, LevelBadge } from '@/components/famil
 import { RecommendationActions, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Autonomous Management' };
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,7 @@ function ReadFailure() {
 }
 
 export default async function AutonomousManagementPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -65,7 +67,7 @@ export default async function AutonomousManagementPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Autonomous Family Management"
+        title={t('dashboardAutonomousFamilyManagement.autonomousFamilyManagement')}
         description="The AI watches your real data, recommends the next move, and only acts on sensitive things with your approval."
       />
 
@@ -73,15 +75,15 @@ export default async function AutonomousManagementPage() {
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-blue-600"><Bot className="h-6 w-6 text-white" /></div>
           <div>
-            <p className="font-semibold">Bubaly is monitoring {monitoring.length} areas</p>
-            <p className="text-xs text-muted">Last evaluated just now · {rules.data?.length ?? 0} active automations</p>
+            <p className="font-semibold">{t('dashboardAutonomousFamilyManagement.bubalyIsMonitoring')} {monitoring.length} areas</p>
+            <p className="text-xs text-muted">{t('dashboardAutonomousFamilyManagement.lastEvaluatedJustNow')} {rules.data?.length ?? 0} {t('dashboardAutonomousFamilyManagement.activeAutomations')}</p>
           </div>
-          <div className="ml-auto flex items-center gap-2"><LevelBadge level={stress.level} /><span className="text-sm font-bold tabular-nums">{completion}% on track</span></div>
+          <div className="ml-auto flex items-center gap-2"><LevelBadge level={stress.level} /><span className="text-sm font-bold tabular-nums">{completion}{t('dashboardAutonomousFamilyManagement.onTrack')}</span></div>
         </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <SectionCard title="What AI Is Monitoring" className="lg:col-span-1">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiIsMonitoring')} className="lg:col-span-1">
           <ul className="space-y-2.5">
             {monitoring.map((m) => (
               <li key={m.label} className="flex items-center gap-3 text-sm">
@@ -93,7 +95,7 @@ export default async function AutonomousManagementPage() {
           </ul>
         </SectionCard>
 
-        <SectionCard title="What AI Recommends" description="Stored + derived next-best actions" className="lg:col-span-2">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiRecommends')} description="Stored + derived next-best actions" className="lg:col-span-2">
           {(recs.data && recs.data.length > 0) || actions.length > 0 ? (
             <ul className="space-y-2.5">
               {(recs.data ?? []).map((r) => (
@@ -121,12 +123,12 @@ export default async function AutonomousManagementPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <StatTile label="Active automations" value={rules.data?.length ?? 0} icon={Zap} accent="bg-violet-600" href="/dashboard/family-automation" sublabel="Manage" />
-        <StatTile label="Pending approvals" value={pendingRuns.data?.length ?? 0} icon={Lock} accent="bg-orange-500" />
-        <StatTile label="Risk alerts" value={risks.length} icon={ShieldAlert} accent="bg-rose-500" href="/dashboard/family-stress" sublabel="Stress" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.activeAutomations')} value={rules.data?.length ?? 0} icon={Zap} accent="bg-violet-600" href="/dashboard/family-automation" sublabel="Manage" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.pendingApprovals')} value={pendingRuns.data?.length ?? 0} icon={Lock} accent="bg-orange-500" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.riskAlerts')} value={risks.length} icon={ShieldAlert} accent="bg-rose-500" href="/dashboard/family-stress" sublabel="Stress" />
       </div>
 
-      <SectionCard title="Pending Approvals" description="Sensitive actions wait for a parent — never automatic">
+      <SectionCard title={t('dashboardAutonomousFamilyManagement.pendingApprovals')} description="Sensitive actions wait for a parent — never automatic">
         {pendingRuns.data && pendingRuns.data.length > 0 ? (
           <ul className="space-y-2.5">
             {pendingRuns.data.map((run) => (
@@ -141,16 +143,16 @@ export default async function AutonomousManagementPage() {
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Weekly Plan" description="AI-optimized focus for the week">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.weeklyPlan')} description="AI-optimized focus for the week">
           <ul className="space-y-2.5 text-sm">
-            <li className="flex items-center gap-3"><Gauge className="h-4 w-4 text-violet-400" /> Keep family load at or below <LevelBadge level="moderate" /></li>
+            <li className="flex items-center gap-3"><Gauge className="h-4 w-4 text-violet-400" /> {t('dashboardAutonomousFamilyManagement.keepFamilyLoadAtOrBelow')} <LevelBadge level="moderate" /></li>
             {stress.suggestions.map((s, i) => (
               <li key={i} className="flex items-start gap-3"><CalendarRange className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" /> {s}</li>
             ))}
           </ul>
         </SectionCard>
 
-        <SectionCard title="Completed Automations" viewAllHref="/dashboard/family-automation">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.completedAutomations')} viewAllHref="/dashboard/family-automation">
           {doneRuns.data && doneRuns.data.length > 0 ? (
             <ul className="divide-y divide-border">
               {doneRuns.data.map((run) => (

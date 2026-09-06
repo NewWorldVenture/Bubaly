@@ -18,6 +18,7 @@ import {
   type ActivityProjectionInput,
 } from '@/app/(app)/dashboard/family-digital-twin/actions';
 import type { ProjectionResult, ProjectionDimension } from '@/lib/twin/simulate';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const DIM_ICON: Record<ProjectionDimension['key'], React.ComponentType<{ className?: string }>> = {
   schedule: CalendarClock, travel: Car, cost: DollarSign, family_time: Clock,
@@ -47,6 +48,7 @@ export function ActivityProjection({
   budgetCategories: string[];
   saved: SavedSim[];
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -100,44 +102,44 @@ export function ActivityProjection({
       <div className="mb-4 flex items-center gap-2">
         <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><Sparkles className="h-5 w-5" /></div>
         <div>
-          <h2 className="text-sm font-bold">Activity projection</h2>
-          <p className="text-xs text-muted">See the full ripple before you say yes — schedule, driving, cost, family time.</p>
+          <h2 className="text-sm font-bold">{t('activityProjection.activityProjection')}</h2>
+          <p className="text-xs text-muted">{t('activityProjection.seeTheFullRippleBeforeYou')}</p>
         </div>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className={inputCls} aria-label="Member">
+        <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className={inputCls} aria-label={t('activityProjection.member')}>
           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </select>
-        <input value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder="Travel soccer" className={inputCls} aria-label="Activity" />
-        <label className="text-xs text-muted">First session
-          <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={inputCls} aria-label="First session" />
+        <input value={activityName} onChange={(e) => setActivityName(e.target.value)} placeholder={t('activityProjection.travelSoccer')} className={inputCls} aria-label={t('activityProjection.activity')} />
+        <label className="text-xs text-muted">{t('activityProjection.firstSession')}
+          <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={inputCls} aria-label={t('activityProjection.firstSession')} />
         </label>
-        <label className="text-xs text-muted">Minutes / session
+        <label className="text-xs text-muted">{t('activityProjection.minutesSession')}
           <input type="number" min={15} step={15} value={durationMin} onChange={(e) => setDurationMin(+e.target.value)} className={inputCls} />
         </label>
-        <label className="text-xs text-muted">Sessions / week
+        <label className="text-xs text-muted">{t('activityProjection.sessionsWeek')}
           <input type="number" min={1} max={7} value={sessionsPerWeek} onChange={(e) => setSessionsPerWeek(+e.target.value)} className={inputCls} />
         </label>
-        <label className="text-xs text-muted">Weeks
+        <label className="text-xs text-muted">{t('activityProjection.weeks')}
           <input type="number" min={1} max={52} value={weeks} onChange={(e) => setWeeks(+e.target.value)} className={inputCls} />
         </label>
-        <label className="text-xs text-muted">Travel each way (min)
+        <label className="text-xs text-muted">{t('activityProjection.travelEachWayMin')}
           <input type="number" min={0} step={5} value={travelMinEach} onChange={(e) => setTravelMinEach(+e.target.value)} className={inputCls} />
         </label>
-        <label className="text-xs text-muted">Cost ($)
+        <label className="text-xs text-muted">{t('activityProjection.cost')}
           <input type="number" min={0} value={costDollars} onChange={(e) => setCostDollars(+e.target.value)} className={inputCls} />
         </label>
         {budgetCategories.length > 0 && (
-          <select value={costCategory} onChange={(e) => setCostCategory(e.target.value)} className={inputCls} aria-label="Budget category">
-            <option value="">No budget check</option>
+          <select value={costCategory} onChange={(e) => setCostCategory(e.target.value)} className={inputCls} aria-label={t('activityProjection.budgetCategory')}>
+            <option value="">{t('activityProjection.noBudgetCheck')}</option>
             {budgetCategories.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
       </div>
 
       <Button className="mt-3 w-full" onClick={project} disabled={pending || !activityName.trim() || !startsAt}>
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Project the ripple
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {t('activityProjection.projectTheRipple')}
       </Button>
 
       {result && (
@@ -163,14 +165,14 @@ export function ActivityProjection({
             })}
           </div>
           <Button variant="secondary" className="w-full" onClick={save} disabled={pending}>
-            <Save className="h-4 w-4" /> Save this scenario
+            <Save className="h-4 w-4" /> {t('activityProjection.saveThisScenario')}
           </Button>
         </div>
       )}
 
       {saved.length > 0 && (
         <div className="mt-5 border-t border-border/40 pt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Saved scenarios</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('activityProjection.savedScenarios')}</p>
           <ul className="space-y-1.5">
             {saved.map((s) => (
               <li key={s.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-bg/30 px-3 py-2 text-sm">

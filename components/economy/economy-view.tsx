@@ -16,6 +16,7 @@ import {
   createCurrencyAction, awardTokensAction, createRewardAction,
   requestRedemptionAction, decideRedemptionAction,
 } from '@/app/(app)/economy/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type Currency = { id: string; name: string; emoji: string; unitLabel: string | null };
 export type Member = { id: string; name: string; color: string | null; isManager: boolean };
@@ -29,6 +30,7 @@ export function EconomyView(props: {
   currencies: Currency[]; members: Member[]; balances: BalanceCell[];
   rewards: Reward[]; redemptions: Redemption[]; canManage: boolean;
 }) {
+  const tr = useTranslations();
   const { currencies, members, balances, rewards, redemptions, canManage } = props;
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -53,8 +55,8 @@ export function EconomyView(props: {
   if (currencies.length === 0 && !canManage) {
     return (
       <div>
-        <PageHeader title="Family Economy" description="Earn and spend family tokens." />
-        <EmptyState icon={Coins} title="No currencies yet" description="Ask a parent to set up your family's tokens." />
+        <PageHeader title={tr('economy.familyEconomy')} description="Earn and spend family tokens." />
+        <EmptyState icon={Coins} title={tr('economy.noCurrenciesYet')} description="Ask a parent to set up your family's tokens." />
       </div>
     );
   }
@@ -68,7 +70,7 @@ export function EconomyView(props: {
 
   return (
     <div>
-      <PageHeader title="Family Economy" description="Custom family tokens kids earn and spend on rewards — no cash involved." />
+      <PageHeader title={tr('economy.familyEconomy')} description="Custom family tokens kids earn and spend on rewards — no cash involved." />
 
       <div className="mb-5 mt-3 flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface/40 p-1 no-scrollbar">
         {TABS.filter((t) => t.show).map((t) => (
@@ -86,7 +88,7 @@ export function EconomyView(props: {
       {/* ── Balances ── */}
       {tab === 'balances' && (
         kids.length === 0 ? (
-          <EmptyState icon={Coins} title="No kids yet" description="Add child members to start the family economy." />
+          <EmptyState icon={Coins} title={tr('economy.noKidsYet')} description="Add child members to start the family economy." />
         ) : (
           <div className="space-y-3">
             {kids.map((m) => (
@@ -115,7 +117,7 @@ export function EconomyView(props: {
       {/* ── Store ── */}
       {tab === 'store' && (
         rewards.length === 0 ? (
-          <EmptyState icon={Store} title="No rewards yet" description={canManage ? 'Add rewards in the Manage tab.' : 'Ask a parent to add rewards.'} />
+          <EmptyState icon={Store} title={tr('economy.noRewardsYet')} description={canManage ? 'Add rewards in the Manage tab.' : 'Ask a parent to add rewards.'} />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {rewards.map((r) => (
@@ -130,7 +132,7 @@ export function EconomyView(props: {
       {/* ── Requests (manager) ── */}
       {tab === 'requests' && canManage && (
         pending.length === 0 ? (
-          <EmptyState icon={Inbox} title="No pending requests" description="Redemption requests will appear here for approval." />
+          <EmptyState icon={Inbox} title={tr('economy.noPendingRequests')} description="Redemption requests will appear here for approval." />
         ) : (
           <div className="space-y-2">
             {pending.map((r) => (
@@ -205,6 +207,7 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
   onAward: (currencyId: string, memberId: string, amount: number, reason: string) => void;
   onCreateReward: (currencyId: string, title: string, emoji: string, cost: number) => void;
 }) {
+  const tr = useTranslations();
   const [cName, setCName] = useState(''); const [cEmoji, setCEmoji] = useState('⭐'); const [cUnit, setCUnit] = useState('');
   const [aCur, setACur] = useState(currencies[0]?.id ?? ''); const [aMem, setAMem] = useState(kids[0]?.id ?? '');
   const [aAmt, setAAmt] = useState(''); const [aReason, setAReason] = useState('');
@@ -214,39 +217,39 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-border bg-surface/40 p-4">
-        <h3 className="mb-3 font-semibold">New currency</h3>
+        <h3 className="mb-3 font-semibold">{tr('economy.newCurrency')}</h3>
         <div className="flex flex-wrap gap-2">
           <input value={cEmoji} onChange={(e) => setCEmoji(e.target.value)} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
-          <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Name (e.g. Stars)" className="h-10 min-w-[140px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
-          <input value={cUnit} onChange={(e) => setCUnit(e.target.value)} placeholder="Unit (optional)" className="h-10 w-32 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+          <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder={tr('economy.nameEGStars')} className="h-10 min-w-[140px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+          <input value={cUnit} onChange={(e) => setCUnit(e.target.value)} placeholder={tr('economy.unitOptional')} className="h-10 w-32 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
           <Button onClick={() => onCreateCurrency(cName, cEmoji, cUnit)} loading={busy === 'new-currency'} disabled={!cName.trim()}><Plus className="mr-1 h-4 w-4" /> Add</Button>
         </div>
       </section>
 
       {currencies.length > 0 && kids.length > 0 && (
         <section className="rounded-2xl border border-border bg-surface/40 p-4">
-          <h3 className="mb-3 font-semibold">Award tokens</h3>
+          <h3 className="mb-3 font-semibold">{tr('economy.awardTokens')}</h3>
           <div className="flex flex-wrap gap-2">
             <select value={aMem} onChange={(e) => setAMem(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {kids.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
             </select>
-            <input type="number" min="1" value={aAmt} onChange={(e) => setAAmt(e.target.value)} placeholder="Amount" className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+            <input type="number" min="1" value={aAmt} onChange={(e) => setAAmt(e.target.value)} placeholder={tr('economy.amount')} className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <select value={aCur} onChange={(e) => setACur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
             </select>
-            <input value={aReason} onChange={(e) => setAReason(e.target.value)} placeholder="Reason (optional)" className="h-10 min-w-[120px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
-            <Button onClick={() => onAward(aCur, aMem, Number(aAmt), aReason)} loading={busy === 'award'} disabled={!aCur || !aMem || !aAmt}>Award</Button>
+            <input value={aReason} onChange={(e) => setAReason(e.target.value)} placeholder={tr('economy.reasonOptional')} className="h-10 min-w-[120px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+            <Button onClick={() => onAward(aCur, aMem, Number(aAmt), aReason)} loading={busy === 'award'} disabled={!aCur || !aMem || !aAmt}>{tr('economy.award')}</Button>
           </div>
         </section>
       )}
 
       {currencies.length > 0 && (
         <section className="rounded-2xl border border-border bg-surface/40 p-4">
-          <h3 className="mb-3 font-semibold">New reward</h3>
+          <h3 className="mb-3 font-semibold">{tr('economy.newReward')}</h3>
           <div className="flex flex-wrap gap-2">
             <input value={rEmoji} onChange={(e) => setREmoji(e.target.value)} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
-            <input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder="Reward (e.g. Movie night pick)" className="h-10 min-w-[160px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
-            <input type="number" min="1" value={rCost} onChange={(e) => setRCost(e.target.value)} placeholder="Cost" className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+            <input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder={tr('economy.rewardEGMovieNightPick')} className="h-10 min-w-[160px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+            <input type="number" min="1" value={rCost} onChange={(e) => setRCost(e.target.value)} placeholder={tr('economy.cost')} className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <select value={rCur} onChange={(e) => setRCur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
             </select>

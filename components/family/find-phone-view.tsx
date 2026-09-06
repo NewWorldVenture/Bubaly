@@ -11,11 +11,13 @@ import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { relTime } from '@/lib/family/safety';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Loc = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
 
 export function FindPhoneView() {
+  const t = useTranslations();
   const { familyId, members } = useApp();
 
   const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<Loc>({
@@ -36,8 +38,8 @@ export function FindPhoneView() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Find Phone" description="See each family member's last known device location."
-        action={<Link href="/dashboard/locator" className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-elevated px-5 text-sm font-semibold transition hover:bg-elevated/70"><MapPinned className="h-4 w-4" /> Family Map</Link>} />
+      <PageHeader title={t('findPhone.findPhone')} description="See each family member's last known device location."
+        action={<Link href="/dashboard/locator" className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-elevated px-5 text-sm font-semibold transition hover:bg-elevated/70"><MapPinned className="h-4 w-4" /> {t('findPhone.familyMap')}</Link>} />
 
       {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load phone locations. Refresh and try again." onRetry={refresh} /> : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -86,8 +88,8 @@ export function FindPhoneView() {
       )}
 
       <p className="text-center text-xs text-muted">
-        Location updates come from each member&apos;s device via the Family Map. Manage sharing in{' '}
-        <Link href="/dashboard/locator" className="text-brand-text">Location settings</Link>.
+        {t('findPhone.locationUpdatesComeFromEachMember')}{' '}
+        <Link href="/dashboard/locator" className="text-brand-text">{t('findPhone.locationSettings')}</Link>.
       </p>
     </div>
   );

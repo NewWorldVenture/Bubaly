@@ -13,8 +13,10 @@ import { UpgradeModal } from '@/components/app/upgrade-modal';
 import { SERVICE_CATEGORY_BY_ID, navItemsForHrefs } from '@/lib/constants/service-categories';
 import type { NavItem } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
+  const t = useTranslations();
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
 
@@ -31,7 +33,7 @@ export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
       <div className="mb-6 flex items-center gap-3">
         <Link
           href="/services"
-          aria-label="Back to All Services"
+          aria-label={t('serviceCategory.backToAllServices')}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -47,7 +49,7 @@ export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
 
       {items.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
-          Nothing here yet for your plan.
+          {t('serviceCategory.nothingHereYetForYourPlan')}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">

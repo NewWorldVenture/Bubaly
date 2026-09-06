@@ -18,6 +18,7 @@ import { formatCents } from '@/lib/wallet/ledger';
 import { dueAllowances } from '@/lib/wallet/allowance';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { saveAllowanceRuleAction, toggleAllowanceRuleAction, runDueAllowancesAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type AllowanceRow = {
   childWalletId: string; name: string; ruleId: string | null;
@@ -25,6 +26,7 @@ export type AllowanceRow = {
 };
 
 export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow[]; enabled: boolean; canManage: boolean }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<AllowanceRow | null>(null);
@@ -52,7 +54,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Automate weekly, biweekly, or monthly allowances." />
+      <PageHeader title={t('allowance.familyWallet')} description="Automate weekly, biweekly, or monthly allowances." />
       <WalletSubnav />
 
       {enabled && canManage && due.count > 0 && (
@@ -61,10 +63,10 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
             <Zap className="h-5 w-5 flex-shrink-0 text-brand-text" />
             <p className="text-sm">
               <span className="font-semibold">{due.count} allowance{due.count === 1 ? '' : 's'} due</span>
-              <span className="text-muted"> · {formatCents(due.totalCents)}. They pay automatically, or run them now.</span>
+              <span className="text-muted"> · {formatCents(due.totalCents)}{t('allowance.theyPayAutomaticallyOrRunThem')}</span>
             </p>
           </div>
-          <Button size="sm" onClick={runDue} loading={running}>Run due now</Button>
+          <Button size="sm" onClick={runDue} loading={running}>{t('allowance.runDueNow')}</Button>
         </div>
       )}
 
@@ -72,15 +74,15 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
         <div className="mb-5 flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
           <Lock className="h-5 w-5 flex-shrink-0 text-amber-500" />
           <div className="flex-1 text-sm">
-            <p className="font-semibold">Automated allowances are a Basic plan feature.</p>
-            <p className="text-xs text-muted">Upgrade to schedule recurring allowances that pay automatically.</p>
+            <p className="font-semibold">{t('allowance.automatedAllowancesAreABasicPlan')}</p>
+            <p className="text-xs text-muted">{t('allowance.upgradeToScheduleRecurringAllowancesThat')}</p>
           </div>
-          <Link href="/pricing" className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">Upgrade</Link>
+          <Link href="/pricing" className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">{t('allowance.upgrade')}</Link>
         </div>
       )}
 
       {rows.length === 0 ? (
-        <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">No child wallets yet. Activate the Family Wallet and add children first.</p>
+        <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('allowance.noChildWalletsYetActivateThe')}</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
@@ -120,6 +122,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
 }
 
 function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -142,9 +145,9 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
   return (
     <Modal open onClose={onClose} title={`Allowance — ${row.name}`}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Amount (USD)">{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
+        <Field label={t('allowance.amountUsd')}>{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">How often?</label>
+          <label className="mb-1.5 block text-sm font-medium">{t('allowance.howOften')}</label>
           <div className="flex gap-2">
             {(['weekly', 'biweekly', 'monthly'] as const).map((c) => (
               <button key={c} type="button" onClick={() => setCadence(c)}
@@ -155,10 +158,10 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
             ))}
           </div>
         </div>
-        <p className="flex items-center gap-1.5 text-xs text-muted"><CalendarClock className="h-3.5 w-3.5" /> Paid automatically into {row.name}&apos;s wallet, split by your rules.</p>
+        <p className="flex items-center gap-1.5 text-xs text-muted"><CalendarClock className="h-3.5 w-3.5" /> {t('allowance.paidAutomaticallyInto')} {row.name}{t('allowance.aposSWalletSplitByYour')}</p>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}>Save allowance</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('allowance.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('allowance.saveAllowance')}</Button>
         </div>
       </form>
     </Modal>

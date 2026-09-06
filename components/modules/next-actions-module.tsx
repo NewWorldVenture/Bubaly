@@ -23,6 +23,7 @@ import {
   type ActionInput, type ActionSource, type ActionPriority,
 } from '@/lib/opportunities/next-actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 type Task = Tables<'todo_items'>;
@@ -43,6 +44,8 @@ const OPEN_OPP = new Set(['interested', 'registered', 'waitlisted']);
 const PRIORITIES = new Set<ActionPriority>(['low', 'medium', 'high']);
 
 export function NextActionsModule() {
+  const i18nT = useTranslations();
+  const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const journey = useJourney('next_actions');
@@ -129,20 +132,20 @@ export function NextActionsModule() {
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
-        title="Next Best Actions"
+        title={tr('nextActions.nextBestActions')}
         description="Everything that needs the family, ranked by what matters most right now."
       />
 
       {ranked.length === 0 ? (
-        <EmptyState icon={Sparkles} title="You're all caught up"
+        <EmptyState icon={Sparkles} title={i18nT('nextActions.youreAllCaughtUp')}
           description="No overdue tasks, upcoming events, or closing opportunities need attention. Enjoy it." />
       ) : (
         <>
           <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
             <Target className="h-4 w-4 text-brand-text" />
             {needAttention > 0
-              ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} attention today. {ranked.length} total in your queue.</span>
-              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming — nothing overdue. Nicely ahead.</span>}
+              ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} {tr('nextActions.attentionToday')} {ranked.length} {tr('nextActions.totalInYourQueue')}</span>
+              : <span><span className="font-semibold text-fg">{ranked.length}</span> {tr('nextActions.upcomingNothingOverdueNicelyAhead')}</span>}
           </div>
 
           <div className="space-y-6">
@@ -172,12 +175,12 @@ export function NextActionsModule() {
                             <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} · {a.reason}</p>
                           </div>
                           {isTask && (
-                            <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label="Mark done" title="Mark done"
+                            <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label={tr('nextActions.markDone')} title={tr('nextActions.markDone')}
                               className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:border-emerald-500/40 hover:text-emerald-300">
                               <Check className="h-4 w-4" />
                             </button>
                           )}
-                          <Link href={a.href} aria-label="Open" title="Open"
+                          <Link href={a.href} aria-label={tr('nextActions.open')} title={tr('nextActions.open')}
                             className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-brand-text">
                             <ArrowRight className="h-4 w-4" />
                           </Link>

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Heading = { id: string; text: string };
 
 export function TableOfContents({ headings }: { headings: Heading[] }) {
+  const t = useTranslations();
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
 
   return (
     <nav className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-      <h3 className="mb-3 text-sm font-bold">In This Article</h3>
+      <h3 className="mb-3 text-sm font-bold">{t('blogTableOfContents.inThisArticle')}</h3>
       <ul className="space-y-2">
         {headings.map(({ id, text }) => (
           <li key={id}>

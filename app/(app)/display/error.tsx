@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RotateCw } from 'lucide-react';
 import { isStaleBundleError, shouldHardReload } from '@/lib/display/recover';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const RETRY_SECONDS = 15;
 const FAILS_KEY = 'display.boundary.fails';
@@ -35,6 +36,7 @@ export default function DisplayError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations();
   const [countdown, setCountdown] = useState(RETRY_SECONDS);
   // Count consecutive boundary hits across soft resets (sessionStorage survives
   // them; a hard reload clears the session count naturally on success paths).
@@ -81,24 +83,23 @@ export default function DisplayError({
       </div>
 
       <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">Bubaly Kitchen</p>
-        <h1 className="mt-3 text-3xl font-black sm:text-4xl">One moment…</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+        <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
         <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">
-          The display hit a brief hiccup. It will refresh itself —
-          nothing to do, your data is safe.
+          {t('display.theDisplayHitABriefHiccup')}
         </p>
         <p className="mt-6 text-sm text-white/45">
-          Refreshing in <span className="tabular-nums font-bold text-white/80">{countdown}s</span>
+          {t('display.refreshingIn')} <span className="tabular-nums font-bold text-white/80">{countdown}s</span>
         </p>
         <button
           onClick={() => { writeFails(0); window.location.reload(); }}
           className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
         >
-          <RotateCw className="h-4 w-4" /> Refresh now
+          <RotateCw className="h-4 w-4" /> {t('display.refreshNow')}
         </button>
         {/* Diagnostic line — small, but turns a photo of this screen into a bug report. */}
         <p className="mx-auto mt-8 max-w-md break-all font-mono text-[10px] leading-relaxed text-white/25">
-          {(error?.digest ? `digest ${error.digest}` : (error?.message ?? 'unknown error').slice(0, 160))} · build {BUILD_ID}
+          {(error?.digest ? `digest ${error.digest}` : (error?.message ?? 'unknown error').slice(0, 160))} {t('display.build')} {BUILD_ID}
         </p>
       </div>
     </div>

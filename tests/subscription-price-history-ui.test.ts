@@ -42,6 +42,17 @@ vi.mock('react', async (original) => ({
     });
   },
 }));
+vi.mock('@/components/i18n/locale-provider', async () => {
+  // These tests call components as plain functions with hand-mocked hooks, so
+  // useContext is unavailable. Resolve through the real catalogue rather than
+  // returning the key, so assertions keep checking the words a user sees.
+  const { SOURCE_MESSAGES } = await import('@/lib/i18n/messages');
+  return {
+    useTranslations: () => (key: string) => SOURCE_MESSAGES[key] ?? key,
+    useLocale: () => ({ code: 'en-US', language: 'en', region: 'US', dir: 'ltr' }),
+    useLocaleSource: () => 'default',
+  };
+});
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mocks.context }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: mocks.rows, loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: mocks.createClient }));

@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import {
   MAX_AI_REQUEST_TEXT_CHARS, answerAIRequest, parseAIRequestIntake, runPagePath, submitAIRequest,
 } from '@/lib/ai/chat-request';
@@ -16,7 +17,7 @@ import { MAX_SUGGESTIONS, SUGGESTED_PROMPTS, moduleFromPathname, suggestedPrompt
 import { toCommandBarResults } from '@/components/app/command-bar';
 import { FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
 
-const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const read = (path: string) => readUiSource(resolve(process.cwd(), path));
 
 describe('suggested prompts', () => {
   it('offers the six §16 prompts, in order, on Home', () => {

@@ -5,6 +5,7 @@ import { Phone, Check, X } from 'lucide-react';
 import { assignGuardianPhoneAction } from '@/app/(app)/guardian/actions';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useToast } from '@/components/ui/toast';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function GuardianNumberForm({
   memberId,
@@ -15,6 +16,7 @@ export function GuardianNumberForm({
   initialPhone: string | null;
   twilioEnabled: boolean;
 }) {
+  const t = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [phone, setPhone] = useState<string | null>(initialPhone);
   const [editing, setEditing] = useState(!initialPhone);
@@ -37,13 +39,13 @@ export function GuardianNumberForm({
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Your Guardian Number</h3>
+        <h3 className="text-sm font-semibold">{t('guardianNumber.yourGuardianNumber')}</h3>
         {phone && !editing && (
           <button
             onClick={() => { setDraft(phone ?? ''); setEditing(true); }}
             className="text-xs font-medium text-brand-text hover:underline"
           >
-            Change
+            {t('guardianNumber.change')}
           </button>
         )}
       </div>
@@ -60,14 +62,13 @@ export function GuardianNumberForm({
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-lg">📞</div>
           <div>
             <p className="text-lg font-bold text-emerald-400">{formatPhone(phone)}</p>
-            <p className="text-xs text-muted">Share this number — Bubaly answers for you</p>
+            <p className="text-xs text-muted">{t('guardianNumber.shareThisNumberBubalyAnswersFor')}</p>
           </div>
         </div>
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-muted">
-            Enter the Twilio phone number you bought for this person. Bubaly answers, screens, and routes
-            every call and text to it.
+            {t('guardianNumber.enterTheTwilioPhoneNumberYou')}
           </p>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -84,7 +85,7 @@ export function GuardianNumberForm({
               onClick={save}
               disabled={saving}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-50 transition"
-              aria-label="Save Guardian number"
+              aria-label={t('guardianNumber.saveGuardianNumber')}
             >
               <Check className="h-4 w-4" />
             </button>
@@ -92,7 +93,7 @@ export function GuardianNumberForm({
               <button
                 onClick={() => { setEditing(false); setDraft(phone ?? ''); }}
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border text-muted hover:bg-surface transition"
-                aria-label="Cancel"
+                aria-label={t('guardianNumber.cancel')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -104,7 +105,7 @@ export function GuardianNumberForm({
               disabled={saving}
               className="text-xs text-red-400 hover:underline disabled:opacity-50"
             >
-              Remove this number
+              {t('guardianNumber.removeThisNumber')}
             </button>
           )}
         </div>

@@ -13,8 +13,10 @@ import {
   getProfileStateAction, saveProfileAnswerAction, skipProfileFieldAction,
 } from '@/app/(app)/dashboard/settings/profile-actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ProfileNudge() {
+  const t = useTranslations();
   const [loaded, setLoaded] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [known, setKnown] = useState<KnownProfile>({});
@@ -65,11 +67,11 @@ export function ProfileNudge() {
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-bold">Personalize Bubaly</p>
-            <p className="text-[11px] text-muted">One quick question — helps us tailor your experience.</p>
+            <p className="text-sm font-bold">{t('profileNudge.personalizeBubaly')}</p>
+            <p className="text-[11px] text-muted">{t('profileNudge.oneQuickQuestionHelpsUsTailor')}</p>
           </div>
         </div>
-        <button onClick={() => setHidden(true)} aria-label="Dismiss for now" className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
+        <button onClick={() => setHidden(true)} aria-label={t('profileNudge.dismissForNow')} className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -98,6 +100,7 @@ function Question({
   onChoose: (v: string | string[]) => void;
   onSkip: () => void;
 }) {
+  const t = useTranslations();
   const toggleMulti = (v: string) =>
     setMulti(multi.includes(v) ? multi.filter((x) => x !== v) : [...multi, v]);
 
@@ -133,7 +136,7 @@ function Question({
             onClick={() => onChoose(multi)}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
           >
-            Save <ArrowRight className="h-3.5 w-3.5" />
+            {t('profileNudge.save')} <ArrowRight className="h-3.5 w-3.5" />
           </button>
         )}
         <button
@@ -141,7 +144,7 @@ function Question({
           onClick={onSkip}
           className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold text-muted transition hover:text-fg disabled:opacity-60"
         >
-          Skip
+          {t('profileNudge.skip')}
         </button>
       </div>
     </div>

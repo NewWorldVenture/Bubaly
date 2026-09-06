@@ -4,6 +4,7 @@ import { Ticket, CalendarCheck } from 'lucide-react';
 import { TripCrudSection, type FieldDef } from './shared';
 import { dollars } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Activity = Tables<'vacation_activities'>;
 type Reservation = Tables<'vacation_reservations'>;
@@ -36,10 +37,11 @@ const reservationFields: FieldDef[] = [
 ];
 
 export function TripActivities({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <div className="space-y-8">
       <TripCrudSection<Activity>
-        table="vacation_activities" vacationId={vacationId} title="Activities" icon={Ticket}
+        table="vacation_activities" vacationId={vacationId} title={t('tripActivities.activities')} icon={Ticket}
         fields={activityFields} emptyText="No activities yet" addLabel="Add activity"
         orderBy={(a, b) => (a.scheduled_at ?? '~').localeCompare(b.scheduled_at ?? '~')}
         renderRow={(a) => (
@@ -55,7 +57,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
         )}
       />
       <TripCrudSection<Reservation>
-        table="vacation_reservations" vacationId={vacationId} title="Reservations" icon={CalendarCheck}
+        table="vacation_reservations" vacationId={vacationId} title={t('tripActivities.reservations')} icon={CalendarCheck}
         fields={reservationFields} emptyText="No reservations yet" addLabel="Add reservation"
         orderBy={(a, b) => (a.reserved_at ?? '~').localeCompare(b.reserved_at ?? '~')}
         renderRow={(r) => (

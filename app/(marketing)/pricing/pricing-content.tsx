@@ -20,6 +20,7 @@ import {
   PLUS_MONTHLY_CENTS,
   PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Period = 'monthly' | 'yearly';
 
@@ -86,11 +87,12 @@ const SWITCH_HIGHLIGHTS: { emoji: string; title: string; desc: string; tier: HiT
 ];
 
 function WhySwitch() {
+  const tr = useTranslations();
   return (
     <section className="mt-12">
-      <h2 className="text-center text-2xl font-black">Why families switch to Bubaly</h2>
+      <h2 className="text-center text-2xl font-black">{tr('pricingPricingContent.whyFamiliesSwitchToBubaly')}</h2>
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
-        The highest-value things Bubaly does that most family apps don’t — in plain language.
+        {tr('pricingPricingContent.theHighestValueThingsBubalyDoes')}
       </p>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SWITCH_HIGHLIGHTS.map((h) => (
@@ -123,12 +125,13 @@ const TRIAL_STEPS: { icon: React.ReactNode; title: string; desc: string }[] = [
 ];
 
 function HowTrialWorks() {
+  const tr = useTranslations();
   return (
     <section className="mt-10">
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-        <h2 className="text-center text-xl font-black sm:text-2xl">How your free trial works</h2>
+        <h2 className="text-center text-xl font-black sm:text-2xl">{tr('pricingPricingContent.howYourFreeTrialWorks')}</h2>
         <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
-          Five days on the house — then pick the plan that fits your family. No surprises.
+          {tr('pricingPricingContent.fiveDaysOnTheHouseThen')}
         </p>
         <ol className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {TRIAL_STEPS.map((s, i) => (
@@ -148,6 +151,7 @@ function HowTrialWorks() {
 // ── Plan card ──────────────────────────────────────────────────────────────
 /** The one-click, no-signup demo submit button (server action). */
 function TryDemoButton() {
+  const tr = useTranslations();
   const { pending } = useFormStatus();
   return (
     <button
@@ -156,8 +160,8 @@ function TryDemoButton() {
       className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-brand-fg shadow-glow transition hover:opacity-90 disabled:opacity-70"
     >
       {pending
-        ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting your demo…</>
-        : <><PlayCircle className="h-5 w-5" /> Click to Demo Now</>}
+        ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('pricingPricingContent.startingYourDemo')}</>
+        : <><PlayCircle className="h-5 w-5" /> {tr('pricingPricingContent.clickToDemoNow')}</>}
     </button>
   );
 }
@@ -166,6 +170,7 @@ function TryDemoButton() {
  *  one click → a fully-seeded Family+ demo for 5 minutes. Surfaces the
  *  ?demo=error|ended round-trip params so a failed/finished demo isn't silent. */
 function TestAccountCard() {
+  const tr = useTranslations();
   const demoStatus = useSearchParams().get('demo');
   return (
     <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
@@ -175,25 +180,25 @@ function TestAccountCard() {
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-black">Demo Account</h2>
+            <h2 className="text-base font-black">{tr('pricingPricingContent.demoAccount')}</h2>
             <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-950">
-              Free · 5-min demo
+              {tr('pricingPricingContent.free5MinDemo')}
             </span>
           </div>
           <p className="mt-0.5 text-xs text-white/60">
-            No card needed — logs you straight into full Family+.
+            {tr('pricingPricingContent.noCardNeededLogsYouStraight')}
           </p>
         </div>
       </div>
 
       {demoStatus === 'error' && (
         <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-medium text-danger">
-          We couldn’t start the demo just now — please try again in a moment.
+          {tr('pricingPricingContent.weCouldntStartTheDemoJust')}
         </p>
       )}
       {demoStatus === 'ended' && (
         <p role="status" className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
-          Thanks for trying Bubaly! Ready to keep going? Pick a plan below.
+          {tr('pricingPricingContent.thanksForTryingBubalyReadyTo')}
         </p>
       )}
 
@@ -312,10 +317,11 @@ function PositioningCallouts() {
 }
 
 function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
+  const tr = useTranslations();
   if (matrix.length === 0) return null;
   return (
     <section className="mt-12">
-      <h2 className="text-center text-2xl font-black">Every feature, by plan</h2>
+      <h2 className="text-center text-2xl font-black">{tr('pricingPricingContent.everyFeatureByPlan')}</h2>
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
         Your 5-day free trial includes full Family Basic. After that, a check means the feature is included on that plan (and every plan above it).
       </p>
@@ -324,7 +330,7 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03]">
-              <th className="px-4 py-3 text-left font-bold">Feature</th>
+              <th className="px-4 py-3 text-left font-bold">{tr('pricingPricingContent.feature')}</th>
               {TIER_COL.map((t) => (
                 <th key={t.key} className="px-4 py-3 text-center font-bold">
                   <span className="inline-flex items-center gap-1.5"><span className={cn('h-2 w-2 rounded-full', t.dot)} />{t.label}</span>
@@ -367,6 +373,7 @@ function FeatureMatrixSection({ section, items }: { section: string; items: { la
 
 // ── Main component ─────────────────────────────────────────────────────────
 export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { familiesCount?: number; featureMatrix?: FeatureMatrix }) {
+  const tr = useTranslations();
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
   const router = useRouter();
@@ -403,13 +410,13 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           {/* Hero + billing toggle — spans columns 2-3, left-aligned on desktop. */}
           <section className="order-1 mx-auto max-w-2xl text-center lg:order-2 lg:col-span-2 lg:mx-0 lg:max-w-none lg:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80 sm:text-sm">
-              Less Managing Life. More Living It.
+              {tr('pricingPricingContent.lessManagingLifeMoreLivingIt')}
             </p>
             <h1 className="mt-3 font-black leading-[1.05] text-[clamp(2.25rem,6vw,3.75rem)]">
-              Bubaly Pricing
+              {tr('pricingPricingContent.bubalyPricing')}
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:mt-5 sm:text-lg lg:mx-0">
-              Get full Family Basic access free for 5 days — no credit card. After that, keep Family Basic or go Family+.
+              {tr('pricingPricingContent.getFullFamilyBasicAccessFree')}
             </p>
 
             <div className="mt-6 flex justify-center sm:mt-7 lg:justify-start">
@@ -418,17 +425,17 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
                   onClick={() => setPeriod('monthly')}
                   className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
-                  Monthly
+                  {tr('pricingPricingContent.monthly')}
                 </button>
                 <button
                   onClick={() => setPeriod('yearly')}
                   className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
-                  Yearly
+                  {tr('pricingPricingContent.yearly')}
                 </button>
                 {yearly && (
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    Save up to {basicSavings}%
+                    {tr('pricingPricingContent.saveUpTo')} {basicSavings}%
                   </span>
                 )}
               </div>
@@ -489,7 +496,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
             <div className="shrink-0 text-3xl">📸</div>
             <div>
-              <h2 className="font-bold">Smart Imports — the feature most competitors don&apos;t offer well</h2>
+              <h2 className="font-bold">{tr('pricingPricingContent.smartImportsTheFeatureMostCompetitors')}</h2>
               <p className="mt-1 text-sm text-white/65">
                 Snap a school flyer, upload a PDF, or share a screenshot. Bubaly AI automatically creates calendar events, tasks, and reminders — no manual entry.
               </p>
@@ -502,10 +509,10 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         <TrustStrip familiesNote={familiesNote(familiesCount)} />
 
         <p className="border-t border-white/8 pt-7 text-center text-sm text-white/55">
-          Questions? Visit our{' '}
-          <a className="text-violet-300 hover:underline" href="/faq">Help Center</a>
+          {tr('pricingPricingContent.questionsVisitOur')}{' '}
+          <a className="text-violet-300 hover:underline" href="/faq">{tr('pricingPricingContent.helpCenter')}</a>
           {' '}or{' '}
-          <a className="text-violet-300 hover:underline" href="/contact">Contact Support</a>
+          <a className="text-violet-300 hover:underline" href="/contact">{tr('pricingPricingContent.contactSupport')}</a>
         </p>
       </Container>
     </PageWrap>

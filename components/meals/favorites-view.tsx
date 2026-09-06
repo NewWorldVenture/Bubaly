@@ -14,11 +14,13 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { FAVORITE_KIND_META } from '@/lib/meals/tracker';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Favorite = Tables<'family_favorites'>;
 const KINDS = ['recipe', 'restaurant', 'meal', 'snack', 'drink', 'other'] as const;
 
 export function FavoritesView() {
+  const t = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -50,20 +52,20 @@ export function FavoritesView() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Favorites" description="The meals, recipes, and spots your family loves most."
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add favorite</Button>} />
+      <PageHeader title={t('favorites.familyFavorites')} description="The meals, recipes, and spots your family loves most."
+        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('favorites.addFavorite')}</Button>} />
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
-        <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All ({favorites.length})</Chip>
+        <Chip active={filter === 'all'} onClick={() => setFilter('all')}>{t('favorites.all')}{favorites.length})</Chip>
         {KINDS.filter((k) => counts[k]).map((k) => (
           <Chip key={k} active={filter === k} onClick={() => setFilter(k)}>{FAVORITE_KIND_META[k].emoji} {FAVORITE_KIND_META[k].label} ({counts[k]})</Chip>
         ))}
       </div>
 
       {loading ? <SkeletonList /> : favorites.length === 0 ? (
-        <EmptyState icon={Heart} title="No favorites yet" description="Save the recipes, restaurants, and meals your family loves."
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add favorite</Button>} />
+        <EmptyState icon={Heart} title={t('favorites.noFavoritesYet')} description="Save the recipes, restaurants, and meals your family loves."
+          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('favorites.addFavorite')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((f) => {
@@ -105,6 +107,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: string; userId: string; memberId: string | null; onClose: () => void }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState({ name: '', kind: 'recipe', rating: '', notes: '', ref_url: '' });
@@ -125,17 +128,17 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Favorite">
+    <Modal open onClose={onClose} title={t('favorites.addFavorite')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Name">{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Grandma's lasagna" required autoFocus />}</Field>
+        <Field label={t('favorites.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Grandma's lasagna" required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Kind">{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{KINDS.map((k) => <option key={k} value={k}>{FAVORITE_KIND_META[k].label}</option>)}</Select>}</Field>
-          <Field label="Rating" hint="Optional">{(id) => <Select id={id} value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })}><option value="">—</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)}</option>)}</Select>}</Field>
+          <Field label={t('favorites.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{KINDS.map((k) => <option key={k} value={k}>{FAVORITE_KIND_META[k].label}</option>)}</Select>}</Field>
+          <Field label={t('favorites.rating')} hint="Optional">{(id) => <Select id={id} value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })}><option value="">—</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)}</option>)}</Select>}</Field>
         </div>
-        <Field label="Link" hint="Optional">{(id) => <Input id={id} value={v.ref_url} onChange={(e) => setV({ ...v, ref_url: e.target.value })} placeholder="https://…" />}</Field>
-        <Field label="Notes" hint="Optional">{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder="Why the family loves it…" />}</Field>
+        <Field label={t('favorites.link')} hint="Optional">{(id) => <Input id={id} value={v.ref_url} onChange={(e) => setV({ ...v, ref_url: e.target.value })} placeholder="https://…" />}</Field>
+        <Field label={t('favorites.notes')} hint="Optional">{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder="Why the family loves it…" />}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('favorites.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.name.trim()}>Add</Button>
         </div>
       </form>

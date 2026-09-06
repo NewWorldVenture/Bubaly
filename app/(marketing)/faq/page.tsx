@@ -6,6 +6,7 @@ import { CTASection } from '@/components/marketing/cta';
 import { FaqStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
 import { readPublishedAeoQuestions } from '@/lib/marketing/aeo';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
+import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/faq', {
@@ -65,6 +66,7 @@ const FAQ_SECTIONS: FaqSection[] = [
 ];
 
 export default async function FAQPage() {
+  const t = await getTranslations();
   // The Knowledge Center is driven by the admin AEO console: published
   // marketing_aeo_questions render here + feed the FAQPage structured data, so
   // adding/editing an answer in /admin/marketing/aeo updates this page and its
@@ -85,7 +87,7 @@ export default async function FAQPage() {
       <FaqStructuredData items={schemaItems} />
       <MarketingPageStructuredData path="/faq" name="FAQ & Family Knowledge Center" description="Answers to common questions about Bubaly." />
       <Section className="pt-20 text-center">
-        <SectionHeading eyebrow="FAQ" title="Questions, answered" description="Everything you need to know to get your family started with the AI Family Operating System." />
+        <SectionHeading eyebrow="FAQ" title={t('faq.questionsAnswered')} description="Everything you need to know to get your family started with the AI Family Operating System." />
       </Section>
 
       {!aeo.available && (

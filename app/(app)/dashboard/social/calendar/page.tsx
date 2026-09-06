@@ -8,11 +8,13 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
 import type { SocialPlatform } from '@/lib/social/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Calendar · Social' };
 export const dynamic = 'force-dynamic';
 
 export default async function CalendarPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const items = await getCalendarItems(ctx.active.familyId);
 
@@ -28,14 +30,14 @@ export default async function CalendarPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Content calendar</h2>
+        <h2 className="text-sm font-semibold">{t('dashboardSocialCalendar.contentCalendar')}</h2>
         <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <PenSquare className="h-4 w-4" /> Schedule a post
+          <PenSquare className="h-4 w-4" /> {t('dashboardSocialCalendar.scheduleAPost')}
         </Link>
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="Nothing scheduled" description="Schedule a post in the studio and it will appear here grouped by day." />
+        <EmptyState icon={CalendarClock} title={t('dashboardSocialCalendar.nothingScheduled')} description="Schedule a post in the studio and it will appear here grouped by day." />
       ) : (
         <div className="space-y-4">
           {days.map((day) => (

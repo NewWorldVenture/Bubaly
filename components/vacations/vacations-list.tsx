@@ -16,6 +16,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Vacation = Tables<'vacations'>;
 type Member = Tables<'vacation_members'>;
@@ -24,6 +25,7 @@ type Score = Tables<'vacation_travel_scores'>;
 const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false });
 
 export function VacationsList({ openCreate = false }: { openCreate?: boolean }) {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -94,12 +96,12 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Plane className="h-6 w-6 text-brand-text" /> Vacation Planner</h1>
-          <p className="text-sm text-muted">Plan, coordinate, and pack for every family trip — with an AI travel concierge.</p>
+          <h1 className="flex items-center gap-2 text-2xl font-bold"><Plane className="h-6 w-6 text-brand-text" /> {tr('vacationsList.vacationPlanner')}</h1>
+          <p className="text-sm text-muted">{tr('vacationsList.planCoordinateAndPackForEvery')}</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/vacations/calendar"><Button variant="secondary" size="sm"><CalendarDays className="h-4 w-4" /> Calendar</Button></Link>
-          <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> New trip</Button>
+          <Link href="/dashboard/vacations/calendar"><Button variant="secondary" size="sm"><CalendarDays className="h-4 w-4" /> {tr('vacationsList.calendar')}</Button></Link>
+          <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('vacationsList.newTrip')}</Button>
         </div>
       </div>
 
@@ -124,7 +126,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       {loading ? <LoadingBlock /> : error ? (
         <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
       ) : sorted.length === 0 ? (
-        <EmptyState icon={Plane} title="No trips yet" description="Create your first vacation — or let the AI builder plan one for you." />
+        <EmptyState icon={Plane} title={tr('vacationsList.noTripsYet')} description="Create your first vacation — or let the AI builder plan one for you." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.map((t) => {
@@ -153,30 +155,30 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="New trip">
+        <Modal open onClose={() => setForm(null)} title={tr('vacationsList.newTrip')}>
           <form onSubmit={create} className="space-y-3">
-            <Field label="Trip name" required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Summer at Disney World" required />}</Field>
+            <Field label={tr('vacationsList.tripName')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Summer at Disney World" required />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Type">{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{VACATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-              <Field label="Destination">{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Orlando, FL" />}</Field>
+              <Field label={tr('vacationsList.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{VACATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+              <Field label={tr('vacationsList.destination')}>{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Orlando, FL" />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Start date">{(id) => <Input id={id} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />}</Field>
-              <Field label="End date">{(id) => <Input id={id} type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />}</Field>
+              <Field label={tr('vacationsList.startDate')}>{(id) => <Input id={id} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />}</Field>
+              <Field label={tr('vacationsList.endDate')}>{(id) => <Input id={id} type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Budget ($)">{(id) => <Input id={id} type="number" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="5000" />}</Field>
+              <Field label={tr('vacationsList.budget')}>{(id) => <Input id={id} type="number" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="5000" />}</Field>
               <label className="mt-7 flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={form.is_international} onChange={(e) => setForm({ ...form, is_international: e.target.checked })} className="h-4 w-4 rounded border-border" /> International
+                <input type="checkbox" checked={form.is_international} onChange={(e) => setForm({ ...form, is_international: e.target.checked })} className="h-4 w-4 rounded border-border" /> {tr('vacationsList.international')}
               </label>
             </div>
-            <Field label="Notes">{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />}</Field>
+            <Field label={tr('vacationsList.notes')}>{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />}</Field>
             <div className="rounded-xl border border-border bg-elevated/40 p-3 text-xs text-muted">
-              <Sparkles className="mr-1 inline h-3.5 w-3.5 text-brand-text" /> Tip: after creating, open the AI Concierge to auto-build a full itinerary, packing list, and budget.
+              <Sparkles className="mr-1 inline h-3.5 w-3.5 text-brand-text" /> {tr('vacationsList.tipAfterCreatingOpenTheAi')}
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit">Create trip</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('vacationsList.cancel')}</Button>
+              <Button type="submit">{tr('vacationsList.createTrip')}</Button>
             </div>
           </form>
         </Modal>

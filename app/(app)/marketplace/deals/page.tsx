@@ -10,6 +10,7 @@ import {
   priceBand, assessPrice, dealLabel, discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Deals · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,7 @@ type Row = { id: string; title: string; photo_url: string | null; category: stri
  *  category's comp band, ranked by how far below the median they sit. Turns the
  *  Price Coach from a per-item check into a discovery surface. */
 export default async function DealsPage() {
+  const t = await getTranslations();
   await requireUserContext();
   const sb = await createServer();
 
@@ -71,13 +73,13 @@ export default async function DealsPage() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Deals" description="Items priced below what similar things go for right now — biggest savings first, based on comparable listings." />
+      <PageHeader title={t('marketplaceDeals.deals')} description="Items priced below what similar things go for right now — biggest savings first, based on comparable listings." />
 
       {deals.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Tag className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">No standout deals right now</p>
-          <p className="mt-1 text-sm text-muted">When something is listed below its typical price, it’ll surface here. Check back soon.</p>
+          <p className="mt-3 text-sm font-semibold">{t('marketplaceDeals.noStandoutDealsRightNow')}</p>
+          <p className="mt-1 text-sm text-muted">{t('marketplaceDeals.whenSomethingIsListedBelowIts')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -89,6 +90,7 @@ function gpaFromPct(pct: number): number {
 }
 
 export function SchoolModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
@@ -276,18 +278,18 @@ export function SchoolModule() {
     <div className="module-with-sidebar">
       <div className="module-main module-page">
         <PageHeader
-          title="School"
+          title={tr('school.school')}
           description="Stay on top of classes, assignments, and school events."
           action={
             <div className="flex items-center gap-2">
               <AiInsight kind="school" iconOnly />
               <div className="relative">
-              <Button onClick={() => setAddMenuOpen((v) => !v)}><Plus className="h-4 w-4" /> Add Item</Button>
+              <Button onClick={() => setAddMenuOpen((v) => !v)}><Plus className="h-4 w-4" /> {tr('school.addItem')}</Button>
               {addMenuOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
-                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setEventOpen(true); }}>School Event</button>
-                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setClassOpen(true); }}>Class</button>
-                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setGradeOpen(true); }}>Grade</button>
+                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setEventOpen(true); }}>{tr('school.schoolEvent')}</button>
+                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setClassOpen(true); }}>{tr('school.class')}</button>
+                  <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setGradeOpen(true); }}>{tr('school.grade')}</button>
                 </div>
               )}
               </div>
@@ -319,22 +321,22 @@ export function SchoolModule() {
         {(tab === 'Overview' || tab === 'Assignments') && (
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
-              <h2 className="font-semibold">Upcoming Assignments</h2>
-              <button onClick={() => setTab('Assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+              <h2 className="font-semibold">{tr('school.upcomingAssignments')}</h2>
+              <button onClick={() => setTab('Assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('school.viewAllAssignments')} <ChevronRight className="h-3.5 w-3.5" /></button>
             </div>
             {assignments.length === 0 ? (
               <div className="p-5 pt-0">
-                <EmptyState icon={BookOpen} title="No assignments yet" description="Add assignment events to track due dates." action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Assignment</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noAssignmentsYet')} description="Add assignment events to track due dates." action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addAssignment')}</Button>} />
               </div>
             ) : (
               <>
                 <div className="table-responsive overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr className="border-t border-border text-xs text-muted">
-                      <th className="px-5 py-3 text-left font-medium">Assignment</th>
-                      <th className="px-4 py-3 text-left font-medium">Student</th>
-                      <th className="px-4 py-3 text-left font-medium">Type</th>
-                      <th className="px-4 py-3 text-left font-medium">Due Date</th>
+                      <th className="px-5 py-3 text-left font-medium">{tr('school.assignment')}</th>
+                      <th className="px-4 py-3 text-left font-medium">{tr('school.student')}</th>
+                      <th className="px-4 py-3 text-left font-medium">{tr('school.type')}</th>
+                      <th className="px-4 py-3 text-left font-medium">{tr('school.dueDate')}</th>
                       <th className="w-8 px-4 py-3" />
                     </tr></thead>
                     <tbody className="divide-y divide-border">
@@ -354,7 +356,7 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button aria-label="More options" className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button aria-label={tr('school.moreOptions')} className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}
@@ -363,7 +365,7 @@ export function SchoolModule() {
                 </div>
                 {tab === 'Overview' && assignments.length > 5 && (
                   <div className="border-t border-border p-4 text-center">
-                    <button onClick={() => setTab('Assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">View all {assignments.length} assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setTab('Assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('school.viewAll')} {assignments.length} assignments <ChevronRight className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </>
@@ -375,11 +377,11 @@ export function SchoolModule() {
         {tab === 'Classes' && (
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">All Classes</h2>
-              <Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> Add Class</Button>
+              <h2 className="font-semibold">{tr('school.allClasses')}</h2>
+              <Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>
             </div>
             {classes.length === 0 ? (
-              <EmptyState icon={BookOpen} title="No classes added" description="Add your classes to see schedules." action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> Add Class</Button>} />
+              <EmptyState icon={BookOpen} title={tr('school.noClassesAdded')} description="Add your classes to see schedules." action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
             ) : (
               <div className="space-y-2">
                 {classes.map((c) => {
@@ -406,21 +408,21 @@ export function SchoolModule() {
         {tab === 'Grades' && (
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">All Grades</h2>
-              <Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> Add Grade</Button>
+              <h2 className="font-semibold">{tr('school.allGrades')}</h2>
+              <Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addGrade')}</Button>
             </div>
             {grades.length === 0 ? (
-              <EmptyState icon={GraduationCap} title="No grades recorded" description="Add grades to track academic performance." action={<Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> Add Grade</Button>} />
+              <EmptyState icon={GraduationCap} title={tr('school.noGradesRecorded')} description="Add grades to track academic performance." action={<Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addGrade')}</Button>} />
             ) : (
               <div className="table-responsive overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-border text-xs text-muted">
-                    <th className="px-4 py-3 text-left font-medium">Title</th>
-                    <th className="px-4 py-3 text-left font-medium">Student</th>
-                    <th className="px-4 py-3 text-left font-medium">Subject</th>
-                    <th className="px-4 py-3 text-left font-medium">Type</th>
-                    <th className="px-4 py-3 text-left font-medium">Score</th>
-                    <th className="px-4 py-3 text-left font-medium">Date</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.title')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.student')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.subject')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.type')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.score')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('school.date')}</th>
                   </tr></thead>
                   <tbody className="divide-y divide-border">
                     {grades.map((g) => {
@@ -456,8 +458,8 @@ export function SchoolModule() {
             {/* Class Schedules */}
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold">Today&apos;s Classes</h2>
-                <button onClick={() => setTab('Classes')} className="text-xs font-semibold text-brand-text">View full schedule →</button>
+                <h2 className="font-semibold">{tr('school.todayAposSClasses')}</h2>
+                <button onClick={() => setTab('Classes')} className="text-xs font-semibold text-brand-text">{tr('school.viewFullSchedule')}</button>
               </div>
               {members.length > 0 && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -469,7 +471,7 @@ export function SchoolModule() {
                 </div>
               )}
               {todayClasses.length === 0 ? (
-                <EmptyState icon={BookOpen} title="No classes today" description={selectedMember ? `No classes scheduled for ${firstName(selectedMember.display_name)} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> Add Class</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noClassesToday')} description={selectedMember ? `No classes scheduled for ${firstName(selectedMember.display_name)} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
               ) : (
                 <div className="space-y-2.5">
                   {todayClasses.map((c) => (
@@ -487,10 +489,10 @@ export function SchoolModule() {
             {/* Announcements */}
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold">School Announcements</h2>
+                <h2 className="font-semibold">{tr('school.schoolAnnouncements')}</h2>
               </div>
               {announcements.length === 0 ? (
-                <EmptyState icon={BookOpen} title="No announcements" description="Announcements will appear here when added." action={<Button onClick={() => { setEventForm((f) => ({ ...f, event_type: 'announcement' })); setEventOpen(true); }}><Plus className="h-4 w-4" /> Add Announcement</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noAnnouncements')} description="Announcements will appear here when added." action={<Button onClick={() => { setEventForm((f) => ({ ...f, event_type: 'announcement' })); setEventOpen(true); }}><Plus className="h-4 w-4" /> {tr('school.addAnnouncement')}</Button>} />
               ) : (
                 <div className="space-y-4">
                   {announcements.map((a) => (
@@ -514,9 +516,9 @@ export function SchoolModule() {
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Upcoming School Events */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming School Events</h2></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('school.upcomingSchoolEvents')}</h2></div>
           {sidebarEvents.length === 0 ? (
-            <p className="text-sm text-muted">No upcoming events in the next 2 weeks.</p>
+            <p className="text-sm text-muted">{tr('school.noUpcomingEventsInTheNext')}</p>
           ) : (
             <div className="space-y-3">
               {sidebarEvents.map((e, i) => {
@@ -540,9 +542,9 @@ export function SchoolModule() {
 
         {/* Grade Summary */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Grade Summary <span className="text-xs text-muted/60">(This Term)</span></h2>
+          <h2 className="mb-4 font-semibold">{tr('school.gradeSummary')} <span className="text-xs text-muted/60">{tr('school.thisTerm')}</span></h2>
           {grades.length === 0 ? (
-            <p className="text-sm text-muted">No grades recorded yet.</p>
+            <p className="text-sm text-muted">{tr('school.noGradesRecordedYet')}</p>
           ) : (
             <>
               <div className="flex items-center gap-4">
@@ -562,16 +564,16 @@ export function SchoolModule() {
                   ))}
                 </div>
               </div>
-              <button onClick={() => setTab('Grades')} className="mt-4 flex items-center gap-1 text-xs text-brand-text">View grade details <ChevronRight className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTab('Grades')} className="mt-4 flex items-center gap-1 text-xs text-brand-text">{tr('school.viewGradeDetails')} <ChevronRight className="h-3.5 w-3.5" /></button>
             </>
           )}
         </div>
 
         {/* Important Dates */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Important Dates</h2></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('school.importantDates')}</h2></div>
           {importantDates.length === 0 ? (
-            <p className="text-sm text-muted">No upcoming dates.</p>
+            <p className="text-sm text-muted">{tr('school.noUpcomingDates')}</p>
           ) : (
             <div className="space-y-3">
               {importantDates.map((e) => {
@@ -592,50 +594,50 @@ export function SchoolModule() {
         {/* AI Study Helper */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
-          <h3 className="font-bold">AI Study Helper</h3>
-          <p className="mt-2 text-xs leading-5 text-muted">Get study tips, homework help, and resources for your kids.</p>
-          <Button className="mt-4 w-full">Ask AI</Button>
+          <h3 className="font-bold">{tr('school.aiStudyHelper')}</h3>
+          <p className="mt-2 text-xs leading-5 text-muted">{tr('school.getStudyTipsHomeworkHelpAnd')}</p>
+          <Button className="mt-4 w-full">{tr('school.askAi')}</Button>
         </div>
       </aside>
 
       {/* ── Modals ────────────────────────────────────────────── */}
-      <Modal open={eventOpen} title="Add School Event" onClose={() => setEventOpen(false)}>
+      <Modal open={eventOpen} title={tr('school.addSchoolEvent')} onClose={() => setEventOpen(false)}>
         <div className="space-y-4">
-          <Field label="Title">{(id) => <Input id={id} value={eventForm.title} onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Math Worksheet" />}</Field>
-          <Field label="Type">{(id) => <Select id={id} value={eventForm.event_type} onChange={(e) => setEventForm((f) => ({ ...f, event_type: e.target.value }))}>{EVENT_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}</Select>}</Field>
-          <Field label="Student">{(id) => <Select id={id} value={eventForm.member_id} onChange={(e) => setEventForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
-          <Field label="School">{(id) => <Input id={id} value={eventForm.school_name} onChange={(e) => setEventForm((f) => ({ ...f, school_name: e.target.value }))} placeholder="Optional" />}</Field>
-          <Field label="Notes">{(id) => <Input id={id} value={eventForm.notes} onChange={(e) => setEventForm((f) => ({ ...f, notes: e.target.value }))} />}</Field>
+          <Field label={tr('school.title')}>{(id) => <Input id={id} value={eventForm.title} onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('school.eGMathWorksheet')} />}</Field>
+          <Field label={tr('school.type')}>{(id) => <Select id={id} value={eventForm.event_type} onChange={(e) => setEventForm((f) => ({ ...f, event_type: e.target.value }))}>{EVENT_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}</Select>}</Field>
+          <Field label={tr('school.student')}>{(id) => <Select id={id} value={eventForm.member_id} onChange={(e) => setEventForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('school.dateTime')}>{(id) => <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
+          <Field label={tr('school.school')}>{(id) => <Input id={id} value={eventForm.school_name} onChange={(e) => setEventForm((f) => ({ ...f, school_name: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
+          <Field label={tr('school.notes')}>{(id) => <Input id={id} value={eventForm.notes} onChange={(e) => setEventForm((f) => ({ ...f, notes: e.target.value }))} />}</Field>
           <Button className="w-full" onClick={saveEvent} disabled={saving || !eventForm.title || !eventForm.starts_at}>{saving ? 'Saving...' : 'Add Event'}</Button>
         </div>
       </Modal>
 
-      <Modal open={classOpen} title="Add Class" onClose={() => setClassOpen(false)}>
+      <Modal open={classOpen} title={tr('school.addClass')} onClose={() => setClassOpen(false)}>
         <div className="space-y-4">
-          <Field label="Student">{(id) => <Select id={id} value={classForm.member_id} onChange={(e) => setClassForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select student</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Subject">{(id) => <Input id={id} value={classForm.subject} onChange={(e) => setClassForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Math" />}</Field>
-          <Field label="Teacher">{(id) => <Input id={id} value={classForm.teacher} onChange={(e) => setClassForm((f) => ({ ...f, teacher: e.target.value }))} placeholder="Optional" />}</Field>
-          <Field label="Room">{(id) => <Input id={id} value={classForm.room} onChange={(e) => setClassForm((f) => ({ ...f, room: e.target.value }))} placeholder="e.g. Room 203" />}</Field>
-          <Field label="Time">{(id) => <Input id={id} value={classForm.time_slot} onChange={(e) => setClassForm((f) => ({ ...f, time_slot: e.target.value }))} placeholder="e.g. 8:00 AM" />}</Field>
-          <Field label="Day of Week">{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{DAYS_OF_WEEK.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}</Select>}</Field>
-          <Field label="School">{(id) => <Input id={id} value={classForm.school_name} onChange={(e) => setClassForm((f) => ({ ...f, school_name: e.target.value }))} placeholder="Optional" />}</Field>
+          <Field label={tr('school.student')}>{(id) => <Select id={id} value={classForm.member_id} onChange={(e) => setClassForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('school.selectStudent')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('school.subject')}>{(id) => <Input id={id} value={classForm.subject} onChange={(e) => setClassForm((f) => ({ ...f, subject: e.target.value }))} placeholder={tr('school.eGMath')} />}</Field>
+          <Field label={tr('school.teacher')}>{(id) => <Input id={id} value={classForm.teacher} onChange={(e) => setClassForm((f) => ({ ...f, teacher: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
+          <Field label={tr('school.room')}>{(id) => <Input id={id} value={classForm.room} onChange={(e) => setClassForm((f) => ({ ...f, room: e.target.value }))} placeholder={tr('school.eGRoom203')} />}</Field>
+          <Field label={tr('school.time')}>{(id) => <Input id={id} value={classForm.time_slot} onChange={(e) => setClassForm((f) => ({ ...f, time_slot: e.target.value }))} placeholder={tr('school.eG800Am')} />}</Field>
+          <Field label={tr('school.dayOfWeek')}>{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{DAYS_OF_WEEK.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}</Select>}</Field>
+          <Field label={tr('school.school')}>{(id) => <Input id={id} value={classForm.school_name} onChange={(e) => setClassForm((f) => ({ ...f, school_name: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
           <Button className="w-full" onClick={saveClass} disabled={saving || !classForm.member_id || !classForm.subject}>{saving ? 'Saving...' : 'Add Class'}</Button>
         </div>
       </Modal>
 
-      <Modal open={gradeOpen} title="Add Grade" onClose={() => setGradeOpen(false)}>
+      <Modal open={gradeOpen} title={tr('school.addGrade')} onClose={() => setGradeOpen(false)}>
         <div className="space-y-4">
-          <Field label="Student">{(id) => <Select id={id} value={gradeForm.member_id} onChange={(e) => setGradeForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select student</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Subject">{(id) => <Input id={id} value={gradeForm.subject} onChange={(e) => setGradeForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Math" />}</Field>
-          <Field label="Title">{(id) => <Input id={id} value={gradeForm.title} onChange={(e) => setGradeForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Chapter 5 Test" />}</Field>
-          <Field label="Type">{(id) => <Select id={id} value={gradeForm.grade_type} onChange={(e) => setGradeForm((f) => ({ ...f, grade_type: e.target.value as GradeType }))}>{GRADE_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</Select>}</Field>
+          <Field label={tr('school.student')}>{(id) => <Select id={id} value={gradeForm.member_id} onChange={(e) => setGradeForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('school.selectStudent')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('school.subject')}>{(id) => <Input id={id} value={gradeForm.subject} onChange={(e) => setGradeForm((f) => ({ ...f, subject: e.target.value }))} placeholder={tr('school.eGMath')} />}</Field>
+          <Field label={tr('school.title')}>{(id) => <Input id={id} value={gradeForm.title} onChange={(e) => setGradeForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('school.eGChapter5Test')} />}</Field>
+          <Field label={tr('school.type')}>{(id) => <Select id={id} value={gradeForm.grade_type} onChange={(e) => setGradeForm((f) => ({ ...f, grade_type: e.target.value as GradeType }))}>{GRADE_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</Select>}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Score">{(id) => <Input id={id} type="number" value={gradeForm.score} onChange={(e) => setGradeForm((f) => ({ ...f, score: e.target.value }))} placeholder="e.g. 92" />}</Field>
-            <Field label="Max Score">{(id) => <Input id={id} type="number" value={gradeForm.max_score} onChange={(e) => setGradeForm((f) => ({ ...f, max_score: e.target.value }))} />}</Field>
+            <Field label={tr('school.score')}>{(id) => <Input id={id} type="number" value={gradeForm.score} onChange={(e) => setGradeForm((f) => ({ ...f, score: e.target.value }))} placeholder={tr('school.eG92')} />}</Field>
+            <Field label={tr('school.maxScore')}>{(id) => <Input id={id} type="number" value={gradeForm.max_score} onChange={(e) => setGradeForm((f) => ({ ...f, max_score: e.target.value }))} />}</Field>
           </div>
-          <Field label="Letter Grade (optional)">{(id) => <Input id={id} value={gradeForm.grade} onChange={(e) => setGradeForm((f) => ({ ...f, grade: e.target.value }))} placeholder="e.g. A-" />}</Field>
-          <Field label="Date">{(id) => <Input id={id} type="date" value={gradeForm.date} onChange={(e) => setGradeForm((f) => ({ ...f, date: e.target.value }))} />}</Field>
+          <Field label={tr('school.letterGradeOptional')}>{(id) => <Input id={id} value={gradeForm.grade} onChange={(e) => setGradeForm((f) => ({ ...f, grade: e.target.value }))} placeholder={tr('school.eGA')} />}</Field>
+          <Field label={tr('school.date')}>{(id) => <Input id={id} type="date" value={gradeForm.date} onChange={(e) => setGradeForm((f) => ({ ...f, date: e.target.value }))} />}</Field>
           <Button className="w-full" onClick={saveGrade} disabled={saving || !gradeForm.member_id || !gradeForm.subject}>{saving ? 'Saving...' : 'Add Grade'}</Button>
         </div>
       </Modal>

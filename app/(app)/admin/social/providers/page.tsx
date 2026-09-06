@@ -7,6 +7,7 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Providers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ function ReadFailure() {
 }
 
 export default async function AdminProvidersPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: rows, error } = await supabase.from('social_providers').select('platform, label, is_enabled, needs_app_review, char_limit');
   if (error) {
@@ -33,11 +35,11 @@ export default async function AdminProvidersPage() {
 
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('adminSocialProviders.providers')}</h1>
       <AdminSocialSubnav active="/admin/social/providers" />
       <p className="text-sm text-muted">
-        The provider catalog and capability matrix (source of truth: <code>lib/social/capabilities.ts</code>, mirrored into{' '}
-        <code>social_providers</code>). Credential readiness is read from the environment server-side.
+        {t('adminSocialProviders.theProviderCatalogAndCapabilityMatrix')} <code>lib/social/capabilities.ts</code>{t('adminSocialProviders.mirroredInto')}{' '}
+        <code>social_providers</code>{t('adminSocialProviders.credentialReadinessIsReadFromThe')}
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         {PLATFORMS.map((p) => {

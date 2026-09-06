@@ -10,6 +10,7 @@
 import { CalendarDays } from 'lucide-react';
 import { ErrorState, SkeletonText } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
 export type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
@@ -31,11 +32,12 @@ export type ContextRailProps = {
 };
 
 export function ContextRail({ glance, upcoming, activity, prompts, loading = false, error = null, onRetry, onAsk, className }: ContextRailProps) {
+  const t = useTranslations();
   return (
     <div className={cn('space-y-5', className)}>
       {error && <ErrorState message={error} onRetry={onRetry} />}
 
-      <RailCard title="At a glance">
+      <RailCard title={t('contextRail.atAGlance')}>
         {loading ? (
           <SkeletonText lines={2} />
         ) : (
@@ -51,7 +53,7 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
         )}
       </RailCard>
 
-      <RailCard title="Coming up" action={<a href="/dashboard/calendar" className="focus-ring rounded text-xs font-semibold text-brand-text">Calendar</a>}>
+      <RailCard title={t('contextRail.comingUp')} action={<a href="/dashboard/calendar" className="focus-ring rounded text-xs font-semibold text-brand-text">{t('contextRail.calendar')}</a>}>
         {loading ? (
           <SkeletonText lines={3} />
         ) : upcoming.length > 0 ? (
@@ -75,11 +77,11 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
             })}
           </ul>
         ) : (
-          <p className="py-4 text-center text-sm text-muted/60">Nothing coming up</p>
+          <p className="py-4 text-center text-sm text-muted/60">{t('contextRail.nothingComingUp')}</p>
         )}
       </RailCard>
 
-      <RailCard title="Try asking">
+      <RailCard title={t('contextRail.tryAsking')}>
         <ul>
           {prompts.map(({ icon: Icon, text }) => (
             <li key={text}>
@@ -98,7 +100,7 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
         </ul>
       </RailCard>
 
-      <RailCard title="Recent activity" action={<a href="/dashboard/activity" className="focus-ring rounded text-xs font-semibold text-brand-text">All</a>}>
+      <RailCard title={t('contextRail.recentActivity')} action={<a href="/dashboard/activity" className="focus-ring rounded text-xs font-semibold text-brand-text">All</a>}>
         {loading ? (
           <SkeletonText lines={2} />
         ) : activity.length > 0 ? (
@@ -112,7 +114,7 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
             ))}
           </ul>
         ) : (
-          <p className="py-3 text-center text-xs text-muted/60">No recent activity</p>
+          <p className="py-3 text-center text-xs text-muted/60">{t('contextRail.noRecentActivity')}</p>
         )}
       </RailCard>
     </div>

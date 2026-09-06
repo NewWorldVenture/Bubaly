@@ -6,6 +6,7 @@
 // must render its own <html>/<body> and cannot rely on globals.css or Tailwind
 // being present. Everything here is therefore inlined and self-contained.
 import { useEffect } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export default function GlobalError({
   error,
@@ -14,6 +15,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations();
   useEffect(() => {
     console.error('[Bubaly] root error:', error);
   }, [error]);
@@ -53,9 +55,9 @@ export default function GlobalError({
         >
           ⚠️
         </div>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>Something went wrong</h1>
+        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>{t('globalError.somethingWentWrong')}</h1>
         <p style={{ margin: 0, maxWidth: 420, fontSize: '0.875rem', color: '#94a0b8', lineHeight: 1.6 }}>
-          Bubaly hit an unexpected error. Your data is safe. Try again, or reload the app.
+          {t('globalError.bubalyHitAnUnexpectedErrorYour')}
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
           <button
@@ -72,7 +74,7 @@ export default function GlobalError({
               background: '#7c5dff',
             }}
           >
-            Try again
+            {t('globalError.tryAgain')}
           </button>
           <a
             href="/home"
@@ -87,7 +89,7 @@ export default function GlobalError({
               border: '1px solid rgba(237, 240, 247, 0.18)',
             }}
           >
-            Reload Bubaly
+            {t('globalError.reloadBubaly')}
           </a>
         </div>
         {error.digest && (

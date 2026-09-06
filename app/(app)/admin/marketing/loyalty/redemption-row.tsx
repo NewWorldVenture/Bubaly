@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { Check, X, Loader2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fulfillRedemptionAction, cancelRedemptionAction } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type Redemption = {
   id: string; reward_name: string; cost_points: number; status: string; code: string | null;
@@ -14,6 +15,7 @@ const TONE: Record<string, 'warning' | 'success' | 'neutral'> = { pending: 'warn
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export function RedemptionRow({ redemption }: { redemption: Redemption }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const r = redemption;
@@ -36,8 +38,8 @@ export function RedemptionRow({ redemption }: { redemption: Redemption }) {
 
       {r.status === 'pending' && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2 text-xs">
-          <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-success hover:underline"><Check className="h-3.5 w-3.5" /> Fulfill</button>
-          <button onClick={() => start(async () => { await cancelRedemptionAction(r.id); })} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> Cancel &amp; refund</button>
+          <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-success hover:underline"><Check className="h-3.5 w-3.5" /> {t('adminMarketingLoyaltyRedemptionRow.fulfill')}</button>
+          <button onClick={() => start(async () => { await cancelRedemptionAction(r.id); })} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> {t('adminMarketingLoyaltyRedemptionRow.cancelAmpRefund')}</button>
           {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
         </div>
       )}
@@ -45,9 +47,9 @@ export function RedemptionRow({ redemption }: { redemption: Redemption }) {
       {open && r.status === 'pending' && (
         <form action={(fd) => start(async () => { await fulfillRedemptionAction(fd); setOpen(false); })} className="mt-2 grid gap-2 sm:grid-cols-2">
           <input type="hidden" name="id" value={r.id} />
-          <input name="code" placeholder="Fulfillment code (optional)" className={inputCls} />
-          <input name="notes" placeholder="Notes (optional)" className={inputCls} />
-          <div className="sm:col-span-2"><button className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">Mark fulfilled</button></div>
+          <input name="code" placeholder={t('adminMarketingLoyaltyRedemptionRow.fulfillmentCodeOptional')} className={inputCls} />
+          <input name="notes" placeholder={t('adminMarketingLoyaltyRedemptionRow.notesOptional')} className={inputCls} />
+          <div className="sm:col-span-2"><button className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingLoyaltyRedemptionRow.markFulfilled')}</button></div>
         </form>
       )}
     </div>

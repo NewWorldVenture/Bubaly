@@ -9,6 +9,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
 import { archiveContentAction, updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Content', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const STATUSES = ['idea', 'brief', 'drafting', 'review', 'approved', 'published'
 type BlogMeta = { slug?: string; category?: string; author?: string; excerpt?: string; featured?: boolean; tags?: string[] };
 
 export default async function ContentPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [itemsResult, postsResult] = await Promise.all([
     supabase.from('marketing_content_items').select('*').is('deleted_at', null).order('publish_at', { ascending: true, nullsFirst: false }),
@@ -38,9 +40,9 @@ export default async function ContentPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         <div>
-          <h2 className="mb-2 font-semibold">Content pipeline</h2>
+          <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>
           {(items ?? []).length === 0 ? (
-            <EmptyState icon={FileText} title="No content planned" description="Add an idea or brief on the right." />
+            <EmptyState icon={FileText} title={t('adminMarketingContent.noContentPlanned')} description="Add an idea or brief on the right." />
           ) : (
             <div className="space-y-2">
               {(items ?? []).map((it) => {
@@ -105,9 +107,9 @@ export default async function ContentPage() {
         </div>
 
         <div>
-          <h2 className="mb-2 flex items-center gap-2 font-semibold"><BookOpen className="h-4 w-4" /> Published blog</h2>
+          <h2 className="mb-2 flex items-center gap-2 font-semibold"><BookOpen className="h-4 w-4" /> {t('adminMarketingContent.publishedBlog')}</h2>
           {(posts ?? []).length === 0 ? (
-            <p className="text-sm text-muted">No blog posts yet.</p>
+            <p className="text-sm text-muted">{t('adminMarketingContent.noBlogPostsYet')}</p>
           ) : (
             <div className="space-y-2">
               {(posts ?? []).map((p) => (
@@ -132,15 +134,15 @@ export default async function ContentPage() {
       </div>
 
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New content idea</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingContent.newContentIdea')}</h2>
         <form action={createContentItem} className="space-y-3 text-sm">
-          <input name="title" required placeholder="Title or topic" className={inputCls} />
+          <input name="title" required placeholder={t('adminMarketingContent.titleOrTopic')} className={inputCls} />
           <select name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
           <input name="publish_at" type="date" className={inputCls} />
-          <textarea name="brief" rows={4} placeholder="Brief / notes…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Add to pipeline</button>
+          <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</button>
         </form>
-        <p className="mt-3 text-xs text-muted">Blog items: write the body, set category/author, then “Publish to blog” to push live at <code>/blog/&lt;slug&gt;</code>.</p>
+        <p className="mt-3 text-xs text-muted">{t('adminMarketingContent.blogItemsWriteTheBodySet')} <code>/blog/&lt;slug&gt;</code>.</p>
       </Card>
     </div>
   );

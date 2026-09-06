@@ -7,10 +7,12 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { AllowanceView, type AllowanceRow } from '@/components/wallet/allowance-view';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Wallet Allowance' };
 
 export default async function WalletAllowancePage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -49,9 +51,9 @@ export default async function WalletAllowancePage() {
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Wallet allowance data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('walletAllowance.walletAllowanceDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some allowance details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{t('walletAllowance.someAllowanceDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <AllowanceView rows={rows} enabled={walletFeatureEnabled(tier, 'allowances')} canManage={isManager(ctx.active.role)} />

@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast';
 import { FEATURE_CATALOG, FEATURE_SECTIONS, type FeatureTier } from '@/lib/constants/feature-catalog';
 import { TIER_LABELS } from '@/lib/features/tiers';
 import { setFeatureTierAction, resetFeatureTiersAction } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const TIERS: { tier: FeatureTier; icon: typeof Power; on: string }[] = [
   { tier: 'off', icon: Power, on: 'bg-slate-600 text-white' },
@@ -16,6 +17,7 @@ const TIERS: { tier: FeatureTier; icon: typeof Power; on: string }[] = [
 ];
 
 export function TierFeaturesClient({ resolved }: { resolved: Record<string, FeatureTier> }) {
+  const t = useTranslations();
   const { success, error } = useToast();
   const [state, setState] = useState<Record<string, FeatureTier>>(resolved);
   const [pending, startTransition] = useTransition();
@@ -50,12 +52,11 @@ export function TierFeaturesClient({ resolved }: { resolved: Record<string, Feat
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">
-          Set the minimum tier for each service. <strong className="text-fg">Off</strong> hides it everywhere;
-          changes flow live to the pricing page and in-app gating.
+          {t('adminTierFeaturesTierFeaturesClient.setTheMinimumTierForEach')} <strong className="text-fg">Off</strong> {t('adminTierFeaturesTierFeaturesClient.hidesItEverywhereChangesFlowLive')}
         </p>
         <button onClick={resetAll} disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-fg">
-          <RotateCcw className="h-3.5 w-3.5" /> Reset to defaults
+          <RotateCcw className="h-3.5 w-3.5" /> {t('adminTierFeaturesTierFeaturesClient.resetToDefaults')}
         </button>
       </div>
 

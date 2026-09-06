@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createFunnel } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Funnels', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function FunnelsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: funnels, error: funnelsError } = await supabase.from('marketing_funnels').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (funnelsError) {
@@ -23,7 +25,7 @@ export default async function FunnelsPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(funnels ?? []).length === 0 ? (
-          <EmptyState icon={Filter} title="No funnels yet" description="Define your first funnel on the right." />
+          <EmptyState icon={Filter} title={t('adminMarketingFunnels.noFunnelsYet')} description="Define your first funnel on the right." />
         ) : (
           (funnels ?? []).map((f) => {
             const steps = Array.isArray(f.steps) ? f.steps as { label: string }[] : [];
@@ -44,11 +46,11 @@ export default async function FunnelsPage() {
         )}
       </div>
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New funnel</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingFunnels.newFunnel')}</h2>
         <form action={createFunnel} className="space-y-3 text-sm">
-          <input name="name" required placeholder="Funnel name" className={inputCls} />
-          <textarea name="steps" rows={5} placeholder="One step per line, e.g.&#10;Landing page&#10;Sign up&#10;Onboarding&#10;Subscribe" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create funnel</button>
+          <input name="name" required placeholder={t('adminMarketingFunnels.funnelName')} className={inputCls} />
+          <textarea name="steps" rows={5} placeholder={t('adminMarketingFunnels.oneStepPerLineEG')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingFunnels.createFunnel')}</button>
         </form>
       </Card>
     </div>

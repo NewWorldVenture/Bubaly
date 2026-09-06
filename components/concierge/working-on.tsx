@@ -17,6 +17,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { WORKING_RUN_STATES, workingRunsFrom, type WorkingRun, type WorkingRunRow, type WorkingStepRow } from '@/lib/home/today';
 import { StatusBadge } from './status-badge';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const RUN_COLUMNS = 'id, summary, state, plan_id, updated_at, created_at';
 
@@ -40,6 +41,7 @@ async function fetchWorking(supabase: SupabaseBrowser, familyId: string): Promis
 }
 
 export function WorkingOn({ familyId, initial, className }: { familyId: string; initial: WorkingRun[]; className?: string }) {
+  const t = useTranslations();
   const [rows, setRows] = useState<WorkingRun[]>(initial);
 
   const byStep = useRealtimeQuery<WorkingRun>({
@@ -60,11 +62,11 @@ export function WorkingOn({ familyId, initial, className }: { familyId: string; 
     <section aria-labelledby="working-on-heading" className={className}>
       <div className="mb-3 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
-        <h2 id="working-on-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">Bubaly is working on</h2>
+        <h2 id="working-on-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">{t('workingOn.bubalyIsWorkingOn')}</h2>
       </div>
       {rows.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
-          Nothing in progress. Ask for something above and it will show up here.
+          {t('workingOn.nothingInProgressAskForSomething')}
         </p>
       ) : (
         <ul className="space-y-2">

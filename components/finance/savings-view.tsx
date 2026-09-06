@@ -13,11 +13,13 @@ import { Input, Field } from '@/components/ui/input';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
 import { usd, pct, fmtDueDate } from '@/lib/finance/hub';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Goal = Tables<'savings_goals'>;
 const EMOJIS = ['🎯', '🏖️', '🚗', '🏠', '🎓', '🎁', '💍', '🎄', '💻', '⚽'];
 
 export function SavingsView() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -44,12 +46,12 @@ export function SavingsView() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Savings Goals" description="Set targets and watch your family's savings grow."
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add goal</Button>} />
+      <PageHeader title={t('savings.savingsGoals')} description="Set targets and watch your family's savings grow."
+        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
 
       {loading ? <SkeletonList /> : rows.length === 0 ? (
-        <EmptyState icon={Target} title="No savings goals" description="Create a goal to start saving toward something special."
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add goal</Button>} />
+        <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description="Create a goal to start saving toward something special."
+          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map((g) => {
@@ -87,6 +89,7 @@ export function SavingsView() {
 }
 
 function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: string; onClose: () => void }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState({ name: '', target_amount: '', current_amount: '', target_date: '', emoji: '🎯' });
@@ -106,21 +109,21 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Savings Goal">
+    <Modal open onClose={onClose} title={t('savings.addSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Goal name">{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Family vacation" required autoFocus />}</Field>
+        <Field label={t('savings.goalName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Family vacation" required autoFocus />}</Field>
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted">Icon</p>
+          <p className="mb-1.5 text-xs font-medium text-muted">{t('savings.icon')}</p>
           <div className="flex flex-wrap gap-1.5">{EMOJIS.map((e) => <button key={e} type="button" onClick={() => setV({ ...v, emoji: e })} className={`rounded-lg p-1.5 text-lg transition hover:bg-elevated ${v.emoji === e ? 'bg-brand/15 ring-2 ring-brand/40' : ''}`}>{e}</button>)}</div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Target ($)">{(id) => <Input id={id} type="number" step="0.01" value={v.target_amount} onChange={(e) => setV({ ...v, target_amount: e.target.value })} placeholder="3000" required />}</Field>
-          <Field label="Saved ($)" hint="Optional">{(id) => <Input id={id} type="number" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
+          <Field label={t('savings.target')}>{(id) => <Input id={id} type="number" step="0.01" value={v.target_amount} onChange={(e) => setV({ ...v, target_amount: e.target.value })} placeholder="3000" required />}</Field>
+          <Field label={t('savings.saved')} hint="Optional">{(id) => <Input id={id} type="number" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
           <Field label="By" hint="Optional">{(id) => <Input id={id} type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={saving} disabled={!v.name.trim() || !v.target_amount}>Create</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('savings.cancel')}</Button>
+          <Button type="submit" loading={saving} disabled={!v.name.trim() || !v.target_amount}>{t('savings.create')}</Button>
         </div>
       </form>
     </Modal>
@@ -128,14 +131,15 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
 }
 
 function ContributeModal({ goal, onAdd, onClose }: { goal: Goal; onAdd: (delta: number) => void; onClose: () => void }) {
+  const t = useTranslations();
   const [amt, setAmt] = useState('');
   return (
     <Modal open onClose={onClose} title={`Add to ${goal.name}`}>
       <form onSubmit={(e) => { e.preventDefault(); onAdd(Math.abs(parseFloat(amt) || 0)); }} className="space-y-4">
-        <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
+        <Field label={t('savings.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={!amt}>Add funds</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('savings.cancel')}</Button>
+          <Button type="submit" disabled={!amt}>{t('savings.addFunds')}</Button>
         </div>
       </form>
     </Modal>

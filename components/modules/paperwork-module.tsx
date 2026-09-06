@@ -18,6 +18,7 @@ import {
 } from '@/app/(app)/dashboard/paperwork/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function draftFromMeta(meta: Json): string | null {
   return meta && typeof meta === 'object' && !Array.isArray(meta)
@@ -52,6 +53,7 @@ function parseActions(j: Json): StoredAction[] {
 }
 
 export function PaperworkModule({ items }: { items: Item[] }) {
+  const t = useTranslations();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('needs_action');
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -110,7 +112,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-            <Inbox className="h-6 w-6 text-brand-text" /> Paperwork Inbox
+            <Inbox className="h-6 w-6 text-brand-text" /> {t('paperwork.paperworkInbox')}
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Paste any slip, form, or flyer — AI pulls out what you actually have to
@@ -184,7 +186,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                     </span>
                     {it.urgency === 'urgent' && it.status === 'needs_action' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
-                        <AlertTriangle className="h-2.5 w-2.5" /> Urgent
+                        <AlertTriangle className="h-2.5 w-2.5" /> {t('paperwork.urgent')}
                       </span>
                     )}
                     {it.due_on && (
@@ -247,7 +249,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                             <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg/90">{draft}</p>
                             <button onClick={() => copyDraft(draft)}
                               className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-violet-300 hover:underline">
-                              <Copy className="h-3 w-3" /> Copy reply
+                              <Copy className="h-3 w-3" /> {t('paperwork.copyReply')}
                             </button>
                           </div>
                         )}
@@ -260,18 +262,18 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                     {it.status !== 'done' && it.status !== 'archived' && (
                       <button onClick={() => setStatus(it.id, 'done')} disabled={busyItem}
                         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
-                        <Check className="h-3.5 w-3.5" /> Mark done
+                        <Check className="h-3.5 w-3.5" /> {t('paperwork.markDone')}
                       </button>
                     )}
                     {it.status !== 'archived' ? (
                       <button onClick={() => setStatus(it.id, 'archived')} disabled={busyItem}
                         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
-                        <Archive className="h-3.5 w-3.5" /> Archive
+                        <Archive className="h-3.5 w-3.5" /> {t('paperwork.archive')}
                       </button>
                     ) : (
                       <button onClick={() => setStatus(it.id, 'needs_action')} disabled={busyItem}
                         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
-                        <RotateCcw className="h-3.5 w-3.5" /> Reopen
+                        <RotateCcw className="h-3.5 w-3.5" /> {t('paperwork.reopen')}
                       </button>
                     )}
                   </div>
@@ -286,6 +288,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
 }
 
 function Composer({ onDone }: { onDone: () => void }) {
+  const t = useTranslations();
   const [pending, startTransition] = useTransition();
 
   return (
@@ -294,7 +297,7 @@ function Composer({ onDone }: { onDone: () => void }) {
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
       <label htmlFor="pw-text" className="text-xs font-bold uppercase tracking-wide text-muted">
-        Paste the paperwork text
+        {t('paperwork.pasteThePaperworkText')}
       </label>
       <textarea
         id="pw-text"
@@ -307,7 +310,7 @@ function Composer({ onDone }: { onDone: () => void }) {
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         <input
           name="sender"
-          placeholder="From (school, coach, clinic…) — optional"
+          placeholder={t('paperwork.fromSchoolCoachClinicOptional')}
           className="h-10 flex-1 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
         />
         <button
@@ -316,7 +319,7 @@ function Composer({ onDone }: { onDone: () => void }) {
           className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          Triage it
+          {t('paperwork.triageIt')}
         </button>
       </div>
     </form>

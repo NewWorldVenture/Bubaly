@@ -16,6 +16,7 @@ import {
   type ListingKind, type ListingCategory, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Storefront · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,7 @@ const KIND_ICON: Record<string, typeof ShoppingBag> = {
 };
 
 export default async function StorefrontPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -70,7 +72,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   return (
     <div className="mx-auto max-w-4xl">
       <Link href="/marketplace/creators" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> All creators
+        <ArrowLeft className="h-4 w-4" /> {t('marketplaceCreators.allCreators')}
       </Link>
 
       {/* Storefront header */}
@@ -86,7 +88,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
           </div>
           <div className="flex flex-col items-end gap-2">
             {isOwner ? (
-              <Link href="/marketplace/store" className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-fg">Edit store</Link>
+              <Link href="/marketplace/store" className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-fg">{t('marketplaceCreators.editStore')}</Link>
             ) : (
               <FollowButton storeId={store.id} following={!!selfFollowRes.data} />
             )}
@@ -100,15 +102,15 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
           <Stat icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />} value={String(trust.score)} label={TRUST_BAND_LABELS[trust.band]} />
           <Stat icon={<Star className="h-4 w-4 fill-amber-400 text-amber-400" />} value={rs.count > 0 ? rs.avg.toFixed(1) : '—'} label={rs.count > 0 ? `${rs.count} review${rs.count === 1 ? '' : 's'}` : 'No reviews'} />
           <Stat icon={<Users className="h-4 w-4 text-brand-text" />} value={String(followers)} label={`follower${followers === 1 ? '' : 's'}`} />
-          <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(listings.length)} label="open listings" />
+          <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(listings.length)} label={t('marketplaceCreators.openListings')} />
         </div>
       </div>
 
       {/* Listings */}
-      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Listings</h2>
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">{t('marketplaceCreators.listings')}</h2>
       {listings.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
-          Nothing on offer right now.
+          {t('marketplaceCreators.nothingOnOfferRightNow')}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -150,7 +152,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
       {/* Reviews */}
       {reviews.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold text-fg">What people say</h2>
+          <h2 className="mb-3 text-sm font-semibold text-fg">{t('marketplaceCreators.whatPeopleSay')}</h2>
           <ul className="space-y-3">
             {reviews.map((r) => (
               <li key={r.id} className="rounded-xl border border-border bg-surface/50 p-3">

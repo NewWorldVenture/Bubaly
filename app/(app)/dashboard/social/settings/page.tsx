@@ -9,11 +9,13 @@ import { isMissingTableError } from '@/lib/supabase/errors';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Settings · Social' };
 export const dynamic = 'force-dynamic';
 
 export default async function SocialSettingsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -48,22 +50,22 @@ export default async function SocialSettingsPage() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">Workspace settings</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialSettings.workspaceSettings')}</h2>
         <form action={updateSettingsAction} className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Default timezone</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultTimezone')}</label>
             <input name="default_timezone" defaultValue={settings?.default_timezone ?? 'UTC'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">AI tone</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.aiTone')}</label>
             <input name="ai_tone" defaultValue={settings?.ai_tone ?? 'friendly'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Signature (appended on supported platforms)</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.signatureAppendedOnSupportedPlatforms')}</label>
             <input name="signature" defaultValue={settings?.signature ?? ''} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Default platforms</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultPlatforms')}</label>
             <div className="flex flex-wrap gap-2">
               {PLATFORMS.map((p) => (
                 <label key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">
@@ -74,19 +76,19 @@ export default async function SocialSettingsPage() {
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="require_approval" defaultChecked={settings?.require_approval ?? false} /> Require approval before publishing
+            <input type="checkbox" name="require_approval" defaultChecked={settings?.require_approval ?? false} /> {t('dashboardSocialSettings.requireApprovalBeforePublishing')}
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="auto_hashtags" defaultChecked={settings?.auto_hashtags ?? true} /> Auto-extract hashtags into variants
+            <input type="checkbox" name="auto_hashtags" defaultChecked={settings?.auto_hashtags ?? true} /> {t('dashboardSocialSettings.autoExtractHashtagsIntoVariants')}
           </label>
-          <button disabled={!canManage} className="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg disabled:opacity-50">Save settings</button>
-          {!canManage && <p className="text-[11px] text-muted">Your role can’t change settings.</p>}
+          <button disabled={!canManage} className="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg disabled:opacity-50">{t('dashboardSocialSettings.saveSettings')}</button>
+          {!canManage && <p className="text-[11px] text-muted">{t('dashboardSocialSettings.yourRoleCantChangeSettings')}</p>}
         </form>
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">Access control</h2>
-        <p className="mb-3 text-xs text-muted">Grant a social role per family member. Without an explicit role, members default by household role.</p>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialSettings.accessControl')}</h2>
+        <p className="mb-3 text-xs text-muted">{t('dashboardSocialSettings.grantASocialRolePerFamily')}</p>
         <div className="space-y-2">
           {(members ?? []).filter((m): m is typeof m & { user_id: string } => Boolean(m.user_id)).map((m) => {
             const explicit = permByUser.get(m.user_id);

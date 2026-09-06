@@ -13,6 +13,7 @@ import type { CashflowTimeline, TimelineInsight, InsightSeverity } from '@/lib/f
 import { money, pretty } from '@/lib/finance/timeline';
 import { setMoneyInsightStatusAction, syncMoneyInsightsAction } from '@/app/(app)/dashboard/money-timeline/actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type KeyedInsight = TimelineInsight & { key: string };
 
@@ -40,6 +41,7 @@ export function MoneyTimelineModule({
   insights: KeyedInsight[];
   statusByKey: Record<string, string>;
 }) {
+  const t = useTranslations();
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
@@ -60,11 +62,10 @@ export function MoneyTimelineModule({
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-            <Sparkles className="h-6 w-6 text-brand-text" /> Financial Copilot
+            <Sparkles className="h-6 w-6 text-brand-text" /> {t('moneyTimeline.financialCopilot')}
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
-            Your money and your calendar on one timeline — so a heavy week never
-            catches you off guard.
+            {t('moneyTimeline.yourMoneyAndYourCalendarOn')}
           </p>
         </div>
         <button
@@ -72,30 +73,30 @@ export function MoneyTimelineModule({
           disabled={pending}
           className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold transition hover:bg-elevated disabled:opacity-60"
         >
-          <RefreshCw className={cn('h-4 w-4', pending && 'animate-spin')} /> Refresh
+          <RefreshCw className={cn('h-4 w-4', pending && 'animate-spin')} /> {t('moneyTimeline.refresh')}
         </button>
       </header>
 
       {/* Stat row */}
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Liquid today" value={money(timeline.startingBalance)} tone="fg" />
+        <Stat label={t('moneyTimeline.liquidToday')} value={money(timeline.startingBalance)} tone="fg" />
         <Stat
-          label="Projected low"
+          label={t('moneyTimeline.projectedLow')}
           value={money(timeline.lowestBalance)}
           sub={timeline.lowestBalanceWeek ? `wk of ${pretty(timeline.lowestBalanceWeek)}` : undefined}
           tone={timeline.lowestBalance < 0 ? 'rose' : timeline.lowestBalance < 200 ? 'amber' : 'emerald'}
         />
-        <Stat label="Due · next 12 wks" value={money(timeline.totalOutflow)} tone="fg" />
-        <Stat label="Recurring / mo" value={money(timeline.monthlyRecurring)} tone="fg" />
+        <Stat label={t('moneyTimeline.dueNext12Wks')} value={money(timeline.totalOutflow)} tone="fg" />
+        <Stat label={t('moneyTimeline.recurringMo')} value={money(timeline.monthlyRecurring)} tone="fg" />
       </section>
 
       {/* Insights */}
       <section className="mt-7">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Copilot insights</h2>
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('moneyTimeline.copilotInsights')}</h2>
         <div className="mt-3 space-y-3">
           {visible.length === 0 && (
             <p className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
-              All caught up — you’ve cleared every insight. Tap Refresh after adding bills or goals.
+              {t('moneyTimeline.allCaughtUpYouveClearedEvery')}
             </p>
           )}
           {visible.map((i) => {
@@ -114,7 +115,7 @@ export function MoneyTimelineModule({
                       <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', sev.chip)}>
                         {sev.label}
                       </span>
-                      {acknowledged && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400"><Check className="h-3 w-3" /> Noted</span>}
+                      {acknowledged && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400"><Check className="h-3 w-3" /> {t('moneyTimeline.noted')}</span>}
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-muted">{i.detail}</p>
                     {i.kind !== 'all_clear' && (
@@ -125,7 +126,7 @@ export function MoneyTimelineModule({
                             disabled={pending}
                             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand/15 px-3 text-xs font-bold text-brand-text transition hover:bg-brand/25 disabled:opacity-60"
                           >
-                            <Check className="h-3.5 w-3.5" /> Got it
+                            <Check className="h-3.5 w-3.5" /> {t('moneyTimeline.gotIt')}
                           </button>
                         )}
                         <button
@@ -133,7 +134,7 @@ export function MoneyTimelineModule({
                           disabled={pending}
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60"
                         >
-                          <X className="h-3.5 w-3.5" /> Dismiss
+                          <X className="h-3.5 w-3.5" /> {t('moneyTimeline.dismiss')}
                         </button>
                       </div>
                     )}
@@ -163,6 +164,7 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 }
 
 function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
+  const t = useTranslations();
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxOutflow = useMemo(
     () => Math.max(1, ...timeline.weeks.map((w) => w.outflow)),
@@ -171,7 +173,7 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
 
   return (
     <section className="mt-8">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Next 12 weeks</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('moneyTimeline.next12Weeks')}</h2>
       <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-surface">
         {timeline.weeks.map((w, idx) => {
           const active = w.outflow > 0 || w.events.length > 0;
@@ -201,7 +203,7 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {w.heavy && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                        <AlertTriangle className="h-2.5 w-2.5" /> Heavy
+                        <AlertTriangle className="h-2.5 w-2.5" /> {t('moneyTimeline.heavy')}
                       </span>
                     )}
                     {w.events.slice(0, 2).map((e) => (
@@ -237,7 +239,7 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
                     </div>
                   ))}
                   {w.events.length > 0 && (
-                    <p className="pt-1 text-[11px] text-muted">On the calendar: {w.events.join(' · ')}</p>
+                    <p className="pt-1 text-[11px] text-muted">{t('moneyTimeline.onTheCalendar')} {w.events.join(' · ')}</p>
                   )}
                 </div>
               )}

@@ -11,6 +11,7 @@ import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationActio
 import { useToast } from '@/components/ui/toast';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Communication = {
   id: string;
@@ -86,6 +87,7 @@ const CONTEXT_OPTIONS = [
 ];
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
+  const t = useTranslations();
   const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
@@ -137,12 +139,11 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div>
-            <p className="font-semibold text-amber-500">Twilio not configured</p>
+            <p className="font-semibold text-amber-500">{t('guardianDashboard.twilioNotConfigured')}</p>
             <p className="text-sm text-muted mt-0.5">
               Add <code className="rounded bg-surface px-1 text-xs">TWILIO_ACCOUNT_SID</code>,{' '}
-              <code className="rounded bg-surface px-1 text-xs">TWILIO_AUTH_TOKEN</code>, and{' '}
-              <code className="rounded bg-surface px-1 text-xs">TWILIO_PHONE_NUMBER</code> to enable call screening.
-              The Trust Graph and Rules Engine work without Twilio.
+              <code className="rounded bg-surface px-1 text-xs">TWILIO_AUTH_TOKEN</code>{t('guardianDashboard.and')}{' '}
+              <code className="rounded bg-surface px-1 text-xs">TWILIO_PHONE_NUMBER</code> {t('guardianDashboard.toEnableCallScreeningTheTrust')}
             </p>
           </div>
         </div>
@@ -193,7 +194,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {/* Context switcher per member */}
       {memberProfiles.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Your Status</h3>
+          <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">{t('guardianDashboard.yourStatus')}</h3>
           {memberProfiles.map((profile) => (
             <div key={profile.id} className="space-y-2">
               <p className="text-sm font-medium">{profile.ai_persona_name}&apos;s Status</p>
@@ -225,7 +226,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-purple-400" />
-            <h3 className="text-sm font-semibold text-purple-300">Bubaly Suggestions</h3>
+            <h3 className="text-sm font-semibold text-purple-300">{t('guardianDashboard.bubalySuggestions')}</h3>
           </div>
           <button
             onClick={handleScan}
@@ -242,8 +243,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         </p>
         {pendingSuggestions.length === 0 ? (
           <p className="rounded-xl border border-border bg-elevated px-3 py-4 text-center text-xs text-muted">
-            No suggestions right now. Tap <span className="font-medium text-purple-300">Scan for tips</span> to
-            check your recent activity.
+            {t('guardianDashboard.noSuggestionsRightNowTap')} <span className="font-medium text-purple-300">{t('guardianDashboard.scanForTips')}</span> {t('guardianDashboard.toCheckYourRecentActivity')}
           </p>
         ) : (
           <div className="space-y-2">
@@ -283,13 +283,13 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {/* Recent communications feed */}
       <div className="rounded-2xl border border-border bg-surface/40">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h3 className="text-sm font-semibold">Recent Communications</h3>
-          <a href="/guardian/history" className="text-xs text-brand-text hover:underline">View all</a>
+          <h3 className="text-sm font-semibold">{t('guardianDashboard.recentCommunications')}</h3>
+          <a href="/guardian/history" className="text-xs text-brand-text hover:underline">{t('guardianDashboard.viewAll')}</a>
         </div>
         {recentComms.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted">
             <Shield className="mx-auto mb-2 h-8 w-8 opacity-30" />
-            No communications yet. Bubaly is standing guard.
+            {t('guardianDashboard.noCommunicationsYetBubalyIsStanding')}
           </div>
         ) : (
           <div className="divide-y divide-border">

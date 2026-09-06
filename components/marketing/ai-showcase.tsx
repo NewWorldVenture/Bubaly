@@ -5,6 +5,7 @@ import {
   Calendar, UtensilsCrossed, ShoppingCart, CheckSquare, Bell, PiggyBank,
   Check, CornerDownRight, type LucideIcon,
 } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // The centerpiece of the /ai page: a live-feeling "Ask → Act" demo. Each prompt,
 // when active, shows the family member's message, Bubaly's reply, and — the whole
@@ -80,6 +81,7 @@ const TONE: Record<Action['tone'], string> = {
 };
 
 export function AiActionDemo() {
+  const tr = useTranslations();
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -99,7 +101,7 @@ export function AiActionDemo() {
         onMouseEnter={() => setPaused(true)}
         onFocusCapture={() => setPaused(true)}
       >
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">Try asking…</p>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{tr('aiShowcase.tryAsking')}</p>
         {DEMOS.map((d, i) => {
           const on = i === active;
           return (
@@ -140,11 +142,11 @@ export function AiActionDemo() {
         <div className="relative flex items-center gap-2.5 border-b border-white/10 pb-4">
           <span className="glow-dot h-8 w-8" />
           <div>
-            <p className="text-sm font-semibold leading-tight">Bubaly Assistant</p>
-            <p className="text-[11px] text-muted">Acting inside your family — private by design</p>
+            <p className="text-sm font-semibold leading-tight">{tr('aiShowcase.bubalyAssistant')}</p>
+            <p className="text-[11px] text-muted">{tr('aiShowcase.actingInsideYourFamilyPrivateBy')}</p>
           </div>
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-500/12 px-2.5 py-1 text-[11px] font-medium text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> {tr('aiShowcase.live')}
           </span>
         </div>
 
@@ -163,7 +165,7 @@ export function AiActionDemo() {
 
           <div className="space-y-2 pl-9">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-brand-text">
-              <CornerDownRight className="h-3.5 w-3.5" /> Created for you
+              <CornerDownRight className="h-3.5 w-3.5" /> {tr('aiShowcase.createdForYou')}
             </p>
             {demo.actions.map((a) => (
               <div
