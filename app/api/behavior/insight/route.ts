@@ -91,8 +91,16 @@ export async function POST(req: NextRequest) {
           try {
             parsed = JSON.parse(match[0]) as Record<string, unknown>;
           } catch {
-            obs.failed(new Error('The coach reply was not valid JSON.'));
-            return { insight: CANNED_INSIGHT, tips: [] };
+            // RETHROWN, not returned. The route's outer catch builds a fallback
+            // from the family's own numbers plus three concrete tips, and that
+            // is a materially better answer than the canned line. Sanitising the
+            // exception must not cost the parent that — the first version of
+            // this fix returned CANNED_INSIGHT with no tips and quietly
+            // downgraded the malformed-JSON case while closing the leak.
+            //
+            // The replacement carries no model text, so `withAiRequest` records
+            // this message and nothing from the reply.
+            throw new Error('The coach reply was not valid JSON.');
           }
         }
         const insight = typeof parsed.insight === 'string' ? parsed.insight : null;

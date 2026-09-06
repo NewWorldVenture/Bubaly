@@ -217,11 +217,17 @@ describe('vacation builder validates before persistence', () => {
     expect(builderWrites()).toEqual([]);
   });
 
+  // These two assert `mocks.writes`, NOT `builderWrites()`. Excluding
+  // `ai_requests` is right for an authenticated attempt that produced an invalid
+  // plan — the assistant's own bookkeeping about a real attempt. It is wrong
+  // here: a request rejected before any AI attempt should write NOTHING, and
+  // telemetry is not an exception. A blanket rewrite of every `mocks.writes` in
+  // this file swept these two up and quietly weakened them.
   it('preserves authentication before provider calls or writes', async () => {
     mocks.requireUserContext.mockRejectedValue(new Error('Unauthorized'));
     expect((await POST(request())).status).toBe(401);
     expect(mocks.complete).not.toHaveBeenCalled();
-    expect(builderWrites()).toEqual([]);
+    expect(mocks.writes, 'a rejected request writes nothing at all').toEqual([]);
   });
 
   it('preserves rate limiting before provider calls or writes', async () => {
@@ -230,6 +236,6 @@ describe('vacation builder validates before persistence', () => {
     expect(response.status).toBe(429);
     expect(response.headers.get('Retry-After')).toBe('30');
     expect(mocks.complete).not.toHaveBeenCalled();
-    expect(builderWrites()).toEqual([]);
+    expect(mocks.writes, 'a rate-limited request writes nothing at all').toEqual([]);
   });
 });

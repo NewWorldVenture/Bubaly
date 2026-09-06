@@ -225,9 +225,14 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
     const wrapped = src.slice(src.indexOf('withAiRequest('));
     expect(wrapped, 'the parse must be caught where it happens').toMatch(/try \{[\s\S]{0,200}JSON\.parse\([\s\S]{0,120}\} catch \{/);
-    expect(src).toContain("obs.failed(new Error('The coach reply was not valid JSON.'))");
-    // The recorded message must be a constant, never derived from the error.
-    expect(wrapped, 'the caught error must not be passed through').not.toMatch(/catch \(\w+\)[\s\S]{0,200}obs\.failed\(\w+\)/);
+    // RETHROWN with a constant, not returned. Throwing lets the route's outer
+    // catch build its data-derived fallback (the family's own numbers plus three
+    // tips); returning here would settle for the canned line and quietly
+    // downgrade the answer while closing the leak. `tests/behavior-insight-observed.test.ts`
+    // holds both halves behaviourally; this is the shape check.
+    expect(src).toContain("throw new Error('The coach reply was not valid JSON.');");
+    // The caught error must never be what propagates — that is the leak.
+    expect(wrapped, 'the caught error must not be passed through').not.toMatch(/catch \(\w+\)[\s\S]{0,200}(throw \w+|obs\.failed\(\w+\))/);
   });
 
   it('a canned sentence that reads like coaching is recorded as a failure', () => {
