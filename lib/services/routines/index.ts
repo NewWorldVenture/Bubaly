@@ -81,7 +81,19 @@ export async function createRoutine(scope: ServiceScope, input: CreateRoutineInp
 
   const now = scope.now ?? new Date();
   const db = opts?.db ?? scope.db;
-  const nextRunAt = schedule.kind === 'cron' ? nextCronRun(schedule.expr, now, scope.tz) : null;
+  // Arm it here, of both kinds. A relative routine used to be stored with
+  // `next_run_at: null` on the theory that the worker would compute it from the
+  // anchor rows — but the worker's only query is `.lte('next_run_at', now)`,
+  // which null never matches, so `nextRelativeFire` was reached only AFTER a
+  // rule had already fired. Relative routines were unreachable by construction:
+  // "two days before every trip" could never fire, ever.
+  //
+  // Null is still possible and still correct — a family with no trip on file
+  // has nothing to count back from — and the worker's arming pass picks it up
+  // as soon as one exists.
+  const nextRunAt = schedule.kind === 'cron'
+    ? nextCronRun(schedule.expr, now, scope.tz)
+    : await nextRelativeFire(db, scope.familyId, schedule, now, scope.tz);
 
   const { data, error } = await db
     .from('family_automation_rules')
