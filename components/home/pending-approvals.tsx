@@ -38,6 +38,9 @@ export function toPendingCard(item: PendingApprovalItem): ApprovalCardData {
     editableFields: item.editableFields ?? [],
     agent: item.agent ?? null,
     priority: item.priority ?? null,
+    requiredApprovals: item.requiredApprovals,
+    approvalsRecorded: item.approvalsRecorded,
+    parentsOnly: item.parentsOnly,
   };
 }
 

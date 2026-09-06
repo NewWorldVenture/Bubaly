@@ -74,14 +74,60 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
   it('every declared write-tool domain is a real mutating assistant tool (no typo bypass)', () => {
     // Guard against a write tool being renamed in tools.ts but left mapped here
     // (or vice-versa) — the mapping is the entire enforcement surface.
-    const trustSrc = String(require('node:fs').readFileSync('lib/assistant/trust-wrapper.ts', 'utf8'));
-    const toolsSrc = String(require('node:fs').readFileSync('lib/assistant/tools.ts', 'utf8'));
-    const block = trustSrc.match(/const TOOL_DOMAIN:[^{]*\{([\s\S]*?)\};/);
-    expect(block, 'TOOL_DOMAIN map not found in trust-wrapper.ts').toBeTruthy();
-    const mapped = [...block![1].matchAll(/^\s*([a-z_]+):\s*'[a-z]+',/gm)].map((m) => m[1]);
-    expect(mapped.length).toBeGreaterThanOrEqual(9);
+    const mapped = mappedToolNames();
+    const toolsSrc = readSrc('lib/assistant/tools.ts');
+    expect(mapped.length).toBeGreaterThanOrEqual(11);
     for (const name of mapped) {
       expect(toolsSrc, `mapped tool ${name} not found in tools.ts`).toContain(`name: '${name}'`);
     }
   });
+
+  it('every mutating assistant tool is declared in TOOL_DOMAIN (no ungated write)', () => {
+    // The direction that actually matters. The test above walks map → tools, so
+    // it passes happily while a brand-new write tool sits in tools.ts with no
+    // entry here — `wrapToolsWithTrust` returns an unmapped tool UNWRAPPED, and
+    // it writes with no trust check at all. `complete_reminder` and
+    // `snooze_reminder` shipped that way. This walks tools → map instead.
+    const mapped = new Set(mappedToolNames());
+    const mutating = mutatingToolNames();
+    // Sanity: the scan must actually find the known writers, or an off-by-one
+    // in the parser would make this assertion vacuous.
+    expect(mutating).toContain('create_calendar_event');
+    expect(mutating).toContain('complete_reminder');
+    const ungated = mutating.filter((name) => !mapped.has(name));
+    expect(ungated, `these assistant tools write to the database with no trust check: ${ungated.join(', ')}`).toEqual([]);
+  });
 });
+
+// ─── Source scanners shared by the two guard tests ──────────────────────────
+
+function readSrc(path: string): string {
+  return String(require('node:fs').readFileSync(path, 'utf8'));
+}
+
+/** The tool names declared in trust-wrapper's TOOL_DOMAIN map. */
+function mappedToolNames(): string[] {
+  const block = readSrc('lib/assistant/trust-wrapper.ts').match(/const TOOL_DOMAIN:[^{]*\{([\s\S]*?)^\};/m);
+  expect(block, 'TOOL_DOMAIN map not found in trust-wrapper.ts').toBeTruthy();
+  return [...block![1].matchAll(/^\s*([a-z_]+):\s*'[a-z_]+',/gm)].map((m) => m[1]);
+}
+
+/**
+ * Every tool in lib/assistant/tools.ts whose own body mutates the database.
+ *
+ * Each tool's slice runs from its `name:` line to the next one, so a helper
+ * defined above the tool list (which may legitimately insert) is not attributed
+ * to the first tool.
+ */
+function mutatingToolNames(): string[] {
+  const src = readSrc('lib/assistant/tools.ts');
+  const decls = [...src.matchAll(/^\s*name: '([a-z_]+)',$/gm)];
+  const names: string[] = [];
+  for (let i = 0; i < decls.length; i += 1) {
+    const start = decls[i].index ?? 0;
+    const end = i + 1 < decls.length ? (decls[i + 1].index ?? src.length) : src.length;
+    const body = src.slice(start, end);
+    if (/\.(insert|update|upsert|delete)\(/.test(body)) names.push(decls[i][1]);
+  }
+  return names;
+}

@@ -19,6 +19,12 @@ const TOOL_DOMAIN: Record<string, string> = {
   add_grocery_item: 'shopping',
   add_todo: 'tasks',
   add_reminder: 'scheduling',
+  // Both of these mutate family_reminders (one of them inserts the next
+  // occurrence of a repeating reminder), so both belong here. They shadow the
+  // gated registry tools of the same name via `mergeToolSets`, which is why
+  // leaving them out meant two writes reaching the database ungated.
+  complete_reminder: 'scheduling',
+  snooze_reminder: 'scheduling',
   add_note: 'tasks',
   add_goal: 'tasks',
   create_announcement: 'announcements',
@@ -79,6 +85,8 @@ function fmtTitle(name: string, a: Record<string, unknown>): string {
     case 'add_grocery_item':      return `Add grocery: ${s('item')}`;
     case 'add_todo':              return `Add task: "${s('task')}"`;
     case 'add_reminder':          return `Add reminder: "${s('title')}"`;
+    case 'complete_reminder':     return `Complete reminder: "${s('title')}"`;
+    case 'snooze_reminder':       return `Move reminder: "${s('title')}"`;
     case 'add_note':              return `Save note: "${s('title') || s('body').slice(0, 40)}"`;
     case 'add_goal':              return `Create goal: "${s('title')}"`;
     case 'create_announcement':   return `Post announcement: "${s('title')}"`;

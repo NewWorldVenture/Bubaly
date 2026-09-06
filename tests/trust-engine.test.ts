@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  evaluateAction, computeTrustScore, trustBand,
+  evaluateAction, computeTrustScore, trustBand, riskToDecision,
   type Policy, type Actor, type Grant, type Delegation,
 } from '@/lib/trust/engine';
 
@@ -157,5 +157,88 @@ describe('computeTrustScore + trustBand', () => {
     expect(trustBand(70)).toBe('trusted');
     expect(trustBand(50)).toBe('building');
     expect(trustBand(20)).toBe('low');
+  });
+});
+
+// ─── §11's dial, and the blanket that used to beat it ───────────────────────
+
+describe('the autonomy dial applies to every write, not only the medium ones', () => {
+  const low = (behavior: 'recommend' | 'prepare' | 'execute') => riskToDecision({
+    risk: 'low',
+    actor: { kind: 'ai_agent', id: 'bubaly', role: 'parent' },
+    domain: 'calendar',
+    capability: 'automate',
+    behavior,
+    explicitAllow: false,
+  });
+
+  it('"Suggests only" stops a low-risk write — most of what Bubaly does', () => {
+    // calendar.createEvent, tasks.createTodo, chores, reminders, groceries:
+    // twenty write tools declare risk 'low'. Before this they ignored the dial
+    // entirely, so a family set to "Recommend" still had events created.
+    expect(low('recommend')).toMatchObject({ effect: 'deny', basis: 'risk_tier' });
+  });
+
+  it('"Prepare" stages a low-risk write for a person instead of doing it', () => {
+    expect(low('prepare')).toMatchObject({ effect: 'require_approval', basis: 'risk_tier' });
+  });
+
+  it('"Execute" changes nothing — the role matrix still has the last word', () => {
+    expect(low('execute')).toMatchObject({ effect: 'allow', basis: 'risk_tier' });
+  });
+
+  it('never loosens the high tier', () => {
+    for (const behavior of ['recommend', 'prepare', 'execute'] as const) {
+      const d = riskToDecision({
+        risk: 'high',
+        actor: { kind: 'ai_agent', id: 'bubaly', role: 'parent' },
+        domain: 'finances',
+        capability: 'automate',
+        behavior,
+        explicitAllow: false,
+      });
+      expect(d?.effect, behavior).not.toBe('allow');
+    }
+  });
+
+  it('leaves reads alone: the dial is about acting', () => {
+    expect(riskToDecision({
+      risk: 'low',
+      actor: { kind: 'member', id: 'm1', role: 'parent' },
+      domain: 'calendar',
+      capability: 'view',
+      behavior: 'recommend',
+      explicitAllow: false,
+    })).toBeNull();
+  });
+});
+
+describe('a household policy is only a decision about what it names', () => {
+  const policy = (over: Partial<Policy>): Policy => ({
+    id: 'p1', domain: 'finances', capability: 'automate', subjectKind: 'ai', effect: 'allow',
+    conditions: {}, approvalModel: 'single', requiredApprovals: 1, priority: 10, enabled: true, ...over,
+  });
+  const evaluate = (p: Policy) => evaluateAction({
+    actor: { kind: 'ai_agent', id: 'bubaly', role: 'parent' },
+    domain: 'finances', capability: 'automate', policies: [p],
+  });
+
+  it('marks a domain=all allow as the blanket it is', () => {
+    expect(evaluate(policy({ domain: 'all', capability: 'all' }))).toMatchObject({
+      effect: 'allow', basis: 'policy', policyScope: 'broad',
+    });
+    // Still a blanket when it names a capability but no area of family life.
+    expect(evaluate(policy({ domain: 'all' })).policyScope).toBe('broad');
+  });
+
+  it('marks a policy that names the area it is talking about as specific', () => {
+    expect(evaluate(policy({}))).toMatchObject({ effect: 'allow', basis: 'policy', policyScope: 'specific' });
+    // "Bubaly may do anything with our money" is a deliberate, scoped choice.
+    expect(evaluate(policy({ capability: 'all' })).policyScope).toBe('specific');
+  });
+
+  it('does not label a deny or an approval requirement — only an allow can over-reach', () => {
+    expect(evaluate(policy({ domain: 'all', capability: 'all', effect: 'deny' })).policyScope).toBeUndefined();
+    expect(evaluate(policy({ domain: 'all', capability: 'all', effect: 'require_approval' })).policyScope).toBeUndefined();
   });
 });

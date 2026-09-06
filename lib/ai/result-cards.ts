@@ -169,6 +169,11 @@ export const ApprovalCardDataSchema = z.object({
   })).optional(),
   agent: z.string().nullable().optional(),
   priority: z.string().nullable().optional(),
+  // Absent on cards stored before the threshold was carried; the card renders
+  // those exactly as it did then — as a single yes.
+  requiredApprovals: z.number().optional(),
+  approvalsRecorded: z.number().optional(),
+  parentsOnly: z.boolean().optional(),
 });
 
 export const ApprovalCardSchema = z.object({

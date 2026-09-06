@@ -35,7 +35,7 @@ type Policy = {
 type Grant = { id: string; member_id: string; domain: string; capability: string; effect: string };
 type Delegation = { id: string; from_member_id: string; to_member_id: string; domains: string[]; reason: string | null; starts_at: string; expires_at: string };
 type Approval = TrustApproval;
-type Emergency = { id: string; kind: string; reason: string | null; elevated_domains: string[]; activated_at: string };
+type Emergency = { id: string; kind: string; reason: string | null; elevated_domains: string[]; activated_at: string; expires_at?: string | null };
 type Audit = { id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; confidence: number | null; created_at: string };
 
 export type TrustData = {
@@ -154,6 +154,9 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
   // re-syncs the counts and the "Recently decided" list from the server.
   const [gone, setGone] = useState<Set<string>>(() => new Set());
   const nameById = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  // A consensus rule means "every parent and adult", so the card needs to know
+  // how many that is before it can say what it is waiting for.
+  const managerCount = useMemo(() => members.filter(m => m.role === 'parent' || m.role === 'adult').length, [members]);
   const pending = approvals.filter(a => a.status === 'pending' && !gone.has(a.id));
   const decided = approvals.filter(a => a.status !== 'pending').slice(0, 12);
 
@@ -166,7 +169,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
           {pending.map(a => (
             <ApprovalCard
               key={a.id}
-              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage })}
+              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage, managerCount })}
               canDecide={canManage}
               onResult={(result) => {
                 if (result.decision !== 'pending') setGone((g) => new Set(g).add(a.id));
@@ -387,16 +390,18 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
         )}
         {effect === 'require_approval' && (
           <div className="grid grid-cols-2 gap-3">
+            {/* Only models the engine actually enforces are offered.
+                "First available" was the same rule as Single, and nothing has
+                ever ordered approvers, so Sequential was a label on a count. */}
             <Field label="Approval model">{id => (
               <Select id={id} name="approvalModel" defaultValue={policy?.approval_model ?? 'single'}>
                 <option value="single">Single approver</option>
-                <option value="two_parent">Two-parent</option>
-                <option value="first_available">First available</option>
-                <option value="consensus">Consensus</option>
-                <option value="sequential">Sequential</option>
+                <option value="two_parent">Two parents</option>
+                <option value="consensus">Every parent and adult</option>
               </Select>
             )}</Field>
-            <Field label="Required approvals">{id => <Input id={id} name="requiredApprovals" type="number" min="1" max="5" defaultValue={policy?.required_approvals ?? 1} />}</Field>
+            {/* The model sets the floor; this can only raise it. */}
+            <Field label="At least this many">{id => <Input id={id} name="requiredApprovals" type="number" min="1" max="5" defaultValue={policy?.required_approvals ?? 1} />}</Field>
           </div>
         )}
         <div className="rounded-xl border border-border bg-surface/40 p-3">
@@ -661,6 +666,9 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
         <p className="text-lg font-bold text-rose-300">Emergency Mode is active</p>
         <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} · since {fmtWhen(active.activated_at)}</p>
         <p className="mt-2 text-xs text-muted">Elevated: {active.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}</p>
+        {/* Elevation outranks every other rule, so when it stops is part of what
+            is active — not a detail to discover later. */}
+        {active.expires_at && <p className="mt-1 text-xs text-muted">Ends on its own {fmtWhen(active.expires_at)}</p>}
         {canManage && <button onClick={end} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} End Emergency Mode</button>}
       </div>
     );

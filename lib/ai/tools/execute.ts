@@ -332,10 +332,20 @@ async function gate(
   let decision: Decision = engineDecision;
   let approvalId = engineApprovalId ?? null;
 
-  // The risk tier speaks only where the answer came from the generic role
-  // matrix — a household's own policy, grant, delegation or emergency
-  // elevation is a deliberate decision and keeps the floor.
-  if (decision.basis === 'role_default' || decision.basis === 'fallback') {
+  // The risk tier speaks where the answer came from the generic role matrix —
+  // a household's own grant, delegation or emergency elevation is a deliberate
+  // decision about this action and keeps the floor.
+  //
+  // A POLICY is only such a decision when it names the area it is talking
+  // about. "Bubaly may act on the calendar" is a family's real choice and still
+  // wins. A row saved with domain `all` and effect `allow` names nothing — and
+  // the Trust form lets any manager save one, after which every `high` tool
+  // (spend money, submit an order, delete records, share a document) executed
+  // with nobody asked. So a blanket allow is re-checked against the tier and
+  // may be tightened, never loosened.
+  const fromGenericRule = decision.basis === 'role_default' || decision.basis === 'fallback';
+  const blanketAllow = decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad';
+  if (fromGenericRule || blanketAllow) {
     const risked = riskToDecision({
       // The family's own override, floored for money and documents.
       risk,
@@ -348,7 +358,10 @@ async function gate(
     // Safety rail: a tier must never release work that already has an approval
     // waiting on a person. (`riskToDecision` cannot produce that today; this
     // keeps it true if its rules are ever widened.)
-    if (risked && !(approvalId && risked.effect === 'allow')) decision = risked;
+    const usable = risked && !(approvalId && risked.effect === 'allow');
+    // Over a blanket allow the tier may only tighten: an `allow` from the tier
+    // would be no change, and letting it through would rewrite the basis.
+    if (usable && (fromGenericRule || risked!.effect !== 'allow')) decision = risked!;
   }
 
   if (decision.basis === 'risk_tier') {

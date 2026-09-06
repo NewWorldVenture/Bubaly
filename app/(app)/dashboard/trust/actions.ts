@@ -5,6 +5,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
+import { ledgerWriter } from '@/lib/trust/ledger';
+import { APPROVAL_MODELS, thresholdFor } from '@/lib/approvals/threshold';
 import type { Json } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -18,7 +20,7 @@ function actionFailure(error: unknown, fallback = 'Could not update Trust Engine
 }
 
 const EFFECTS = ['allow', 'deny', 'require_approval', 'auto_approve'] as const;
-const APPROVAL_MODELS = ['single', 'two_parent', 'first_available', 'consensus', 'sequential'] as const;
+
 const SUBJECT_KINDS = ['role', 'member', 'ai', 'everyone'] as const;
 
 async function managerCtx() {
@@ -57,6 +59,10 @@ export async function savePolicyAction(input: {
   if (!(EFFECTS as readonly string[]).includes(input.effect)) return { ok: false, error: 'Unknown effect.' };
   if (!(SUBJECT_KINDS as readonly string[]).includes(input.subjectKind)) return { ok: false, error: 'Unknown subject.' };
   const model = input.approvalModel && (APPROVAL_MODELS as readonly string[]).includes(input.approvalModel) ? input.approvalModel : 'single';
+  // The model IS the rule (lib/approvals/threshold.ts). Storing a count that
+  // disagrees with it is how "Two-parent" came to approve on one vote, so the
+  // count is derived from the model and the manager's number only raises it.
+  const requiredApprovals = thresholdFor(model, Math.min(Math.max(input.requiredApprovals ?? 1, 1), 5), 2).required;
 
   const supabase = await createServer();
   const base = {
@@ -70,7 +76,7 @@ export async function savePolicyAction(input: {
     effect: input.effect,
     conditions: (input.conditions ?? {}) as Json,
     approval_model: model,
-    required_approvals: Math.min(Math.max(input.requiredApprovals ?? 1, 1), 5),
+    required_approvals: requiredApprovals,
     priority: Math.min(Math.max(input.priority ?? 100, 0), 1000),
     enabled: input.enabled ?? true,
   };
@@ -194,13 +200,19 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
   const domains = input.elevatedDomains.filter(d => isDomain(d));
 
   const supabase = await createServer();
+  // Emergency elevation outranks every deny, policy and risk tier, so it must
+  // name what it is elevating. Defaulting an empty selection to ['all'] turned
+  // "I did not choose" into "everything, including money and medical".
+  if (!domains.length) return { ok: false, error: 'Choose which areas the emergency should unlock.' };
+
   const { error: e } = await supabase.from('emergency_sessions').insert({
     family_id: ctx.active.familyId, kind, reason: input.reason?.trim() || null,
-    activated_by: ctx.active.member.id, elevated_domains: domains.length ? domains : ['all'],
+    activated_by: ctx.active.member.id, elevated_domains: domains,
   });
   if (e) return actionFailure(e, 'Could not activate emergency mode.');
 
-  await supabase.from('trust_audit_logs').insert({
+  // 0260: the ledger is written by the server, not by the session that acted.
+  await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
     family_id: ctx.active.familyId, actor_kind: 'member', actor_id: ctx.active.member.id,
     domain: 'emergency', capability: 'automate', decision: 'emergency_override',
     reason: `Emergency mode activated (${kind})${input.reason ? `: ${input.reason}` : ''}`,

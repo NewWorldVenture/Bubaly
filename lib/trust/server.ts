@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
+import { ledgerWriter } from '@/lib/trust/ledger';
 import {
   evaluateAction, type Actor, type Capability, type Decision,
   type Policy, type Grant, type Delegation, type ActionContext, type TrustRole,
@@ -62,7 +63,12 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
     supabase.from('permission_grants').select('member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('to_member_id, domains, starts_at, expires_at, revoked_at')
       .eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso),
-    supabase.from('emergency_sessions').select('elevated_domains').eq('family_id', familyId).is('ended_at', null),
+    // 0260 gives every elevation an expiry. An emergency that nobody remembered
+    // to end must stop elevating on its own — it outranks explicit denies, so
+    // "still open" is not enough to keep applying it. Rows written before 0260
+    // were backfilled from their activation time, so none are open-ended.
+    supabase.from('emergency_sessions').select('elevated_domains').eq('family_id', familyId)
+      .is('ended_at', null).gt('expires_at', nowIso),
   ]);
 
   const emergencyDomains = [...new Set((emergencies ?? []).flatMap((e: Record<string, unknown>) => (e.elevated_domains as string[]) ?? []))];
@@ -87,28 +93,12 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
  * approval request when required. Never throws on a normal "deny" — callers
  * branch on `outcome.decision.effect`.
  */
-/**
- * The client that files approval requests and audit rows.
- *
- * 0252 restricts a member's own INSERT on approval_requests to rows that name
- * that member and carry no run/step/payload linkage, so a family member can no
- * longer file a row that looks like Bubaly asking for something and have a
- * parent execute it. The rows this function writes on Bubaly's behalf therefore
- * go through the service client; when no service credentials exist (unit
- * tests, a misconfigured environment) the caller's client is used, which is
- * exactly what happened before and what the recorder-based tests observe.
- */
-async function ledgerWriter(fallback: DB): Promise<DB> {
-  try {
-    const { createServiceClient } = await import('@/lib/supabase/server');
-    return createServiceClient();
-  } catch {
-    return fallback;
-  }
-}
 
 export async function evaluateTrust(supabase: DB, familyId: string, req: EvaluateRequest): Promise<EvaluateOutcome> {
   const inputs = await loadTrustInputs(supabase, familyId);
+  // Approval requests and audit rows are Bubaly's own, not the caller's: 0252
+  // pins what a member may file on approval_requests and 0260 removes member
+  // INSERT on trust_audit_logs entirely, so both go through the service role.
   const writer = await ledgerWriter(supabase);
   const decision = evaluateAction({
     actor: req.actor, domain: req.domain, capability: req.capability, context: req.context,
