@@ -1,11 +1,11 @@
 -- Synthetic minimal physical schema, NOT the full legacy migration chain.
 -- Mirrors required columns from 0006, 0110, 0113, 0250 and 0256.
--- The workflow applies actual 0272 after this file. Main E2E owns full-chain coverage.
+-- The workflow applies actual 0273 after this file. Main E2E owns full-chain coverage.
 DO $$
 BEGIN
   IF current_database() <> 'bubaly_finance_operation_ci'
      OR current_user <> 'postgres' OR current_setting('server_version_num')::integer / 10000 <> 17 THEN
-    RAISE EXCEPTION '0272 bootstrap requires its dedicated synthetic PostgreSQL 17 database';
+    RAISE EXCEPTION '0273 bootstrap requires its dedicated synthetic PostgreSQL 17 database';
   END IF;
 END $$;
 CREATE ROLE anon NOLOGIN;

@@ -114,6 +114,156 @@ the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
 
+- **An RSVP is a statement about a person, and only the app was enforcing that.**
+  Found while giving `calendar.rsvp` a home: `0047` shipped `event_rsvps` with
+  ONE policy for every verb —
+
+  ```sql
+  create policy "Members can manage event_rsvps" on public.event_rsvps
+    for all to authenticated
+    using (public.is_family_member(family_id))
+    with check (public.is_family_member(family_id));
+  ```
+
+  — no member predicate on either side. Any member of the household could INSERT
+  an `accepted` row carrying a **parent's** `member_id`, UPDATE a sibling's reply,
+  or DELETE one. And `event_rsvps_once UNIQUE (event_id, member_id)` makes the
+  write an upsert, so a second answer did not sit next to the first: it **replaced
+  it, silently**. A teen could mark a parent as coming to a thing they had
+  declined, and the calendar would show no trace of the earlier answer.
+
+  Nothing in the product does this. The event modal writes only `selfMemberId`,
+  and `rsvpToEvent` takes `member_id` from `scope.memberId` and never from a
+  caller's arguments — a discipline that exists because this code once used
+  `members[0]` as a lookup, so a teen saying "I'm going" answered as whoever
+  sorted first in the roster. But that app-level care was the ONLY thing between a
+  child and a reply in a parent's name; PostgREST is reachable with the same
+  anon key the browser holds. `0272` puts the rule where the next writer cannot
+  forget it: four per-verb policies, writes requiring
+  `is_self_member(member_id) or can_manage_family(family_id)`.
+
+  **The manager branch is load-bearing, not laxity.** `performApproved` runs under
+  the APPROVING parent's client while writing the ASKER's `member_id`
+  (`scopeForApprovedWork`), so a self-only rule would have broken the approval
+  path this migration exists to protect — and a parent answering for a
+  six-year-old with no login is a real thing families do.
+
+  Proven against real Postgres before shipping (PGlite; the migration applied
+  verbatim; acting as parent, teen and child under `set role authenticated`), and
+  the proof was itself wrong first: the insert cases shared one event with the
+  seeded parent reply, so "teen answers for the parent" passed on a duplicate-key
+  error rather than on RLS — green against a policy that did nothing. Split onto a
+  clean event, the mutant of `0272` that restates the `0047` bug fails two cases,
+  and `tests/rsvp-first-person-rls.test.ts` (9) pins the shape that made the real
+  outcomes true, including the drop of the `FOR ALL` policy — permissive policies
+  are OR'd, so leaving it would have made all four new ones decorative.
+
+  **`notes` and `goals` carry the same `is_family_member`-and-nothing-else shape
+  and are deliberately NOT changed.** A shared family notepad being collaboratively
+  editable is plausibly the intent; tightening it is a product decision, and
+  making one here wearing a security fix's clothes would be the wrong way to get
+  it. Recorded so someone can make it deliberately. `event_rsvps` is different in
+  kind: the row is a claim about a named person's intent, and the unique index
+  turns a second claim into an erasure of the first.
+
+- **An approval now remembers who asked, which closed four things at once.**
+  `gateAiAction` passes `actor.kind: 'ai_agent'`, so `openApprovalRequest` left
+  `requested_by_member_id` NULL on every AI-filed row: nothing on the row said
+  who the request was FOR. And `decideApproval` builds its scope from whoever is
+  DECIDING. Between them, an approved action was carried out as the parent who
+  released it:
+
+  1. a note the teen asked for was stamped `created_by` = the parent, and
+     `activity/page.tsx` renders `created_by` as who "added note" — so it read
+     *"Mum added note"*;
+  2. an RSVP would have been recorded for the parent and, since
+     `event_rsvps_once` makes the write an upsert, **replaced their own reply** —
+     which is why `rsvp_to_event` had no registry tool at all and sat in
+     `APPROVAL_CANNOT_REPLAY`;
+  3. **no approved write reached the family activity feed**, because
+     `recordActivity` returns early for `actorKind === 'member'`;
+  4. and a parent deciding an approval was only ever told "Bubaly" asked, never
+     who for.
+
+  `wrapToolsWithTrust` now takes the acting member and carries it through
+  `gateAiAction` to `requested_by_member_id`, and `scopeForApprovedWork` rebuilds
+  the replay scope from it: the asker's `memberId`/`userId`, and `actorKind: 'ai'`
+  because it IS Bubaly's work — a human released it, they did not type it. The
+  approval card reads "Bubaly, for Emma".
+
+  **Confined to `requested_by_kind === 'ai'`**, the same condition that already
+  decides `skipTrust`. A member-filed row keeps the decider's scope, because its
+  gate IS re-evaluated under the approver's authority and relabelling the actor
+  would change that evaluation rather than merely its attribution.
+
+  **The unknown-asker case clears `memberId` rather than falling back.** A row
+  filed before this existed has no asker, and inheriting the approver's is
+  exactly how an RSVP answers for the wrong person. Cleared, `rsvpToEvent`'s own
+  guard fires — *"Bubaly could not tell whose reply this is"* — and the tools
+  that do not need a member id are unaffected. Refusing something a parent
+  approved is bad; recording it against them is worse.
+
+  Blast radius checked rather than assumed: every reader of `scope.actorKind` was
+  inspected. The ledger row, run events, `ai_suggested`, `ai_generated` and the
+  finance `source` all become MORE accurate under `'ai'`; the memory
+  sensitive-content guard tightens; nothing loosens. And no table the AI writes
+  carries a `created_by = auth.uid()` predicate — `0004` applies that only to
+  `families` and `user_preferences` — so attributing `created_by` to the asker is
+  safe while the approver's session runs the insert.
+
+  With the blocker gone, **`calendar.rsvp` is back** and `APPROVAL_CANNOT_REPLAY`
+  is empty. The ratchet forced the decision: the test pinning "the replay runs as
+  the approver" went red the moment that stopped being true.
+
+
+- **§49, the overnight recap was a day stale, not merely evening-only.** The row
+  says a parent who opens the brief at 7am is shown nothing of what Bubaly did
+  overnight, because the recap only renders on the Evening tab while the tab
+  defaults to Morning. Both halves were true, and the second one was worse than
+  recorded.
+
+  `briefing/page.tsx` did not use the shared loader. It read
+  `family_operating_index` itself — `.order('as_of_date', { ascending: false })`
+  with `.limit(2)` — and diffed those two rows, with **no anchor to today at
+  all**. That table is written LAZILY, by `loadOperatingIndex`'s own upsert, and
+  its only other callers are the Command Center, the Operating Index page and the
+  reasoning engine. On a morning when nobody has opened one of those there is no
+  row for today, so the card diffed YESTERDAY against THE DAY BEFORE and titled
+  itself "Since yesterday". A day out of date, silently, on the one screen meant
+  to start the family's day.
+
+  The page now calls `loadOperatingIndex`, which computes today live, anchors the
+  prior read with `.lt('as_of_date', today)`, and persists today's row — so
+  opening the brief is what makes today's snapshot exist for every other surface,
+  instead of the brief being the one reading a stale pair. The page's own
+  `toView`/`summarizeChange` block is deleted: it was a second, worse copy of a
+  shared function.
+
+  **The two reads now run together.** The page awaited the index read and THEN
+  the reasoning context, so it paid both latencies in series. `Promise.allSettled`
+  — not `all` — keeps them parallel while keeping the two failures
+  distinguishable, because a family told the wrong thing about what broke is a
+  different bug.
+
+  **A test had made the staleness look deliberate**, the same way the recurring
+  reminder's did: `tests/briefing-read-boundary.test.ts` pinned the page by
+  SOURCE STRING, including the literal `const { data: foiSnaps, error: foiError }`
+  the fix deletes. The assertions described the shape of the code rather than what
+  a family gets, so the code and its test agreed with each other and both were
+  wrong. It now asserts delegation, and names the exact discarded shape so
+  reintroducing it fails.
+
+  `tests/operating-index-today-anchor.test.ts` is the behavioural half, and it did
+  not exist before: **nothing in the suite asserted the `.lt('as_of_date', today)`
+  anchor**, though every surface's recap rests on it. I checked it fires by
+  removing the anchor.
+
+  Still open in §49: the brief is reachable only from nav, the manifest shortcut
+  and a dashboard tile. Nothing surfaces it where a parent packing lunches
+  actually lands — that half is a product decision, not a bug, and is left for
+  someone to choose deliberately.
+
+
 - **§30, two of the three writes that had nowhere to land.** `add_note`,
   `add_goal` and `rsvp_to_event` were gated in chat with no registry tool, so a
   parent could grant the approval and read back *"Bubaly has no tool called

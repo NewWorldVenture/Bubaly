@@ -1,9 +1,9 @@
--- Execute only after the minimal bootstrap and actual migration 0272.
+-- Execute only after the minimal bootstrap and actual migration 0273.
 DO $$
 BEGIN
   IF current_database() <> 'bubaly_finance_operation_ci' OR current_user <> 'postgres'
      OR current_setting('server_version_num')::integer / 10000 <> 17 THEN
-    RAISE EXCEPTION '0272 runtime requires the dedicated synthetic PostgreSQL 17 database';
+    RAISE EXCEPTION '0273 runtime requires the dedicated synthetic PostgreSQL 17 database';
   END IF;
 END $$;
 
@@ -11,9 +11,9 @@ CREATE FUNCTION public.finance_test_assert(p_ok boolean, p_label text) RETURNS v
 LANGUAGE plpgsql AS $$
 BEGIN
   IF p_ok IS DISTINCT FROM true THEN
-    RAISE EXCEPTION '0272 assertion: %', p_label;
+    RAISE EXCEPTION '0273 assertion: %', p_label;
   END IF;
-  RAISE NOTICE '0272 PASS %', p_label;
+  RAISE NOTICE '0273 PASS %', p_label;
 END $$;
 
 CREATE FUNCTION public.finance_test_inputs() RETURNS jsonb

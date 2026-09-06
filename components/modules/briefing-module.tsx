@@ -762,6 +762,12 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
           {/* Cross-domain concierge: "What does my family need to do today?" */}
           {digest && <div className="mb-6"><NeedsAttention digest={digest} /></div>}
 
+          {/* The overnight recap belongs to the morning too — "since yesterday"
+              read at 7am is what changed while the family slept, which is the
+              whole point of the brief. It used to render only under Evening,
+              and the tab defaults to Morning, so a parent who opened the brief
+              to start the day saw none of what Bubaly had done. */}
+          {tab === 'morning' && recap && <div className="mb-6">{recap}</div>}
           {tab === 'morning' && <MorningContent data={currentBriefing} relationships={relationships} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}
           {tab === 'weekly'  && <WeeklyContent  data={currentBriefing} />}
