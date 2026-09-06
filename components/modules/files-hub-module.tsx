@@ -7,6 +7,7 @@ import {
   ChevronDown, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -46,7 +47,12 @@ const toDocLike = (d: Document): DocLike => ({
 });
 
 export function FilesHubModule({ view }: { view: FileView }) {
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
+  // 0266 made the Secure Vault a database boundary rather than a folder label:
+  // a non-manager no longer reads, moves or deletes a sensitive file. The check
+  // here is not the boundary — it is so the controls that would now fail are
+  // not offered, and the Vault tab explains itself instead of coming back empty.
+  const manager = isManager(role);
   const { success, error: toastError } = useToast();
   const meta = VIEW_META[view];
   const ViewIcon = VIEW_ICON[view];
@@ -85,6 +91,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function remove(id: string) {
     const d = byId.get(id); if (!d) return;
+    if (d.is_secure && !manager) return toastError('Only a parent or another adult can delete a file from the Secure Vault.');
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${d.title}"? This can't be undone.`)) return;
     setBusy(id);
     const sb = createClient();
@@ -97,6 +104,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function toggleSecure(id: string) {
     const d = byId.get(id); if (!d) return;
+    if (!manager) return toastError('Only a parent or another adult can move files in and out of the Secure Vault.');
     setBusy(id);
     const { error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id);
     setBusy(null);
@@ -123,7 +131,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
     const { error: err } = await sb.from('documents').insert({
       family_id: familyId, title: title.trim(), category: category.trim() || null,
       storage_path: path, mime_type: file.type || null, size_bytes: file.size,
-      is_secure: view === 'vault', created_by: userId,
+      // Uploading into the Vault is a manager's act; for anyone else the file
+      // lands in Shared Files rather than being refused by the policy.
+      is_secure: view === 'vault' && manager, created_by: userId,
     });
     setSaving(false);
     if (err) { await removeFamilyDocument(sb, path); return toastError(describeDbError(err)); }
@@ -212,10 +222,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
                       className={cn('rounded-lg p-1.5 transition hover:bg-elevated', d.is_favorite ? 'text-amber-400' : 'text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100')}>
                       <Star className={cn('h-4 w-4', d.is_favorite && 'fill-amber-400')} />
                     </button>
-                    <button onClick={() => toggleSecure(d.id)} aria-label={d.is_secure ? 'Move to shared' : 'Move to vault'}
-                      className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-elevated hover:text-fg group-hover:opacity-100">
-                      {d.is_secure ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                    </button>
+                    {manager && (
+                      <button onClick={() => toggleSecure(d.id)} aria-label={d.is_secure ? 'Move to shared' : 'Move to vault'}
+                        className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-elevated hover:text-fg group-hover:opacity-100">
+                        {d.is_secure ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="mt-3 min-w-0">

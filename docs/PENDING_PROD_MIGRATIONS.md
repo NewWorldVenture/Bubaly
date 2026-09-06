@@ -26,7 +26,7 @@ from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
 
-`0255` through `0265` are all outside the unchanged pinned bundle. Code
+`0255` through `0267` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
 application.
 
@@ -41,11 +41,17 @@ applied:
 | `0263_dead_letter_reconcile` | `create or replace` on `claim_ai_runs` so a dead-lettered run also settles its steps, its legacy status column and its request ledger. Every write bounded to rows the same statement just dead-lettered | One function |
 | `0264_ai_surface_role_privacy` | The role boundary the AI layer already enforced, in the database: `ai_plans`, `ai_plan_steps`, `ai_run_events` to the requester or a manager; `family_automation_rules` writes to managers; `family_facts` per role; `home_briefs` writes to the service role. Deliberately does NOT narrow the finance and document tables — named in its own header | Policies dropped and recreated by name |
 | `0265_family_facts_provenance` | `source`, `confidence` and `expires_at` on `family_facts`, with a backfill classifying existing rows by the `Learned by Bubaly` note prefix they carry today. Additive; changes no existing row's meaning | Three added columns, two check constraints, two indexes |
+| `0266_document_vault_boundary` | Makes the Secure Vault real. `documents` SELECT/INSERT/UPDATE/DELETE and the three `documents` storage-bucket policies now consult `is_sensitive_document(is_secure, category)` and `can_manage_family`. **Closes a live leak**: before this, any member — including a child with a PIN login — could read every vault row (with its `storage_path`), fetch the bytes, move a file out of the vault, or delete it | Four table policies + three storage policies recreated, one new function, one index |
+| `0267_money_write_boundary` | `financial_accounts`, `transactions`, `budgets`, `bills`, `savings_goals`: INSERT/UPDATE/DELETE move to `can_manage_family`; SELECT deliberately unchanged. **Also drops 0006's `"Members can manage <table>"` `FOR ALL` policy**, which 0109 left in place beside the four named ones — permissive policies are OR'd, so that one had been the effective rule all along and 0109's "repair" was decoration | Five policies dropped, twenty recreated, per table via the 0109 loop shape |
 
-Each applies clean through the full local replay. `0262` is the only one that
-takes anything away from a family (reads of saved briefs), and it does so
-deliberately; the rest are additive or tighten a policy that was wider than the
-application layer already assumed. A separately
+`0266` and `0267` are the first two migrations in this range that **take capability away from a role**. Both are proved behaviourally against a real Postgres as an `authenticated` session — `docs/audit/document-vault-boundary-check.sql` and `docs/audit/money-write-boundary-check.sql` — and both proofs fail without their migration. The money proof also asserts the *whole* policy set rather than only the policies it wrote, which is the check that caught the `FOR ALL` survivor; without it `0267` would have applied cleanly and changed nothing.
+
+Each applies clean through the full local replay. `0262`, `0266` and `0267` are
+the ones that take something away: saved-brief reads, the children's access to
+sensitive documents, and the children's ability to write household money. All
+three are deliberate, and the last two close gaps a family would not have
+expected to exist. The rest are additive or tighten a policy that was wider
+than the application layer already assumed. A separately
 reviewed hash-pinned release, a new successful preview, the required matrix and
 review evidence, and explicit parent authorization are required before any
 production apply. No future release range is authorized by this inventory.

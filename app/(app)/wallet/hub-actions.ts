@@ -1,9 +1,19 @@
 'use server';
 
 // Server actions for the "My Wallet" hub. Every write is scoped to the
-// signed-in user's active family and relies on the tables' own family-scoped
-// RLS as the security boundary (never the service role).
+// signed-in user's active family and relies on the tables' own RLS as the
+// security boundary (never the service role).
+//
+// That boundary is a ROLE now, not just membership (0267): the household's
+// accounts and transactions are the adults'. A minor's own money lives in the
+// wallet and economy ledgers, which took this same lockdown in 0217/0218.
+//
+// The check below is not the boundary — RLS is — but a server action that
+// returns a bare policy error reads as a bug to the person who hit it. This
+// answers with a sentence instead, and says out loud what the file header used
+// to get wrong.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -14,6 +24,9 @@ function actionFailure(operation: string, error: unknown): Result {
   console.error(`[wallet-hub] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
 }
+
+/** The household's money is the adults'. Mirrors 0267, in words a person reads. */
+const NOT_YOURS: Result = { ok: false, error: 'Only a parent or another adult can change the household accounts.' };
 
 const ACCOUNT_TYPES: AccountType[] = ['checking', 'savings', 'credit', 'investment', 'retirement'];
 const CARD_BRANDS = ['visa', 'mastercard', 'amex', 'discover', 'other'];
@@ -32,6 +45,7 @@ const cents = (v: unknown): number => Math.round(dollars(v) * 100);
 
 export async function addAccountAction(input: Record<string, unknown>): Promise<Result> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return NOT_YOURS;
   const name = str(input.name);
   if (!name) return { ok: false, error: 'Account name is required' };
   const type = ACCOUNT_TYPES.includes(input.type as AccountType) ? (input.type as AccountType) : 'checking';
@@ -99,6 +113,7 @@ export async function addRewardAction(input: Record<string, unknown>): Promise<R
 
 export async function addTransactionAction(input: Record<string, unknown>): Promise<Result> {
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return NOT_YOURS;
   const name = str(input.name);
   if (!name) return { ok: false, error: 'Description is required' };
   const supabase = await createServer();
@@ -118,9 +133,14 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
 
 const DELETABLE = new Set(['wallet_cards', 'wallet_passes', 'wallet_rewards', 'financial_accounts', 'transactions']);
 
+const MANAGER_ONLY_DELETES = new Set(['financial_accounts', 'transactions']);
+
 export async function deleteWalletRowAction(input: { table: string; id: string }): Promise<Result> {
   const ctx = await requireUserContext();
   if (!DELETABLE.has(input.table) || !input.id) return { ok: false, error: 'Invalid request' };
+  // Narrowed to the two household-money tables on purpose: a teen tidying
+  // their own wallet cards, passes and rewards is not what 0267 is about.
+  if (MANAGER_ONLY_DELETES.has(input.table) && !isManager(ctx.active.role)) return NOT_YOURS;
   const supabase = await createServer();
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
