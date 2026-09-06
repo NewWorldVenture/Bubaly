@@ -3,6 +3,10 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
+import { buildBrief } from '@/lib/briefing/build';
+import { saveBrief } from '@/lib/briefing/store';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/response-schema';
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
       { data: warranties },
       { data: trips },
       { data: pantry },
+      { data: completedRuns },
+      { data: agentActivity },
     ] = await Promise.all([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', todayEnd).order('starts_at'),
@@ -68,6 +74,14 @@ export async function POST(req: NextRequest) {
       supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
+      // What Bubaly actually finished. Not for the prompt — for the answer:
+      // "Completed Today" is evidence, and evidence comes from the run rows.
+      supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
+        .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
+        .order('completed_at', { ascending: false, nullsFirst: false }).limit(6),
+      supabase.from('agent_activity').select('id, title, detail, href, created_at')
+        .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', todayStart)
+        .order('created_at', { ascending: false }).limit(5),
     ]);
 
     const memberMap = new Map((members ?? []).map(m => [m.id, m]));
@@ -272,6 +286,39 @@ Rules:
       };
     }
 
+    // ── "Completed Today" is evidence, not the model's word for it ──────────
+    // The system prompt asks the model to populate `completed`, and until now
+    // whatever it wrote went straight to the screen. The runs are right here:
+    // `buildBrief` carries them through `mergeCompletedByBubaly`, which keeps
+    // only the ones that really reached completed / partially_completed. The
+    // model may describe the day; it does not get to decide what happened.
+    const brief = buildBrief({
+      kind: type === 'evening' ? 'evening' : 'daily',
+      now,
+      events: (todayEvents ?? []).map(e => ({ title: e.title, start: e.starts_at, end: e.ends_at, location: e.location })),
+      snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
+      completedRuns: (completedRuns ?? []) as CompletedRunRow[],
+      activity: (agentActivity ?? []) as AiActivityRow[],
+    }, ctx.active.family.timezone ?? 'America/New_York');
+
+    briefing = {
+      ...briefing,
+      // A partly-finished run says so. Without this a run that did six of eight
+      // things reads exactly like one that did all eight (§29).
+      completed: brief.handled.map(h => {
+        if (!h.partial) return h.detail ? `${h.title} — ${h.detail}` : h.title;
+        return h.detail ? `${h.title} — ${h.detail}` : `${h.title} — partly done`;
+      }),
+    };
+
+    // File the brief so the delivery cron and the next page load read the same
+    // one (0258 is unique on family + day + kind, so this is idempotent). A
+    // failure here must not cost the family their briefing.
+    const saved = await saveBrief(scopeFromUserContext(ctx, supabase), brief);
+    if (!saved.ok) console.error('[briefing] could not persist the brief', saved.error);
+
+    // The envelope is unchanged: `briefing-module.tsx` is the only consumer and
+    // the composed brief's home is the `home_briefs` row, not this response.
     return NextResponse.json({ briefing, digest, generatedAt: new Date().toISOString() });
   } catch (err) {
     console.error('Briefing error:', err);
