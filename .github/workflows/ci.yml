@@ -114,7 +114,14 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_PASSWORD: postgres
+          # Throwaway, job-owned, and reachable only from this ephemeral runner.
+          # This job connects to nothing else: no repository secrets, no database
+          # URL, no production. (move-date-recalculation-runtime.yml goes further
+          # and maps no host port at all, driving psql inside the container over
+          # its Unix socket. That posture is deliberate there; it is not adopted
+          # here because the same scripts have to keep running against a plain
+          # local Postgres for anyone reproducing a failure by hand.)
+          POSTGRES_PASSWORD: ci-only-not-a-production-secret
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
@@ -126,7 +133,7 @@ jobs:
       PGHOST: localhost
       PGPORT: '5432'
       PGUSER: postgres
-      PGPASSWORD: postgres
+      PGPASSWORD: ci-only-not-a-production-secret
       PGDATABASE: bubaly
     steps:
       - uses: actions/checkout@v4
