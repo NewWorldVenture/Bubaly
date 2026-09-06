@@ -158,12 +158,18 @@ the result rather than narrated as a fresh write.
   scanner cannot satisfy the cap vacuously. Verified: adding one new
   provider-calling route fails it.
 
-  **One surface is deliberately NOT adopted.**  is unauthenticated
-  by design — givers are not signed in — so there is no user scope to build one
-  from, and attributing a stranger's request to the family's own 
-  ledger is a product decision about whose AI budget a gift-link visitor spends
-  rather than a mechanical conversion. Recorded in the coverage test with that
-  reason instead of guessed at.
+  **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
+  by design — a giver following a gift link is not signed in — so
+  `scopeFromUserContext` has nothing to build from. It could be given a system
+  scope for the family that owns the link, but that would put a stranger's
+  request on the family's own `ai_requests` ledger, and whose AI budget a
+  gift-link visitor spends is a product decision rather than a mechanical
+  conversion. Recorded in the coverage test with that reason instead of guessed
+  at.
+
+  It is the second surface that does not fit the pattern, after the chat
+  assistant which never throws. The remaining 40 should be expected to contain
+  more of them: "wrap the provider call" is the common case, not the whole set.
 
   Still open in §33: the other 40 surfaces, and the admin view over runs, which
   this does not touch.
