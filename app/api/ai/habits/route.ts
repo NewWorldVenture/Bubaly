@@ -67,7 +67,7 @@ export async function POST() {
 
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
     const { system, user } = buildCoachPrompt(stats, firstName);
-    const completion = await withAiRequest(
+    const coaching = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'habits.coach', text: 'Habit coaching' },
       async (obs) => {
@@ -79,12 +79,16 @@ export async function POST() {
           maxTokens: 600,
         });
         obs.used(done.model ?? 'unknown', done.usage);
-        return done;
+        const parsed = parseCoachResponse(done.text || '');
+        if (!parsed.headline && parsed.nudges.length === 0) {
+          obs.failed(new Error('The model returned no usable headline or nudges.'));
+          return null;
+        }
+        return parsed;
       },
     );
 
-    const coaching = parseCoachResponse(completion.text || '');
-    if (!coaching.headline && coaching.nudges.length === 0) {
+    if (!coaching) {
       return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
     }
 

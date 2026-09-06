@@ -36,17 +36,20 @@ export async function POST() {
       // Inside the try that falls through to the evergreen prompt, so a failure
       // is recorded before it is swallowed — the same reason the daily brief
       // wraps inside its own silent catch.
-      const text = await withAiRequest(
+      const prompt = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'journal.prompt', text: 'Journal prompt' },
         async (obs) => {
           const provider = await resolveProvider();
           const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 60 });
           obs.used(completion.model ?? 'unknown', completion.usage);
-          return completion.text || '';
+          const parsed = parseJournalPrompt(completion.text || '');
+          if (!parsed) {
+            obs.failed(new Error('The model returned no usable journal prompt.'));
+          }
+          return parsed;
         },
       );
-      const prompt = parseJournalPrompt(text);
       if (prompt) return NextResponse.json({ prompt, source: 'ai' });
     } catch {
       // fall through to evergreen
