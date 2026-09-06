@@ -5,6 +5,8 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
+import { detectConflicts, type TimedEvent } from '@/lib/family/conflicts';
+import { mostLoaded } from '@/lib/operating-index/score';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { ErrorState } from '@/components/ui/states';
@@ -31,7 +33,6 @@ export default async function ReadinessPage() {
     remindersOverdueRes,
     mealsRes,
     eventsUpcomingRes,
-    groceryActiveRes,
     activeMembersRes,
     famPlanLevel,
   ] = await Promise.all([
@@ -39,7 +40,6 @@ export default async function ReadinessPage() {
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString()),
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr),
     supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
@@ -53,7 +53,6 @@ export default async function ReadinessPage() {
     remindersOverdueRes.error,
     mealsRes.error,
     eventsUpcomingRes.error,
-    groceryActiveRes.error,
     activeMembersRes.error,
   ].find(Boolean);
   if (primaryError) {
@@ -66,7 +65,6 @@ export default async function ReadinessPage() {
     remindersOverdue: remindersOverdueRes.count ?? 0,
     mealsPlanned: new Set((mealsRes.data ?? []).map((m) => m.plan_date)).size,
     eventsUpcoming: eventsUpcomingRes.count ?? 0,
-    groceryActive: groceryActiveRes.count ?? 0,
     activeMembers: activeMembersRes.count ?? 0,
   };
   const { score, band, factors } = computeReadiness(input);
@@ -97,25 +95,32 @@ export default async function ReadinessPage() {
     cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),
     cnt(supabase.from('prep_plans').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'active')),
   ]);
-  const tEvents = tomorrowEventsRes.data ?? [];
-  const HOUR = 3_600_000;
-  const tomorrowConflicts = countOverlaps(tEvents.filter((e) => !e.all_day), HOUR);
-  // Same overlap rule as tomorrow's, over the week — and who is carrying the
-  // day it lands on. Both were hardcoded zeros while the rows sat ten lines up,
-  // so the week card could never say "two clashes" and the month card could
-  // never name an overloaded person.
-  const weekEvents = (weekEventsRes.data ?? []).filter((e) => !e.all_day);
-  const conflictsWeek = countOverlaps(weekEvents, HOUR);
+  const tEvents = (tomorrowEventsRes.data ?? []) as TimedEvent[];
+  const weekEvents = (weekEventsRes.data ?? []) as TimedEvent[];
+  // THE COUNT MUST MATCH THE PAGE IT SENDS YOU TO. The gap reads "2 clashes
+  // this week" and links to /dashboard/conflicts, which runs
+  // `lib/family/conflicts.ts detectConflicts`. This page had its own copy of
+  // that sweep, so the two could — and did — disagree about the same week.
+  // (The Family Operating Index deliberately uses a DIFFERENT rule,
+  // `lib/home/conflicts.ts`: one PERSON double-booked, which is a different
+  // question and has its own page. Two named rules, each used consistently,
+  // rather than a third written here.)
+  const tomorrowConflicts = detectConflicts(tEvents).length;
+  const conflictsWeek = detectConflicts(weekEvents).length;
+
+  // Likewise for "someone is carrying a heavy load": the gap links to the
+  // Family Operating Index, so it answers with that page's own rule
+  // (`mostLoaded`) rather than a second threshold written here — which could
+  // send a person to a page that names nobody. It identifies at most one
+  // member, so this is 0 or 1 by construction.
   const perMember = new Map<string, number>();
   for (const e of weekEvents) {
-    if (!e.assignee_id) continue;
+    if (e.all_day || !e.assignee_id) continue;
     perMember.set(e.assignee_id, (perMember.get(e.assignee_id) ?? 0) + 1);
   }
-  const loads = [...perMember.values()];
-  const averageLoad = loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
-  // "Overloaded" is relative to this family, not an absolute: half again the
-  // household average, and at least four things, so a quiet week names nobody.
-  const overloadedMembers = loads.filter((n) => n >= 4 && n > averageLoad * 1.5).length;
+  const overloadedMembers = mostLoaded(
+    [...perMember.entries()].map(([memberId, upcoming]) => ({ memberId, name: memberId, upcoming, openTasks: 0 })),
+  ) ? 1 : 0;
 
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
@@ -128,7 +133,7 @@ export default async function ReadinessPage() {
   };
   const horizonCards = assessReadiness(signals);
 
-  // SVG ring math.
+  // SVG ring math for the activity panel below.
   const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;
 
   return (
@@ -138,7 +143,16 @@ export default async function ReadinessPage() {
         <h1 className="text-lg font-bold">Family Readiness</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* §51's readiness, and the only thing on this page that answers "are we
+          ready?". It used to sit BELOW a second, larger 0–100 ring computed by
+          `lib/readiness/score.ts` under the same word, so a family could read
+          "78 · Looking good" and "40 · Not ready" on one screen about what
+          looked like one question. That score is a real measure of a different
+          thing — how much the household is currently doing in the app — and it
+          keeps its place further down under a name that says so. */}
+      <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
+
+      <div className="grid gap-4 pt-1 lg:grid-cols-3">
         <div className="flex flex-col items-center justify-center rounded-3xl border border-border bg-surface/40 p-6">
           <svg viewBox="0 0 128 128" className="h-40 w-40 -rotate-90">
             <circle cx="64" cy="64" r={r} fill="none" stroke="currentColor" strokeWidth="12" className="text-elevated" />
@@ -150,9 +164,13 @@ export default async function ReadinessPage() {
         </div>
 
         <div className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold">What&apos;s driving your score</h2>
+          <h2 className="text-base font-semibold">How much your family is running through Bubaly</h2>
+          <p className="mb-4 mt-1 text-sm text-muted">
+            A measure of activity — planned meals, an up-to-date calendar, chores kept on top of. Not the same question as
+            &ldquo;are we ready?&rdquo; above, which is about what is still open.
+          </p>
           {factors.length === 0 ? (
-            <p className="text-sm text-muted">Add events, chores, and meals to see what shapes your readiness.</p>
+            <p className="text-sm text-muted">Add events, chores, and meals to see what shapes this.</p>
           ) : (
             <ul className="space-y-2">
               {factors.map((f, i) => (
@@ -165,11 +183,6 @@ export default async function ReadinessPage() {
             </ul>
           )}
         </div>
-      </div>
-
-      <div className="pt-1">
-        <h2 className="mb-3 text-base font-semibold">Are we ready?</h2>
-        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
       </div>
 
       {!isPlus && (
@@ -186,24 +199,3 @@ export default async function ReadinessPage() {
   );
 }
 
-/**
- * Overlapping timed events, counted once per pair.
- *
- * An event with no end is treated as an hour long, which is what the rest of
- * the product assumes. Sorted first so the inner loop can stop early.
- */
-function countOverlaps(events: { starts_at: string; ends_at: string | null }[], defaultMs: number): number {
-  const timed = [...events].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  let count = 0;
-  for (let i = 0; i < timed.length; i += 1) {
-    const aStart = new Date(timed[i].starts_at).getTime();
-    const aEnd = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aStart + defaultMs;
-    for (let j = i + 1; j < timed.length; j += 1) {
-      const bStart = new Date(timed[j].starts_at).getTime();
-      if (bStart >= aEnd) break;
-      const bEnd = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bStart + defaultMs;
-      if (bStart < aEnd && aStart < bEnd) count += 1;
-    }
-  }
-  return count;
-}

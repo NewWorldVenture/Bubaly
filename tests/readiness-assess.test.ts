@@ -20,6 +20,68 @@ describe('assessReadiness', () => {
     }
   });
 
+  // ── §51's "Ready ✓" half ─────────────────────────────────────────────────
+  it('says what is handled, not only what is not', () => {
+    // The card used to carry gaps and nothing else, so a family with the week
+    // under control read "Nothing to close." — a shorter list of failures
+    // rather than an answer to "are we ready?".
+    const [tomorrow, week, month] = assessReadiness(sig());
+    expect(tomorrow.ready.map((r) => r.label)).toEqual([
+      'Calendar is clear', 'Everything has an owner', "Tomorrow's dinner is planned",
+    ]);
+    expect(week.ready.map((r) => r.label)).toContain('No clashes this week');
+    expect(month.ready.map((r) => r.label)).toContain('Documents are current');
+    for (const card of [tomorrow, week, month]) {
+      for (const check of card.ready) expect(check.href).toMatch(/^\/dashboard\//);
+    }
+  });
+
+  it('drops a check from the ✓ column the moment it fails', () => {
+    const [tomorrow] = assessReadiness(sig({ tomorrowConflicts: 1 }));
+    expect(tomorrow.ready.map((r) => r.label)).not.toContain('Calendar is clear');
+    expect(tomorrow.gaps.map((g) => g.label)).toContain('1 schedule clash tomorrow');
+    // The rules that still pass are still reported.
+    expect(tomorrow.ready.map((r) => r.label)).toContain("Tomorrow's dinner is planned");
+  });
+
+  it('does not dress an absence up as an accomplishment', () => {
+    // "No bills due this week" and "no trips to prep" are nothing happening,
+    // not something the family did. Padding the ✓ column with them would make
+    // a quiet week look like an achievement and devalue a real ✓.
+    const [, week, month] = assessReadiness(sig());
+    expect(week.ready.map((r) => r.label).join(' ')).not.toMatch(/bill/i);
+    expect(month.ready.map((r) => r.label).join(' ')).not.toMatch(/trip|prep plan/i);
+  });
+
+  it('calls the week of dinners planned only when it actually is', () => {
+    const planned = assessReadiness(sig({ unplannedDinnersWeek: 0 }))[1];
+    expect(planned.ready.map((r) => r.label)).toContain('The week of dinners is planned');
+    // Two unplanned dinners is below the gap threshold and above nothing: it
+    // belongs on neither list rather than being called planned.
+    const partial = assessReadiness(sig({ unplannedDinnersWeek: 2 }))[1];
+    expect(partial.ready.map((r) => r.label)).not.toContain('The week of dinners is planned');
+    expect(partial.gaps.map((g) => g.label).join(' ')).not.toMatch(/dinner/i);
+  });
+
+  // ── §51's [Let Bubaly Handle It] ─────────────────────────────────────────
+  it('hands Bubaly the gaps, not just the horizon', () => {
+    // "Get us ready for tomorrow" gives the planner nothing to work from.
+    const [tomorrow] = assessReadiness(sig({ tomorrowConflicts: 1, dinnerPlannedTomorrow: false }));
+    expect(tomorrow.handleIt).toBe(
+      "Help me get ready for tomorrow: 1 schedule clash tomorrow and tomorrow's dinner isn't planned.",
+    );
+  });
+
+  it('asks rather than asserts when there is nothing to close', () => {
+    const [tomorrow] = assessReadiness(sig());
+    expect(tomorrow.handleIt).toBe('Is there anything I should be doing about tomorrow?');
+  });
+
+  it('reads a single gap as a sentence, not a list of one', () => {
+    const [tomorrow] = assessReadiness(sig({ dinnerPlannedTomorrow: false }));
+    expect(tomorrow.handleIt).toBe("Help me get ready for tomorrow: tomorrow's dinner isn't planned.");
+  });
+
   it('marks a horizon not_ready when a blocker exists', () => {
     const [tomorrow] = assessReadiness(sig({ tomorrowConflicts: 1 }));
     expect(tomorrow.status).toBe('not_ready');
@@ -91,15 +153,89 @@ describe('the readiness page computes what it claims to know', () => {
     const code = page.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
     expect(code).not.toMatch(/conflictsWeek:\s*0\b/);
     expect(code).not.toMatch(/overloadedMembers:\s*0\b/);
-    expect(page).toContain('const conflictsWeek = countOverlaps(weekEvents, HOUR)');
-    expect(page).toContain('const overloadedMembers = loads.filter(');
+    expect(page).toContain('const conflictsWeek = detectConflicts(weekEvents).length');
   });
 
   it('reads the week, not just tomorrow', () => {
     expect(page).toContain("gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)");
   });
 
-  it('uses one overlap rule for both windows rather than two copies', () => {
-    expect((page.match(/countOverlaps\(/g) ?? []).length).toBe(3); // definition + two calls
+  it('counts clashes with the rule the page it links to runs', () => {
+    // The gap reads "2 clashes this week" and links to /dashboard/conflicts,
+    // which runs `lib/family/conflicts.ts detectConflicts`. This page carried
+    // its own copy of that sweep, so the number and its destination could
+    // disagree about the same week. The Family Operating Index deliberately
+    // uses the OTHER rule (`lib/home/conflicts.ts`: one person double-booked)
+    // for a different question — two named rules, not a third written here.
+    expect(page).toContain("from '@/lib/family/conflicts'");
+    expect(page).not.toMatch(/function countOverlaps/);
+    // Both windows go through it.
+    expect((page.match(/detectConflicts\(/g) ?? []).length).toBe(2);
+  });
+
+  it('decides who is overloaded with the rule the page it links to runs', () => {
+    // The month gap links to the Family Operating Index. Deciding it here with
+    // a second threshold could send a person to a page that names nobody.
+    expect(page).toContain("import { mostLoaded } from '@/lib/operating-index/score'");
+    expect(page).not.toMatch(/averageLoad \* 1\.5/);
+  });
+
+  it('does not pay for a count nothing reads', () => {
+    // `groceryActive` was fetched with its own Supabase count query, passed
+    // into `computeReadiness`, and never referenced by the formula.
+    expect(page).not.toMatch(/grocery/i);
+  });
+
+  it('answers "are we ready?" with one number, above the activity score', () => {
+    // The page carried two 0–100 scores under the word readiness: the §51
+    // horizon assessment and `lib/readiness/score.ts`'s activity score, whose
+    // bands ("Looking good") and statuses ("Not ready") disagree by
+    // construction. A family reading both on one screen has no way to know
+    // they are different questions. §51 asks for one indicator, so the horizon
+    // readiness is the headline and the activity panel says what it measures.
+    const readiness = page.indexOf('<ReadinessHorizons');
+    const activity = page.indexOf('How much your family is running through Bubaly');
+    expect(readiness).toBeGreaterThan(-1);
+    expect(activity).toBeGreaterThan(-1);
+    expect(readiness).toBeLessThan(activity);
+    // The activity panel no longer calls its own number a readiness score.
+    expect(page).not.toContain("What&apos;s driving your score");
+    expect(page).not.toMatch(/shapes your readiness/);
+  });
+});
+
+// ── The other readiness numbers, and which of them may differ ───────────────
+describe('a trip scores the same wherever it is asked', () => {
+  const overview = readFileSync('components/vacations/trip-overview.tsx', 'utf8');
+  const service = readFileSync('lib/services/trips/index.ts', 'utf8');
+
+  it('measures the trip in the same days on both sides', () => {
+    // One formula (`lib/vacations/readiness.ts`), two input assemblies. The
+    // client read `tripNights` — end minus start — while the service used
+    // `dateRange(...).length`, always one more. The itinerary factor is
+    // `daysWithItems / tripDays` and `daysWithItems` counts `vacation_days`
+    // rows, which are the inclusive dates, so the trip overview inflated its
+    // own score and the AI readiness card disagreed with the page.
+    expect(service).toContain('dateRange(s.trip.start_date, s.trip.end_date).length');
+    expect(overview).toContain('dateRange(trip.start_date, trip.end_date).length');
+    expect(overview).not.toMatch(/tripDays:\s*tripNights\(/);
+  });
+
+  it('counts the people going, not the whole household, on both sides', () => {
+    // Already true and worth pinning: `members` in the overview is the
+    // `vacation_members` query, and the service falls back to the family only
+    // when a trip has no travellers recorded.
+    expect(overview).toContain("useRealtimeQuery<Tables<'vacation_members'>>");
+    expect(service).toContain('membersCount: s.travelers.length || members.data.length');
+  });
+});
+
+// The readiness numbers that are allowed to differ, recorded so a later reader
+// does not "fix" them into one. Each answers a different question about a
+// different subject; §51's is the household one and lives in ./assess.ts.
+describe('the readiness numbers that are deliberately separate', () => {
+  it('each says which question it answers in its own header', () => {
+    expect(readFileSync('lib/readiness/score.ts', 'utf8')).toMatch(/NOT §51's readiness/);
+    expect(readFileSync('lib/readiness/assess.ts', 'utf8')).toMatch(/§51's signature/);
   });
 });
