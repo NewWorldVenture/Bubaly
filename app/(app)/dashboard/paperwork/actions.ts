@@ -5,6 +5,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -156,9 +158,21 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
 
   let draft = '';
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });
-    draft = (completion.text || '').trim();
+    // Nothing from the document itself goes on the row. `source` is OCR of a
+    // letter somebody else wrote — the most literally untrusted text in the
+    // product, and not something to copy into a second table.
+    draft = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'paperwork.draft-reply', text: `Draft a reply to ${kindLabel(item.kind as PaperworkKind)}` },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });
+        obs.used(provider.model, completion.usage);
+        const out = (completion.text || '').trim();
+        if (!out) obs.failed(new Error('The model returned an empty draft.'));
+        return out;
+      },
+    );
   } catch (err) {
     return { ok: false, error: describeAIError(err).message };
   }

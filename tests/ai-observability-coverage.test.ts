@@ -108,6 +108,14 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/recipes/suggest/route.ts', "feature: 'recipes.suggest'"],
       ['app/api/recipes/transform/route.ts', 'feature: `recipes.${actionId}`'],
       ['app/api/ai/trip/route.ts', "feature: 'travel.research'"],
+      ['app/api/ai/auto/accident/route.ts', "feature: 'auto.accident'"],
+      ['app/api/ai/invest/route.ts', "feature: 'invest.mentor'"],
+      ['app/api/behavior/insight/route.ts', "feature: 'behavior.insight'"],
+      ['app/(app)/dashboard/contacts/[id]/actions.ts', "feature: 'contacts.reconnect'"],
+      ['app/(app)/dashboard/paperwork/actions.ts', "feature: 'paperwork.draft-reply'"],
+      ['app/(app)/marketplace/assistant-actions.ts', "feature: 'marketplace.assistant'"],
+      ['app/api/ai/import/route.ts', "feature: 'import.extract'"],
+      ['app/api/vacations/ai/route.ts', "feature: 'vacations.build'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -194,6 +202,53 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     expect(src).not.toContain('obs.failed(fallbackErr, { partial: true })');
   });
 
+  it('does not record an instructed no-op as a failure', () => {
+    // `/api/ai/import`'s system prompt says "If nothing is actionable, make no
+    // tool calls", so zero extracted items is the model obeying, not failing.
+    // Recording it would inflate the count support reads as "how much AI is
+    // broken right now" — the same argument that keeps the chore validator's
+    // guard paths off the ledger. An earlier version of this route had the
+    // reasoning backwards: it noted that a valid no-op and an unusable reply
+    // are indistinguishable, and then marked both failed.
+    const src = readFileSync('app/api/ai/import/route.ts', 'utf8');
+    expect(src, 'the prompt must still license the no-op').toContain('If nothing is actionable, make no tool calls.');
+    expect(src, 'an empty extraction is not a failure').not.toContain('obs.failed(');
+  });
+
+  it('never lets a JSON.parse message carry the model reply onto the row', () => {
+    // V8 embeds a snippet of the input in its message —
+    //   Unexpected token 'A', "Ava had 3 "... is not valid JSON
+    // — and in `/api/behavior/insight` the input is the coach's reply about a
+    // child's behaviour logs. Reaching the wrapper's catch would copy that into
+    // `ai_requests.error`, which /admin/ai-activity renders. The parse is caught
+    // at the call site and reported generically instead.
+    const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
+    const wrapped = src.slice(src.indexOf('withAiRequest('));
+    expect(wrapped, 'the parse must be caught where it happens').toMatch(/try \{[\s\S]{0,200}JSON\.parse\([\s\S]{0,120}\} catch \{/);
+    // RETHROWN with a constant, not returned. Throwing lets the route's outer
+    // catch build its data-derived fallback (the family's own numbers plus three
+    // tips); returning here would settle for the canned line and quietly
+    // downgrade the answer while closing the leak. `tests/behavior-insight-observed.test.ts`
+    // holds both halves behaviourally; this is the shape check.
+    expect(src).toContain("throw new Error('The coach reply was not valid JSON.');");
+    // The caught error must never be what propagates — that is the leak.
+    expect(wrapped, 'the caught error must not be passed through').not.toMatch(/catch \(\w+\)[\s\S]{0,200}(throw \w+|obs\.failed\(\w+\))/);
+  });
+
+  it('a canned sentence that reads like coaching is recorded as a failure', () => {
+    // The subtlest shape of all. When the parenting coach replies without JSON,
+    // `/api/behavior/insight` answers 200 with "Keep logging — patterns will
+    // sharpen over time." — a warm, plausible sentence a parent cannot tell from
+    // real coaching. The other empty-200 routes at least LOOK empty.
+    const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
+    // The canned line is chosen after the failure is recorded, not instead of it.
+    const failedAt = src.indexOf('obs.failed(');
+    const cannedAt = src.indexOf('insight ?? CANNED_INSIGHT');
+    expect(failedAt, 'the unusable reply must be recorded').toBeGreaterThan(-1);
+    expect(cannedAt, 'the canned line must still be what the parent sees').toBeGreaterThan(failedAt);
+    expect(src, 'and it is still that sentence').toContain("const CANNED_INSIGHT = 'Keep logging — patterns will sharpen over time.'");
+  });
+
   it('a 200 carrying an empty answer is recorded as a failure too', () => {
     // The fourth shape of silence, after "throws", "never throws" and "answers
     // 200 with a flag". `/api/ai/resolve-conflict` splits the reply into lines
@@ -233,6 +288,8 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       'app/api/recipes/suggest/route.ts',
       'app/api/recipes/transform/route.ts',
       'app/api/ai/trip/route.ts',
+      'app/api/ai/invest/route.ts',
+      'app/api/behavior/insight/route.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
       const used = src.indexOf('obs.used(');
@@ -263,6 +320,18 @@ describe('§33 the surfaces a family would ask about are observed', () => {
 });
 
 describe('what is deliberately NOT adopted', () => {
+  it('leaves the admin AI-engine connectivity test alone, with a reason', () => {
+    // `app/(app)/admin/ai/actions.ts` authenticates with getUser() + isSuperAdmin()
+    // and never resolves a family at all — it exists to answer "does the
+    // configured key work?". There is no `familyId` to build a scope from, and
+    // billing a connectivity check to whichever family happens to be first would
+    // be worse than not recording it. Same class as /api/ai/gift.
+    const src = readFileSync('app/(app)/admin/ai/actions.ts', 'utf8');
+    expect(src).not.toContain('withAiRequest(');
+    expect(src).toContain('isSuperAdmin()');
+    expect(src, 'it has no family context to attribute a row to').not.toContain('requireUserContext');
+  });
+
   it('leaves the public gift assistant alone, with a reason', () => {
     // /api/ai/gift is UNAUTHENTICATED by design — givers are not signed in, so
     // there is no user scope to build one from. Attributing a stranger's
@@ -274,20 +343,36 @@ describe('what is deliberately NOT adopted', () => {
     expect(src).toContain('createServiceClient()');
   });
 
-  it('counts the provider factory, which will never adopt, so the floor is 1', () => {
-    // `resolveProviderForTask` builds an OpenAIProvider and hands it back; it
-    // never calls one. There is no request to observe here and no scope to
-    // observe it with — the caller that asked for the provider is the surface.
+  it('the floor is 3, and it is these three', () => {
+    // A correction. This assertion used to say "the floor is 1" and named only
+    // `lib/ai/routing.ts`, because the gift route was documented as
+    // deliberately-not-adopted in its own test and never counted toward the
+    // floor here — even though it obtains a provider and has always been in
+    // SILENT. The floor was 2 the day that sentence was written, and it is 3
+    // now. Naming all three in one place is what stops the arithmetic drifting
+    // again.
     //
-    // It stays in the count anyway. Excluding it would mean teaching the scanner
-    // a judgement call, and a scanner that makes judgement calls is one that can
-    // be argued into excluding a real surface. The floor of the ceiling is 1,
-    // not 0, and that is written down rather than discovered by whoever gets
-    // there.
-    const src = readFileSync('lib/ai/routing.ts', 'utf8');
-    expect(src).toContain('return new OpenAIProvider(');
-    expect(src).not.toContain('.complete(');
-    expect([...SILENT]).toContain('lib/ai/routing.ts');
+    // None of them is excluded from the count. Excluding any would mean teaching
+    // the scanner a judgement call, and a scanner that makes judgement calls is
+    // one that can be argued into excluding a real surface.
+    const floor = [
+      // The provider factory: builds an OpenAIProvider and hands it back
+      // without ever calling one. No request to observe, no scope to observe it
+      // with — the caller that asked for the provider is the surface.
+      'lib/ai/routing.ts',
+      // Unauthenticated by design: a giver following a gift link is not signed
+      // in, so there is no user scope to build one from.
+      'app/api/ai/gift/route.ts',
+      // Authenticates as a super admin and never resolves a family at all — it
+      // answers "does the configured key work?".
+      'app/(app)/admin/ai/actions.ts',
+    ];
+    for (const file of floor) expect([...SILENT], `${file} is part of the floor`).toContain(file);
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('return new OpenAIProvider(');
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
+    // The ceiling can never go below this, so a future tranche that claims to
+    // have finished §33 has to reckon with these three by name.
+    expect(floor).toHaveLength(3);
   });
 });
 
@@ -301,7 +386,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // room for new silent surfaces to slip in green. Lower it every time a
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
-    // then 22 when the assistant engine adopted it, then 19, then 17, then 14.
+    // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
+    // then 11, then 8, then 6.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -309,7 +395,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 14;
+    const CEILING = 6;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +

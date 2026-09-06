@@ -357,6 +357,38 @@ the result rather than narrated as a fresh write.
   `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
   both halves.
 
+  **Server actions, not routes — the same wrapper, a different call shape.**
+  The reconnect-message drafter, the paperwork reply drafter and the marketplace
+  assistant are Server Actions returning result objects rather than HTTP
+  responses. They needed nothing new: `ctx` and the client are already in scope,
+  and the failure modes are the familiar ones (an empty answer returned as an
+  error result; the marketplace one swallowing into its deterministic engine).
+  What each does NOT put on the row is the point — not the contact's name, and
+  nothing at all from the paperwork itself, which is OCR of a letter somebody
+  else wrote and the most literally untrusted text in the product.
+
+  **A second surface that will never adopt, for the same reason as the gift
+  route.** `app/(app)/admin/ai/actions.ts` authenticates with `getUser()` +
+  `isSuperAdmin()` and never resolves a family: it answers "does the configured
+  key work?". There is no `familyId` to build a scope from, and billing a
+  connectivity check to whichever family came first would be worse than not
+  recording it. Named in the coverage test with that reason, so the floor is now
+  2 rather than 1.
+
+  **The subtlest shape: a canned sentence that reads like the real thing.**
+  When the parenting coach at `/api/behavior/insight` replies without JSON, the
+  route answers 200 with *"Keep logging — patterns will sharpen over time."* — a
+  warm, plausible sentence a parent cannot distinguish from coaching. The other
+  empty-200 routes at least LOOK empty; this one looks like an answer. Three
+  paths reach it (no JSON in the reply, `JSON.parse` throwing on malformed
+  braces, the provider throwing) and none recorded anything. The canned line is
+  still what the parent sees — the test asserts the failure is recorded BEFORE
+  it, by source position, so a mutant that drops `obs.failed` fails.
+
+  `auto.accident` went in the same tranche and is worth naming for a different
+  reason: someone has just had a car accident, and a 503 there is the failure on
+  this whole list a family is most likely to write in about.
+
   **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
   (the common case), "never throws" (the chat assistant) and "answers 200 with a
   flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
@@ -373,16 +405,22 @@ the result rather than narrated as a fresh write.
   **The remaining 19 silent surfaces are counted, not ignored.**
   `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8, then 6) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 
-  **The floor is 1, not 0.** `lib/ai/routing.ts` builds an `OpenAIProvider` and
-  hands it back without ever calling one — there is no request to observe and no
-  scope to observe it with; the caller that asked for the provider is the surface.
-  It stays in the count regardless, because excluding it means teaching the
-  scanner a judgement call, and a scanner that makes judgement calls can be argued
-  into excluding a real surface.
+  **The floor is 3, and this paragraph used to say 1.** That was wrong twice
+  over. `lib/ai/routing.ts` builds an `OpenAIProvider` and hands it back without
+  ever calling one — no request to observe, no scope to observe it with. But
+  `/api/ai/gift` was documented as deliberately-not-adopted in its own paragraph
+  and never counted toward the floor here, despite obtaining a provider and
+  sitting in the count from the first day. The floor was 2 the day "the floor is
+  1" was written, and `app/(app)/admin/ai/actions.ts` makes it 3. All three are
+  now named in one assertion, which is what stops the arithmetic drifting again.
+
+  None is excluded from the count: excluding any means teaching the scanner a
+  judgement call, and a scanner that makes judgement calls can be argued into
+  excluding a real surface.
 
   **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
   by design — a giver following a gift link is not signed in — so
