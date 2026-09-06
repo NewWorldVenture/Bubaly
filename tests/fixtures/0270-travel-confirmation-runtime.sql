@@ -975,7 +975,7 @@ SELECT travel_import_ci.assert_same('review-tamper-before', 'review-tamper-after
 SELECT travel_import_ci.observe('wrong-day-before');
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
-SELECT travel_import_ci.expect_error($sql$SELECT travel_import_ci.invoke('wrong-day', true)$sql$, '42501');
+SELECT travel_import_ci.expect_error($sql$SELECT travel_import_ci.invoke('wrong-day', true)$sql$, '55000');
 RESET ROLE;
 SELECT travel_import_ci.observe('wrong-day-after');
 SELECT travel_import_ci.assert_same('wrong-day-before', 'wrong-day-after');
