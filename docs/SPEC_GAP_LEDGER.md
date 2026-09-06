@@ -89,6 +89,27 @@ that does.
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
 
+- **§21, the routes that went around it.** Quiet hours landing was only half the
+  job: **fifteen call sites wrote `notifications` rows directly**, so they got
+  neither the window nor the unread-duplicate guard. The three that woke a house
+  most often now go through `notify()` — every screened text, every WhatsApp,
+  every voicemail, each firing on *every* inbound message that is not blocked or
+  spam. None is marked urgent, deliberately: a text from the dentist can wait
+  until morning, and a genuine emergency comes through `/api/guardian/escalate`,
+  which is urgent and still lands immediately.
+
+  `systemScopeForFamily` reads the family's real timezone rather than taking
+  `scopeForSystem`'s `DEFAULT_TZ`. That fallback would be worse than no check at
+  all: a window evaluated against the wrong clock holds a notification at six in
+  the evening and lets one through at two in the morning.
+
+  `tests/notification-write-boundary.test.ts` is the ratchet. Every remaining raw
+  insert is enumerated **with a reason** — four urgent by nature, six named as
+  debt — so what is left is a list someone chose rather than one nobody counted,
+  and the sixteenth has to be added deliberately. It also fails on a *stale*
+  entry, because an allowlist that stops describing the code is how a ratchet
+  quietly becomes decoration.
+
 - **§21, the reader and the control.** Quiet hours were stored in two places and
   honoured from neither. The one `notify()` read —
   `user_preferences.notification_prefs.quietHours` — could never have worked:

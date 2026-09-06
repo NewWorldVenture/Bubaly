@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
@@ -119,15 +121,19 @@ export async function POST(req: NextRequest) {
   const preview = body.length > 100 ? `${body.slice(0, 100)}…` : body;
 
   try {
-    await supabase.from('notifications').insert({
-      family_id: familyId,
-      user_id: null,
-      type: 'system',
-      title: `💚 WhatsApp from ${callerDisplay}`,
-      body: preview,
-      related_type: 'guardian_communications',
-      related_id: comm?.id ?? null,
-    });
+    // Same shape and same reason as the SMS route: a routine screened message
+    // obeys quiet hours. Not urgent.
+    const scope = await systemScopeForFamily(supabase, familyId);
+    if (scope) {
+      await notify(scope, {
+        recipients: 'family',
+        type: 'system',
+        title: `💚 WhatsApp from ${callerDisplay}`,
+        body: preview,
+        relatedType: 'guardian_communications',
+        relatedId: comm?.id ?? null,
+      });
+    }
   } catch { /* non-fatal */ }
 
   await markGuardianCallbackProcessed(supabase, smsSid);
