@@ -139,7 +139,22 @@ export function LifeEventsModule() {
                     <button onClick={() => removeFact(f)} aria-label="Remove" className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
-                <span className="mt-2 inline-block rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">{f.category}</span>
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <span className="inline-block rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">{f.category}</span>
+                  {/* §26: the family can see what Bubaly believes and where it
+                      got it. The section is titled "What Bubaly has learned"
+                      and lists every fact, so without this a preference you
+                      typed yourself reads as something Bubaly worked out. */}
+                  {(f.source === 'ai_conversation' || f.source === 'ai_inferred') && (
+                    <span className="inline-block rounded-full border border-brand/40 bg-brand/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-brand-text">
+                      {f.source === 'ai_conversation' ? 'Bubaly kept this' : 'Bubaly worked this out'}
+                      {typeof f.confidence === 'number' ? ` · ${f.confidence}%` : ''}
+                    </span>
+                  )}
+                  {f.expires_at && new Date(f.expires_at) <= new Date() && (
+                    <span className="inline-block rounded-full border border-warning/40 bg-warning/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-warning">Out of date</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -292,7 +307,10 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
     onSaved();
   }
   return (
-    <Modal open onClose={onClose} title={editing ? 'Edit' : 'Add what Bubaly has learned'}>
+    // A person typing here is telling Bubaly, not Bubaly learning — and the
+    // row is written with `source: 'user'`, so the old title was the one
+    // sentence on this screen the data disagreed with.
+    <Modal open onClose={onClose} title={editing ? 'Edit' : 'Tell Bubaly something'}>
       <form onSubmit={submit} className="space-y-3">
         <Field label="Label">{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Friday tradition" autoFocus />}</Field>
         <Field label="Value">{(id) => <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Pizza & movie night" />}</Field>

@@ -12,14 +12,24 @@
 //   the facts. `confirmFact` moves a suggestion across, exactly as the
 //   playbook page's accept action does.
 //
-// WHAT `family_facts` DOES NOT HAVE: `source`, `confidence`, `confirmed` or a
-// metadata jsonb (0123 defines id, family_id, member_id, category, label,
-// value, notes, is_pinned, created_by and the timestamps — nothing else).
-// Migration 0253 will add them; until then provenance is carried the way the
-// repo already carries it: an AI-sourced fact's `notes` starts with
-// `Learned by Bubaly` (the marker the playbook accept action writes and the
-// 0253 backfill keys on). `clearAiMemory` deletes exactly those rows plus the
-// AI-sourced inbox entries, and nothing a person typed.
+// PROVENANCE IS A COLUMN (0265), not a prefix in `notes`. It used to be the
+// latter — an inferred fact's notes began `Learned by Bubaly` — and that broke
+// two ways a family would actually hit: "Clear what Bubaly learned" ran
+// `notes ilike 'Learned by Bubaly%'` and took a person's own fact if they
+// happened to write that sentence, while `rememberConfirmed` overwrites
+// `notes` whenever someone restates a fact the household already holds, which
+// erased the marker and hid the row from that clear forever. `source` cannot
+// be edited away: the update path below leaves it alone by construction.
+//
+// `AI_MEMORY_MARKER` survives as the human-readable opening of the note a
+// confirmed suggestion carries. It is prose now, not a signal.
+//
+// `confidence` comes across from the inbox with the fact — `confirmFact` used
+// to discard the one number a person most wants when deciding whether to keep
+// a belief. `expires_at` is new: a child's coat size and a school year have a
+// shelf life, and a stale fact steering a plan is worse than no fact, because
+// it looks as certain as a fresh one. There is no `confirmed` column, and
+// deliberately so — see 0265's header.
 //
 // Categories are the 0123 CHECK list. "food" is not one of them: food
 // preferences are `preference` facts, which is where `lib/services/meals
@@ -44,6 +54,8 @@ export const MEMORY_SOURCES: MemorySource[] = ['user', 'ai_conversation', 'ai_in
 export const AI_MEMORY_MARKER = 'Learned by Bubaly';
 /** Inbox signatures written by this service, so `clearAiMemory` can tell them from the playbook miner's. */
 const AI_SIGNATURE_PREFIX = 'ai_memory:';
+/** The two `family_facts.source` values that mean "Bubaly, not a person". */
+export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'];
 
 /**
  * Categories the assistant must never write on its own. Medical facts belong
@@ -73,8 +85,15 @@ function canManage(scope: ServiceScope): boolean {
   return scope.role === 'system' || scope.role === 'parent' || scope.role === 'adult';
 }
 
-export function isAiFact(fact: Pick<FamilyFact, 'notes'>): boolean {
-  return Boolean(fact.notes && fact.notes.startsWith(AI_MEMORY_MARKER));
+export function isAiFact(fact: Pick<FamilyFact, 'source'>): boolean {
+  return fact.source === 'ai_conversation' || fact.source === 'ai_inferred';
+}
+
+/** A fact whose shelf life has run out. Null `expires_at` means "still true". */
+export function isExpiredFact(fact: Pick<FamilyFact, 'expires_at'>, now: Date): boolean {
+  if (!fact.expires_at) return false;
+  const at = Date.parse(fact.expires_at);
+  return Number.isFinite(at) && at <= now.getTime();
 }
 
 export type RememberInput = {
@@ -89,6 +108,8 @@ export type RememberInput = {
   /** Free-text context. For AI sources this is the evidence shown on the inbox card. */
   note?: string | null;
   pinned?: boolean;
+  /** When this stops being true. Null (the default) is a fact with no shelf life. */
+  expiresAt?: string | null;
 };
 
 export type RememberResult =
@@ -143,7 +164,7 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     }
   }
 
-  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false });
+  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: normalizeExpiry(input.expiresAt) });
   return rememberUnconfirmed(scope, {
     category, key, content, memberId: input.memberId ?? null, source: input.source,
     confidence: clampConfidence(input.confidence), evidence: input.note ?? null,
@@ -155,9 +176,16 @@ function clampConfidence(value: number | null | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value as number)));
 }
 
+/** An expiry Bubaly or a person offered, or null. An unparseable date is no expiry, never a past one. */
+function normalizeExpiry(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+}
+
 async function rememberConfirmed(
   scope: ServiceScope,
-  input: { category: FactCategory; key: string; content: string; memberId: string | null; note: string | null; pinned: boolean },
+  input: { category: FactCategory; key: string; content: string; memberId: string | null; note: string | null; pinned: boolean; expiresAt: string | null },
 ): Promise<ServiceResult<RememberResult>> {
   let probe = scope.db
     .from('family_facts')
@@ -180,6 +208,12 @@ async function rememberConfirmed(
         category: input.category,
         notes: input.note?.trim() || null,
         is_pinned: input.pinned || existing.is_pinned,
+        // `source` is deliberately absent. A person restating a fact Bubaly
+        // inferred is correcting it, not claiming to have said it first — and
+        // under the old notes-prefix scheme this very write was what erased
+        // the provenance and hid the row from "clear what Bubaly learned".
+        // A restated fact does keep its expiry: the value is fresh again.
+        expires_at: null,
       })
       .eq('id', existing.id)
       .eq('family_id', scope.familyId)
@@ -203,6 +237,11 @@ async function rememberConfirmed(
       value: input.content,
       notes: input.note?.trim() || null,
       is_pinned: input.pinned,
+      // A person said this in so many words — `rememberFact` has already
+      // established `fromPerson` before routing here — so it carries no
+      // confidence score. Null means nobody had to guess.
+      source: 'user',
+      expires_at: input.expiresAt,
       // family_facts.created_by references auth.users (0123).
       created_by: scope.userId,
     })
@@ -270,9 +309,14 @@ async function rememberUnconfirmed(
 export type RecallInput = { query?: string | null; category?: FactCategory | string | null; memberId?: string | null; limit?: number };
 
 /**
- * Confirmed facts only, pinned first. Filtering runs in memory over the
- * family's rows (a household has dozens of facts, not thousands) so the
- * match rules stay the same ones the knowledge page uses (`filterFacts`).
+ * Confirmed, unexpired facts, pinned first. Filtering runs in memory over the
+ * family's rows (a household has dozens of facts, not thousands) so the match
+ * rules stay the same ones the knowledge page uses (`filterFacts`).
+ *
+ * Expiry is applied HERE and not on the knowledge page: this is what a tool
+ * and the context builder read, and a stale fact steering a plan is the whole
+ * problem. A person looking at Family Memory should still see the coat size
+ * that ran out, greyed, so they can update it — see `listMemories`.
  */
 export async function recallFacts(scope: ServiceScope, input: RecallInput = {}): Promise<ServiceResult<FamilyFact[]>> {
   let q = scope.db
@@ -293,7 +337,9 @@ export async function recallFacts(scope: ServiceScope, input: RecallInput = {}):
   // Same rule as the memory context slice: medical and account facts are for
   // the adults who manage the family, whatever tool or page asks.
   const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
-  const visible = (data ?? []).filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+  const visible = (data ?? [])
+    .filter((f) => !isExpiredFact(f, scope.now ?? new Date()))
+    .filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
   const matched = filterFacts(visible, { q: input.query ?? '' });
   return ok(matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
 }
@@ -357,6 +403,15 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
       label: suggestion.label,
       value: suggestion.value,
       notes: suggestion.evidence ? `${AI_MEMORY_MARKER} — ${suggestion.evidence}` : AI_MEMORY_MARKER,
+      // Two ways Bubaly comes to believe something, and a family reads them
+      // differently: `ai_conversation` is "you said it and I kept it", written
+      // by this service's own cards; `ai_inferred` is the playbook miner
+      // deriving it from what the household does. Accepting the card confirms
+      // the fact — it does not make it something a person stated.
+      source: suggestion.signature.startsWith(AI_SIGNATURE_PREFIX) ? 'ai_conversation' : 'ai_inferred',
+      // How sure Bubaly was, which the move across used to discard at the one
+      // moment a person is deciding whether to keep the belief.
+      confidence: suggestion.confidence,
       created_by: scope.userId,
     })
     .select('*')
@@ -438,9 +493,11 @@ export async function forgetFact(
 
 /**
  * The "Clear memories" setting: remove everything Bubaly learned on its own
- * and leave everything a person entered. Facts are matched by the provenance
- * marker; inbox cards by this service's signature prefix (the playbook miner's
- * own cards are its business and stay).
+ * and leave everything a person entered. Facts are matched by `source` (0265)
+ * rather than by a prefix in free text, which used to take a person's own
+ * fact if they wrote "Learned by Bubaly" in their note and to miss a real one
+ * whose note had since been edited. Inbox cards go by this service's signature
+ * prefix — the playbook miner's own cards are its business and stay.
  */
 export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<{ facts: number; suggestions: number }>> {
   if (!canManage(scope)) return fail("Only a parent or adult can clear Bubaly's memory.", { code: SERVICE_CODES.denied });
@@ -449,7 +506,7 @@ export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<
     .from('family_facts')
     .delete()
     .eq('family_id', scope.familyId)
-    .ilike('notes', `${AI_MEMORY_MARKER}%`)
+    .in('source', AI_FACT_SOURCES)
     .select('id');
   if (factError) {
     console.error('[service:memory] clear facts failed', factError);

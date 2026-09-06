@@ -8,6 +8,8 @@
 // family_facts row (the persistent Knowledge Base) and marks it accepted;
 // dismissing hides it. All reads/writes go through the RLS-scoped server client.
 
+import { confirmFact } from '@/lib/services/memory';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
@@ -136,34 +138,27 @@ export async function refreshPlaybookAction(): Promise<Result> {
   return { ok: true, added: rows.length };
 }
 
-/** Confirm a suggestion → write a real family_facts row + mark it accepted. */
+/**
+ * Confirm a suggestion → write a real family_facts row + mark it accepted.
+ *
+ * This used to be a second implementation of `confirmFact`, and the two had
+ * drifted in three ways that all mattered: it wrote the provenance marker as a
+ * hardcoded string rather than the shared constant (so 0265's `source` column
+ * would have defaulted to 'user' here and a fact accepted from THIS page would
+ * have been invisible to "clear what Bubaly learned"); it had no manager
+ * check, while the settings panel's accept requires one; and neither its read
+ * nor its update carried `.eq('family_id', …)`, leaning entirely on RLS —
+ * which 0123/0126 grant to every member for all four verbs.
+ *
+ * One accept, one set of rules. The service owns them.
+ */
 export async function acceptSuggestionAction(input: { id: string }): Promise<Result> {
   const ctx = await requireUserContext();
   const id = String(input?.id || '').trim();
   if (!id) return { ok: false, error: 'Missing suggestion' };
-  const sb = await createServer();
-
-  const { data: s, error: readErr } = await sb.from('family_playbook_suggestions')
-    .select('*').eq('id', id).maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-  if (!s) return { ok: false, error: 'Suggestion not found' };
-  if (s.status === 'accepted') return { ok: true }; // idempotent
-
-  const { data: fact, error: factErr } = await sb.from('family_facts').insert({
-    family_id: s.family_id,
-    member_id: s.member_id,
-    category: s.category,
-    label: s.label,
-    value: s.value,
-    notes: s.evidence ? `Learned by Bubaly — ${s.evidence}` : 'Learned by Bubaly',
-    created_by: ctx.user.id,
-  }).select('id').maybeSingle();
-  if (factErr) return { ok: false, error: factErr.message };
-
-  const { error: updErr } = await sb.from('family_playbook_suggestions')
-    .update({ status: 'accepted', fact_id: fact?.id ?? null }).eq('id', id);
-  if (updErr) return { ok: false, error: updErr.message };
-  return { ok: true };
+  const scope = scopeFromUserContext(ctx, await createServer());
+  const res = await confirmFact(scope, id);
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
 }
 
 /** Dismiss a suggestion (kept, so it isn't re-suggested on the next refresh). */

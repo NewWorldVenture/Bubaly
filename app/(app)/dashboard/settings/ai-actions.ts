@@ -55,7 +55,10 @@ export async function saveAISettingsAction(patch: AISettingsPatch): Promise<AISe
 //
 // Only what BUBALY learned is listed: a fact a person typed into the family's
 // own memory is theirs, and does not belong in a panel about what the AI may
-// keep. `isAiFact` is the same marker `clearAiMemory` deletes on.
+// keep. `isAiFact` reads the same `source` column `clearAiMemory` deletes on
+// (0265), so what this panel offers to clear and what the clear takes cannot
+// drift — under the old notes-prefix scheme an edited note put a fact in
+// neither set.
 
 export type AiMemoryItem = {
   id: string;
@@ -63,7 +66,7 @@ export type AiMemoryItem = {
   label: string;
   value: string;
   category: string;
-  /** 0–100 for a suggestion; null for a fact Bubaly already keeps. */
+  /** 0–100, how sure Bubaly was when it offered this. Null when nobody scored it. */
   confidence: number | null;
 };
 
@@ -82,7 +85,10 @@ export async function loadAiMemoryAction(): Promise<AiMemoryResult> {
       // The same category fence the context slice uses: medical and account
       // details are not shown to someone who could not read them elsewhere.
       .filter((f) => canManage || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }))
-      .map((f): AiMemoryItem => ({ id: f.id, kind: 'fact', label: f.label, value: f.value, category: f.category, confidence: null }));
+      // Carried across from the inbox by 0265. It used to be thrown away at
+      // the moment of acceptance, so this panel could only ever say null for a
+      // fact — which is the one place a person is deciding whether to keep it.
+      .map((f): AiMemoryItem => ({ id: f.id, kind: 'fact', label: f.label, value: f.value, category: f.category, confidence: f.confidence }));
     const pending = canManage
       ? memories.data.pending.map((s): AiMemoryItem => ({ id: s.id, kind: 'suggestion', label: s.label, value: s.value, category: s.category, confidence: s.confidence }))
       : [];

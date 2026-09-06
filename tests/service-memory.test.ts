@@ -33,7 +33,11 @@ function makeDb(respond: (call: Call) => Reply) {
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
       select: chain, order: chain, limit: chain, or: chain,
-      eq: filter, is: filter, in: filter,
+      eq: filter, is: filter,
+      // `in` is recorded distinctly, like `ilike` and `gte`: a set membership
+      // and an equality are different assertions and a test should be able to
+      // tell them apart.
+      in: (c: string, v: unknown) => filter(`in:${c}`, v),
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
@@ -59,7 +63,8 @@ function scopeWith(db: SupabaseClient<Database>, extra?: Partial<ServiceScope>):
 
 const FACT = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'fact-1', family_id: 'fam-1', member_id: 'member-2', category: 'preference', label: "Doesn't eat", value: 'mushrooms',
-  notes: null, is_pinned: false, created_by: 'auth-user-1', created_at: NOW.toISOString(), updated_at: NOW.toISOString(), ...overrides,
+  notes: null, is_pinned: false, source: 'user', confidence: null, expires_at: null,
+  created_by: 'auth-user-1', created_at: NOW.toISOString(), updated_at: NOW.toISOString(), ...overrides,
 });
 
 const SUGGESTION = (overrides: Partial<Record<string, unknown>> = {}) => ({
@@ -91,7 +96,9 @@ describe('rememberFact — from a person', () => {
     const insert = calls.find((c) => c.kind === 'insert' && c.table === 'family_facts');
     expect(insert?.payload).toEqual({
       family_id: 'fam-1', member_id: 'member-2', category: 'preference', label: "Doesn't eat", value: 'mushrooms',
-      notes: null, is_pinned: false, created_by: 'auth-user-1',
+      // 0265: a person said this, so it carries `source: 'user'`, no
+      // confidence (nobody had to guess) and no expiry.
+      notes: null, is_pinned: false, source: 'user', expires_at: null, created_by: 'auth-user-1',
     });
     expect(calls.some((c) => c.table === 'family_playbook_suggestions')).toBe(false);
   });
@@ -105,6 +112,13 @@ describe('rememberFact — from a person', () => {
     const update = calls.find((c) => c.kind === 'update');
     expect(update?.filters).toMatchObject({ id: 'fact-1', family_id: 'fam-1' });
     expect(update?.payload).toMatchObject({ value: 'mushrooms and olives' });
+    // 0265: restating a fact refreshes the value and clears any expiry, but it
+    // must NOT rewrite provenance. A person correcting something Bubaly
+    // inferred is not claiming to have said it first — and this very write is
+    // what used to erase the `Learned by Bubaly` marker from the notes and
+    // hide the row from "clear what Bubaly learned" for good.
+    expect(update?.payload).not.toHaveProperty('source');
+    expect(update?.payload).toMatchObject({ expires_at: null });
     expect(calls.some((c) => c.kind === 'insert' && c.table === 'family_facts')).toBe(false);
   });
 
@@ -195,6 +209,28 @@ describe('recallFacts', () => {
     expect(parent.ok && parent.data.map((f) => f.id).sort()).toEqual(['fact-1', 'fact-3', 'fact-4']);
   });
 
+  it('does not recall a fact whose shelf life has run out', async () => {
+    // 0265. A coat size and a school year stop being true on their own, and a
+    // stale one steering a plan is worse than not knowing, because it reads as
+    // confidently as a fresh one. The expired row stays in the table for a
+    // person to update — `listMemories` still returns it — it just does not
+    // reach a tool or the planner.
+    const rows = [
+      FACT(),
+      FACT({ id: 'fact-past', label: 'Coat size', value: 'Age 8', expires_at: '2026-09-04T00:00:00.000Z' }),
+      FACT({ id: 'fact-future', label: 'Swim class', value: 'Thursdays', expires_at: '2026-12-01T00:00:00.000Z' }),
+    ];
+    const { db } = makeDb(() => ({ data: rows, error: null }));
+    const res = await recallFacts(scopeWith(db));
+    expect(res.ok && res.data.map((f) => f.id).sort()).toEqual(['fact-1', 'fact-future']);
+  });
+
+  it('treats an unreadable expiry as no expiry rather than silently dropping the fact', async () => {
+    const { db } = makeDb(() => ({ data: [FACT({ expires_at: 'not a date' })], error: null }));
+    const res = await recallFacts(scopeWith(db));
+    expect(res.ok && res.data.map((f) => f.id)).toEqual(['fact-1']);
+  });
+
   it('puts pinned facts first when there is no query', async () => {
     const { db } = makeDb(() => ({ data: [FACT(), FACT({ id: 'fact-2', label: 'Shoe size', value: 'US 3', is_pinned: true })], error: null }));
     const res = await recallFacts(scopeWith(db));
@@ -227,10 +263,30 @@ describe('confirmFact', () => {
     expect(insert?.payload).toMatchObject({
       family_id: 'fam-1', member_id: 'member-2', category: 'preference', label: 'Go-to dinner', value: 'Taco night',
       notes: `${AI_MEMORY_MARKER} — Mentioned in a conversation`, created_by: 'auth-user-1',
+      // 0265: accepting the card confirms the fact; it does not make it
+      // something a person stated. The signature says which of the two AI
+      // routes it came by, and the confidence — which this move used to
+      // discard at the one moment somebody is deciding whether to keep it —
+      // comes across unchanged.
+      source: 'ai_conversation', confidence: 70,
     });
     const accept = calls.find((c) => c.table === 'family_playbook_suggestions' && c.kind === 'update');
     expect(accept?.filters).toMatchObject({ family_id: 'fam-1', id: 'sug-1' });
     expect(accept?.payload).toEqual({ status: 'accepted', fact_id: 'fact-9' });
+  });
+
+  it("calls the playbook miner's own card an inference, not something it heard", async () => {
+    // The two are read differently by a family: `ai_conversation` is "you said
+    // it and I kept it"; `ai_inferred` is Bubaly deriving it from what the
+    // household does. Only this service's cards carry the `ai_memory:` prefix.
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') return { data: SUGGESTION({ signature: 'meals:taco-night', confidence: 45 }), error: null };
+      if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      return { data: null, error: null };
+    });
+    await confirmFact(scopeWith(db), 'sug-1');
+    const insert = calls.find((c) => c.table === 'family_facts' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ source: 'ai_inferred', confidence: 45 });
   });
 
   it('is idempotent for an already-accepted card', async () => {
@@ -295,7 +351,10 @@ describe('forgetFact', () => {
 });
 
 describe('clearAiMemory', () => {
-  it('deletes only marker-tagged facts and this service\'s inbox cards', async () => {
+  it("deletes facts by provenance, not by a prefix in the note, plus this service's inbox cards", async () => {
+    // 0265. `ilike('notes', 'Learned by Bubaly%')` took a person's own fact if
+    // they happened to write that sentence, and missed a real one whose note
+    // had since been edited — which `rememberConfirmed` does on every restate.
     const { db, calls } = makeDb((call) => (call.table === 'family_facts'
       ? { data: [{ id: 'fact-7' }, { id: 'fact-8' }], error: null }
       : { data: [{ id: 'sug-1' }], error: null }));
@@ -303,7 +362,8 @@ describe('clearAiMemory', () => {
     expect(res).toMatchObject({ ok: true, data: { facts: 2, suggestions: 1 } });
     const [facts, suggestions] = calls.filter((c) => c.kind === 'delete');
     expect(facts.table).toBe('family_facts');
-    expect(facts.filters).toEqual({ family_id: 'fam-1', 'ilike:notes': `${AI_MEMORY_MARKER}%` });
+    expect(facts.filters).toEqual({ family_id: 'fam-1', 'in:source': ['ai_conversation', 'ai_inferred'] });
+    expect(JSON.stringify(facts.filters)).not.toContain(AI_MEMORY_MARKER);
     expect(suggestions.table).toBe('family_playbook_suggestions');
     expect(suggestions.filters).toEqual({ family_id: 'fam-1', 'ilike:signature': 'ai_memory:%' });
   });

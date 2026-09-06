@@ -26,9 +26,26 @@ from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
 
-`0255`, `0256`, `0257`, `0258` and `0259` are all outside the unchanged pinned bundle. Code
+`0255` through `0265` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
-application. A separately
+application.
+
+The six that landed after `0259`, for the record and in the order they must be
+applied:
+
+| # | What it changes | Shape |
+|---|---|---|
+| `0260_trust_ledger_lockdown` | Drops the member INSERT policy on the trust audit ledger, narrows its read to `can_manage_family`, and gives `emergency_sessions` an `expires_at` (backfilled to `activated_at + 4h` for sessions still open) | Policies + one added column, both idempotent |
+| `0261_home_briefs_kind_uniqueness` | Widens the saved-brief unique key to include `kind` | Index |
+| `0262_home_briefs_quarantine` | RESTRICTIVE deny-all on `home_briefs`: a saved snapshot mixes sources whose access cannot be revalidated when it is read back later. The store helpers refuse to save, load or claim, so no code path depends on it | One policy |
+| `0263_dead_letter_reconcile` | `create or replace` on `claim_ai_runs` so a dead-lettered run also settles its steps, its legacy status column and its request ledger. Every write bounded to rows the same statement just dead-lettered | One function |
+| `0264_ai_surface_role_privacy` | The role boundary the AI layer already enforced, in the database: `ai_plans`, `ai_plan_steps`, `ai_run_events` to the requester or a manager; `family_automation_rules` writes to managers; `family_facts` per role; `home_briefs` writes to the service role. Deliberately does NOT narrow the finance and document tables — named in its own header | Policies dropped and recreated by name |
+| `0265_family_facts_provenance` | `source`, `confidence` and `expires_at` on `family_facts`, with a backfill classifying existing rows by the `Learned by Bubaly` note prefix they carry today. Additive; changes no existing row's meaning | Three added columns, two check constraints, two indexes |
+
+Each applies clean through the full local replay. `0262` is the only one that
+takes anything away from a family (reads of saved briefs), and it does so
+deliberately; the rest are additive or tighten a policy that was wider than the
+application layer already assumed. A separately
 reviewed hash-pinned release, a new successful preview, the required matrix and
 review evidence, and explicit parent authorization are required before any
 production apply. No future release range is authorized by this inventory.

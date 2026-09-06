@@ -308,11 +308,19 @@ describe('memory.remember', () => {
 });
 
 describe('memory.recall', () => {
-  it('returns confirmed facts with a from_person flag', async () => {
+  it('returns confirmed facts with a from_person flag read from the source column', async () => {
+    // 0265. `from_person` used to be `!notes.startsWith('Learned by Bubaly')`,
+    // so the third row here — Bubaly's, with a note a person has since edited
+    // — reported as the family's own. `f4` proves the converse: a person's
+    // fact whose note happens to open with that sentence is still theirs.
     const { db } = makeDb(() => ({
       data: [
-        { id: 'f1', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Diet', value: 'vegetarian', notes: null, is_pinned: false, created_by: 'u', created_at: '', updated_at: '' },
-        { id: 'f2', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Go-to dinner', value: 'Tacos', notes: 'Learned by Bubaly — planned 5 times', is_pinned: false, created_by: 'u', created_at: '', updated_at: '' },
+        { id: 'f1', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Diet', value: 'vegetarian', notes: null, is_pinned: false, source: 'user', confidence: null, expires_at: null, created_by: 'u', created_at: '', updated_at: '' },
+        { id: 'f2', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Go-to dinner', value: 'Tacos', notes: 'Learned by Bubaly — planned 5 times', is_pinned: false, source: 'ai_conversation', confidence: 80, expires_at: null, created_by: 'u', created_at: '', updated_at: '' },
+        { id: 'f3', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Snack', value: 'Apples', notes: 'Actually she prefers pears now', is_pinned: false, source: 'ai_inferred', confidence: 55, expires_at: null, created_by: 'u', created_at: '', updated_at: '' },
+        { id: 'f4', family_id: 'fam-1', member_id: null, category: 'sizes', label: 'Shoe size', value: 'US 2', notes: 'Learned by Bubaly? No — I measured it myself', is_pinned: false, source: 'user', confidence: null, expires_at: null, created_by: 'u', created_at: '', updated_at: '' },
+        // Expired: a coat size that ran out yesterday must not steer a plan.
+        { id: 'f5', family_id: 'fam-1', member_id: null, category: 'sizes', label: 'Coat size', value: 'Age 8', notes: null, is_pinned: false, source: 'user', confidence: null, expires_at: '2026-09-04T00:00:00.000Z', created_by: 'u', created_at: '', updated_at: '' },
       ],
       error: null,
     }));
@@ -321,10 +329,12 @@ describe('memory.recall', () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({ facts: [
-        { id: 'f1', category: 'preference', label: 'Diet', value: 'vegetarian', member_id: null, pinned: false, from_person: true },
-        { id: 'f2', category: 'preference', label: 'Go-to dinner', value: 'Tacos', member_id: null, pinned: false, from_person: false },
+        { id: 'f1', category: 'preference', label: 'Diet', value: 'vegetarian', member_id: null, pinned: false, from_person: true, expires_at: null },
+        { id: 'f2', category: 'preference', label: 'Go-to dinner', value: 'Tacos', member_id: null, pinned: false, from_person: false, expires_at: null },
+        { id: 'f3', category: 'preference', label: 'Snack', value: 'Apples', member_id: null, pinned: false, from_person: false, expires_at: null },
+        { id: 'f4', category: 'sizes', label: 'Shoe size', value: 'US 2', member_id: null, pinned: false, from_person: true, expires_at: null },
       ] });
-      expect(tool.summarize({}, res.data)).toBe('Recalled 2 facts');
+      expect(tool.summarize({}, res.data)).toBe('Recalled 4 facts');
     }
   });
 });

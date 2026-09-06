@@ -97,7 +97,7 @@ describe('a confirmed fact needs somebody who could have asked', () => {
 
 describe('memory off — Bubaly stops using what it already knows', () => {
   const FACTS = [
-    { id: 'f1', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Diet', value: 'vegetarian', notes: null, is_pinned: false, created_by: 'u', created_at: '', updated_at: '' },
+    { id: 'f1', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Diet', value: 'vegetarian', notes: null, is_pinned: false, source: 'user', confidence: null, expires_at: null, created_by: 'u', created_at: '', updated_at: '' },
   ];
 
   it('recall comes back empty rather than reading the family’s facts aloud', async () => {
@@ -129,5 +129,49 @@ describe('memory off — Bubaly stops using what it already knows', () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect((res.data.data as { facts: unknown[] }).facts).toHaveLength(1);
+  });
+});
+
+describe('what the planner is told about a memory (0265)', () => {
+  const env = { viewer: { canManage: true }, members: [] } as never;
+  const fact = (over: Record<string, unknown>) => ({
+    id: 'f1', family_id: 'fam-1', member_id: null, category: 'preference', label: 'Go-to dinner',
+    value: 'Tacos', notes: null, is_pinned: false, source: 'user', confidence: null, expires_at: null,
+    created_by: 'u', created_at: '', updated_at: '', ...over,
+  });
+
+  it('says how sure Bubaly was, so an inference is weighed differently from something you said', async () => {
+    // §2 asks the planner to tell confirmed facts from inferred ones, and
+    // "confirmed" alone does not say by how much. The number came across from
+    // the inbox with the fact — `confirmFact` used to discard it.
+    const { db } = makeDb(true, [fact({ id: 'f2', source: 'ai_conversation', confidence: 80 })]);
+    const res = await memorySlice.load(scopeWith(db), env);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.lines?.join('\n')).toMatch(/learned by Bubaly, confirmed — 80% sure when offered/);
+  });
+
+  it('says nothing about confidence for a fact a person typed', async () => {
+    const { db } = makeDb(true, [fact({})]);
+    const res = await memorySlice.load(scopeWith(db), env);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.lines?.join('\n')).not.toMatch(/sure when offered/);
+    expect(res.data.lines?.join('\n')).not.toMatch(/learned by Bubaly/);
+  });
+
+  it('does not hand the planner a fact that has run out', async () => {
+    // The row stays in Family Memory for a person to correct — this is only
+    // about what reaches a model, where a stale belief reads as confidently
+    // as a fresh one.
+    const { db } = makeDb(true, [
+      fact({ id: 'live', label: 'Diet', value: 'vegetarian' }),
+      fact({ id: 'stale', label: 'Coat size', value: 'Age 8', expires_at: '2026-09-04T00:00:00.000Z' }),
+    ]);
+    const res = await memorySlice.load(scopeWith(db), env);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect((res.data.data as { facts: { id: string }[] }).facts.map((f) => f.id)).toEqual(['live']);
+    expect(res.data.lines?.join('\n')).not.toMatch(/Coat size/);
   });
 });
