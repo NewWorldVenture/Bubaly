@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { TripConfirmationImport } from '@/components/vacations/trip-confirmation-import';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -71,6 +72,8 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> AI Vacation Concierge</h2>
         <Button size="sm" variant="secondary" onClick={autoBuild} loading={building}><Wand2 className="h-4 w-4" /> Auto-build trip</Button>
       </div>
+
+      <TripConfirmationImport vacationId={vacationId} />
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         {messages.length === 0 ? (
