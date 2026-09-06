@@ -45,22 +45,20 @@ export const TOOL_DOMAIN: Record<string, string> = {
  * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
  * no tool called ...".
  *
- * These three are written nowhere but `lib/assistant/tools.ts` — there is no
- * `lib/services/notes`, no `lib/services/goals`, and nothing under
- * `lib/ai/tools/` touches `event_rsvps` — so there is no registry tool for the
- * replay to find. Until they have one, the family is TOLD that, in the
- * approval line itself, rather than discovering it after a parent has already
- * said yes.
+ * IT IS EMPTY, AND THAT IS THE POINT. It held `add_note`, `add_goal` and
+ * `rsvp_to_event` — the three gated tools that were written nowhere but
+ * `lib/assistant/tools.ts`. They now resolve to `notes.create`, `goals.create`
+ * and `calendar.rsvp`, so every gated tool can be replayed and none needs a
+ * caveat. Emptying it was forced rather than remembered:
+ * `tests/assistant-approval-replay.test.ts` fails on an entry whose tool has
+ * gained a registry equivalent.
  *
- * `tests/assistant-approval-replay.test.ts` fails in both directions: a new
- * gated tool with no registry equivalent has to be added here, and an entry
- * that gains one has to be removed.
+ * The list stays because the ratchet still needs somewhere to put the next one.
+ * That test fails in both directions — a newly gated tool with no registry
+ * equivalent has to be named here with a reason, and an entry that gains one
+ * has to be removed.
  */
-export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
-  add_note: 'nothing outside lib/assistant/tools.ts writes `notes`',
-  add_goal: 'nothing outside lib/assistant/tools.ts writes `goals`',
-  rsvp_to_event: 'nothing under lib/ai/tools/ writes `event_rsvps`',
-};
+export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {};
 
 export function wrapToolsWithTrust(
   tools: ToolSpec[],

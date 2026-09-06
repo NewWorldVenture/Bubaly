@@ -163,16 +163,30 @@ describe('runAction → tool registry', () => {
     expect(executeTool).toHaveBeenCalledTimes(4);
   });
 
-  it('still runs the hand-written branch for a name the registry does not cover', async () => {
+  it('routes add_note through the registry now that notes.create exists', async () => {
     const { ctx, calls } = ctxWith();
 
-    // add_note has no registry tool yet, so it must keep hitting the switch.
+    // This used to assert the opposite: that add_note kept hitting a
+    // hand-rolled `notes` insert in lib/ai/actions.ts because the registry had
+    // never heard of it. `notes.create` resolves the alias now, so the switch
+    // branch is gone and Magic Import's note writes get the ledger row, the
+    // trust evaluation and the activity line every other AI write gets.
+    executeTool.mockResolvedValueOnce({
+      status: 'ok', data: { id: 'note-1' }, summary: 'Saved the note "Lunch idea"', toolCallId: 'call-9',
+    } satisfies ToolOutcome);
     const result = await runAction(ctx, { name: 'add_note', args: { title: 'Lunch idea', body: 'Try the new taco place' } });
 
     expect(result.ok).toBe(true);
-    expect(result.summary).toBe('Saved a family note.');
-    expect(executeTool).not.toHaveBeenCalled();
-    expect(calls.filter((c) => c.kind === 'insert').map((c) => c.table)).toEqual(['notes']);
+    expect(result.summary).toBe('Saved the note "Lunch idea"');
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(executeTool).toHaveBeenCalledWith(
+      expect.anything(),
+      'add_note',
+      { title: 'Lunch idea', body: 'Try the new taco place' },
+      expect.anything(),
+    );
+    // The hand-rolled insert is what is NOT supposed to happen any more.
+    expect(calls.filter((c) => c.kind === 'insert' && c.table === 'notes')).toEqual([]);
   });
 
   it('refuses an unknown name rather than delegating it', async () => {
@@ -202,9 +216,15 @@ describe('legacy payload shapes still parse', () => {
     // AI_TOOLS is what Magic Import sends the model, so each of its names must
     // either resolve in the registry or have a branch in the switch. This pins
     // the split so a tool added to one side is not silently unroutable.
-    const registryCovered = ['create_calendar_event', 'create_chore', 'create_reminder', 'add_grocery_item', 'create_meal_plan_entry', 'create_announcement'];
+    // Every AI_TOOLS name now resolves — add_note and add_goal were the last
+    // two that did not, and the hand-written switch they fell through to has
+    // been deleted rather than left as an unreachable second implementation.
+    const registryCovered = [
+      'create_calendar_event', 'create_chore', 'create_reminder', 'add_grocery_item',
+      'create_meal_plan_entry', 'create_announcement', 'add_note', 'add_goal',
+    ];
     for (const name of registryCovered) expect(getTool(name), name).toBeTruthy();
-    // Still hand-written in lib/ai/actions.ts until notes/goals get services.
-    for (const name of ['add_note', 'add_goal']) expect(getTool(name), name).toBeNull();
+    expect(getTool('add_note')?.name).toBe('notes.create');
+    expect(getTool('add_goal')?.name).toBe('goals.create');
   });
 });

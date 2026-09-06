@@ -114,6 +114,68 @@ the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
 
+- **§30, the three writes that had nowhere to land.** `add_note`, `add_goal` and
+  `rsvp_to_event` were gated in chat and had no registry tool, so a parent could
+  grant the approval and read back *"Bubaly has no tool called \"add_note\""* —
+  the gate filed a request the product could not honour. `notes.create`,
+  `goals.create` and `calendar.rsvp` close that, and with it their
+  `ai_tool_calls` gap: three more of the eleven chat writes now reach the ledger,
+  the trust evaluation and the family activity feed on the paths that go through
+  `executeTool`.
+
+  **The chat toolbox does not change, and that is the load-bearing property.**
+  `assistant-engine.ts` excludes a registry tool when `getTool(flatName)`
+  resolves, and `mergeToolSets` dedupes on the WIRE name — where the registry's
+  is `notes_create`, a different string from `add_note` that it could never see
+  as the same tool. So the ALIAS is the entire mechanism. Drop one and the model
+  is offered both spellings of one capability: the flat name through
+  `wrapToolsWithTrust`, the underscored one skipping the wrapper and gated
+  inside `executeTool`, with only the second writing a ledger row. Two doors,
+  two gates, one ledger. `tests/assistant-toolbox-invariance.test.ts` reproduces
+  the engine's own merge and fails on exactly that, and I checked it fires.
+
+  **Risk is `medium` on purpose.** `ai-gate.ts` reads
+  `registryTool ? effectiveRisk(settings, tool) : 'medium'`, so these three
+  names were taking the hard-coded fallback. Declaring `low` — which every other
+  `tasks.*` tool declares — would have quietly LOOSENED the chat gate for
+  children and teens the day this merged.
+
+  **The RSVP lookup was wrong and is now right.** It ordered
+  `starts_at` DESCENDING with `limit 1`, so "RSVP yes to swim" on a weekly
+  lesson answered for the LAST occurrence of the term, months out, while this
+  week's stayed blank — and said *"RSVP'd Going to Swim lesson"*, which reads
+  exactly like success. There was no lower bound either, so with no future match
+  it answered for an event that had already happened. It now takes the NEXT
+  occurrence, refuses a name matching two genuinely different events, and treats
+  several occurrences of one weekly lesson as unambiguous. This mattered more
+  than it looks: the approval payload stores the TITLE, and `approval_requests`
+  live 48 hours, so the lookup re-runs against a calendar that has moved — a new
+  matching event added in that window would otherwise win.
+
+  `member_id` comes from `scope.memberId` and nowhere else, which is a security
+  property rather than hygiene: `0047`'s policy is
+  `FOR ALL … USING (is_family_member(family_id))` with no member predicate, so
+  the database will let any member write any other member's row. The app is the
+  only thing between a teen and a reply recorded in a parent's name — which is
+  what happened once already, when this code used `members[0]` as if it were a
+  lookup.
+
+  Two invariants the database does not keep are now kept by `createGoal`:
+  `progress` has no CHECK despite its `-- 0..100` comment, and `is_complete` is
+  not derived — both rules lived only in `goals-module.tsx`, and three readers
+  filter on `is_complete`.
+
+  Also deleted: the `add_note`/`add_goal` branches in `lib/ai/actions.ts`. They
+  were reachable only while `getTool` returned null for those names, so they
+  became unreachable the moment the tools registered — and dead code that still
+  looks like the live path is how the next reader learns the wrong thing about
+  where notes are written.
+
+  Still open in §30: the eight remaining chat writes shadow registry tools that
+  DO exist, and the delegation that would close them is the one rejected above —
+  do not key it on `tool.idempotencyFrom`.
+
+
 - **The registry path was looser than the hand-written one it replaces.** Two
   data-integrity bugs found while designing §30's delegation, both live, both in
   code the delegation would have leaned on.

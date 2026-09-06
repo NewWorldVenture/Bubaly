@@ -105,21 +105,18 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     expect(approvalIdFromToolResult(res)).toBeNull();
   });
 
-  it('a gated tool the approval cannot replay says so in the approval line', async () => {
-    // add_note has no registry tool, so approving it would fail at replay. The
-    // family is told that up front rather than after a parent says yes.
+  it('no gated tool carries the cannot-replay caveat any more', async () => {
+    // add_note used to say "a parent will need to add it by hand", because
+    // approving it would have failed at replay — nothing outside
+    // lib/assistant/tools.ts wrote `notes`. `notes.create` resolves that alias
+    // now, so the approval executes and the caveat would be a lie.
     evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-9' });
-    const { wrapped } = wrapOne('add_note', 'child');
-    const res = (await wrapped.execute({ body: 'Remember the bins' })) as { ok: boolean; summary: string };
-    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
-    expect(res.summary).toMatch(/add it by hand/i);
-  });
-
-  it('a gated tool the approval CAN replay carries no such caveat', async () => {
-    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-2' });
-    const { wrapped } = wrapOne('add_chore', 'child');
-    const res = (await wrapped.execute({ title: 'Mow lawn' })) as { summary: string };
-    expect(res.summary).not.toMatch(/by hand/i);
+    for (const name of ['add_note', 'add_goal', 'rsvp_to_event', 'add_chore']) {
+      const { wrapped } = wrapOne(name, 'child');
+      const res = (await wrapped.execute({ body: 'x', title: 'x', event_title: 'x', status: 'accepted' })) as { ok: boolean; summary: string };
+      expect(res, name).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
+      expect(res.summary, `${name} still warns about a replay that now works`).not.toMatch(/by hand/i);
+    }
   });
 
   it('ALLOW: the underlying write executes with the original args', async () => {

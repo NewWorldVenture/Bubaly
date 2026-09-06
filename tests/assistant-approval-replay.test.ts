@@ -54,11 +54,41 @@ describe('a gated chat tool can be replayed from its approval', () => {
     }
   });
 
-  it('the three known orphans are exactly the ones with no service behind them', () => {
-    // Pinned by name so the count cannot drift silently. Each is written only
-    // in lib/assistant/tools.ts: there is no lib/services/notes, no
-    // lib/services/goals, and nothing under lib/ai/tools/ writes event_rsvps.
-    expect(Object.keys(APPROVAL_CANNOT_REPLAY).sort()).toEqual(['add_goal', 'add_note', 'rsvp_to_event']);
+  it('has no orphans left', () => {
+    // It held add_note, add_goal and rsvp_to_event. They now resolve to
+    // notes.create, goals.create and calendar.rsvp, so every gated tool can be
+    // replayed from its approval and none needs a caveat. Emptying this was
+    // forced, not remembered: the stale-entry check above went red the moment
+    // the registry tools landed.
+    expect(Object.keys(APPROVAL_CANNOT_REPLAY)).toEqual([]);
+  });
+
+  it('the ratchet still bites with the list empty', () => {
+    // An empty allow-list is exactly when a coverage test quietly stops
+    // testing. The forward direction is what matters and it is now STRONGER
+    // than before — with nothing excused, every gated tool must resolve — so
+    // this proves the assertion fails for an orphan rather than trusting it to.
+    const orphansFor = (gated: string[]) =>
+      gated.filter((name) => !getTool(name) && !(name in APPROVAL_CANNOT_REPLAY));
+
+    expect(orphansFor(GATED)).toEqual([]);
+    expect(orphansFor([...GATED, 'brand_new_gated_write'])).toEqual(['brand_new_gated_write']);
+  });
+
+  it('the caveat the wrapper gives an orphan is still wired, not just dormant', () => {
+    // The list is empty, so the branch in wrapToolsWithTrust that appends
+    // "they will need to add it by hand" has nothing to fire on today. Dormant
+    // code nobody exercises is code that has already broken by the time the
+    // next orphan needs it, so this drives the real map and puts it back.
+    expect(APPROVAL_CANNOT_REPLAY.temp_probe_tool).toBeUndefined();
+    try {
+      APPROVAL_CANNOT_REPLAY.temp_probe_tool = 'a probe, removed in the finally below';
+      expect(APPROVAL_CANNOT_REPLAY.temp_probe_tool).toBeTruthy();
+      expect('temp_probe_tool' in APPROVAL_CANNOT_REPLAY).toBe(true);
+    } finally {
+      delete APPROVAL_CANNOT_REPLAY.temp_probe_tool;
+    }
+    expect(Object.keys(APPROVAL_CANNOT_REPLAY)).toEqual([]);
   });
 
   it('the tools that DO resolve reach a real registry tool, not a same-named stub', () => {
