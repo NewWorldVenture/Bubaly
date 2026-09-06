@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
+import { isSensitiveCategory } from '@/lib/documents/sensitivity';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -123,6 +124,26 @@ export function FilesHubModule({ view }: { view: FileView }) {
     e.preventDefault();
     if (!file) return toastError('Choose a file to upload');
     if (!title.trim()) return toastError('Add a name for this file');
+
+    // REFUSE, DO NOT DOWNGRADE, AND DO IT BEFORE THE BYTES MOVE.
+    //
+    // This used to compute `is_secure: view === 'vault' && manager`, so a
+    // non-manager on the Vault tab got their file uploaded and filed as Shared
+    // — visible to the whole family — under a success toast. Someone putting a
+    // passport somewhere private and being silently given the opposite is
+    // worse than being told no, and the bytes were already in the bucket by
+    // the time the classification was decided.
+    //
+    // The same for a sensitive category: 0266's policy would reject the insert
+    // and the orphan cleanup would run, but a person deserves the reason, not
+    // a database error.
+    if (!manager && view === 'vault') {
+      return toastError('Only a parent or another adult can add a file to the Secure Vault. Ask one of them, or upload it to Shared Files instead.');
+    }
+    if (!manager && isSensitiveCategory(category)) {
+      return toastError(`Only a parent or another adult can file a ${category.trim().toLowerCase()} document. Ask one of them to add it.`);
+    }
+
     setSaving(true);
     const sb = createClient();
     const folder = category.trim() || meta.folder;
@@ -131,9 +152,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
     const { error: err } = await sb.from('documents').insert({
       family_id: familyId, title: title.trim(), category: category.trim() || null,
       storage_path: path, mime_type: file.type || null, size_bytes: file.size,
-      // Uploading into the Vault is a manager's act; for anyone else the file
-      // lands in Shared Files rather than being refused by the policy.
-      is_secure: view === 'vault' && manager, created_by: userId,
+      // The requested destination, honoured as asked. A non-manager never
+      // reaches here with `view === 'vault'`.
+      is_secure: view === 'vault', created_by: userId,
     });
     setSaving(false);
     if (err) { await removeFamilyDocument(sb, path); return toastError(describeDbError(err)); }

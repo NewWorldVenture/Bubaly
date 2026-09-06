@@ -8,7 +8,7 @@
 // thing holding the two together.
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { SENSITIVE_CATEGORIES } from '@/lib/services/documents';
+import { SENSITIVE_CATEGORIES, isSensitiveCategory } from '@/lib/documents/sensitivity';
 
 const MIGRATION = readFileSync('supabase/migrations/0266_document_vault_boundary.sql', 'utf8');
 
@@ -66,5 +66,53 @@ describe('the bytes are covered too, not just the row', () => {
     // required a matching row would reject every upload.
     expect(MIGRATION).toContain('and not exists (');
     expect(MIGRATION).not.toContain('and exists (\n      select 1 from public.documents d\n      where d.storage_path');
+  });
+});
+
+
+describe('the Files hub refuses rather than downgrades', () => {
+  const raw = readFileSync('components/modules/files-hub-module.tsx', 'utf8');
+  // Comments here describe the shape being replaced, so assert against code.
+  const hub = raw.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+
+  it('does not silently file a Vault upload as Shared', () => {
+    // This computed `is_secure: view === 'vault' && manager`, so a non-manager
+    // on the Vault tab got their file uploaded and filed as Shared — visible
+    // to the whole family — under a success toast. Someone putting a passport
+    // somewhere private and being handed the opposite is worse than being
+    // told no.
+    expect(hub).not.toMatch(/is_secure:\s*view === 'vault' && manager/);
+    expect(hub).toContain("is_secure: view === 'vault', created_by: userId,");
+  });
+
+  it('refuses before the bytes move, not after the policy rejects them', () => {
+    // The old shape decided the classification AFTER `uploadFamilyDocument`
+    // had already put the file in the bucket.
+    const upload = hub.slice(hub.indexOf('async function upload('));
+    const body = upload.slice(0, upload.indexOf('\n  }'));
+    const refusal = body.indexOf("Only a parent or another adult can add a file to the Secure Vault");
+    const putBytes = body.indexOf('uploadFamilyDocument(');
+    expect(refusal).toBeGreaterThan(-1);
+    expect(putBytes).toBeGreaterThan(-1);
+    expect(refusal).toBeLessThan(putBytes);
+  });
+
+  it('also refuses a sensitive category, with the reason rather than a database error', () => {
+    // 0266's policy would reject the insert anyway; a person deserves to know
+    // why, and not to have the file uploaded first.
+    const upload = hub.slice(hub.indexOf('async function upload('));
+    const body = upload.slice(0, upload.indexOf('\n  }'));
+    expect(body).toContain('isSensitiveCategory(category)');
+    expect(body.indexOf('isSensitiveCategory(category)')).toBeLessThan(body.indexOf('uploadFamilyDocument('));
+  });
+
+  it('shares one definition of sensitive with the server, not a second list', () => {
+    expect(hub).toContain("from '@/lib/documents/sensitivity'");
+    // The categories the hub will refuse are the ones the policy refuses.
+    for (const category of ['medical', 'Passport ', 'BANK']) {
+      expect(isSensitiveCategory(category)).toBe(true);
+    }
+    expect(isSensitiveCategory('school')).toBe(false);
+    expect(isSensitiveCategory(null)).toBe(false);
   });
 });
