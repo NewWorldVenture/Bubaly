@@ -11,6 +11,14 @@ import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
+function normalizeBriefTimezone(candidate: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: candidate }).resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
@@ -40,7 +48,7 @@ export async function POST(req: NextRequest) {
     // brief covered the wrong day and `brief.asOfDate` (which IS family-local)
     // disagreed with the events listed beside it. The timezone was four lines
     // away the whole time.
-    const tz = ctx.active.family.timezone || 'America/New_York';
+    const tz = normalizeBriefTimezone(ctx.active.family.timezone || 'America/New_York');
     const today = dayKeyInTz(now, tz);
     const bounds = zonedDayBoundsMs(today, tz);
     const todayStart = new Date(bounds.start).toISOString();
@@ -282,18 +290,24 @@ ${UNTRUSTED_CONTENT_RULE}
 
     let briefing: Record<string, unknown> | null = null;
 
-    if (await isAIConfigured()) {
-      const provider = await resolveProvider();
-      const completion = await provider.complete({
-        system: systemPrompt,
-        // `context` is the family's own rows — event titles, reminder text,
-        // meal names, contractor notes — assembled into one blob. Same §44 rule
-        // as the context builder applies to the same strings.
-        messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${fenceUntrustedBlock('briefing_data', context, 24_000)}` }],
-        tools: [],
-        maxTokens: 2000,
-      });
-      briefing = parseBriefingResponse(completion.text);
+    try {
+      if (await isAIConfigured()) {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system: systemPrompt,
+          // `context` is the family's own rows — event titles, reminder text,
+          // meal names, contractor notes — assembled into one blob. Same §44 rule
+          // as the context builder applies to the same strings.
+          messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${fenceUntrustedBlock('briefing_data', context, 24_000)}` }],
+          tools: [],
+          maxTokens: 2000,
+        });
+        briefing = parseBriefingResponse(completion.text);
+      }
+    } catch {
+      // AI is optional enrichment; retain the fresh deterministic fallback.
+      // Provider errors may contain sensitive context, so do not log them here.
+      briefing = null;
     }
 
     // Deterministic concierge briefing — used when AI is off or returns junk.
@@ -406,15 +420,15 @@ function kidsNeedsFrom(
   dayKey: string,
   tz: string,
 ): { name: string; items: string[] }[] {
-  const byMember = new Map<string, string[]>();
+  const byMember = new Map<string, { name: string; items: string[] }>();
   for (const row of [...school, ...sports]) {
     if (!row.member_id) continue;
     if (dayKeyInTz(new Date(row.starts_at), tz) !== dayKey) continue;
     const name = members.get(row.member_id)?.display_name;
     if (!name) continue;
-    const items = byMember.get(name) ?? [];
-    if (items.length < 4) items.push(row.title);
-    byMember.set(name, items);
+    const needs: { name: string; items: string[] } = byMember.get(row.member_id) ?? { name, items: [] };
+    if (needs.items.length < 4) needs.items.push(row.title);
+    byMember.set(row.member_id, needs);
   }
-  return [...byMember.entries()].slice(0, 6).map(([name, items]) => ({ name, items }));
+  return [...byMember.values()].slice(0, 6);
 }
