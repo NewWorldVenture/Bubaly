@@ -4,6 +4,7 @@
 // and (when needed) opens an approval request. This is the single entry point
 // every AI agent / privileged action should call before executing.
 // ════════════════════════════════════════════════════════════════════════════
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { ledgerWriter } from '@/lib/trust/ledger';
@@ -38,6 +39,8 @@ export type EvaluateRequest = {
 export type EvaluateOutcome = {
   decision: Decision;
   approvalId?: string;
+  /** the approval row was already waiting; this call did not file a new one */
+  alreadyPending?: boolean;
 };
 
 /** Map a DB policy row → engine Policy. */
@@ -107,14 +110,74 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
  * over the engine's answer, and telling somebody "sent for approval" with
  * nothing in the inbox to approve is worse than not gating at all.
  */
+/**
+ * Stable JSON: object keys in a fixed order at every depth, so two payloads that
+ * differ only in key order hash the same. `JSON.stringify` preserves insertion
+ * order, and a resent tool call assembled by a different code path can easily
+ * produce the same object with the keys in a different sequence.
+ */
+function stable(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(',')}}`;
+}
+
+/**
+ * What makes two approval requests the same ACTION: the same thing, asked for by
+ * the same person, in the same family.
+ *
+ * The payload is included in full — a natural key (title, due date) cannot see
+ * the assignee, so "give Emma and Jack each a chore due Friday" would collapse
+ * two different chores into one. The decision reasoning, priority and title are
+ * NOT included: they are how the engine described the request, not what was
+ * asked, and letting them vary would let two identical asks through.
+ */
+export function approvalDedupeKey(familyId: string, req: EvaluateRequest): string {
+  return createHash('sha256').update(stable({
+    familyId,
+    domain: req.domain,
+    capability: req.capability,
+    actorKind: req.actor.kind === 'ai_agent' ? 'ai' : 'member',
+    // Who it is FOR, which for an agent is the asker rather than Bubaly.
+    asker: req.actor.kind === 'member' ? req.actor.id : (req.onBehalfOfMemberId ?? null),
+    agent: req.actor.kind === 'ai_agent' ? (req.agent ?? req.actor.id) : null,
+    payload: req.payload ?? {},
+  })).digest('hex');
+}
+
+export type OpenedApproval = {
+  id: string;
+  /**
+   * True when this returned a row that was ALREADY waiting. The caller must say
+   * so rather than narrating a fresh send: a resend that silently reports
+   * "sent for approval" is how one intent becomes two cards in a parent's inbox.
+   */
+  alreadyPending: boolean;
+};
+
 export async function openApprovalRequest(
   supabase: DB,
   familyId: string,
   req: EvaluateRequest,
   decision: Decision,
-): Promise<string | null> {
+): Promise<OpenedApproval | null> {
   const writer = await ledgerWriter(supabase);
-  const { data: appr } = await writer.from('approval_requests').insert({
+  const dedupeKey = approvalDedupeKey(familyId, req);
+
+  // A pending row for this exact ask already covers it. 0273's partial unique
+  // index makes this a fast lookup and, more importantly, makes the check
+  // correct under a race: two simultaneous resends both miss here, one insert
+  // wins, and the loser is caught below rather than filing a second card.
+  const existing = await writer.from('approval_requests')
+    .select('id').eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
+    .limit(1).maybeSingle();
+  if (existing.data?.id) return { id: existing.data.id, alreadyPending: true };
+
+  const { data: appr, error } = await writer.from('approval_requests').insert({
+    dedupe_key: dedupeKey,
     family_id: familyId,
     domain: req.domain,
     capability: req.capability,
@@ -137,7 +200,20 @@ export async function openApprovalRequest(
     status: 'pending',
     priority: req.context?.amountCents && req.context.amountCents > 20000 ? 'high' : 'normal',
   }).select('id').single();
-  return appr?.id ?? null;
+
+  if (appr?.id) return { id: appr.id, alreadyPending: false };
+
+  // 23505: the index caught a concurrent resend between our lookup and this
+  // insert. The row that won is the answer — returning null here would tell the
+  // family "could not send for approval" about a card sitting in their inbox.
+  if (error?.code === '23505') {
+    const raced = await writer.from('approval_requests')
+      .select('id').eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
+      .limit(1).maybeSingle();
+    if (raced.data?.id) return { id: raced.data.id, alreadyPending: true };
+  }
+  if (error) console.error('[trust] approval request insert failed', error);
+  return null;
 }
 
 export async function evaluateTrust(supabase: DB, familyId: string, req: EvaluateRequest): Promise<EvaluateOutcome> {
@@ -153,8 +229,11 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
   });
 
   let approvalId: string | undefined;
+  let alreadyPending = false;
   if (decision.effect === 'require_approval' && (req.openApproval ?? true)) {
-    approvalId = (await openApprovalRequest(supabase, familyId, req, decision)) ?? undefined;
+    const opened = await openApprovalRequest(supabase, familyId, req, decision);
+    approvalId = opened?.id;
+    alreadyPending = opened?.alreadyPending ?? false;
   }
 
   // Explainable audit trail — always recorded.
@@ -172,7 +251,7 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
     context: { basis: decision.basis, amountCents: req.context?.amountCents ?? null },
   });
 
-  return { decision, approvalId };
+  return { decision, approvalId, alreadyPending };
 }
 
 /** Resolve the trust role for a member row. */

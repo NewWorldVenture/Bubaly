@@ -12,6 +12,7 @@ import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { fetchExternal } from '@/lib/server/external-fetch';
+import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 
 type DB = SupabaseClient<Database>;
 
@@ -180,9 +181,24 @@ export async function dispatchPendingPushes(
     return ids;
   }
 
+  // "How Bubaly may reach a child directly" (0257's `child_channels`) was stored
+  // and consulted by nothing, so a family that switched push off still had its
+  // children's phones buzz. Resolved once for the whole batch rather than per
+  // notification: a whole-family notice fans out to every active member, so
+  // without this a child is reached by the fan-out even when the family said no.
+  const candidates = new Set<string>();
+  for (const n of rows) {
+    if (n.user_id) candidates.add(n.user_id);
+    else for (const id of await membersOf(n.family_id)) candidates.add(id);
+  }
+  const pushBlocked = await childrenBlockedOn(supabase, 'push', [...candidates]);
+
   const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
   for (const n of rows) {
-    const recipients = n.user_id ? [n.user_id] : await membersOf(n.family_id);
+    const addressed = n.user_id ? [n.user_id] : await membersOf(n.family_id);
+    const recipients = addressed.filter((id) => !pushBlocked.has(id));
+    // Still stamped below even when everyone was filtered out: the notification
+    // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
     const r = await sendPushToUsers(supabase, recipients, { title: n.title, body: n.body, url });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;

@@ -44,13 +44,36 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-4000-8000-0000000000f1';  -- placeholder, reset below
 reset role;
 
+-- A read probe over an EMPTY table returns 0 for the wrong reason. SEED_ALL
+-- leaves `wallet_transactions` with no rows for the anchor family, so for the
+-- highest-risk money table on the list this probe proved nothing at all — it
+-- reported isolation it had never tested. One fixture row, written as the owner,
+-- gives it something to fail on.
+insert into public.wallet_transactions (family_id, type, direction, amount_cents, description)
+select :'FA', 'adjustment'::wallet_txn_type, 'credit'::wallet_txn_direction, 4200, 'A-03 isolation fixture'
+where not exists (
+  select 1 from public.wallet_transactions
+  where family_id = :'FA' and description = 'A-03 isolation fixture');
+
 do $$
 declare
   tbls text[] := array['family_members','calendar_events','wallet_transactions','notes',
                        'documents','grocery_items','family_recipes','chore_assignments',
                        'family_photos','family_messages'];
-  t text; leaked int;
+  t text; leaked int; baseline int;
 begin
+  -- FIRST, as the owner: every table on the list must actually hold family-A
+  -- rows. Without this the loop below is satisfied by an empty table, and the
+  -- probe passes hardest exactly where the data is missing — a green light that
+  -- means "nothing to read", not "reading is blocked".
+  foreach t in array tbls loop
+    execute format('select count(*) from public.%I where family_id = %L', t, '00000000-0000-4000-8000-0000000000f1') into baseline;
+    if baseline = 0 then
+      raise exception 'A-03 FAIL: family A has no rows in %, so this probe cannot prove B is blocked from reading it', t;
+    end if;
+  end loop;
+
+  -- THEN, as user B: none of those rows may be visible.
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000b2', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
@@ -58,7 +81,7 @@ begin
     execute format('select count(*) from public.%I where family_id = %L', t, '00000000-0000-4000-8000-0000000000f1') into leaked;
     if leaked <> 0 then raise exception 'A-03 FAIL: user B read % rows from family A table %', leaked, t; end if;
   end loop;
-  raise notice 'A-03 OK: user B read 0 rows across % family-A tables', array_length(tbls,1);
+  raise notice 'A-03 OK: user B read 0 rows across % NON-EMPTY family-A tables', array_length(tbls,1);
   perform set_config('role','postgres', true);
 end $$;
 

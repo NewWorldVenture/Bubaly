@@ -4,15 +4,15 @@ DO $$
 BEGIN
   IF current_database() <> 'bubaly_finance_operation_ci' OR current_user <> 'postgres'
      OR current_setting('server_version_num')::integer / 10000 <> 17 THEN
-    RAISE EXCEPTION '0273 concurrency requires the dedicated synthetic PostgreSQL 17 database';
+    RAISE EXCEPTION '0274 concurrency requires the dedicated synthetic PostgreSQL 17 database';
   END IF;
 END $$;
 CREATE EXTENSION dblink;
 SET statement_timeout = '60s';
 SELECT public.dblink_connect('finance_a',
-  'host=/var/run/postgresql dbname=bubaly_finance_operation_ci user=postgres application_name=finance_0273_a');
+  'host=/var/run/postgresql dbname=bubaly_finance_operation_ci user=postgres application_name=finance_0274_a');
 SELECT public.dblink_connect('finance_b',
-  'host=/var/run/postgresql dbname=bubaly_finance_operation_ci user=postgres application_name=finance_0273_b');
+  'host=/var/run/postgresql dbname=bubaly_finance_operation_ci user=postgres application_name=finance_0274_b');
 SELECT public.dblink_exec('finance_a', 'SET statement_timeout = ''25s''');
 SELECT public.dblink_exec('finance_b', 'SET statement_timeout = ''25s''');
 SELECT public.dblink_exec('finance_a', 'SET ROLE service_role');
@@ -46,7 +46,7 @@ BEGIN
       WHERE cardinality(pg_blocking_pids(pid)) > 0;
     EXIT WHEN v_waiting = 2;
     IF clock_timestamp() > v_deadline THEN
-      RAISE EXCEPTION '0273 concurrency: both sessions did not reach the lock barrier';
+      RAISE EXCEPTION '0274 concurrency: both sessions did not reach the lock barrier';
     END IF;
     PERFORM pg_sleep(0.025);
   END LOOP;
@@ -59,7 +59,7 @@ DECLARE v_deadline timestamptz := clock_timestamp() + interval '25 seconds';
 BEGIN
   WHILE public.dblink_is_busy('finance_a') = 1 OR public.dblink_is_busy('finance_b') = 1 LOOP
     IF clock_timestamp() > v_deadline THEN
-      RAISE EXCEPTION '0273 concurrency: requests did not finish after lock release';
+      RAISE EXCEPTION '0274 concurrency: requests did not finish after lock release';
     END IF;
     PERFORM pg_sleep(0.025);
   END LOOP;

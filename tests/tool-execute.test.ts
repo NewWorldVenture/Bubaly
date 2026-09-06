@@ -63,13 +63,22 @@ function makeDb(respond: (call: Call) => Reply) {
 type LedgerRow = Record<string, unknown> & { id: string; state: string; attempt: number; idempotency_key: string; family_id: string };
 
 /** An in-memory `ai_tool_calls` with the real unique key, so conflicts behave like 0250. */
-function makeLedger(seed: LedgerRow[] = []) {
+function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string } = {}) {
   const rows: LedgerRow[] = [...seed];
   let counter = 0;
   const { db, calls } = makeDb((call) => {
     // Trust rows are filed through this client too (0252): answer like the
     // family fake did so the same ids and payloads can be asserted.
-    if (call.table === 'approval_requests') return { data: { id: 'appr-1' }, error: null };
+    if (call.table === 'approval_requests') {
+      // Since 0273 the filer LOOKS FIRST for a pending row with the same
+      // dedupe_key. Answering a select the same way as an insert made that
+      // lookup always hit, so no card was ever filed — model the real table
+      // instead: nothing pending unless a test says so.
+      if (call.kind === 'select') {
+        return { data: opts.pendingApproval ? { id: opts.pendingApproval } : null, error: null };
+      }
+      return { data: { id: 'appr-1' }, error: null };
+    }
     if (call.table !== 'ai_tool_calls') return { data: null, error: null };
     if (call.kind === 'insert') {
       const payload = call.payload as LedgerRow;
@@ -123,7 +132,9 @@ function makeFamilyDb(options: { policies?: PolicyRow[]; domain?: (call: Call) =
       case 'permission_grants': return { data: [], error: null };
       case 'trust_delegations': return { data: [], error: null };
       case 'emergency_sessions': return { data: [], error: null };
-      case 'approval_requests': return { data: { id: 'appr-1' }, error: null };
+      case 'approval_requests':
+        // See makeLedger: a pre-check select must not answer like an insert.
+        return call.kind === 'select' ? { data: null, error: null } : { data: { id: 'appr-1' }, error: null };
       case 'trust_audit_logs': return { data: null, error: null };
       case 'agent_activity': return { data: { id: 'activity-1' }, error: null };
       default: return options.domain?.(call) ?? { data: null, error: null };
@@ -346,6 +357,21 @@ describe('trust gate', () => {
     const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
 
     expect(outcome).toMatchObject({ status: 'ok' });
+  });
+
+  it('reuses the pending card on a resend instead of filing a second one', async () => {
+    // The other half of 0273. This filer opens a row when the RISK TIER
+    // tightened an `allow`, and left keyless it would keep filing duplicate
+    // cards on the registry path while the chat path was fixed. A parent who
+    // sees two identical cards approves both, and the resource is written twice.
+    const family = makeFamilyDb({ domain: calendarDomain });
+    const ledger = makeLedger([], { pendingApproval: 'appr-existing' });
+    ledgerHolder.client = ledger.db;
+
+    const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
+
+    expect(outcome).toMatchObject({ status: 'pending_approval', approvalId: 'appr-existing' });
+    expect(trustCalls(family).some((c) => c.table === 'approval_requests' && c.kind === 'insert')).toBe(false);
   });
 
   it('holds a high-risk tool for approval and stores the payload so it can execute later', async () => {
