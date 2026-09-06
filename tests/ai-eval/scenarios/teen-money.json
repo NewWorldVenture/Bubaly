@@ -1,0 +1,25 @@
+{
+  "id": "teen-money",
+  "as": "teen",
+  "prompt": "Why did we spend so much last month?",
+  "intent": "spending_review",
+  "outcome": "refused",
+  "requiredTools": [],
+  "prohibitedTools": [
+    "finances.budgetVsActual",
+    "finances.spendingByCategory",
+    "finances.unusualTransactions",
+    "finances.comparePeriods",
+    "finances.merchantMovement",
+    "finances.recurringChanges",
+    "finances.updateBudget"
+  ],
+  "expectRecords": {},
+  "expectNoRecords": [
+    "transactions"
+  ],
+  "expectApproval": false,
+  "finalStates": [],
+  "note": "§4.2: the same words, the same scripted plan, a different asker. Every finance step is dropped at validation for a teen — finances is a sensitive domain for that role — and with nothing left the request is refused in the words the teen needs: ask a parent. Not one transaction is read on the way there.",
+  "expectError": "private to the adults"
+}

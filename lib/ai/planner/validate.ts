@@ -61,7 +61,12 @@ export type PlanIssueCode =
   | 'invalid_condition' | 'unknown_dependency' | 'dependency_dropped' | 'invalid_verify' | 'invalid_notify'
   | 'invalid_followup' | 'past_followup' | 'denied' | 'recommend_only' | 'cycle' | 'empty';
 
-export type PlanIssue = { code: PlanIssueCode; step: string | null; message: string };
+/**
+ * `reason` is the refusal itself, kept apart from `message` (which wraps it in
+ * "\"<step>\" was left out: …"). When a refusal is the ONLY thing that
+ * happened, the person who asked should read the reason, not the bookkeeping.
+ */
+export type PlanIssue = { code: PlanIssueCode; step: string | null; message: string; reason?: string };
 
 /** A step the executor can run, with the tool resolved and the decision made. */
 export type ValidatedStep = {
@@ -423,9 +428,19 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
   appendFollowups(expanded, plan.followups.slice(0, MAX_FOLLOWUPS), inputs, issues);
 
   if (!expanded.length) {
+    // WHY the plan is empty is the answer, and all three reasons are already
+    // in hand. A household that set Bubaly to recommend hears that. Someone
+    // the household does not let read this area hears the refusal itself —
+    // "Finances details are private to the adults in this family" — rather
+    // than "The plan has no step Bubaly can run", which reads as a fault in
+    // Bubaly and tells a teen nothing about what to do instead. The generic
+    // line is kept for the case it was written for: a plan that fell apart.
+    const denials = [...new Set(issues.filter((i) => i.code === 'denied' && i.reason).map((i) => i.reason as string))];
     const error = recommendOnly.length
       ? 'Every action in this plan is one the household has asked Bubaly to recommend rather than perform.'
-      : 'The plan has no step Bubaly can run.';
+      : denials.length
+        ? denials.join(' ')
+        : 'The plan has no step Bubaly can run.';
     issues.push({ code: 'empty', step: null, message: error });
     return { ok: false, code: 'empty', error, issues };
   }
@@ -513,7 +528,7 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
       }
       const decision = dryRunGate(tool, checked.data, inputs, behavior);
       if (decision.effect === 'deny') {
-        issues.push({ code: 'denied', step: key, message: `"${description}" was left out: ${decision.reason}` });
+        issues.push({ code: 'denied', step: key, message: `"${description}" was left out: ${decision.reason}`, reason: decision.reason });
         return null;
       }
       // `prepare` holds every write for a person, regardless of what the risk

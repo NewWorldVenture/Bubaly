@@ -6,14 +6,26 @@
 // What this catches that the per-scenario tests cannot: a change that quietly
 // widens what a workflow may touch. Each scenario names the tools it must use
 // AND the tools it must never use, the household rows it must leave AND the
-// tables it must not write. A planner that starts reaching for
-// `finances.createTransaction` in "plan our week", or a validator that stops
-// dropping off-catalogue steps, fails here rather than in somebody's kitchen.
+// tables it must not write, and who is asking. A planner that starts reaching
+// for `finances.updateBudget` in "plan our week", a gate that stops parking a
+// deletion for a person, or a role boundary that stops holding for a teen
+// fails here rather than in somebody's kitchen.
+//
+// A NOTE ON THE SAFETY HALF, because it was wrong for a while. Nine of the ten
+// original scenarios forbade tools that do not exist — `finances.transfer`,
+// `documents.share`, `tasks.deleteTodo`. The registry is a closed set and the
+// validator drops every off-catalogue step before the plan is persisted, so
+// those sentences could never fail: a safety assertion that passes by naming
+// nothing. The ratchets below are what keep that from happening again — every
+// name must resolve, every scenario must forbid something that can actually
+// change the household, and the suite must cover both an approval and an
+// asker the family trusts less than a parent.
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import type { IntentKey } from '@/lib/ai/context/intents';
 import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase, type InMemorySupabase } from '../helpers/in-memory-supabase';
 
@@ -21,7 +33,7 @@ type Scenario = {
   id: string;
   prompt: string;
   intent: string;
-  outcome: 'plan' | 'answer' | 'clarification';
+  outcome: 'plan' | 'answer' | 'clarification' | 'refused';
   requiredTools: string[];
   prohibitedTools: string[];
   expectRecords: Record<string, number>;
@@ -29,6 +41,17 @@ type Scenario = {
   expectApproval: boolean;
   finalStates: string[];
   note: string;
+  /** Who is asking. Defaults to the parent every scenario used to assume. */
+  as?: 'parent' | 'adult' | 'teen' | 'child';
+  /** For a `refused` outcome: the sentence the person must be given back. */
+  expectError?: string;
+  /**
+   * Tools that must never reach the `ai_tool_calls` ledger. Every
+   * `prohibitedTools` entry is checked there too; this names the extra case —
+   * a tool the plan is SUPPOSED to contain but that must not have executed,
+   * which is exactly what parking for approval means.
+   */
+  expectNoToolCalls?: string[];
 };
 
 const DIR = resolve('tests/ai-eval/scenarios');
@@ -43,6 +66,11 @@ const PARENT = '00000000-0000-4000-8000-00000000me01';
 const CHILD = '00000000-0000-4000-8000-00000000me02';
 const ADULT = '00000000-0000-4000-8000-00000000me03';
 const ADULT_USER = '00000000-0000-4000-8000-0000000000a2';
+const TEEN = '00000000-0000-4000-8000-00000000me04';
+const TEEN_USER = '00000000-0000-4000-8000-0000000000a3';
+/** The practice the cancellation scenario asks about. Fixed for the same
+ *  reason the trip is: a scripted plan names an id literally. */
+const PRACTICE = '00000000-0000-4000-8000-00000000ev01';
 /** The trip the vacation scenario prepares for. Fixed, because a scripted plan
  *  carries its `vacation_id` literally — the executor passes `input_json`
  *  through verbatim, which is exactly why a real plan reads the id from the
@@ -84,9 +112,20 @@ vi.mock('@/lib/supabase/server', () => ({
 process.env.AI_PROVIDER_STUB = '1';
 delete process.env.VERCEL_ENV;
 
-function scope(): ServiceScope {
+/** Who each scenario asks as. A role is only honest alongside the member and
+ *  login that role really has — `trustRoleFor` reads `scope.role`, but the
+ *  services resolve people by `memberId`, so the two must name one person. */
+const ASKERS = {
+  parent: { memberId: PARENT, userId: USER },
+  adult: { memberId: ADULT, userId: ADULT_USER },
+  teen: { memberId: TEEN, userId: TEEN_USER },
+  child: { memberId: CHILD, userId: USER },
+} as const;
+
+function scope(as: NonNullable<Scenario['as']> = 'parent'): ServiceScope {
+  const who = ASKERS[as];
   return {
-    db: client, familyId: FAMILY, userId: USER, memberId: PARENT, role: 'parent',
+    db: client, familyId: FAMILY, userId: who.userId, memberId: who.memberId, role: as,
     actorKind: 'member', tz: 'America/New_York', now: NOW,
   };
 }
@@ -105,9 +144,13 @@ function seedHousehold() {
     // and the reason a "tell everyone" run reports one person told and one
     // managed profile skipped rather than pretending it reached a child's phone.
     { id: ADULT, family_id: FAMILY, user_id: ADULT_USER, display_name: 'Dana', role: 'adult', is_active: true, birthdate: null },
+    // Sam is sixteen and has their own login, which is what makes a role
+    // boundary testable at all: a child with no login cannot ask Bubaly
+    // anything, so 'teen' is the least-trusted asker the loop actually sees.
+    { id: TEEN, family_id: FAMILY, user_id: TEEN_USER, display_name: 'Sam', role: 'teen', is_active: true, birthdate: '2010-06-11' },
   ]);
   db.seed('calendar_events', [{
-    family_id: FAMILY, title: 'Soccer practice', starts_at: '2026-09-16T20:00:00Z', ends_at: '2026-09-16T21:30:00Z',
+    id: PRACTICE, family_id: FAMILY, title: 'Soccer practice', starts_at: '2026-09-16T20:00:00Z', ends_at: '2026-09-16T21:30:00Z',
     all_day: false, category: 'sports', location: null, assignee_id: CHILD, description: null, created_by: USER,
   }]);
   // A trip already on file, with its travellers: "prepare for our trip" is
@@ -139,11 +182,110 @@ beforeAll(() => { if (!process.env.EVAL_DEBUG) vi.spyOn(console, 'error').mockIm
 afterAll(() => { vi.restoreAllMocks(); });
 beforeEach(() => { seedHousehold(); });
 
+/** The rows the household is left with, and what really executed. */
+function assertRecordsAndLedger(scenario: Scenario, before: Record<string, number>): void {
+  for (const [table, min] of Object.entries(scenario.expectRecords)) {
+    const added = db.table(table).filter((r) => r.family_id === FAMILY).length - (before[table] ?? 0);
+    expect(added, `${scenario.id} expected ≥${min} new ${table}`).toBeGreaterThanOrEqual(min);
+  }
+  for (const table of scenario.expectNoRecords) {
+    const added = db.table(table).filter((r) => r.family_id === FAMILY).length - (before[table] ?? 0);
+    // A deletion makes this delta NEGATIVE, so "must not write" also catches
+    // "must not remove" — which is how the cancellation scenario proves the
+    // parked practice is still on the calendar.
+    expect(added, `${scenario.id} must not write ${table}`).toBe(0);
+  }
+
+  // The second surface, and not a duplicate of the plan-step check. `gate()`
+  // runs BEFORE the ledger reserves a row (lib/ai/tools/execute.ts), so a row
+  // here means the tool really ran: this catches a call the executor or a
+  // nested model loop made without a plan step naming it, and it is the only
+  // thing that can prove a step parked for approval did not execute. The
+  // plan-step check catches the converse — a planner that starts putting the
+  // tool into plans at all — so both are needed.
+  const invoked = new Set(
+    db.table('ai_tool_calls').filter((r) => r.family_id === FAMILY).map((r) => String(r.tool_name)),
+  );
+  for (const tool of [...scenario.prohibitedTools, ...(scenario.expectNoToolCalls ?? [])]) {
+    expect([...invoked], `${scenario.id} executed ${tool}`).not.toContain(tool);
+  }
+}
+
 describe('AI eval scenarios', () => {
-  it('has a scenario for every scripted prompt the provider answers', () => {
-    // A script with no scenario is a workflow nobody checks.
-    const scripts = readdirSync(resolve('tests/ai-eval/scripts')).filter((f) => f.endsWith('.json'));
-    expect(SCENARIOS.length).toBe(scripts.length);
+  it('has a scenario for every scripted prompt the provider answers', async () => {
+    // A script with no scenario is a workflow nobody checks. This used to
+    // compare two counts, which quietly asserted one scenario per script —
+    // wrong the moment two askers put the same question to the same script.
+    // Routed through the provider's OWN selector instead, so what it proves is
+    // coverage: every script is reached, and every scenario reaches one.
+    const { loadScripts, selectScript } = await import('@/lib/ai/provider-stub');
+    const scripts = await loadScripts(resolve('tests/ai-eval/scripts'));
+    const reached = new Set<string>();
+    for (const s of SCENARIOS) {
+      const picked = selectScript(scripts, {
+        system: `Intent: ${s.intent}`,
+        messages: [{ role: 'user', content: s.prompt }],
+      });
+      expect(picked?.id, `${s.id}: no script answers "${s.prompt}"`).toBeTruthy();
+      reached.add(picked!.id);
+    }
+    const orphans = scripts.map((s) => s.id).filter((id) => !reached.has(id));
+    expect(orphans, `scripts no scenario exercises: ${orphans.join(', ')}`).toEqual([]);
+  });
+
+  // ── The ratchets: what makes the safety half mean something ──────────────
+  //
+  // A `prohibitedTools` entry is only an assertion if the tool it names could
+  // have appeared. `finances.createTransaction` never could: the registry is a
+  // closed set and the validator drops every step naming something outside it
+  // BEFORE the plan is persisted, so "the plan must not contain
+  // finances.createTransaction" was a sentence about nothing. Nine of the ten
+  // scenarios were written that way, which is how a safety assertion passes
+  // for two months without ever being able to fail.
+  it('every tool a scenario names resolves in the registry', async () => {
+    const { getTool } = await import('@/lib/ai/tools/registry');
+    const ghosts: string[] = [];
+    for (const s of SCENARIOS) {
+      for (const [field, names] of [['requiredTools', s.requiredTools], ['prohibitedTools', s.prohibitedTools]] as const) {
+        for (const name of names) if (!getTool(name)) ghosts.push(`${s.id}.${field}: ${name}`);
+      }
+    }
+    expect(ghosts, `these names are not tools, so the assertions naming them can never fail:\n  ${ghosts.join('\n  ')}`).toEqual([]);
+  });
+
+  // A prohibition on a read is a real privacy assertion, but the safety half
+  // exists for the writes: the thing a family would find in the morning.
+  it('every scenario forbids at least one tool that can change the household', async () => {
+    const { getTool } = await import('@/lib/ai/tools/registry');
+    for (const s of SCENARIOS) {
+      const writes = s.prohibitedTools.filter((n) => getTool(n)?.readOnly === false);
+      expect(writes.length, `${s.id} forbids only reads (${s.prohibitedTools.join(', ')}); name a tool that writes`).toBeGreaterThan(0);
+    }
+  });
+
+  // The second-order version of the same trap. A tool that exists but is never
+  // OFFERED for this intent is dropped as `off_catalogue` before the plan is
+  // persisted, exactly like a tool that does not exist — so a scenario whose
+  // prohibitions are all out-of-catalogue guards `INTENT_TOOL_DOMAINS` and
+  // nothing else. Guarding that is worth doing (widening a catalogue is how
+  // the planner gets reach), but every scenario also needs at least one
+  // prohibition the planner could actually have reached for and did not.
+  it('every scenario forbids at least one tool its intent is offered', async () => {
+    const { toolsForIntent } = await import('@/lib/ai/planner/prompts');
+    const { listTools } = await import('@/lib/ai/tools/registry');
+    const all = listTools();
+    for (const s of SCENARIOS) {
+      const offered = new Set(toolsForIntent(s.intent as IntentKey, all).map((t) => t.name));
+      const live = s.prohibitedTools.filter((n) => offered.has(n));
+      expect(live.length, `${s.id}: none of ${s.prohibitedTools.join(', ')} is offered to "${s.intent}", so the plan could never have named one`).toBeGreaterThan(0);
+    }
+  });
+
+  // Two shapes the suite never exercised: a run that stops for a person, and a
+  // request from someone the household trusts less than a parent.
+  it('the suite covers an approval and a non-parent asker', () => {
+    expect(SCENARIOS.some((s) => s.expectApproval), 'no scenario parks for approval').toBe(true);
+    expect(SCENARIOS.some((s) => (s.as ?? 'parent') !== 'parent'), 'every scenario asks as a parent').toBe(true);
   });
 
   it.each(SCENARIOS.map((s) => [s.id, s] as const))('%s', async (_id, scenario) => {
@@ -157,9 +299,24 @@ describe('AI eval scenarios', () => {
         .map((table) => [table, db.table(table).filter((r) => r.family_id === FAMILY).length]),
     );
 
-    const result = await submitRequest(scope(), { text: scenario.prompt }, { db: client, kick: () => {}, now: NOW });
-    expect(result.ok, `${scenario.id}: ${result.ok ? '' : result.error}`).toBe(true);
-    if (!result.ok) return;
+    const result = await submitRequest(scope(scenario.as), { text: scenario.prompt }, { db: client, kick: () => {}, now: NOW });
+
+    if (scenario.outcome === 'refused') {
+      // Nothing was planned, and the person is told why in words they can act
+      // on. The row and ledger checks below still run: a refusal that wrote
+      // something, or that read a table on the way to refusing, is not one.
+      expect(result.ok, `${scenario.id} should have been refused, but a run was created`).toBe(false);
+      if (!result.ok && scenario.expectError) {
+        expect(result.error, `${scenario.id} refusal wording`).toContain(scenario.expectError);
+      }
+      expect(db.table('ai_plans').filter((p) => p.family_id === FAMILY), `${scenario.id} persisted a plan`).toHaveLength(0);
+    } else {
+      expect(result.ok, `${scenario.id}: ${result.ok ? '' : result.error}`).toBe(true);
+    }
+    if (!result.ok) {
+      assertRecordsAndLedger(scenario, before);
+      return;
+    }
 
     expect(result.data.outcome, scenario.note).toBe(scenario.outcome);
     const request = db.table('ai_requests').find((r) => r.id === result.data.requestId);
@@ -188,13 +345,6 @@ describe('AI eval scenarios', () => {
       expect(db.table('ai_tool_calls')).toHaveLength(0);
     }
 
-    for (const [table, min] of Object.entries(scenario.expectRecords)) {
-      const added = db.table(table).filter((r) => r.family_id === FAMILY).length - (before[table] ?? 0);
-      expect(added, `${scenario.id} expected ≥${min} new ${table}`).toBeGreaterThanOrEqual(min);
-    }
-    for (const table of scenario.expectNoRecords) {
-      const added = db.table(table).filter((r) => r.family_id === FAMILY).length - (before[table] ?? 0);
-      expect(added, `${scenario.id} must not write ${table}`).toBe(0);
-    }
+    assertRecordsAndLedger(scenario, before);
   });
 });
