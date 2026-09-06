@@ -100,11 +100,51 @@ export function summarizeToolResult(result: unknown): { ok: boolean; summary: st
   return { ok: true, summary: 'Done.' };
 }
 
-/** The assistant's final text, with a sensible fallback when the model only acted. */
-export function finalizeAssistantContent(text: string, actionCount: number): string {
+/** What one executed action actually did, for the fallback sentence below. */
+type ActionState = 'done' | 'pending' | 'failed';
+
+function actionState(result: unknown): ActionState {
+  const r = result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
+  if (r && (r.pending_approval === true || r.pendingApproval === true)) return 'pending';
+  return summarizeToolResult(result).ok ? 'done' : 'failed';
+}
+
+/**
+ * The assistant's final text, with a fallback when the model only acted.
+ *
+ * The fallback used to be chosen from the action COUNT alone, so a turn whose
+ * every action was refused by the household's own policy — the exact case the
+ * trust gate exists to produce — signed off with "Done — I’ve updated that
+ * for you." A refusal that reads as a success is worse than no gate at all: the
+ * family believes the thing happened, and finds out when it does not.
+ *
+ * A queued approval is not "done" either. Nothing has been written yet, and the
+ * card beneath the message is asking a parent to decide.
+ */
+export function finalizeAssistantContent(text: string, actions: readonly { result: unknown }[]): string {
   const trimmed = text.trim();
   if (trimmed) return trimmed;
-  return actionCount ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.';
+  if (!actions.length) return 'I’m not sure how to help with that yet.';
+
+  const states = actions.map((a) => actionState(a.result));
+  const count = (s: ActionState) => states.filter((x) => x === s).length;
+  const firstFailure = actions.find((a) => actionState(a.result) === 'failed');
+  const failureLine = firstFailure ? summarizeToolResult(firstFailure.result).summary : 'That didn’t work.';
+
+  if (!count('failed') && !count('pending')) return 'Done — I’ve updated that for you.';
+  if (!count('done') && !count('failed')) {
+    return count('pending') === 1
+      ? 'That needs a parent’s OK, so I’ve sent it for approval.'
+      : 'Those need a parent’s OK, so I’ve sent them for approval.';
+  }
+  if (!count('done') && !count('pending')) return failureLine;
+
+  // Mixed. Naming each part beats letting the happiest one speak for the turn.
+  return [
+    count('done') ? 'I’ve done part of that.' : null,
+    count('pending') ? `${count('pending')} of them ${count('pending') === 1 ? 'needs' : 'need'} a parent’s OK.` : null,
+    count('failed') ? failureLine : null,
+  ].filter(Boolean).join(' ');
 }
 
 export type FamilySnapshot = {
@@ -392,7 +432,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
   const { system, messages, tools, provider } = prepared;
   const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
   const actions: ExecutedAssistantAction[] = result.actions.map((a) => ({ name: a.name, args: a.args, result: a.result }));
-  const content = finalizeAssistantContent(result.text, actions.length);
+  const content = finalizeAssistantContent(result.text, actions);
   const { cards, runIds } = await collectOutcomes(input, prepared, actions);
   const persisted = await persistAssistantTurn(input.supabase, {
     familyId: input.familyId, conversationId: input.conversationId, message: input.message,
@@ -471,7 +511,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
         }
       }
 
-      const assistantContent = finalizeAssistantContent(content, actions.length);
+      const assistantContent = finalizeAssistantContent(content, actions);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
         assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
