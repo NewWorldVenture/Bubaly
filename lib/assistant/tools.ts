@@ -17,6 +17,20 @@ type DB = SupabaseClient<Database>;
 export type AssistantCtx = {
   familyId: string;
   userId: string;
+  /**
+   * The acting person's `family_members.id` — NOT their auth user id.
+   *
+   * The two are different keys and this file writes both. Most tables here
+   * reference `auth.users(id)` for `created_by`, so `userId` is right for them.
+   * `todo_lists` and `todo_items` are the exception: `0015_todos.sql` points
+   * their `created_by` at `public.family_members(id)`, so writing `userId`
+   * there is a foreign-key violation and every chat "add a to-do" failed.
+   *
+   * Null when the roster and the session disagree. The to-do writes then record
+   * no creator, which the column already allows (`on delete set null`) — an
+   * unattributed task is a far better outcome than a refusal.
+   */
+  memberId: string | null;
   members: { id: string; display_name: string }[];
   /** Family time zone (IANA), used to format times for availability answers. */
   tz?: string;
@@ -54,13 +68,13 @@ async function ensureGroceryList(supabase: DB, familyId: string, userId: string)
   return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('Grocery list was not created') };
 }
 
-/** Get-or-create the family's default to-do list. */
-async function ensureTodoList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
+/** Get-or-create the family's default to-do list. `memberId` is a family_members id (0015). */
+async function ensureTodoList(supabase: DB, familyId: string, memberId: string | null): Promise<ListResult> {
   const { data: existing, error: lookupError } = await supabase.from('todo_lists').select('id')
     .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
   if (lookupError) return { id: null, error: lookupError };
   if (existing?.id) return { id: existing.id };
-  const { data, error: createError } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: userId }).select('id').single();
+  const { data, error: createError } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: memberId }).select('id').single();
   return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('To-do list was not created') };
 }
 
@@ -169,12 +183,14 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const title = str(a.task);
         if (!title) return { ok: false, error: 'task is required' };
-        const list = await ensureTodoList(supabase, ctx.familyId, ctx.userId);
+        const list = await ensureTodoList(supabase, ctx.familyId, ctx.memberId);
         if (list.error) return toolFailure('open a to-do list', list.error);
         if (!list.id) return { ok: false, error: 'Could not open a to-do list' };
         const { error } = await supabase.from('todo_items').insert({
           family_id: ctx.familyId, list_id: list.id, title, notes: optStr(a.notes),
-          due_date: optStr(a.due_date), assigned_to_id: resolveMember(ctx, a.assignee), created_by: ctx.userId,
+          // family_members.id here, not the auth user id: 0015 points this FK at
+          // the roster, unlike every other created_by in this file.
+          due_date: optStr(a.due_date), assigned_to_id: resolveMember(ctx, a.assignee), created_by: ctx.memberId,
         });
         if (error) return toolFailure('add the task', error);
         return { ok: true, summary: `Added “${title}” to the to-do list.` };
@@ -516,10 +532,13 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .order('starts_at', { ascending: false }).limit(1);
         if (eventError) return toolFailure('find the event', eventError);
         if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
-        const selfMember = ctx.members.find((m) => true);
-        if (!selfMember) return { ok: false, error: 'Could not determine your member profile.' };
+        // Was `ctx.members.find((m) => true)` — members[0] written to look like a
+        // lookup, so a teen saying "I'm going" RSVP'd as whoever sorts first in
+        // the roster, usually a parent. An RSVP is a statement about a person;
+        // making it about the wrong one is worse than not making it.
+        if (!ctx.memberId) return { ok: false, error: 'Could not determine your member profile.' };
         const { error } = await supabase.from('event_rsvps').upsert(
-          { event_id: events[0].id, family_id: ctx.familyId, member_id: selfMember.id, status: status as 'accepted' | 'maybe' | 'declined' },
+          { event_id: events[0].id, family_id: ctx.familyId, member_id: ctx.memberId, status: status as 'accepted' | 'maybe' | 'declined' },
           { onConflict: 'event_id,member_id' },
         );
         if (error) return toolFailure('save the RSVP', error);
@@ -544,14 +563,15 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const title = str(a.title);
         if (!title) return { ok: false, error: 'title is required' };
-        const selfMember = ctx.members.find((m) => true);
-        if (!selfMember) return { ok: false, error: 'Could not determine your member profile.' };
+        // Same members[0] bug: every announcement was signed by the first person
+        // in the roster, whoever actually wrote it.
+        if (!ctx.memberId) return { ok: false, error: 'Could not determine your member profile.' };
         const { error } = await supabase.from('family_announcements').insert({
           family_id: ctx.familyId,
           title,
           body: optStr(a.body),
           is_pinned: Boolean(a.pinned),
-          author_member_id: selfMember.id,
+          author_member_id: ctx.memberId,
         });
         if (error) return toolFailure('post the announcement', error);
         return { ok: true, summary: `Posted announcement: "${title}".` };

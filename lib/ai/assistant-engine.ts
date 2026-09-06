@@ -249,7 +249,7 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   // `calendar_createEvent`) are different strings, so `mergeToolSets` could not
   // see them as one tool, and the model would be offered the same capability
   // twice under two names.
-  const assistantTools = buildAssistantTools(supabase, { familyId, userId, members: memberRows, tz: input.tz });
+  const assistantTools = buildAssistantTools(supabase, { familyId, userId, memberId: acting?.id ?? null, members: memberRows, tz: input.tz });
   const actionTools = buildActionTools({ supabase, familyId, userId });
   const covered = new Set(
     [...assistantTools, ...actionTools]
