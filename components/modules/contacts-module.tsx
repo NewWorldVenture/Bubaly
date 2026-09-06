@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Contact = Tables<'family_contacts'>;
 
@@ -60,6 +61,7 @@ function avatarColor(name: string) {
 }
 
 export function ContactsModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -117,7 +119,7 @@ export function ContactsModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Contacts"
+        title={t('contacts.familyContacts')}
         description="Your family's people — doctors, teachers, coaches, and everyone else who matters."
         action={
           <div className="flex items-center gap-2">
@@ -125,11 +127,11 @@ export function ContactsModule() {
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search contacts…"
+                placeholder={t('contacts.searchContacts')}
                 className="w-36 bg-transparent text-sm placeholder:text-muted outline-none sm:w-48" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Contact</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('contacts.addContact')}</Button>
           </div>
         }
       />
@@ -138,7 +140,7 @@ export function ContactsModule() {
       {emergencyContacts.length > 0 && (
         <div className="rounded-2xl border border-danger/30 bg-danger/5 p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold text-danger">
-            <AlertTriangle className="h-4 w-4" /> Emergency Contacts
+            <AlertTriangle className="h-4 w-4" /> {t('contacts.emergencyContacts')}
           </p>
           <div className="flex flex-wrap gap-3">
             {emergencyContacts.map((c) => (
@@ -165,7 +167,7 @@ export function ContactsModule() {
           <div className="tab-bar mb-4">
             <button onClick={() => setActiveCategory('all')}
               className={cn('tab-item', activeCategory === 'all' ? 'tab-item-active' : 'tab-item-inactive')}>
-              All ({contacts.length})
+              {t('contacts.all')}{contacts.length})
             </button>
             {CATEGORIES.filter((c) => contacts.some((contact) => contact.category === c.id)).map((cat) => (
               <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
@@ -176,9 +178,9 @@ export function ContactsModule() {
           </div>
 
           {filtered.length === 0 ? (
-            <EmptyState icon={Users} title="No contacts found"
+            <EmptyState icon={Users} title={t('contacts.noContactsFound')}
               description={search ? 'Try a different search term.' : 'Add your family\'s important contacts.'}
-              action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add First Contact</Button>} />
+              action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('contacts.addFirstContact')}</Button>} />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border">
               {filtered.map((contact, idx) => {
@@ -204,7 +206,7 @@ export function ContactsModule() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-semibold text-sm">{contact.name}</p>
-                        {contact.is_emergency && <Badge tone="danger" className="hidden sm:inline-flex">Emergency</Badge>}
+                        {contact.is_emergency && <Badge tone="danger" className="hidden sm:inline-flex">{t('contacts.emergency')}</Badge>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted">
                         {contact.relationship && <span>{contact.relationship}</span>}
@@ -276,11 +278,11 @@ export function ContactsModule() {
                 ); })()}
                 <Link href={`/dashboard/contacts/${selected.id}`}
                   className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
-                  🕰️ Relationship timeline
+                  {t('contacts.relationshipTimeline')}
                 </Link>
                 {selected.is_emergency && (
                   <span className="flex items-center gap-1 rounded-lg bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Emergency
+                    <AlertTriangle className="h-3.5 w-3.5" /> {t('contacts.emergency')}
                   </span>
                 )}
               </div>
@@ -341,7 +343,7 @@ export function ContactsModule() {
                 )}
                 {selected.notes && (
                   <div className="rounded-xl bg-elevated/50 px-3 py-2.5">
-                    <p className="mb-1 text-xs font-medium text-muted">Notes</p>
+                    <p className="mb-1 text-xs font-medium text-muted">{t('contacts.notes')}</p>
                     <p className="text-sm">{selected.notes}</p>
                   </div>
                 )}
@@ -351,17 +353,17 @@ export function ContactsModule() {
               <div className="mt-5 grid grid-cols-2 gap-2">
                 {selected.phone && (
                   <Button variant="outline" size="sm" onClick={() => callPhone(selected.phone!)}>
-                    <Phone className="h-4 w-4" /> Call
+                    <Phone className="h-4 w-4" /> {t('contacts.call')}
                   </Button>
                 )}
                 {selected.email && (
                   <a href={`mailto:${selected.email}`}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-                    <Mail className="h-4 w-4" /> Email
+                    <Mail className="h-4 w-4" /> {t('contacts.email')}
                   </a>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => setEditing(selected)}>
-                  <Edit2 className="h-4 w-4" /> Edit
+                  <Edit2 className="h-4 w-4" /> {t('contacts.edit')}
                 </Button>
                 <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm('Delete this contact?')) deleteContact(selected.id); }}>
                   <Trash2 className="h-4 w-4 text-danger" />
@@ -390,6 +392,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   contact: Contact | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -440,15 +443,15 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     <Modal open onClose={onClose} title={contact ? 'Edit Contact' : 'New Contact'}>
       <form onSubmit={onSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" required>
-            {(id) => <Input id={id} name="name" defaultValue={contact?.name ?? ''} placeholder="Jane Smith" autoFocus />}
+          <Field label={t('contacts.fullName')} required>
+            {(id) => <Input id={id} name="name" defaultValue={contact?.name ?? ''} placeholder={t('contacts.janeSmith')} autoFocus />}
           </Field>
-          <Field label="Relationship">
+          <Field label={t('contacts.relationship')}>
             {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder="Mom's doctor, Emma's teacher…" />}
           </Field>
         </div>
 
-        <Field label="Category">
+        <Field label={t('contacts.category')}>
           {() => (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {CATEGORIES.map((cat) => (
@@ -468,62 +471,62 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Phone">
+          <Field label={t('contacts.phone')}>
             {(id) => <Input id={id} name="phone" type="tel" defaultValue={contact?.phone ?? ''} placeholder="+1 (555) 000-0000" />}
           </Field>
-          <Field label="Alternate phone">
+          <Field label={t('contacts.alternatePhone')}>
             {(id) => <Input id={id} name="phone_alt" type="tel" defaultValue={contact?.phone_alt ?? ''} placeholder="+1 (555) 000-0001" />}
           </Field>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Email">
+          <Field label={t('contacts.email')}>
             {(id) => <Input id={id} name="email" type="email" defaultValue={contact?.email ?? ''} placeholder="jane@example.com" />}
           </Field>
-          <Field label="Organization">
-            {(id) => <Input id={id} name="organization" defaultValue={contact?.organization ?? ''} placeholder="Riverside Elementary, Kaiser…" />}
+          <Field label={t('contacts.organization')}>
+            {(id) => <Input id={id} name="organization" defaultValue={contact?.organization ?? ''} placeholder={t('contacts.riversideElementaryKaiser')} />}
           </Field>
         </div>
 
-        <Field label="Specialty / Role">
-          {(id) => <Input id={id} name="specialty" defaultValue={contact?.specialty ?? ''} placeholder="Pediatrician, Math teacher, Soccer coach…" />}
+        <Field label={t('contacts.specialtyRole')}>
+          {(id) => <Input id={id} name="specialty" defaultValue={contact?.specialty ?? ''} placeholder={t('contacts.pediatricianMathTeacherSoccerCoach')} />}
         </Field>
 
-        <Field label="Address">
-          {(id) => <Input id={id} name="address" defaultValue={contact?.address ?? ''} placeholder="123 Main St, Springfield, CA" />}
+        <Field label={t('contacts.address')}>
+          {(id) => <Input id={id} name="address" defaultValue={contact?.address ?? ''} placeholder={t('contacts.123MainStSpringfieldCa')} />}
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Birthday month">
+          <Field label={t('contacts.birthdayMonth')}>
             {(id) => (
               <select id={id} name="birthday_month" defaultValue={contact?.birthday_month ?? ''}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">— month —</option>
+                <option value="">{t('contacts.month')}</option>
                 {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
                   <option key={m} value={i + 1}>{m}</option>
                 ))}
               </select>
             )}
           </Field>
-          <Field label="Birthday day">
+          <Field label={t('contacts.birthdayDay')}>
             {(id) => <Input id={id} name="birthday_day" type="number" min={1} max={31} defaultValue={contact?.birthday_day ?? ''} placeholder="Day" />}
           </Field>
         </div>
 
-        <Field label="Notes">
-          {(id) => <Textarea id={id} name="notes" defaultValue={contact?.notes ?? ''} placeholder="Insurance info, pickup person, special instructions…" className="min-h-[80px]" />}
+        <Field label={t('contacts.notes')}>
+          {(id) => <Textarea id={id} name="notes" defaultValue={contact?.notes ?? ''} placeholder={t('contacts.insuranceInfoPickupPersonSpecialInstructions')} className="min-h-[80px]" />}
         </Field>
 
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3 hover:bg-elevated/30 transition">
           <input type="checkbox" name="is_emergency" defaultChecked={contact?.is_emergency ?? false} className="h-4 w-4 accent-danger" />
           <div>
-            <p className="text-sm font-medium">Emergency contact</p>
-            <p className="text-xs text-muted">Appears in the emergency contacts strip</p>
+            <p className="text-sm font-medium">{t('contacts.emergencyContact')}</p>
+            <p className="text-xs text-muted">{t('contacts.appearsInTheEmergencyContactsStrip')}</p>
           </div>
         </label>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('contacts.cancel')}</Button>
           <Button type="submit" loading={loading}>{contact ? 'Save Changes' : 'Add Contact'}</Button>
         </div>
       </form>

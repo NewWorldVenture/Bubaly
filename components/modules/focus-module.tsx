@@ -18,6 +18,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import {
   completeFocusTodo, createFocusTimer, focusTimerReducer, runFocusAction, submitFocusChore,
 } from '@/lib/focus/session';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type FocusItem = {
   id: string;
@@ -35,6 +36,7 @@ export function FocusModule() {
 }
 
 function FocusQueue() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [items, setItems] = useState<FocusItem[] | null>(null);
@@ -157,11 +159,11 @@ function FocusQueue() {
             <RotateCcw className="h-10 w-10 text-danger" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Couldn’t load your day</h1>
-            <p className="mt-1 text-sm text-muted">Something went wrong reaching your events and tasks. This isn’t an empty day — try again.</p>
+            <h1 className="text-2xl font-bold">{tr('focus.couldntLoadYourDay')}</h1>
+            <p className="mt-1 text-sm text-muted">{tr('focus.somethingWentWrongReachingYourEvents')}</p>
           </div>
           <button onClick={() => load()} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
-            <RotateCcw className="h-4 w-4" /> Try again
+            <RotateCcw className="h-4 w-4" /> {tr('focus.tryAgain')}
           </button>
         </div>
       ) : total === 0 || finished ? (
@@ -176,7 +178,7 @@ function FocusQueue() {
             </p>
           </div>
           <button onClick={() => load()} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
-            <RotateCcw className="h-4 w-4" /> Refresh
+            <RotateCcw className="h-4 w-4" /> {tr('focus.refresh')}
           </button>
         </div>
       ) : (
@@ -202,14 +204,14 @@ function FocusQueue() {
           </div>
 
           <FocusTimer key={current.id} />
-          {current.kind === 'chore' && <p className="text-sm text-muted">Submitting requests approval. It does not approve the chore or award rewards.</p>}
-          {current.kind === 'event' && <p className="text-sm text-muted">Next reviews this event only; it does not mark the event complete.</p>}
-          {saving && <p role="status" className="text-sm text-muted">Saving your update...</p>}
+          {current.kind === 'chore' && <p className="text-sm text-muted">{tr('focus.submittingRequestsApprovalItDoesNot')}</p>}
+          {current.kind === 'event' && <p className="text-sm text-muted">{tr('focus.nextReviewsThisEventOnlyIt')}</p>}
+          {saving && <p role="status" className="text-sm text-muted">{tr('focus.savingYourUpdate')}</p>}
 
           <div className="flex items-center gap-3">
             {current.complete ? (
               <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
-                <Check className="h-4 w-4" /> Mark done
+                <Check className="h-4 w-4" /> {tr('focus.markDone')}
               </button>
             ) : (
               <button onClick={onDone} disabled={saving} className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
@@ -217,11 +219,11 @@ function FocusQueue() {
               </button>
             )}
             <button onClick={onNext} disabled={saving} className="rounded-xl px-4 py-3 text-sm font-medium text-muted hover:text-fg transition disabled:opacity-50">
-              Skip
+              {tr('focus.skip')}
             </button>
           </div>
 
-          {doneCount > 0 && <p className="text-xs text-muted">{doneCount} completed this session 🎉</p>}
+          {doneCount > 0 && <p className="text-xs text-muted">{doneCount} {tr('focus.completedThisSession')}</p>}
         </div>
       )}
     </div>
@@ -229,6 +231,7 @@ function FocusQueue() {
 }
 
 function FocusTimer() {
+  const tr = useTranslations();
   const [timer, dispatch] = useReducer(focusTimerReducer, 25, createFocusTimer);
   const durationId = useId();
 
@@ -243,16 +246,16 @@ function FocusTimer() {
   const inSession = timer.status === 'running' || timer.status === 'paused';
 
   return (
-    <section aria-label="Focus timer" className="w-full rounded-2xl border border-border bg-surface/40 p-4">
+    <section aria-label={tr('focus.focusTimer')} className="w-full rounded-2xl border border-border bg-surface/40 p-4">
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <label htmlFor={durationId} className="text-sm font-semibold">Focus timer</label>
+        <label htmlFor={durationId} className="text-sm font-semibold">{tr('focus.focusTimer')}</label>
         <select id={durationId} value={timer.durationMs / 60_000} disabled={inSession}
           onChange={(event) => dispatch({ type: 'duration', minutes: Number(event.target.value) })}
           className="rounded-lg border border-border bg-surface px-2 py-1 text-sm disabled:opacity-50">
           {[5, 15, 25, 45].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
         </select>
       </div>
-      <p role="timer" aria-label="Time remaining" aria-live="off" className="my-3 text-4xl font-semibold tabular-nums">{clock}</p>
+      <p role="timer" aria-label={tr('focus.timeRemaining')} aria-live="off" className="my-3 text-4xl font-semibold tabular-nums">{clock}</p>
       <p role="status" className="text-sm text-muted">
         {timer.status === 'expired' ? 'Time is up. Your task is not marked complete.'
           : timer.status === 'paused' ? 'Paused. Resume when you are ready.'
@@ -262,11 +265,11 @@ function FocusTimer() {
         {!inSession && <button type="button" onClick={() => dispatch({ type: 'start', now: Date.now() })}
           className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white">{timer.status === 'expired' ? 'Start again' : 'Start timer'}</button>}
         {timer.status === 'running' && <button type="button" onClick={() => dispatch({ type: 'pause', now: Date.now() })}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-medium">Pause timer</button>}
+          className="rounded-xl border border-border px-4 py-2 text-sm font-medium">{tr('focus.pauseTimer')}</button>}
         {timer.status === 'paused' && <button type="button" onClick={() => dispatch({ type: 'resume', now: Date.now() })}
-          className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white">Resume timer</button>}
+          className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white">{tr('focus.resumeTimer')}</button>}
         {timer.status !== 'idle' && <button type="button" onClick={() => dispatch({ type: 'cancel' })}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-medium">Cancel timer</button>}
+          className="rounded-xl border border-border px-4 py-2 text-sm font-medium">{tr('focus.cancelTimer')}</button>}
       </div>
     </section>
   );

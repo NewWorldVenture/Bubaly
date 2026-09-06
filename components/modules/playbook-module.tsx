@@ -25,6 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import {
   refreshPlaybookAction, acceptSuggestionAction, dismissSuggestionAction,
 } from '@/app/(app)/dashboard/playbook/playbook-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'family_playbook_suggestions'>;
 
@@ -36,6 +37,7 @@ function confidenceMeta(n: number): { label: string; tint: string } {
 }
 
 export function PlaybookModule() {
+  const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function PlaybookModule() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        title="Family Playbook"
+        title={t('playbook.familyPlaybook')}
         description="Bubaly learns what matters to your family and suggests it here. Confirm the ones worth keeping — they save to your Knowledge Base."
         action={
           <Button onClick={onRefresh} disabled={refreshing} variant="secondary">
@@ -95,15 +97,15 @@ export function PlaybookModule() {
 
       {/* At-a-glance rail */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile icon={Wand2} label="To review" value={suggested.length} />
-        <StatTile icon={BookHeart} label="Saved to playbook" value={savedCount} />
+        <StatTile icon={Wand2} label={t('playbook.toReview')} value={suggested.length} />
+        <StatTile icon={BookHeart} label={t('playbook.savedToPlaybook')} value={savedCount} />
         <Link
           href="/dashboard/knowledge"
           className="group flex items-center justify-between rounded-2xl border border-border bg-card p-4 transition hover:border-brand/40"
         >
           <div>
-            <p className="text-xs text-muted">Knowledge Base</p>
-            <p className="mt-1 text-sm font-semibold">Open</p>
+            <p className="text-xs text-muted">{t('playbook.knowledgeBase')}</p>
+            <p className="mt-1 text-sm font-semibold">{t('playbook.open')}</p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
         </Link>
@@ -116,12 +118,12 @@ export function PlaybookModule() {
       ) : suggested.length === 0 ? (
         <EmptyState
           icon={Sparkles}
-          title="Nothing to review right now"
+          title={t('playbook.nothingToReviewRightNow')}
           description="As your family plans meals, shops, and celebrates, Bubaly spots the patterns worth remembering. Tap “Find new insights” to look now."
           action={
             <Button onClick={onRefresh} disabled={refreshing}>
               <Wand2 className="h-4 w-4" />
-              Find new insights
+              {t('playbook.findNewInsights')}
             </Button>
           }
         />
@@ -171,15 +173,15 @@ export function PlaybookModule() {
                     <button
                       onClick={() => onDismiss(s)}
                       disabled={busy}
-                      aria-label="Dismiss"
-                      title="Not useful"
+                      aria-label={t('playbook.dismiss')}
+                      title={t('playbook.notUseful')}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted transition hover:bg-elevated disabled:opacity-50"
                     >
                       <X className="h-4 w-4" />
                     </button>
                     <Button onClick={() => onAccept(s)} disabled={busy || expired || invalidExpiry} size="sm">
                       <Check className="h-4 w-4" />
-                      Save
+                      {t('playbook.save')}
                     </Button>
                   </div>
                 </div>

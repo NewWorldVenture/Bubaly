@@ -24,6 +24,7 @@ import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Album = Tables<'family_albums'>;
 type Photo = Tables<'family_photos'>;
@@ -40,6 +41,7 @@ const ALBUM_KINDS = [
 ] as const;
 
 export function PhotosModule() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -195,7 +197,7 @@ export function PhotosModule() {
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">
       {/* Header */}
       <PageHeader
-        title="Family Photos & Videos"
+        title={tr('photos.familyPhotosVideos')}
         description="Memories your family will treasure forever."
         action={
           <div className="flex items-center gap-2">
@@ -203,17 +205,17 @@ export function PhotosModule() {
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search photos…"
+                placeholder={tr('photos.searchPhotos')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
             <Button variant="outline" size="sm" onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
               {view === 'grid' ? <List className="h-4 w-4" /> : <Grid3X3 className="h-4 w-4" />}
             </Button>
             <Button onClick={() => setUploadOpen(true)}>
-              <Upload className="h-4 w-4" /> Upload
+              <Upload className="h-4 w-4" /> {tr('photos.upload')}
             </Button>
             <Button variant="outline" onClick={() => setNewAlbumOpen(true)}>
-              <Plus className="h-4 w-4" /> Album
+              <Plus className="h-4 w-4" /> {tr('photos.album')}
             </Button>
           </div>
         }
@@ -236,9 +238,9 @@ export function PhotosModule() {
       {tab === 'albums' && !activeAlbum && (
         <div>
           {albumStats.length === 0 ? (
-            <EmptyState icon={ImageIcon} title="No albums yet"
+            <EmptyState icon={ImageIcon} title={tr('photos.noAlbumsYet')}
               description="Create your first family album to organize your memories."
-              action={<Button onClick={() => setNewAlbumOpen(true)}><Plus className="h-4 w-4" /> Create Album</Button>} />
+              action={<Button onClick={() => setNewAlbumOpen(true)}><Plus className="h-4 w-4" /> {tr('photos.createAlbum')}</Button>} />
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {albumStats.map((album) => {
@@ -276,7 +278,7 @@ export function PhotosModule() {
                 className="group flex aspect-square items-center justify-center rounded-2xl border-2 border-dashed border-border hover:border-brand/50 hover:bg-brand/5 transition">
                 <div className="flex flex-col items-center gap-2 text-muted group-hover:text-brand-text transition">
                   <Plus className="h-8 w-8" />
-                  <span className="text-xs font-medium">New Album</span>
+                  <span className="text-xs font-medium">{tr('photos.newAlbum')}</span>
                 </div>
               </button>
             </div>
@@ -292,7 +294,7 @@ export function PhotosModule() {
             <div className="mb-3 flex items-center gap-2 text-sm">
               <button onClick={() => { setActiveAlbum(null); setTab('albums'); }}
                 className="flex items-center gap-1 text-muted hover:text-brand-text transition">
-                <ChevronLeft className="h-4 w-4" /> Albums
+                <ChevronLeft className="h-4 w-4" /> {tr('photos.albums')}
               </button>
               <span className="text-muted">/</span>
               <span className="font-semibold">{activeAlbum.name}</span>
@@ -301,9 +303,9 @@ export function PhotosModule() {
           )}
 
           {photos.length === 0 ? (
-            <EmptyState icon={Camera} title="No photos yet"
+            <EmptyState icon={Camera} title={tr('photos.noPhotosYet')}
               description={activeAlbum ? `This album is empty. Upload your first photo.` : `No photos to show.`}
-              action={<Button onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload Photos</Button>} />
+              action={<Button onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr('photos.uploadPhotos')}</Button>} />
           ) : view === 'grid' ? (
             /* Grid */
             <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5">
@@ -325,7 +327,7 @@ export function PhotosModule() {
                   {/* Video badge */}
                   {isVideo && (
                     <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      <Film className="h-3 w-3" /> Video
+                      <Film className="h-3 w-3" /> {tr('photos.video')}
                     </div>
                   )}
                   {/* Hover overlay */}
@@ -339,7 +341,7 @@ export function PhotosModule() {
                           {photo.is_favorite ? <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" /> : <Heart className="h-3.5 w-3.5" />}
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); setEditPhoto(photo); }}
-                          aria-label="Edit photo details"
+                          aria-label={tr('photos.editPhotoDetails')}
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -392,14 +394,14 @@ export function PhotosModule() {
           {/* Nav */}
           {lightboxIdx > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
-              aria-label="Previous photo"
+              aria-label={tr('photos.previousPhoto')}
               className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
           {lightboxIdx < photos.length - 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) + 1); }}
-              aria-label="Next photo"
+              aria-label={tr('photos.nextPhoto')}
               className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronRight className="h-6 w-6" />
             </button>
@@ -436,7 +438,7 @@ export function PhotosModule() {
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
                 <button onClick={() => { if (confirm('Delete this photo?')) deletePhoto(photos[lightboxIdx]); }}
-                  aria-label="Delete photo"
+                  aria-label={tr('photos.deletePhoto')}
                   className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -446,7 +448,7 @@ export function PhotosModule() {
 
           {/* Close */}
           <button onClick={() => setLightboxIdx(null)}
-            aria-label="Close"
+            aria-label={tr('photos.close')}
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
             <X className="h-5 w-5" />
           </button>
@@ -481,6 +483,7 @@ export function PhotosModule() {
 function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string; onClose: () => void; onCreated: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
@@ -501,12 +504,12 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="New Album">
+    <Modal open onClose={onClose} title={tr('photos.newAlbum')}>
       <form onSubmit={create} className="space-y-4">
-        <Field label="Album name" required>
+        <Field label={tr('photos.albumName')} required>
           {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthday…" autoFocus />}
         </Field>
-        <Field label="Category">
+        <Field label={tr('photos.category')}>
           {(id) => (
             <div className="grid grid-cols-4 gap-2">
               {ALBUM_KINDS.map((k) => (
@@ -520,12 +523,12 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
             </div>
           )}
         </Field>
-        <Field label="Description (optional)">
-          {(id) => <Textarea id={id} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this album about?" className="min-h-[80px]" />}
+        <Field label={tr('photos.descriptionOptional')}>
+          {(id) => <Textarea id={id} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr('photos.whatIsThisAlbumAbout')} className="min-h-[80px]" />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Create Album</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('photos.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('photos.createAlbum')}</Button>
         </div>
       </form>
     </Modal>
@@ -535,6 +538,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
 function UploadModal({ onClose, onUpload, progress }: {
   onClose: () => void; onUpload: (f: FileList) => void; progress?: { done: number; total: number } | null;
 }) {
+  const tr = useTranslations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<File[]>([]);
@@ -551,7 +555,7 @@ function UploadModal({ onClose, onUpload, progress }: {
   }
 
   return (
-    <Modal open onClose={() => { if (!busy) onClose(); }} title="Upload Photos & Videos">
+    <Modal open onClose={() => { if (!busy) onClose(); }} title={tr('photos.uploadPhotosVideos')}>
       <div className="space-y-4">
         <div onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -560,7 +564,7 @@ function UploadModal({ onClose, onUpload, progress }: {
           onKeyDown={(e) => { if (!busy && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
           role="button"
           tabIndex={busy ? -1 : 0}
-          aria-label="Upload photos or videos"
+          aria-label={tr('photos.uploadPhotosOrVideos')}
           aria-disabled={busy}
           className={cn(
             'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
@@ -570,8 +574,8 @@ function UploadModal({ onClose, onUpload, progress }: {
           )}>
           <Upload className="h-10 w-10 text-muted" />
           <div>
-            <p className="font-semibold">Drop photos or videos here or click to browse</p>
-            <p className="mt-1 text-sm text-muted">Supports JPEG, PNG, HEIC, WebP, MP4, MOV, WebM</p>
+            <p className="font-semibold">{tr('photos.dropPhotosOrVideosHereOr')}</p>
+            <p className="mt-1 text-sm text-muted">{tr('photos.supportsJpegPngHeicWebpMp4')}</p>
           </div>
           <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleChange} />
         </div>
@@ -604,15 +608,15 @@ function UploadModal({ onClose, onUpload, progress }: {
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>{tr('photos.cancel')}</Button>
           <Button disabled={!selected.length || busy} onClick={() => {
             const dt = new DataTransfer();
             selected.forEach((f) => dt.items.add(f));
             onUpload(dt.files);
           }}>
             {busy && progress
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
-              : <><Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('photos.uploading')} {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
+              : <><Upload className="h-4 w-4" /> {tr('photos.upload')} {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
           </Button>
         </div>
       </div>
@@ -621,18 +625,19 @@ function UploadModal({ onClose, onUpload, progress }: {
 }
 
 function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () => void; onSave: (caption: string) => void }) {
+  const tr = useTranslations();
   const [caption, setCaption] = useState(photo.caption ?? '');
   return (
-    <Modal open onClose={onClose} title="Edit Photo">
+    <Modal open onClose={onClose} title={tr('photos.editPhoto')}>
       <div className="space-y-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
-        <Field label="Caption">
-          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Add a caption…" autoFocus />}
+        <Field label={tr('photos.caption')}>
+          {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={tr('photos.addACaption')} autoFocus />}
         </Field>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(caption)}>Save</Button>
+          <Button variant="ghost" onClick={onClose}>{tr('photos.cancel')}</Button>
+          <Button onClick={() => onSave(caption)}>{tr('photos.save')}</Button>
         </div>
       </div>
     </Modal>

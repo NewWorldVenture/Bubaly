@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = ReturnType<typeof useApp>['members'][number];
 type Slot = { startISO: string; endISO: string };
@@ -35,6 +36,7 @@ const WINDOWS = [
 export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -118,16 +120,16 @@ export function FindTimeModal({
   };
 
   return (
-    <Modal open title="Find a time" onClose={onClose}>
+    <Modal open title={tr('findTimeModal.findATime')} onClose={onClose}>
       <div className="space-y-4">
         <p className="flex items-center gap-1.5 text-xs text-muted">
           <Sparkles className="h-3.5 w-3.5 text-brand-text" />
-          We&apos;ll scan everyone&apos;s calendars and surface slots where they&apos;re all free.
+          {tr('findTimeModal.weAposLlScanEveryoneApos')}
         </p>
 
         {/* Who */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">Who needs to be free</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</label>
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
             {members.map((m) => {
               const on = selectedMembers.includes(m.id);
@@ -142,13 +144,13 @@ export function FindTimeModal({
             })}
           </div>
           {selectedMembers.length === 0 && (
-            <p className="mt-1 text-[11px] text-muted">No one selected → searches the whole family&apos;s shared time.</p>
+            <p className="mt-1 text-[11px] text-muted">{tr('findTimeModal.noOneSelectedSearchesTheWhole')}</p>
           )}
         </div>
 
         {/* Duration */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">How long</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</label>
           <div className="flex flex-wrap gap-1.5">
             {DURATIONS.map((d) => (
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
@@ -162,7 +164,7 @@ export function FindTimeModal({
 
         {/* Window */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">Within</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</label>
           <div className="flex flex-wrap gap-1.5">
             {WINDOWS.map((w) => (
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
@@ -176,11 +178,11 @@ export function FindTimeModal({
 
         <label className="flex items-center gap-2 text-xs text-muted">
           <input type="checkbox" checked={workdayOnly} onChange={(e) => { setWorkdayOnly(e.target.checked); setSearched(false); }} className="accent-brand" />
-          Keep it to daytime hours (8am–8pm)
+          {tr('findTimeModal.keepItToDaytimeHours8am')}
         </label>
 
         <Button onClick={findTimes} loading={loading} className="w-full">
-          {loading ? 'Scanning calendars…' : <><Sparkles className="h-4 w-4" /> Find open times</>}
+          {loading ? 'Scanning calendars…' : <><Sparkles className="h-4 w-4" /> {tr('findTimeModal.findOpenTimes')}</>}
         </Button>
 
         {/* Results */}
@@ -188,13 +190,13 @@ export function FindTimeModal({
           <div className="border-t border-border pt-3">
             {slots.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted">
-                No shared openings in this window. Try a shorter duration or a wider range.
+                {tr('findTimeModal.noSharedOpeningsInThisWindow')}
               </p>
             ) : (
               <>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted">{slots.length} open slot{slots.length === 1 ? '' : 's'}</span>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title (optional)" className="h-7 max-w-[55%] text-xs" />
+                  <span className="text-xs font-semibold text-muted">{slots.length} {tr('findTimeModal.openSlot')}{slots.length === 1 ? '' : 's'}</span>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('findTimeModal.eventTitleOptional')} className="h-7 max-w-[55%] text-xs" />
                 </div>
                 <div className="max-h-60 space-y-1.5 overflow-y-auto">
                   {slots.map((s) => {
@@ -213,7 +215,7 @@ export function FindTimeModal({
                     );
                   })}
                 </div>
-                <p className="mt-2 text-[11px] text-muted">Tap a slot to book it instantly.</p>
+                <p className="mt-2 text-[11px] text-muted">{tr('findTimeModal.tapASlotToBookIt')}</p>
               </>
             )}
           </div>

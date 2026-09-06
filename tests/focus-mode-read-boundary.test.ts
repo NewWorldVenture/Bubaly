@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // A-05 (agent-05, PLA-0797): Focus Mode read events+chores+todos via Promise.all
@@ -7,7 +8,7 @@ import fs from 'node:fs';
 // load actually failed. It now flags a real error on the primary reads (events +
 // todos) and shows an honest, retryable "Couldn't load your day" state instead.
 
-const src = fs.readFileSync('components/modules/focus-module.tsx', 'utf8');
+const src = readUiSource('components/modules/focus-module.tsx');
 
 describe('focus mode surfaces a failed read (A-05)', () => {
   it('captures errors on the primary events + todos reads', () => {

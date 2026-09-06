@@ -113,14 +113,14 @@ export function LanguagePicker() {
                 >
                   {locale.region}
                 </span>
-                <span className={`flex-1 text-sm ${isActive ? 'font-semibold text-brand' : 'text-fg'}`}>
+                <span className={`flex-1 text-sm ${isActive ? 'font-semibold text-brand-text' : 'text-fg'}`}>
                   {locale.nativeLanguage}{' '}
-                  <span className={isActive ? 'text-brand' : 'text-muted'}>({locale.nativeRegion})</span>
+                  <span className={isActive ? 'text-brand-text' : 'text-muted'}>({locale.nativeRegion})</span>
                 </span>
                 {isPending ? (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" />
                 ) : isActive ? (
-                  <Check className="h-4 w-4 shrink-0 text-brand" />
+                  <Check className="h-4 w-4 shrink-0 text-brand-text" />
                 ) : null}
               </button>
             );

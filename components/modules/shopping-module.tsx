@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type GroceryList = Tables<'grocery_lists'>;
 type GroceryItem = Tables<'grocery_items'>;
@@ -39,6 +40,7 @@ const STORE_PRESETS = [
 const CATEGORIES = ['Produce', 'Dairy & Eggs', 'Meat & Seafood', 'Pantry', 'Beverages', 'Frozen', 'Household', 'Personal Care', 'Baby', 'Pet', 'Other'];
 
 export function ShoppingModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -164,7 +166,7 @@ export function ShoppingModule() {
       {/* ── List sidebar ─────────────────────────────────────── */}
       <div className="flex w-full flex-col lg:w-56 xl:w-64 flex-shrink-0">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold">My Lists</h2>
+          <h2 className="text-sm font-bold">{t('shopping.myLists')}</h2>
           <button onClick={() => setNewListOpen(true)}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand-text hover:bg-brand/25 transition">
             <Plus className="h-3.5 w-3.5" />
@@ -187,7 +189,7 @@ export function ShoppingModule() {
                 </div>
                 {isActive && (
                   <button onClick={(e) => { e.stopPropagation(); setEditingList(list); }}
-                    aria-label="Edit list"
+                    aria-label={t('shopping.editList')}
                     className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
@@ -197,7 +199,7 @@ export function ShoppingModule() {
           })}
           <button onClick={() => setNewListOpen(true)}
             className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2 text-sm text-muted hover:border-brand/40 hover:text-brand-text transition">
-            <Plus className="h-3.5 w-3.5" /> New list
+            <Plus className="h-3.5 w-3.5" /> {t('shopping.newList')}
           </button>
         </div>
       </div>
@@ -205,9 +207,9 @@ export function ShoppingModule() {
       {/* ── Main shopping list ───────────────────────────────── */}
       <div className="module-main">
         {!activeList ? (
-          <EmptyState icon={ShoppingBag} title="No lists yet"
+          <EmptyState icon={ShoppingBag} title={t('shopping.noListsYet')}
             description="Create a shopping list for any store."
-            action={<Button onClick={() => setNewListOpen(true)}><Plus className="h-4 w-4" /> Create List</Button>} />
+            action={<Button onClick={() => setNewListOpen(true)}><Plus className="h-4 w-4" /> {t('shopping.createList')}</Button>} />
         ) : (
           <>
             {/* List header */}
@@ -220,7 +222,7 @@ export function ShoppingModule() {
                 <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearChecked} disabled={isPending('clear-checked')}>
-                    <Check className="h-3.5 w-3.5 text-success" /> Clear {checkedCount} done
+                    <Check className="h-3.5 w-3.5 text-success" /> {t('shopping.clear')} {checkedCount} done
                   </Button>
                 )}
                 <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
@@ -245,7 +247,7 @@ export function ShoppingModule() {
 
             {/* Items by category */}
             {itemsLoading ? <SkeletonList /> : byCategory.length === 0 ? (
-              <EmptyState icon={ShoppingCart} title="List is empty"
+              <EmptyState icon={ShoppingCart} title={t('shopping.listIsEmpty')}
                 description="Add items below to get started." />
             ) : (
               <div className="space-y-3">
@@ -285,7 +287,7 @@ export function ShoppingModule() {
                               {(item as Record<string, unknown>).note ? (
                                 <span className="text-xs text-muted">{String((item as Record<string, unknown>).note)}</span>
                               ) : null}
-                              <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete item"
+                              <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
                                 className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
@@ -306,7 +308,7 @@ export function ShoppingModule() {
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
-                placeholder="+ Add item…"
+                placeholder={t('shopping.addItem')}
                 className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
               {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
@@ -336,6 +338,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string;
   onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
@@ -372,10 +375,10 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="New Shopping List">
+    <Modal open onClose={onClose} title={t('shopping.newShoppingList')}>
       <form onSubmit={create} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium">Quick start from store</label>
+          <label className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</label>
           <div className="grid grid-cols-4 gap-2">
             {STORE_PRESETS.map((p) => (
               <button key={p.name} type="button" onClick={() => selectPreset(p)}
@@ -387,10 +390,10 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
             ))}
           </div>
         </div>
-        <Field label="List name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Grocery List, Costco Run…" autoFocus />}
+        <Field label={t('shopping.listName')} required>
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('shopping.groceryListCostcoRun')} autoFocus />}
         </Field>
-        <Field label="Icon">
+        <Field label={t('shopping.icon')}>
           {() => (
             <div className="flex flex-wrap gap-2">
               {['🛒', '🏪', '🎯', '📦', '🌿', '🌺', '🏠', '🍕', '💊', '🐾'].map((e) => (
@@ -403,8 +406,8 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Create List</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('shopping.createList')}</Button>
         </div>
       </form>
     </Modal>
@@ -414,6 +417,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
 function EditListModal({ list, onClose, onSaved, onArchive }: {
   list: GroceryList; onClose: () => void; onSaved: () => void; onArchive: () => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(list.name);
@@ -439,12 +443,12 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Edit List">
+    <Modal open onClose={onClose} title={t('shopping.editList')}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="List name">
+        <Field label={t('shopping.listName')}>
           {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoFocus />}
         </Field>
-        <Field label="Icon">
+        <Field label={t('shopping.icon')}>
           {() => (
             <div className="flex flex-wrap gap-2">
               {['🛒', '🏪', '🎯', '📦', '🌿', '🌺', '🏠', '🍕', '💊', '🐾'].map((e) => (
@@ -458,11 +462,11 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
         </Field>
         <div className="flex items-center justify-between pt-2">
           <Button type="button" variant="ghost" onClick={onArchive}>
-            <Archive className="h-4 w-4" /> Archive
+            <Archive className="h-4 w-4" /> {t('shopping.archive')}
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={loading}>Save</Button>
+            <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+            <Button type="submit" loading={loading}>{t('shopping.save')}</Button>
           </div>
         </div>
       </form>

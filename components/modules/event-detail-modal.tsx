@@ -10,6 +10,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -34,6 +35,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [saving, setSaving] = useState(false);
@@ -105,11 +107,11 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
         </div>
         {event.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{event.description}</p>}
 
-        <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label="AI prep checklist" />
+        <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label={t('eventDetailModal.aiPrepChecklist')} />
 
         {selfMemberId && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Your RSVP</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('eventDetailModal.yourRsvp')}</p>
             <div className="grid grid-cols-3 gap-2">
               {OPTIONS.map((o) => (
                 <button
@@ -142,7 +144,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
               </div>
             );
           })}
-          {rsvps.length === 0 && <p className="text-sm text-muted">No RSVPs yet — be the first to respond.</p>}
+          {rsvps.length === 0 && <p className="text-sm text-muted">{t('eventDetailModal.noRsvpsYetBeTheFirst')}</p>}
         </div>
 
         {/* Edit / delete — any family member (family-scoped RLS governs). Delete
@@ -156,7 +158,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
                 </span>
                 <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated">
-                  Keep
+                  {t('eventDetailModal.keep')}
                 </button>
                 <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
                   className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60">
@@ -168,13 +170,13 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
                 {onDeleted && (
                   <button type="button" onClick={() => setConfirmDelete(true)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger">
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                    <Trash2 className="h-3.5 w-3.5" /> {t('eventDetailModal.delete')}
                   </button>
                 )}
                 {onEdit && (
                   <button type="button" onClick={() => onEdit(event)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
-                    <Pencil className="h-3.5 w-3.5" /> Edit
+                    <Pencil className="h-3.5 w-3.5" /> {t('eventDetailModal.edit')}
                   </button>
                 )}
               </>

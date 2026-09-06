@@ -24,6 +24,7 @@ import {
   lowStockItems, groupByLocation, pantrySummary, type PantryLocation,
 } from '@/lib/pantry/logic';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type PantryItem = Tables<'pantry_items'>;
 
@@ -34,6 +35,7 @@ const TONE_CLASS: Record<string, string> = {
 };
 
 export function PantryModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -95,9 +97,9 @@ export function PantryModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Pantry & Inventory"
+        title={t('pantry.pantryInventory')}
         description="Track what's in your pantry, fridge, and freezer — never buy doubles or let food expire."
-        action={<div className="flex items-center gap-2"><AiInsight kind="pantry" iconOnly /><Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add item</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="pantry" iconOnly /><Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('pantry.addItem')}</Button></div>}
       />
 
       {/* Stats */}
@@ -123,10 +125,10 @@ export function PantryModule() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-semibold">
-              <Clock className="h-4 w-4 text-warning" /> Use it soon
+              <Clock className="h-4 w-4 text-warning" /> {t('pantry.useItSoon')}
             </h2>
             <Button size="sm" variant="outline" onClick={() => addToGrocery(expiring)}>
-              <ShoppingCart className="h-4 w-4" /> Restock all
+              <ShoppingCart className="h-4 w-4" /> {t('pantry.restockAll')}
             </Button>
           </div>
           <ul className="space-y-2">
@@ -139,7 +141,7 @@ export function PantryModule() {
                     <p className="truncate text-sm font-medium">{item.name}</p>
                     <Badge tone={TONE_CLASS[st.tone] as 'warning'}>{st.label}</Badge>
                   </div>
-                  <button onClick={() => removeItem(item.id)} className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-elevated hover:text-success" title="Used it up">
+                  <button onClick={() => removeItem(item.id)} className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-elevated hover:text-success" title={t('pantry.usedItUp')}>
                     <PackageCheck className="h-4 w-4" />
                   </button>
                 </li>
@@ -154,10 +156,10 @@ export function PantryModule() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-semibold">
-              <AlertTriangle className="h-4 w-4 text-amber-400" /> Running low
+              <AlertTriangle className="h-4 w-4 text-amber-400" /> {t('pantry.runningLow')}
             </h2>
             <Button size="sm" variant="outline" onClick={() => addToGrocery(low)}>
-              <ShoppingCart className="h-4 w-4" /> Add all to grocery list
+              <ShoppingCart className="h-4 w-4" /> {t('pantry.addAllToGroceryList')}
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -172,9 +174,9 @@ export function PantryModule() {
 
       {/* Inventory by location */}
       {items.length === 0 ? (
-        <EmptyState icon={Boxes} title="Your pantry is empty"
+        <EmptyState icon={Boxes} title={t('pantry.yourPantryIsEmpty')}
           description="Add the food and household items you keep on hand to track quantities and expiration dates."
-          action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Add your first item</Button>} />
+          action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('pantry.addYourFirstItem')}</Button>} />
       ) : (
         groups.map(({ location, items: rows }) => (
           <Card key={location}>
@@ -203,12 +205,12 @@ export function PantryModule() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => adjustQty(item, -1)} className="rounded-md p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Decrease"><Minus className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => adjustQty(item, -1)} className="rounded-md p-1 text-muted hover:bg-elevated hover:text-fg" aria-label={t('pantry.decrease')}><Minus className="h-3.5 w-3.5" /></button>
                       <span className="w-10 text-center text-sm font-semibold tabular-nums">{Number(item.quantity)}{item.unit ? <span className="text-[10px] text-muted"> {item.unit}</span> : ''}</span>
-                      <button onClick={() => adjustQty(item, 1)} className="rounded-md p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Increase"><Plus className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => adjustQty(item, 1)} className="rounded-md p-1 text-muted hover:bg-elevated hover:text-fg" aria-label={t('pantry.increase')}><Plus className="h-3.5 w-3.5" /></button>
                     </div>
-                    <button onClick={() => { setEditing(item); setOpen(true); }} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => removeItem(item.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => { setEditing(item); setOpen(true); }} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label={t('pantry.edit')}><Edit2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => removeItem(item.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label={t('pantry.remove')}><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 );
               })}
@@ -231,6 +233,7 @@ export function PantryModule() {
 function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
   item: PantryItem | null; familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [isStaple, setIsStaple] = useState(item?.is_staple ?? false);
@@ -265,18 +268,18 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
   return (
     <Modal open onClose={onClose} title={item ? 'Edit item' : 'Add pantry item'}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Item name" required>
-          {(id) => <Input id={id} name="name" defaultValue={item?.name ?? ''} placeholder="Olive oil, Eggs, Paper towels…" autoFocus />}
+        <Field label={t('pantry.itemName')} required>
+          {(id) => <Input id={id} name="name" defaultValue={item?.name ?? ''} placeholder={t('pantry.oliveOilEggsPaperTowels')} autoFocus />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Location">
+          <Field label={t('pantry.location')}>
             {(id) => (
               <Select id={id} name="location" defaultValue={item?.location ?? 'pantry'}>
                 {PANTRY_LOCATIONS.map((l) => <option key={l.id} value={l.id}>{l.emoji} {l.label}</option>)}
               </Select>
             )}
           </Field>
-          <Field label="Category">
+          <Field label={t('pantry.category')}>
             {(id) => (
               <Select id={id} name="category" defaultValue={item?.category ?? 'Pantry'}>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -285,20 +288,20 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Quantity">{(id) => <Input id={id} name="quantity" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.quantity ?? 1} />}</Field>
-          <Field label="Unit">{(id) => <Input id={id} name="unit" defaultValue={item?.unit ?? ''} placeholder="cans, lbs" />}</Field>
-          <Field label="Low at" hint="Restock threshold">{(id) => <Input id={id} name="low_threshold" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
+          <Field label={t('pantry.quantity')}>{(id) => <Input id={id} name="quantity" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.quantity ?? 1} />}</Field>
+          <Field label={t('pantry.unit')}>{(id) => <Input id={id} name="unit" defaultValue={item?.unit ?? ''} placeholder={t('pantry.cansLbs')} />}</Field>
+          <Field label={t('pantry.lowAt')} hint="Restock threshold">{(id) => <Input id={id} name="low_threshold" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
         </div>
-        <Field label="Expiration date" hint="Leave blank for non-perishables">
+        <Field label={t('pantry.expirationDate')} hint="Leave blank for non-perishables">
           {(id) => <Input id={id} name="expires_at" type="date" defaultValue={item?.expires_at ?? ''} />}
         </Field>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isStaple} onChange={(e) => setIsStaple(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Staple — always keep this stocked
+          {t('pantry.stapleAlwaysKeepThisStocked')}
         </label>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder="Brand, where to buy…" className="min-h-[50px]" />}</Field>
+        <Field label={t('pantry.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={t('pantry.brandWhereToBuy')} className="min-h-[50px]" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('pantry.cancel')}</Button>
           <Button type="submit" loading={loading}>{item ? 'Save' : 'Add item'}</Button>
         </div>
       </form>

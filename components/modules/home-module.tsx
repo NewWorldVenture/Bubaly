@@ -20,6 +20,7 @@ import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type HomeAsset = Tables<'home_assets'>;
 type MaintenanceTask = Tables<'maintenance_tasks'>;
@@ -44,6 +45,7 @@ function expiryStatus(dateStr: string | null): { tone: 'danger' | 'warning' | 's
 }
 
 export function HomeModule() {
+  const tr = useTranslations();
   const { familyId, userId, role } = useApp();
   const manager = isManager(role);
   const { success, error: toastError } = useToast();
@@ -148,15 +150,15 @@ export function HomeModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Home & Maintenance"
+        title={tr('home.homeMaintenance')}
         description="Track appliances, assets, warranties, and maintenance tasks."
         action={
           <div className="flex gap-2">
             <AiInsight kind="home" />
             {manager && (
               <>
-                <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
-                <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> Add task</Button>
+                <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> {tr('home.addAsset')}</Button>
+                <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> {tr('home.addTask')}</Button>
               </>
             )}
           </div>
@@ -167,12 +169,12 @@ export function HomeModule() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Shield className="h-4 w-4 text-success" /> All warranties
+            <Shield className="h-4 w-4 text-success" /> {tr('home.allWarranties')}
           </h2>
           <Badge tone={warrantyRows.length > 0 ? 'success' : 'neutral'}>{warrantyRows.length}</Badge>
         </div>
         {warrantyRows.length === 0 ? (
-          <EmptyState icon={Shield} title="No warranties tracked yet"
+          <EmptyState icon={Shield} title={tr('home.noWarrantiesTrackedYet')}
             description="Open any asset below and click “Manage warranty” to log an expiration date or upload the warranty card or receipt." />
         ) : (
           <ul className="space-y-2">
@@ -195,14 +197,14 @@ export function HomeModule() {
                         className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated"
                         title={f.title}
                       >
-                        <FileText className="h-3.5 w-3.5" /> View{files.length > 1 ? '' : ' file'}
+                        <FileText className="h-3.5 w-3.5" /> {tr('home.view')}{files.length > 1 ? '' : ' file'}
                       </button>
                     ))}
                     <button
                       onClick={() => setWarrantyAsset(asset)}
                       className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated"
                     >
-                      <Shield className="h-3.5 w-3.5" /> Manage
+                      <Shield className="h-3.5 w-3.5" /> {tr('home.manage')}
                     </button>
                   </div>
                 </li>
@@ -216,12 +218,12 @@ export function HomeModule() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Wrench className="h-4 w-4 text-warning" /> Maintenance tasks
+            <Wrench className="h-4 w-4 text-warning" /> {tr('home.maintenanceTasks')}
           </h2>
           <Badge tone={tasks.length > 0 ? 'warning' : 'neutral'}>{tasks.length} open</Badge>
         </div>
         {tasks.length === 0 ? (
-          <EmptyState icon={Wrench} title="No pending tasks" description="Add maintenance tasks to stay on top of your home." />
+          <EmptyState icon={Wrench} title={tr('home.noPendingTasks')} description="Add maintenance tasks to stay on top of your home." />
         ) : (
           <ul className="space-y-2">
             {tasks.map((t) => (
@@ -234,7 +236,7 @@ export function HomeModule() {
                   </div>
                 </div>
                 <button onClick={() => completeTask(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated">
-                  <Check className="h-3.5 w-3.5" /> Done
+                  <Check className="h-3.5 w-3.5" /> {tr('home.done')}
                 </button>
               </li>
             ))}
@@ -246,12 +248,12 @@ export function HomeModule() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Package className="h-4 w-4 text-brand-text" /> Home assets
+            <Package className="h-4 w-4 text-brand-text" /> {tr('home.homeAssets')}
           </h2>
           <Badge tone="neutral">{assets.length}</Badge>
         </div>
         {assets.length === 0 ? (
-          <EmptyState icon={Package} title="No assets tracked" description="Add appliances and items to track warranties and maintenance." />
+          <EmptyState icon={Package} title={tr('home.noAssetsTracked')} description="Add appliances and items to track warranties and maintenance." />
         ) : (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {assets.map((a) => {
@@ -276,11 +278,11 @@ export function HomeModule() {
                       onClick={() => setWarrantyAsset(a)}
                       className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-elevated"
                     >
-                      <Shield className="h-3.5 w-3.5" /> Manage warranty
+                      <Shield className="h-3.5 w-3.5" /> {tr('home.manageWarranty')}
                     </button>
                   </div>
                   {manager && (
-                    <button onClick={() => removeAsset(a.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Remove">
+                    <button onClick={() => removeAsset(a.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label={tr('home.remove')}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
@@ -318,6 +320,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   asset: HomeAsset; files: WarrantyDoc[]; familyId: string; userId: string; manager: boolean;
   onClose: () => void; onChanged: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [warrantyUntil, setWarrantyUntil] = useState(asset.warranty_until ?? '');
   const [savingDate, setSavingDate] = useState(false);
@@ -385,19 +388,19 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   return (
     <Modal open onClose={onClose} title={`Warranty — ${asset.name}`} description="Keep the expiration date and the warranty card or receipt together, right on the asset.">
       <div className="space-y-5">
-        <Field label="Warranty expires">
+        <Field label={tr('home.warrantyExpires')}>
           {(id) => (
             <div className="flex gap-2">
               <Input id={id} type="date" value={warrantyUntil} onChange={(e) => setWarrantyUntil(e.target.value)} disabled={!manager} />
-              {manager && <Button variant="secondary" loading={savingDate} onClick={saveDate}>Save</Button>}
+              {manager && <Button variant="secondary" loading={savingDate} onClick={saveDate}>{tr('home.save')}</Button>}
             </div>
           )}
         </Field>
 
         <div>
-          <p className="mb-2 text-sm font-medium">Warranty documents</p>
+          <p className="mb-2 text-sm font-medium">{tr('home.warrantyDocuments')}</p>
           {files.length === 0 ? (
-            <p className="text-sm text-muted">No file uploaded yet.</p>
+            <p className="text-sm text-muted">{tr('home.noFileUploadedYet')}</p>
           ) : (
             <ul className="space-y-1.5">
               {files.map((f) => (
@@ -405,13 +408,13 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
                   <FileText className="h-4 w-4 shrink-0 text-brand-text" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{f.title}</p>
-                    <p className="text-xs text-muted">{fmtBytes(f.size_bytes)} · added {fmtDate(f.created_at, 'MMM d, yyyy')}</p>
+                    <p className="text-xs text-muted">{fmtBytes(f.size_bytes)} {tr('home.added')} {fmtDate(f.created_at, 'MMM d, yyyy')}</p>
                   </div>
-                  <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="View file">
+                  <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label={tr('home.viewFile')}>
                     <ExternalLink className="h-4 w-4" />
                   </button>
                   {manager && (
-                    <button onClick={() => removeFile(f)} disabled={removingId === f.id} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label="Remove file">
+                    <button onClick={() => removeFile(f)} disabled={removingId === f.id} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label={tr('home.removeFile')}>
                       <X className="h-4 w-4" />
                     </button>
                   )}
@@ -424,14 +427,14 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
             <>
               <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx" onChange={handleFile} />
               <Button type="button" variant="secondary" className="mt-3 w-full" loading={uploading} onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-4 w-4" /> Upload warranty card or receipt
+                <Upload className="h-4 w-4" /> {tr('home.uploadWarrantyCardOrReceipt')}
               </Button>
             </>
           )}
         </div>
 
         <div className="flex justify-end pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('home.close')}</Button>
         </div>
       </div>
     </Modal>
@@ -441,6 +444,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
 function NewAssetModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string; onClose: () => void; onCreated: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -466,25 +470,25 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Add home asset">
+    <Modal open onClose={onClose} title={tr('home.addHomeAsset')}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Item name" required>
-          {(id) => <Input id={id} name="name" placeholder="Dishwasher" autoFocus />}
+        <Field label={tr('home.itemName')} required>
+          {(id) => <Input id={id} name="name" placeholder={tr('home.dishwasher')} autoFocus />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Input id={id} name="category" placeholder="Appliance" />}</Field>
-          <Field label="Location">{(id) => <Input id={id} name="location" placeholder="Kitchen" />}</Field>
+          <Field label={tr('home.category')}>{(id) => <Input id={id} name="category" placeholder={tr('home.appliance')} />}</Field>
+          <Field label={tr('home.location')}>{(id) => <Input id={id} name="location" placeholder={tr('home.kitchen')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Brand">{(id) => <Input id={id} name="brand" placeholder="Bosch" />}</Field>
-          <Field label="Model">{(id) => <Input id={id} name="model" placeholder="SHPM88Z75N" />}</Field>
+          <Field label={tr('home.brand')}>{(id) => <Input id={id} name="brand" placeholder={tr('home.bosch')} />}</Field>
+          <Field label={tr('home.model')}>{(id) => <Input id={id} name="model" placeholder="SHPM88Z75N" />}</Field>
         </div>
-        <Field label="Warranty until" hint="You can also upload the warranty card after creating the asset.">
+        <Field label={tr('home.warrantyUntil')} hint="You can also upload the warranty card after creating the asset.">
           {(id) => <Input id={id} name="warranty_until" type="date" />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Add asset</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('home.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('home.addAsset')}</Button>
         </div>
       </form>
     </Modal>
@@ -495,6 +499,7 @@ function NewTaskModal({ familyId, userId, assets, onClose, onCreated }: {
   familyId: string; userId: string; assets: HomeAsset[];
   onClose: () => void; onCreated: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -521,37 +526,37 @@ function NewTaskModal({ familyId, userId, assets, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Add maintenance task">
+    <Modal open onClose={onClose} title={tr('home.addMaintenanceTask')}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Task" required>
-          {(id) => <Input id={id} name="title" placeholder="Replace HVAC filter" autoFocus />}
+        <Field label={tr('home.task')} required>
+          {(id) => <Input id={id} name="title" placeholder={tr('home.replaceHvacFilter')} autoFocus />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Priority">
+          <Field label={tr('home.priority')}>
             {(id) => (
               <Select id={id} name="priority" defaultValue="medium">
                 <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <option value="medium">{tr('home.medium')}</option>
+                <option value="high">{tr('home.high')}</option>
               </Select>
             )}
           </Field>
-          <Field label="Due date">{(id) => <Input id={id} name="due_at" type="datetime-local" />}</Field>
+          <Field label={tr('home.dueDate')}>{(id) => <Input id={id} name="due_at" type="datetime-local" />}</Field>
         </div>
         {assets.length > 0 && (
-          <Field label="Related asset">
+          <Field label={tr('home.relatedAsset')}>
             {(id) => (
               <Select id={id} name="asset_id" defaultValue="">
-                <option value="">None</option>
+                <option value="">{tr('home.none')}</option>
                 {assets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </Select>
             )}
           </Field>
         )}
-        <Field label="Description">{(id) => <Textarea id={id} name="description" placeholder="Any details…" />}</Field>
+        <Field label={tr('home.description')}>{(id) => <Textarea id={id} name="description" placeholder={tr('home.anyDetails')} />}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Create task</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('home.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('home.createTask')}</Button>
         </div>
       </form>
     </Modal>

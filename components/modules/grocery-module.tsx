@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
 import { RETAILERS, itemSearchUrl, buildShoppingText, type Retailer } from '@/lib/grocery/retailers';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Item = Tables<'grocery_items'>;
 type GroceryList = Tables<'grocery_lists'>;
@@ -31,6 +32,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 
 export function GroceryModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [listId, setListId] = useState<string | null>(null);
@@ -151,20 +153,20 @@ export function GroceryModule() {
         {/* Header */}
         <div className="flex-shrink-0 border-b border-border px-5 py-4">
           <PageHeader
-            title="Groceries"
+            title={t('grocery.groceries')}
             description="Stay organized and never forget an item."
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <AiInsight kind="grocery" />
                 <Button variant="outline" size="sm">
-                  <SlidersHorizontal className="h-4 w-4" /> Reorder
+                  <SlidersHorizontal className="h-4 w-4" /> {t('grocery.reorder')}
                 </Button>
                 <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2">
                   <Search className="h-4 w-4 text-muted" />
-                  <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search groceries…" className="bg-transparent text-sm outline-none w-28 sm:w-36 placeholder:text-muted" />
+                  <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder={t('grocery.searchGroceries')} className="bg-transparent text-sm outline-none w-28 sm:w-36 placeholder:text-muted" />
                 </div>
                 <Button size="sm" onClick={() => document.getElementById('quick-add-input')?.focus()}>
-                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add Item</span>
+                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{t('grocery.addItem')}</span>
                 </Button>
               </div>
             }
@@ -179,7 +181,7 @@ export function GroceryModule() {
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={shareList} className="text-xs text-brand-text hover:underline">Share List</button>
+              <button onClick={shareList} className="text-xs text-brand-text hover:underline">{t('grocery.shareList')}</button>
             </div>
           </div>
 
@@ -207,8 +209,8 @@ export function GroceryModule() {
           {byCategory.length === 0 && (
             <div className="flex flex-col items-center py-16 text-center">
               <ShoppingBag className="mb-3 h-12 w-12 text-muted opacity-50" />
-              <p className="text-sm font-medium">Your list is empty</p>
-              <p className="text-xs text-muted">Add items below to get started.</p>
+              <p className="text-sm font-medium">{t('grocery.yourListIsEmpty')}</p>
+              <p className="text-xs text-muted">{t('grocery.addItemsBelowToGetStarted')}</p>
             </div>
           )}
 
@@ -223,7 +225,7 @@ export function GroceryModule() {
                   <span className="text-sm font-semibold">{cat}</span>
                   <span className="text-xs text-muted">{catItems.length} item{catItems.length !== 1 ? 's' : ''}</span>
                   <div className="ml-auto flex items-center gap-3">
-                    <span className="hidden text-xs text-muted sm:inline">Est. —</span>
+                    <span className="hidden text-xs text-muted sm:inline">{t('grocery.est')}</span>
                     {isCollapsed ? <ChevronDown className="h-4 w-4 text-muted" /> : <ChevronUp className="h-4 w-4 text-muted" />}
                   </div>
                 </button>
@@ -243,7 +245,7 @@ export function GroceryModule() {
                         {item.quantity && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand-text">{item.quantity}</span>}
                         <div className="ml-auto flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
                           <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
-                          <button aria-label="More options" className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('grocery.moreOptions')} className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-3.5 w-3.5" /></button>
                         </div>
                       </div>
                     ))}
@@ -260,7 +262,7 @@ export function GroceryModule() {
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <input id="quick-add-input" value={addingItem} onChange={e => setAddingItem(e.target.value)}
-              placeholder="+ Add item…"
+              placeholder={t('grocery.addItem')}
               className="min-w-0 flex-1 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
             {addingItem && (
               <Button type="submit" size="sm">Add</Button>
@@ -273,8 +275,8 @@ export function GroceryModule() {
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/20 text-xl">🛒</div>
                 <div>
-                  <p className="text-sm font-semibold">Shop online &amp; get it delivered</p>
-                  <p className="text-xs text-muted">Send your list straight to a store — one tap opens each item in their cart.</p>
+                  <p className="text-sm font-semibold">{t('grocery.shopOnlineAmpGetItDelivered')}</p>
+                  <p className="text-xs text-muted">{t('grocery.sendYourListStraightToA')}</p>
                 </div>
               </div>
               <div className="ml-0 flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -304,8 +306,8 @@ export function GroceryModule() {
         {/* Shopping Summary donut */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Shopping Summary</p>
-            <span className="text-[10px] text-muted">This Week</span>
+            <p className="text-sm font-semibold">{t('grocery.shoppingSummary')}</p>
+            <span className="text-[10px] text-muted">{t('grocery.thisWeek')}</span>
           </div>
           <div className="flex items-center gap-3">
             <SimpleDonut segments={donutSegments.map(s => ({ value: s.value, color: s.color }))} center="$—" />
@@ -322,11 +324,11 @@ export function GroceryModule() {
 
         {/* Quick Tips */}
         <div className="sidebar-card">
-          <div className="mb-1 text-sm font-semibold">Quick Tips</div>
-          <div className="mb-3 text-[10px] text-muted">Organize your shopping</div>
+          <div className="mb-1 text-sm font-semibold">{t('grocery.quickTips')}</div>
+          <div className="mb-3 text-[10px] text-muted">{t('grocery.organizeYourShopping')}</div>
           <div className="space-y-2 text-xs text-muted">
-            <p>Use categories to group items by aisle for faster shopping.</p>
-            <p>Check off items as you shop — they stay at the bottom for reference.</p>
+            <p>{t('grocery.useCategoriesToGroupItemsBy')}</p>
+            <p>{t('grocery.checkOffItemsAsYouShop')}</p>
           </div>
         </div>
       </div>
@@ -337,6 +339,7 @@ export function GroceryModule() {
 function ShopOnlineModal({ retailer, items, onClose }: {
   retailer: Retailer; items: Item[]; onClose: () => void;
 }) {
+  const t = useTranslations();
   const { success } = useToast();
 
   async function copyList() {
@@ -357,15 +360,15 @@ function ShopOnlineModal({ retailer, items, onClose }: {
         <div className="flex flex-wrap items-center gap-2">
           <a href={retailer.storeUrl} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-elevated">
-            <Store className="h-4 w-4" /> Open {retailer.name}
+            <Store className="h-4 w-4" /> {t('grocery.open')} {retailer.name}
           </a>
           <Button type="button" variant="outline" size="sm" onClick={copyList} disabled={items.length === 0}>
-            <Copy className="h-4 w-4" /> Copy list
+            <Copy className="h-4 w-4" /> {t('grocery.copyList')}
           </Button>
         </div>
 
         {items.length === 0 ? (
-          <p className="text-sm text-muted">Everything on your list is already checked off. 🎉</p>
+          <p className="text-sm text-muted">{t('grocery.everythingOnYourListIsAlready')}</p>
         ) : (
           <ul className="max-h-72 space-y-1.5 overflow-y-auto">
             {items.map(item => (

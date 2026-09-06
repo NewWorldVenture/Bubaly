@@ -28,16 +28,26 @@ describe('marketing header meets the 44px touch-target minimum (M-021)', () => {
   });
 
   it('the mobile menu toggle button is a >=44px square on touch', () => {
-    const menuBtn = header.slice(header.indexOf('aria-label="Toggle menu"') - 300, header.indexOf('aria-label="Toggle menu"'));
+    // Anchored on aria-controls rather than the button's label: the label is
+    // translated (t('nav.toggleMenu')) and copy must be free to change without
+    // silently disarming a touch-target guard.
+    const anchor = header.indexOf('aria-controls="mobile-navigation"');
+    expect(anchor, 'menu toggle must control the mobile nav').toBeGreaterThan(-1);
+    const menuBtn = header.slice(header.lastIndexOf('<button', anchor), anchor);
     expect(menuBtn).toContain('coarse:min-h-11');
     expect(menuBtn).toContain('coarse:min-w-11');
   });
 
-  it('the Log in and Get Started pills are >=44px tall on touch', () => {
-    for (const label of ['Log in', 'Get Started Free']) {
-      const idx = header.indexOf(`>\n            ${label}`);
-      const start = header.lastIndexOf('<Link', idx);
-      expect(header.slice(start, idx)).toContain('coarse:min-h-11');
+  it('every Log in / Get Started link is >=44px tall on touch', () => {
+    // Anchored on destination, not label, and covering EVERY such link rather
+    // than two hand-picked ones — so a newly added CTA cannot slip in under
+    // 44px. The top-bar pills are h-8 and rely on the coarse escape; the links
+    // inside the mobile drawer are min-h-11 unconditionally. Either satisfies
+    // the 44px minimum.
+    const links = header.match(/<Link[^>]*href="\/(?:login|welcome)"[^>]*>/g) ?? [];
+    expect(links.length, 'expected the header to still ship auth CTAs').toBeGreaterThanOrEqual(4);
+    for (const link of links) {
+      expect(link, link).toMatch(/(?:coarse:)?min-h-11/);
     }
   });
 });

@@ -12,6 +12,7 @@ import {
 } from '@/lib/workload/balance';
 import { moveAssignmentAction, saveWorkloadSnapshotAction } from '@/app/(app)/dashboard/workload/actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = { id: string; display_name: string; role: string; color: string | null; user_id: string | null };
 
@@ -28,6 +29,7 @@ export function WorkloadModule({
   events: { created_by: string | null; starts_at: string }[];
   snapshots: Tables<'workload_snapshots'>[];
 }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -90,7 +92,7 @@ export function WorkloadModule({
   return (
     <div className="module-page">
       <PageHeader
-        title="Workload Balance"
+        title={tr('workload.workloadBalance')}
         description="Who's carrying the household — measured, made visible, and one tap to fix."
       />
 
@@ -102,7 +104,7 @@ export function WorkloadModule({
         <div className="min-w-0">
           <p className="text-sm font-bold">{report.headline}</p>
           <p className="mt-0.5 text-xs text-muted">
-            Load counts chores by estimated minutes, plus tasks and the invisible work of organizing events.
+            {tr('workload.loadCountsChoresByEstimatedMinutes')}
           </p>
         </div>
       </div>
@@ -113,7 +115,7 @@ export function WorkloadModule({
           <span className="text-2xl">⚖️</span>
           <div>
             <div className={cn('text-2xl font-bold', fairnessTone)}>{report.fairness}</div>
-            <div className="text-[11px] text-muted">Fairness score</div>
+            <div className="text-[11px] text-muted">{tr('workload.fairnessScore')}</div>
           </div>
         </div>
         <div className="stat-card">
@@ -129,31 +131,31 @@ export function WorkloadModule({
             <div className="text-2xl font-bold">
               {Math.round(report.loads.reduce((s, l) => s + l.choreMinutes, 0) / 60 * 10) / 10}h
             </div>
-            <div className="text-[11px] text-muted">Chore hours this week</div>
+            <div className="text-[11px] text-muted">{tr('workload.choreHoursThisWeek')}</div>
           </div>
         </div>
         <div className="stat-card">
           <span className="text-2xl">🔁</span>
           <div>
             <div className="text-2xl font-bold">{report.suggestions.length}</div>
-            <div className="text-[11px] text-muted">Rebalance moves ready</div>
+            <div className="text-[11px] text-muted">{tr('workload.rebalanceMovesReady')}</div>
           </div>
         </div>
       </div>
 
       {/* Per-member load bars */}
       <section className="mt-5 rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><Scale className="h-4 w-4 text-brand-text" /> This week&apos;s split</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><Scale className="h-4 w-4 text-brand-text" /> {tr('workload.thisWeekAposSSplit')}</h2>
         <div className="space-y-3">
           {report.loads.map((l, i) => (
             <div key={l.memberId}>
               <div className="mb-1 flex items-baseline justify-between gap-2">
                 <span className="truncate text-sm font-semibold">
                   {l.name}
-                  {l.overloaded && <span className="ml-2 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-400">carrying too much</span>}
+                  {l.overloaded && <span className="ml-2 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-400">{tr('workload.carryingTooMuch')}</span>}
                 </span>
                 <span className="flex-shrink-0 text-xs text-muted">
-                  {l.sharePct}% · {Math.round(l.choreMinutes / 6) / 10}h chores · {l.taskCount} tasks · {l.eventCount} organized
+                  {l.sharePct}% · {Math.round(l.choreMinutes / 6) / 10}{tr('workload.hChores')} {l.taskCount} {tr('workload.tasks')} {l.eventCount} organized
                 </span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-elevated">
@@ -165,7 +167,7 @@ export function WorkloadModule({
             </div>
           ))}
           {report.loads.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted">Add family members to see the balance.</p>
+            <p className="py-6 text-center text-sm text-muted">{tr('workload.addFamilyMembersToSeeThe')}</p>
           )}
         </div>
       </section>
@@ -174,7 +176,7 @@ export function WorkloadModule({
       {report.suggestions.length > 0 && (
         <section className="mt-4 rounded-2xl border border-border bg-surface/30 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <ArrowRightLeft className="h-4 w-4 text-brand-text" /> One-tap rebalance
+            <ArrowRightLeft className="h-4 w-4 text-brand-text" /> {tr('workload.oneTapRebalance')}
           </h2>
           <div className="space-y-2">
             {report.suggestions.map(s => {
@@ -183,7 +185,7 @@ export function WorkloadModule({
                 <div key={s.assignmentId} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">
-                      Move “{s.choreTitle}” → {s.toName}
+                      {tr('workload.move')}{s.choreTitle}” → {s.toName}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">{s.reason}</p>
                   </div>
@@ -194,7 +196,7 @@ export function WorkloadModule({
                       done ? 'bg-emerald-500/15 text-emerald-400'
                         : 'bg-brand text-brand-fg hover:opacity-90 disabled:opacity-50')}
                   >
-                    {done ? <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Moved</span>
+                    {done ? <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> {tr('workload.moved')}</span>
                       : applying === s.assignmentId ? <Loader2 className="h-4 w-4 animate-spin" />
                       : 'Move it'}
                   </button>
@@ -207,10 +209,10 @@ export function WorkloadModule({
 
       {/* Week-over-week trend */}
       <section className="mt-4 rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><TrendingUp className="h-4 w-4 text-brand-text" /> Share of load, week over week</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><TrendingUp className="h-4 w-4 text-brand-text" /> {tr('workload.shareOfLoadWeekOverWeek')}</h2>
         {trend.size === 0 ? (
           <p className="py-4 text-center text-sm text-muted">
-            History builds automatically each week you visit — check back after a few weeks.
+            {tr('workload.historyBuildsAutomaticallyEachWeekYou')}
           </p>
         ) : (
           <div className="space-y-4">

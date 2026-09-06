@@ -13,6 +13,7 @@ import {
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Outcome, OutcomeStep, OutcomeId } from '@/lib/outcomes/launcher';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ICON: Record<string, typeof Sun> = {
   sun: Sun, utensils: UtensilsCrossed, plane: Plane, graduation: GraduationCap,
@@ -32,13 +33,14 @@ const ACCENT: Record<OutcomeId, string> = {
 export type OutcomePlan = { outcome: Outcome; steps: OutcomeStep[]; urgency: number };
 
 export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
+  const t = useTranslations();
   const [selectedId, setSelectedId] = useState<OutcomeId>(plans[0]?.outcome.id ?? 'run_today');
   const selected = plans.find((p) => p.outcome.id === selectedId) ?? plans[0];
 
   return (
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader
-        title="What do you want to get done?"
+        title={t('outcomesLauncher.whatDoYouWantToGet')}
         description="Pick an outcome — we’ll pull together everything it takes, and flag what needs you right now."
       />
 

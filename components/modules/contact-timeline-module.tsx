@@ -16,6 +16,7 @@ import {
   logInteractionAction, deleteInteractionAction, draftReconnectMessageAction,
 } from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Tone = 'warm' | 'brief' | 'playful';
 const TONES: { key: Tone; label: string }[] = [
@@ -44,6 +45,7 @@ export function ContactTimelineModule({
   health: ContactHealth;
   interactionIds: string[];
 }) {
+  const tr = useTranslations();
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function ContactTimelineModule({
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
       <Link href="/dashboard/contacts" className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-fg">
-        <ArrowLeft className="h-3.5 w-3.5" /> All contacts
+        <ArrowLeft className="h-3.5 w-3.5" /> {tr('contactTimeline.allContacts')}
       </Link>
 
       {/* Header */}
@@ -92,7 +94,7 @@ export function ContactTimelineModule({
           <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', hs.chip)}>{hs.label}</span>
           {health.daysSince != null && (
             <span className="text-xs text-muted">
-              last touch {health.daysSince === 0 ? 'today' : `${health.daysSince}d ago`}
+              {tr('contactTimeline.lastTouch')} {health.daysSince === 0 ? 'today' : `${health.daysSince}d ago`}
               {health.cadenceDays ? ` · usual rhythm ~${health.cadenceDays}d` : ''}
             </span>
           )}
@@ -125,13 +127,13 @@ export function ContactTimelineModule({
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <input name="occurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)}
               className="h-10 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 focus:ring-2" />
-            <input name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="$ (gifts — optional)"
+            <input name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder={tr('contactTimeline.giftsOptional')}
               className="h-10 w-36 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />
-            <input name="note" placeholder="Note — optional"
+            <input name="note" placeholder={tr('contactTimeline.noteOptional')}
               className="h-10 flex-1 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />
             <button type="submit" disabled={pending}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60">
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Log it
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {tr('contactTimeline.logIt')}
             </button>
           </div>
         </form>
@@ -139,10 +141,10 @@ export function ContactTimelineModule({
 
       {/* Timeline */}
       <section className="mt-6">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Timeline</h2>
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{tr('contactTimeline.timeline')}</h2>
         {timeline.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted">
-            Nothing here yet — log your first visit, call, or gift above.
+            {tr('contactTimeline.nothingHereYetLogYourFirst')}
           </p>
         ) : (
           <ol className="mt-3 space-y-0">
@@ -169,7 +171,7 @@ export function ContactTimelineModule({
                         <button
                           onClick={() => remove(e.id)}
                           disabled={pending && busyId === e.id}
-                          aria-label="Delete entry"
+                          aria-label={tr('contactTimeline.deleteEntry')}
                           className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50"
                         >
                           {busyId === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -194,6 +196,7 @@ export function ContactTimelineModule({
  * options, regenerate, and one-tap Copy. Honest inline error if no AI key.
  */
 function ReconnectDrafter({ contactId, name }: { contactId: string; name: string }) {
+  const tr = useTranslations();
   const [open, setOpen] = useState(false);
   const [tone, setTone] = useState<Tone>('warm');
   const [pending, startTransition] = useTransition();
@@ -224,13 +227,13 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
           className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/12 px-3 text-xs font-bold text-brand-text ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          Draft a message with AI
+          {tr('contactTimeline.draftAMessageWithAi')}
         </button>
       ) : (
         <div className="rounded-xl border border-brand/25 bg-brand/[0.05] p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-text">
-              <Sparkles className="h-3.5 w-3.5" /> AI draft for {name}
+              <Sparkles className="h-3.5 w-3.5" /> {tr('contactTimeline.aiDraftFor')} {name}
             </div>
             <div className="flex items-center gap-1">
               {TONES.map((t) => (
@@ -243,7 +246,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
                   {t.label}
                 </button>
               ))}
-              <button onClick={() => setOpen(false)} aria-label="Close draft" className="rounded-lg p-1 text-muted hover:bg-elevated">
+              <button onClick={() => setOpen(false)} aria-label={tr('contactTimeline.closeDraft')} className="rounded-lg p-1 text-muted hover:bg-elevated">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -263,10 +266,10 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
                 </button>
                 <button onClick={() => draft(tone)} disabled={pending}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
-                  <RefreshCw className={cn('h-3.5 w-3.5', pending && 'animate-spin')} /> Regenerate
+                  <RefreshCw className={cn('h-3.5 w-3.5', pending && 'animate-spin')} /> {tr('contactTimeline.regenerate')}
                 </button>
               </div>
-              <p className="mt-2 text-[10px] text-muted">AI draft — grounded in your logged history. Review before sending.</p>
+              <p className="mt-2 text-[10px] text-muted">{tr('contactTimeline.aiDraftGroundedInYourLogged')}</p>
             </>
           ) : null}
         </div>
