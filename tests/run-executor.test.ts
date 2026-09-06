@@ -226,6 +226,82 @@ describe('a straightforward run', () => {
   });
 });
 
+describe('work that never finished', () => {
+  it('picks a step back up when a worker died mid-flight, instead of finishing around it', async () => {
+    // The lease this pass holds means no other worker can be running these
+    // steps, so a step still `executing` at claim time was interrupted. It is
+    // invisible to `selectRunnableSteps` and to `blockedSteps`, so the run used
+    // to reach "nothing left to run" and finalize as `completed` — Bubaly
+    // telling a family it finished work it never did.
+    const fake = makeFake({
+      steps: [
+        { id: 's1', description: 'Create the event', status: 'executing' },
+        { id: 's2', description: 'Add the reminder', dependency_ids: ['s1'] },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.eventTypes()).toContain('step_retried');
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1', 's2']);
+    expect(result).toMatchObject({ status: 'completed', completed: 2 });
+  });
+
+  it('does not loop on a step that keeps killing its worker', async () => {
+    const fake = makeFake({
+      steps: [{ id: 's1', description: 'Create the event', status: 'executing', retry_count: 2, max_retries: 2 }],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.step('s1').status).toBe('failed');
+    expect(fake.calls).toHaveLength(0);
+    expect(result).toMatchObject({ status: 'failed' });
+  });
+
+  it('a write it could not confirm is not a completed step, and not a completed run', async () => {
+    // §13: `executeTool` re-reads what the tool claims it wrote. The verdict
+    // used to go into an event payload nothing renders while the step was
+    // marked completed regardless — a calendar event whose re-read did not
+    // match still produced a green run.
+    const fake = makeFake({
+      steps: [
+        { id: 's1', description: 'Create the event' },
+        { id: 's2', description: 'Add the reminder', dependency_ids: ['s1'] },
+      ],
+      tool: (call) => (call.opts.stepId === 's1'
+        ? { status: 'ok', data: { id: 'res-1' }, summary: 'Added soccer Saturday', toolCallId: 'tc-1', verified: false }
+        : { status: 'ok', data: { id: 'res-2' }, summary: 'Set the reminder', toolCallId: 'tc-2' }),
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.step('s1').status).toBe('partially_completed');
+    expect(fake.eventTypes()).toContain('verification_failed');
+    // The write happened, so the plan carries on — but the run says so.
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1', 's2']);
+    expect(result.status).toBe('partially_completed');
+    expect(String((fake.run.result as { detail: string }).detail)).toContain('could not be confirmed');
+  });
+
+  it('shows "Checking the work" while a verify step reads the household back', async () => {
+    const seen: string[] = [];
+    const fake = makeFake({
+      steps: [{ id: 'v1', step_type: 'verify', tool_name: null, input_json: { checks: [{ kind: 'count_at_least', table: 'meal_plans', min: 1 }] } }],
+    });
+    const original = fake.port.verify;
+    fake.port.verify = async (...args: Parameters<typeof original>) => {
+      seen.push(fake.step('v1').status);
+      return original(...args);
+    };
+
+    await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(seen).toEqual(['verifying']);
+    expect(fake.step('v1').status).toBe('completed');
+  });
+});
+
 describe('approvals', () => {
   it('parks the run instead of failing it, and does not touch the household', async () => {
     const fake = makeFake({

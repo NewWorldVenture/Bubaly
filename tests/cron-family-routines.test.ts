@@ -34,6 +34,7 @@ vi.mock('@/lib/supabase/server', () => ({
         return source.filter((r) => Object.entries(filters).every(([c, v]) => {
           if (c.startsWith('lte:')) return String(r[c.slice(4)] ?? '') <= String(v);
           if (c.startsWith('not:')) return r[c.slice(4)] !== null && r[c.slice(4)] !== undefined;
+          if (c.startsWith('is:')) return (r[c.slice(3)] ?? null) === v;
           return r[c] === v;
         }));
       };
@@ -58,6 +59,7 @@ vi.mock('@/lib/supabase/server', () => ({
         eq: (c: string, v: unknown) => { filters[c] = v; return b; },
         lte: (c: string, v: unknown) => { filters[`lte:${c}`] = v; return b; },
         not: (c: string) => { filters[`not:${c}`] = true; return b; },
+        is: (c: string, v: unknown) => { filters[`is:${c}`] = v; return b; },
         insert: (p: Row) => { kind = 'insert'; payload = p; return b; },
         update: (p: Row) => { kind = 'update'; payload = p; return b; },
         single: async () => { const r = result(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
@@ -142,15 +144,17 @@ describe('the routine worker', () => {
     expect(reschedule?.patch.last_run_at).toBeTruthy();
   });
 
-  it('does nothing for a family that switched Bubaly off, and stops asking', async () => {
+  it('does nothing for a family that switched Bubaly off, and waits rather than forgetting', async () => {
     mocks.getAISettings.mockResolvedValue({ familyId: 'fam-1', enabled: false, behavior: 'execute', categoryBehavior: {}, riskOverrides: {}, childChannels: {}, memoryEnabled: true, quietHours: null });
     const res = await GET(req() as never);
     expect(await res.json()).toMatchObject({ filed: 0, skipped: 1 });
     expect(mocks.createRequest).not.toHaveBeenCalled();
-    // The occurrence is recorded as skipped and the rule stops being due, so
-    // the worker does not re-read it every minute forever.
     expect(state.routineRuns[0]).toMatchObject({ status: 'skipped' });
-    expect(state.rules[0].next_run_at).toBeNull();
+    // A pause is not a deletion. The rule steps past this occurrence so the
+    // worker stops re-reading it every minute — and is still armed, so it
+    // simply resumes when the family switches Bubaly back on. Nulling it (what
+    // this used to do) silently lost every routine a family owned.
+    expect(state.rules[0].next_run_at).toBe('2026-09-06T21:00:00.000Z');
   });
 
   it('records a failure instead of losing it silently', async () => {
@@ -171,5 +175,93 @@ describe('the routine worker', () => {
     expect(mocks.nextRelativeFire).toHaveBeenCalled();
     const reschedule = state.updates.find((u) => u.table === 'family_automation_rules' && u.patch.next_run_at);
     expect(reschedule?.patch.next_run_at).toBe('2026-10-22T13:00:00.000Z');
+  });
+});
+
+// ─── Routines that could never fire ────────────────────────────────────────
+
+describe('arming', () => {
+  const RELATIVE = {
+    id: 'rule-2', family_id: 'fam-1', name: 'Trip prep', action_config: { prompt: 'Make sure we are ready' },
+    schedule_kind: 'relative', schedule_expr: null, anchor_key: 'trip', offset_days: -2, at_hour: 9,
+    next_run_at: null, said: 'two days before every trip', is_enabled: true,
+  };
+
+  it('gives a routine with no next fire one, so a relative routine can fire at all', async () => {
+    // The worker's only query is `.lte('next_run_at', now)`, which null never
+    // matches. A relative routine stored unarmed — no trip on file yet, or a
+    // pause that cleared it — was unreachable by construction.
+    state.rules = [{ ...RELATIVE }];
+    mocks.nextRelativeFire.mockResolvedValue(new Date('2026-09-18T13:00:00.000Z'));
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ armed: 1 });
+    expect(state.rules[0].next_run_at).toBe('2026-09-18T13:00:00.000Z');
+  });
+
+  it('leaves a routine alone when its anchor still has nothing upcoming', async () => {
+    state.rules = [{ ...RELATIVE }];
+    mocks.nextRelativeFire.mockResolvedValue(null);
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ armed: 0 });
+    expect(state.rules[0].next_run_at).toBeNull();
+  });
+
+  it('does not arm a routine the family switched off', async () => {
+    state.rules = [{ ...RELATIVE, is_enabled: false }];
+    mocks.nextRelativeFire.mockResolvedValue(new Date('2026-09-18T13:00:00.000Z'));
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ armed: 0 });
+    expect(state.rules[0].next_run_at).toBeNull();
+  });
+});
+
+describe('a reservation nobody came back for', () => {
+  it('steps a wedged routine past an abandoned occurrence', async () => {
+    // A worker that died between reserving the occurrence and rescheduling
+    // leaves the reservation behind. The rule then collides on the same
+    // `due_at` every tick and never advances — silently dead forever.
+    state.routineRuns = [{
+      family_id: 'fam-1', rule_id: 'rule-1', due_at: RULE.next_run_at, status: 'filed',
+      request_id: null, created_at: '2026-01-01T00:00:00.000Z',
+    }];
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ filed: 0, skipped: 1 });
+    expect(state.routineRuns[0]).toMatchObject({ status: 'failed' });
+    expect(state.rules[0].next_run_at).toBe('2026-09-06T21:00:00.000Z');
+  });
+
+  it('leaves a live worker’s reservation alone', async () => {
+    // Fresh, and mid-tick somewhere else: not ours to touch.
+    state.routineRuns = [{
+      family_id: 'fam-1', rule_id: 'rule-1', due_at: RULE.next_run_at, status: 'filed',
+      request_id: null, created_at: new Date().toISOString(),
+    }];
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ filed: 0, skipped: 1 });
+    expect(state.routineRuns[0]).toMatchObject({ status: 'filed' });
+    expect(state.rules[0].next_run_at).toBe(RULE.next_run_at);
+  });
+
+  it('leaves an occurrence that already became a request alone', async () => {
+    state.routineRuns = [{
+      family_id: 'fam-1', rule_id: 'rule-1', due_at: RULE.next_run_at, status: 'filed',
+      request_id: 'req-1', created_at: '2026-01-01T00:00:00.000Z',
+    }];
+
+    const res = await GET(req() as never);
+
+    expect(await res.json()).toMatchObject({ skipped: 1 });
+    expect(state.routineRuns[0]).toMatchObject({ status: 'filed', request_id: 'req-1' });
+    expect(state.rules[0].next_run_at).toBe(RULE.next_run_at);
   });
 });

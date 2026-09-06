@@ -1,6 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
 import { modelCapabilities } from '@/lib/ai/models';
+import { fenceUntrustedBlock } from '@/lib/ai/safety/untrusted';
 import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
@@ -45,6 +46,19 @@ type OpenAIChatResponse = {
 };
 
 /** A tool the model can call, paired with a server-side executor. */
+/**
+ * A tool result on its way back to the model.
+ *
+ * The context builder fences every household string it puts in the SYSTEM
+ * prompt (§44) — and then the same hostile calendar title arrived one turn
+ * later, unfenced, as the JSON body of a `calendar.searchEvents` result. A
+ * tool result is household and third-party data exactly like a context row, so
+ * it carries the same fence and the same nonce guarantee.
+ */
+function fenceToolResult(name: string, result: unknown): string {
+  return fenceUntrustedBlock(`tool_result_${name}`, JSON.stringify(result), 12_000);
+}
+
 export type ToolSpec = AITool & {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 };
@@ -347,7 +361,7 @@ export class OpenAIProvider implements AIProvider {
         try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${call.function.name}` }; }
         catch (e) { result = toolExecutionFailure(call.function.name, e); }
         actions.push({ name: call.function.name, args, result });
-        convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+        convo.push({ role: 'tool', tool_call_id: call.id, content: fenceToolResult(call.function.name, result) });
       }
     }
     // Exhausted rounds — ask once more for a plain summary.
@@ -466,7 +480,7 @@ export class OpenAIProvider implements AIProvider {
         catch (e) { result = toolExecutionFailure(c.name, e); }
         executed += 1;
         yield { type: 'action', name: c.name, args, result };
-        convo.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(result) });
+        convo.push({ role: 'tool', tool_call_id: c.id, content: fenceToolResult(c.name, result) });
       }
     }
   }

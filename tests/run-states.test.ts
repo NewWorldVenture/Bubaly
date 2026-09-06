@@ -7,9 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   RUN_STATES, STEP_STATES, RUN_TRANSITIONS, STEP_TRANSITIONS,
+  SATISFYING_STEP_STATES, UNSATISFIABLE_STEP_STATES,
   blockedSteps, canTransitionRun, canTransitionStep, describeProgress, displayRunState, displayStatus,
   findDependencyCycle, isTerminalRunState, legacyStatusFor, selectRunnableSteps, summarizeSteps,
-  terminalRunStateFor, type GraphStep, type RunState, type StepState,
+  terminalRunStateFor, type GraphStep, type RunState, type StepCounts, type StepState,
 } from '@/lib/ai/runs/states';
 
 function step(id: string, status: StepState, deps: string[] = [], sequence = 0): GraphStep {
@@ -219,5 +220,43 @@ describe('how a run ends', () => {
     const counts = summarizeSteps([step('a', 'awaiting_approval'), step('b', 'queued'), step('c', 'executing')]);
     expect(counts.awaitingApproval).toBe(1);
     expect(counts.pending).toBe(2);
+  });
+});
+
+// ─── A run may not call itself finished while work is outstanding ───────────
+
+describe('terminalRunStateFor counts what did not finish', () => {
+  const counts = (over: Partial<StepCounts> = {}): StepCounts => ({
+    total: 0, completed: 0, skipped: 0, failed: 0, cancelled: 0, blocked: 0,
+    awaitingApproval: 0, pending: 0, unverified: 0, ...over,
+  });
+
+  it('a step left in flight is not a clean finish', () => {
+    // `pending` buckets queued/executing/verifying/scheduled_followup. A step
+    // stranded in `executing` by a dead worker is not runnable and not blocked,
+    // so the executor reaches "nothing left to run" with it still open — and
+    // this used to answer `completed`.
+    expect(terminalRunStateFor(counts({ total: 2, completed: 1, pending: 1 }))).toBe('partially_completed');
+    expect(describeProgress(counts({ total: 2, completed: 1, pending: 1 }))).toContain('1 did not finish');
+  });
+
+  it('a write that could not be confirmed is a success the run must not claim', () => {
+    expect(terminalRunStateFor(counts({ total: 2, completed: 1, unverified: 1 }))).toBe('partially_completed');
+    expect(describeProgress(counts({ total: 2, completed: 1, unverified: 1 }))).toContain('1 could not be confirmed');
+  });
+
+  it('still calls a genuinely clean run completed', () => {
+    expect(terminalRunStateFor(counts({ total: 3, completed: 2, skipped: 1 }))).toBe('completed');
+  });
+
+  it('a run where nothing succeeded is failed, not partially completed', () => {
+    expect(terminalRunStateFor(counts({ total: 2, failed: 1, pending: 1 }))).toBe('failed');
+  });
+
+  it('lets the rest of a plan proceed past an unconfirmed write', () => {
+    // The write happened; only the read-back is uncertain. Holding the plan
+    // hostage to that would turn one uncertain step into a stalled workflow.
+    expect(SATISFYING_STEP_STATES).toContain('partially_completed');
+    expect(UNSATISFIABLE_STEP_STATES).not.toContain('partially_completed');
   });
 });

@@ -377,6 +377,17 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     return summarize('failed', steps);
   }
 
+  // A step left mid-flight by a worker that died. The lease this pass holds is
+  // what makes that judgement safe: no other worker can be running these steps,
+  // so anything still `executing` or `verifying` at claim time is stranded, and
+  // stranded is neither runnable nor blocked — the run would reach "nothing
+  // left to do" with the step in flight and finalize as `completed`.
+  if (await recoverStrandedSteps(port, run, steps)) {
+    const afterRecovery = await port.loadSteps(run);
+    if (!afterRecovery.ok) return { status: 'error', ...empty };
+    steps = afterRecovery.data;
+  }
+
   // A step parked on an approval is not runnable, so a decision made while this
   // run was out of the queue has to be folded in before scheduling. The
   // approvals service is what returns the RUN to `ready`; this is what returns
@@ -501,6 +512,53 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * Return steps a dead worker left mid-flight to the graph.
+ *
+ * `runStep` moves a step out of `executing` before it returns, so a step still
+ * in `executing` (or `verifying`) when a fresh claim begins was interrupted —
+ * an invocation that timed out, a container that went away. Left alone it is
+ * invisible to `selectRunnableSteps` and to `blockedSteps`, so the run finishes
+ * around it and reports `completed`.
+ *
+ * A step that has already spent its retries is failed rather than re-armed:
+ * repeating a step that keeps killing its worker is how one bad tool call
+ * becomes an endless run. Steps carry idempotency keys, so a re-run of one that
+ * did write before dying reuses its result instead of writing twice.
+ */
+async function recoverStrandedSteps(
+  port: ExecutorPort,
+  run: RunSnapshot,
+  steps: readonly StepSnapshot[],
+): Promise<boolean> {
+  let changed = false;
+  for (const step of steps) {
+    if (step.status !== 'executing' && step.status !== 'verifying') continue;
+    const spent = (step.retry_count ?? 0) >= (step.max_retries ?? 0);
+    if (spent) {
+      await port.updateStep(run, step.id, {
+        status: 'failed',
+        error: 'Bubaly stopped part-way through this step and could not pick it up again.',
+        completed_at: new Date(port.now()).toISOString(),
+      });
+      await port.appendEvent(run, {
+        eventType: 'step_failed',
+        stepId: step.id,
+        message: `"${describeStep(step)}" was interrupted and has no attempts left.`,
+      });
+    } else {
+      await port.updateStep(run, step.id, { status: 'ready', retry_count: (step.retry_count ?? 0) + 1 });
+      await port.appendEvent(run, {
+        eventType: 'step_retried',
+        stepId: step.id,
+        message: `Picking "${describeStep(step)}" back up — it was interrupted part-way through.`,
+      });
+    }
+    changed = true;
+  }
+  return changed;
 }
 
 /**
@@ -822,17 +880,27 @@ async function runToolStep(
   });
 
   if (outcome.status === 'ok') {
+    // §13's read-back. `executeTool` re-reads what the tool claims it wrote and
+    // reports the verdict; the executor used to record it in an event payload
+    // nothing renders and mark the step `completed` regardless — so a calendar
+    // event whose re-read did not match still produced a green run.
+    //
+    // A false verdict is not a failure: the tool ran and returned ok, and the
+    // write may well be there. It is an unconfirmed success, which is what
+    // `partially_completed` is for — dependents still proceed
+    // (SATISFYING_STEP_STATES), and the RUN can no longer report `completed`.
+    const unverified = outcome.verified === false;
     await port.updateStep(run, step.id, {
-      status: 'completed',
+      status: unverified ? 'partially_completed' : 'completed',
       completed_at: new Date(port.now()).toISOString(),
       result_json: redactResult(outcome.summary, outcome.data),
-      error: null,
+      error: unverified ? 'Bubaly did this but could not confirm it afterwards.' : null,
     });
     await port.appendEvent(run, {
-      eventType: 'step_completed',
+      eventType: unverified ? 'verification_failed' : 'step_completed',
       stepId: step.id,
       toolName,
-      message: outcome.summary,
+      message: unverified ? `${outcome.summary} — but Bubaly could not confirm it afterwards.` : outcome.summary,
       payload: { tool_call_id: outcome.toolCallId, verified: outcome.verified ?? null },
     });
     return { kind: 'progressed' };
@@ -879,6 +947,13 @@ async function runToolStep(
 async function runVerifyStep(port: ExecutorPort, scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<StepDisposition> {
   const parsed = parseVerificationSpec(step.input_json);
   if (!parsed.ok) return failStep(port, run, step, parsed.error, false);
+
+  // `verifying` is in the state vocabulary, the run-detail badge and the
+  // "Checking the work" label — and nothing ever set it. A check that reads the
+  // household back can take a moment; the person watching should see what
+  // Bubaly is doing, and a step interrupted here is recovered like any other
+  // (`recoverStrandedSteps`).
+  await port.updateStep(run, step.id, { status: 'verifying' });
 
   const result = await port.verify(scope, parsed.data);
   if (!result.ok) return failStep(port, run, step, result.error, result.retryable === true);

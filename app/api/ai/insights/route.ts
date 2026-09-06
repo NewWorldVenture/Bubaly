@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
-import { INSIGHTS, isInsightKind, type InsightData, type InsightKind } from '@/lib/ai/insights';
+import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
+import { isManager } from '@/lib/constants/roles';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -31,6 +33,16 @@ export async function POST(req: Request) {
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = body.kind as string;
   if (!isInsightKind(kind)) return NextResponse.json({ error: 'Unknown insight kind' }, { status: 400 });
+
+  // The route had no role check at all: `requireUserContext()` plus RLS was the
+  // whole guard, and RLS on medications, family_messages, documents and the
+  // finance tables is family-wide. So a child's session could ask a model to
+  // summarise the household's prescriptions, private messages and documents —
+  // the very areas the trust engine treats as sensitive for their role — and
+  // get a helpful answer.
+  if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)) {
+    return NextResponse.json({ error: 'That summary is for the adults in this family.' }, { status: 403 });
+  }
 
   const question = typeof body.question === 'string' ? body.question.slice(0, 1000) : undefined;
   const params = { ...(body.params ?? {}), ...(question ? { question } : {}) };
@@ -72,8 +84,16 @@ export async function POST(req: Request) {
   try {
     const provider = await resolveProvider();
     const completion = await provider.complete({
-      system: def.system,
-      messages: [{ role: 'user', content: def.buildUser(data) }],
+      // The rule lives with the fence, and is appended here rather than inside
+      // `lib/ai/insights.ts` — that module is imported by a client component,
+      // and the fence reaches `node:crypto`.
+      system: `${def.system}\n\n${UNTRUSTED_CONTENT_RULE}`,
+      // The whole user turn is household rows — titles, notes, message bodies,
+      // document names — assembled by the prompt registry. Every one of them is
+      // §44 content, so the whole body goes inside one fence rather than
+      // threading a fence through thirty `buildUser` functions. The rule that
+      // says fenced text is data is in SHARED_RULES, which every kind carries.
+      messages: [{ role: 'user', content: fenceUntrustedBlock(`insight_${kind}`, def.buildUser(data), 24_000) }],
       tools: [],
       maxTokens: def.maxTokens,
     });
