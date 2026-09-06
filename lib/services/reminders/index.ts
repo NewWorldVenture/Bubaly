@@ -117,6 +117,7 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
 
       await recordActivitySafely(scope, {
         agent: 'reminders',
+        action: 'create',
         title: `Set a reminder: "${title}"`,
         detail: remindAt,
         href: '/dashboard/reminders',
@@ -195,7 +196,7 @@ export async function deleteReminder(scope: ServiceScope, reminderId: string): P
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
 
-  await recordActivitySafely(scope, { agent: 'reminders', title: `Removed the reminder "${data.title}"`, href: '/dashboard/reminders' });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'reminders', title: `Removed the reminder "${data.title}"`, href: '/dashboard/reminders' });
   return ok({ id: data.id, title: data.title });
 }
 

@@ -77,6 +77,7 @@ export async function createNote(scope: ServiceScope, input: CreateNoteInput): P
 
   await recordActivitySafely(scope, {
     agent: 'notes',
+    action: 'create',
     title: title ? `Saved the note "${title}"` : 'Saved a family note',
     detail: body.slice(0, 140),
     href: '/dashboard/notes',

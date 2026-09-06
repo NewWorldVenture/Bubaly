@@ -111,6 +111,7 @@ export async function createGoal(scope: ServiceScope, input: CreateGoalInput): P
 
   await recordActivitySafely(scope, {
     agent: 'goals',
+    action: 'create',
     title: `Created the goal "${title}"`,
     detail: targetDate,
     href: '/dashboard/goals',

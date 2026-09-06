@@ -223,7 +223,7 @@ export async function saveContractor(scope: ServiceScope, input: SaveContractorI
       return fail(describeDbError(error, 'Could not save that contractor.'), { code: SERVICE_CODES.db });
     }
     if (!data) return fail('That contractor could not be found.', { code: SERVICE_CODES.notFound });
-    await recordActivitySafely(scope, { agent: 'home', title: `Updated contractor ${data.name}`, href: '/dashboard/home/pros' });
+    await recordActivitySafely(scope, { action: 'update', agent: 'home', title: `Updated contractor ${data.name}`, href: '/dashboard/home/pros' });
     return ok({ contractor: data, created: false });
   }
 
@@ -238,6 +238,7 @@ export async function saveContractor(scope: ServiceScope, input: SaveContractorI
   }
   await recordActivitySafely(scope, {
     agent: 'home',
+    action: 'create',
     title: `Saved ${data.name}${data.trade ? ` (${TRADES.find((t) => t.value === data.trade)?.label ?? data.trade})` : ''} to your contractors`,
     href: '/dashboard/home/pros',
   });
@@ -371,7 +372,7 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
         if (contractorError) console.error('[service:home] home_contractors last_used_on update failed', contractorError);
       }
 
-      await recordActivitySafely(scope, { agent: 'home', title: `Logged service: ${data.title}`, detail: data.service_date, href: '/dashboard/home/service' });
+      await recordActivitySafely(scope, { action: 'create', agent: 'home', title: `Logged service: ${data.title}`, detail: data.service_date, href: '/dashboard/home/service' });
       return ok(data);
     },
   );
@@ -449,6 +450,7 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
       }
       await recordActivitySafely(scope, {
         agent: 'home',
+        action: 'create',
         title: `Added maintenance task "${data.title}"`,
         detail: data.due_at,
         href: '/dashboard/home',
@@ -535,6 +537,6 @@ export async function scheduleRecommendedTasks(scope: ServiceScope, assetId: str
     console.error('[service:home] recommended tasks insert failed', error);
     return fail(describeDbError(error, 'Could not schedule the recommended tasks.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { agent: 'home', title: `Scheduled ${rows.length} recommended maintenance tasks for ${asset.name}`, href: '/dashboard/home' });
+  await recordActivitySafely(scope, { action: 'create', agent: 'home', title: `Scheduled ${rows.length} recommended maintenance tasks for ${asset.name}`, href: '/dashboard/home' });
   return ok({ created: data ?? [], skipped });
 }

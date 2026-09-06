@@ -692,6 +692,7 @@ export async function updateBudget(
     }
     await recordActivitySafely(scope, {
       agent: 'finances',
+      action: 'update',
       title: `Set the ${data.category} budget to ${formatDollars(toCents(data.amount))} ${data.period}`,
       detail: `Was ${formatDollars(toCents(existing.amount))}`,
       href: '/dashboard/finances',
@@ -710,6 +711,7 @@ export async function updateBudget(
   }
   await recordActivitySafely(scope, {
     agent: 'finances',
+    action: 'create',
     title: `Created a ${formatDollars(toCents(data.amount))} ${data.period} budget for ${data.category}`,
     href: '/dashboard/finances',
   });
@@ -846,6 +848,7 @@ export async function createTransaction(
 
   await recordActivitySafely(scope, {
     agent: 'finances',
+    action: 'create',
     title: `Recorded ${formatDollars(toCents(data.amount))}${data.merchant ? ` at ${data.merchant}` : ''}`,
     href: '/dashboard/finances',
   });
@@ -916,6 +919,7 @@ export async function createSavingsGoal(scope: ServiceScope, input: CreateSaving
       }
       await recordActivitySafely(scope, {
         agent: 'finances',
+        action: 'create',
         title: `Started a savings goal: ${data.name} (${formatDollars(toCents(data.target_amount))})`,
         href: '/dashboard/finances',
       });

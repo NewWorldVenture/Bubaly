@@ -195,6 +195,7 @@ export async function addItems(
 
   await recordActivitySafely(scope, {
     agent: 'groceries',
+    action: 'create',
     title: rows.length === 1 ? `Added ${rows[0].name} to the shopping list` : `Added ${rows.length} items to the shopping list`,
     detail: rows.map((r) => r.name).join(', '),
     href: '/dashboard/grocery',

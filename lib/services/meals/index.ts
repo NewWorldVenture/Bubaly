@@ -411,6 +411,7 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   const dates = [...new Set(planned.map((p) => p.date))].sort();
   await recordActivitySafely(scope, {
     agent: 'meal_planner',
+    action: 'create',
     title: planned.length === 1
       ? `Planned ${planned[0].name ?? 'a meal'} for ${planned[0].date}`
       : `Planned ${planned.length} meals from ${dates[0]} to ${dates[dates.length - 1]}`,
@@ -592,7 +593,7 @@ export async function createRecipe(scope: ServiceScope, input: CreateRecipeInput
         console.error('[service:meals] recipe create failed', error);
         return fail(describeDbError(error, 'Could not save that recipe.'), { code: SERVICE_CODES.db });
       }
-      await recordActivitySafely(scope, { agent: 'meal_planner', title: `Saved the recipe ${name}`, href: '/dashboard/recipes' });
+      await recordActivitySafely(scope, { action: 'create', agent: 'meal_planner', title: `Saved the recipe ${name}`, href: '/dashboard/recipes' });
       return ok(toRecipeSummary(data));
     },
   );
