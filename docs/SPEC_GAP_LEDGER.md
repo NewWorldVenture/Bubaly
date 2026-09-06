@@ -38,7 +38,7 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 22 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 19 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
@@ -290,10 +290,23 @@ the result rather than narrated as a fresh write.
   bookkeeping, so the set was widened deliberately and the assertion strengthened
   to also name the actual attack (no `calendar_events` write of any kind).
 
-  **The remaining 22 silent surfaces are counted, not ignored.**
-  `tests/ai-observability-coverage.test.ts` caps them at exactly 22 — not a round
+  **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
+  (the common case), "never throws" (the chat assistant) and "answers 200 with a
+  flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
+  into lines and answers `{ ideas: [] }` when none survive — which is exactly
+  what a working model with nothing to suggest would produce. A parent sees "no
+  suggestions" either way. The response is deliberately unchanged; the row is now
+  the only place that difference lives.
+
+  The two Money Coach routes (`wallet.coach`, `wallet.coach.child`) went with it,
+  both the familiar unparseable-answer 502. Neither puts the child's name on the
+  row: `childId` is already the subject of the `wallet_audit_logs` entry, and the
+  request ledger does not need to repeat which kid is being coached about money.
+
+  **The remaining 19 silent surfaces are counted, not ignored.**
+  `tests/ai-observability-coverage.test.ts` caps them at exactly 19 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 
@@ -316,8 +329,9 @@ the result rather than narrated as a fresh write.
   It is one of three surfaces so far that do not fit the pattern, alongside the
   chat assistant which never throws and utility savings which answers 200 on
   failure, and the assistant engine whose stream outlives the call that creates
-  it. The remaining 22 should be expected to contain more of them: "wrap the
-  provider call" is the common case, not the whole set.
+  it, and the conflict resolver that answers 200 with an empty list. The
+  remaining 19 should be expected to contain more of them: "wrap the provider
+  call" is the common case, not the whole set.
 
   **Adopting the wrapper widens what a route reads from its user context.**
   `scopeFromUserContext` needs `ctx.active.role`, `ctx.active.family.timezone`
@@ -328,7 +342,7 @@ the result rather than narrated as a fresh write.
   not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
   500. Expect the same in the remaining 32: the stub is thinner than the type.
 
-  Still open in §33: the other 22 surfaces, and the admin view over runs, which
+  Still open in §33: the other 19 surfaces, and the admin view over runs, which
   this does not touch. Note that `app/api/ai/route.ts` is not among them and is
   not silent either — it holds the scope, the engine holds the provider, and the
   scanner counts the file that obtains one. For a route/helper pair like that,

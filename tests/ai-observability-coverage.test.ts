@@ -101,6 +101,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/relationship/route.ts', "feature: 'relationship.digest'"],
       ['app/api/ai/meals/nutrition/route.ts', "feature: 'meals.nutrition'"],
       ['app/api/ai/chef/route.ts', "feature: 'meals.chef'"],
+      ['app/api/ai/wallet/route.ts', "feature: 'wallet.coach'"],
+      ['app/api/ai/wallet/child/[childId]/route.ts', "feature: 'wallet.coach.child'"],
+      ['app/api/ai/resolve-conflict/route.ts', "feature: 'calendar.resolve-conflict'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -183,6 +186,17 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     expect(src).not.toContain('obs.failed(fallbackErr, { partial: true })');
   });
 
+  it('a 200 carrying an empty answer is recorded as a failure too', () => {
+    // The fourth shape of silence, after "throws", "never throws" and "answers
+    // 200 with a flag". `/api/ai/resolve-conflict` splits the reply into lines
+    // and returns `{ ideas: [] }` when none survive — a 200 that looks exactly
+    // like a working model with nothing to suggest. The response is deliberately
+    // unchanged; the row is the only place the difference lives.
+    const src = readFileSync('app/api/ai/resolve-conflict/route.ts', 'utf8');
+    expect(src).toContain('if (parsed.length === 0) obs.failed(');
+    expect(src, 'the empty answer must still be returned as a 200').toContain('return NextResponse.json({ ideas });');
+  });
+
   it('an answer the surface could not use is a failure, and the tokens still count', () => {
     // Four surfaces share one failure mode nothing recorded: the model answered,
     // the tokens were spent, and the reply could not be parsed into anything
@@ -198,6 +212,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       'app/api/ai/relationship/route.ts',
       'app/api/ai/meals/nutrition/route.ts',
       'app/api/ai/chef/route.ts',
+      'app/api/ai/wallet/route.ts',
+      'app/api/ai/wallet/child/[childId]/route.ts',
+      'app/api/ai/resolve-conflict/route.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
       const used = src.indexOf('obs.used(');
@@ -266,7 +283,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // room for new silent surfaces to slip in green. Lower it every time a
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
-    // then 22 when the assistant engine adopted it.
+    // then 22 when the assistant engine adopted it, then 19.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -274,7 +291,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 22;
+    const CEILING = 19;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
@@ -286,9 +303,11 @@ describe('the remaining silence is counted, not ignored', () => {
     // The scanner has been wrong twice, in both directions, so it gets its own
     // fixtures. Every line here is a file whose behaviour was checked by hand.
     //
-    // Counted: obtains a provider and calls it.
+    // Counted: obtains a provider and calls it. These two are here to prove the
+    // scanner still finds real surfaces — swap them for others as they adopt
+    // (`app/api/ai/wallet/route.ts` used to be one of them).
     expect([...SILENT]).toContain('lib/chores/ai.ts');
-    expect([...SILENT]).toContain('app/api/ai/wallet/route.ts');
+    expect([...SILENT]).toContain('app/api/ai/import/route.ts');
     // `lib/ai/assistant-engine.ts` used to be asserted here. It was found only
     // after the backward scan was fixed — a forward regex read its earlier
     // `import type` line and called it type-only — and it has since adopted the
