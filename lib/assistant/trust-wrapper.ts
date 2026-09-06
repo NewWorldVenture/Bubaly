@@ -45,21 +45,28 @@ export const TOOL_DOMAIN: Record<string, string> = {
  * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
  * no tool called ...".
  *
- * These three are written nowhere but `lib/assistant/tools.ts` — there is no
- * `lib/services/notes`, no `lib/services/goals`, and nothing under
- * `lib/ai/tools/` touches `event_rsvps` — so there is no registry tool for the
- * replay to find. Until they have one, the family is TOLD that, in the
- * approval line itself, rather than discovering it after a parent has already
- * said yes.
+ * `add_note` and `add_goal` have left this list: they now resolve to
+ * `notes.create` and `goals.create`, so their approvals execute.
  *
- * `tests/assistant-approval-replay.test.ts` fails in both directions: a new
- * gated tool with no registry equivalent has to be added here, and an entry
- * that gains one has to be removed.
+ * `rsvp_to_event` stays, and the reason is sharper than "no registry tool" —
+ * WRITING ONE WOULD BE WORSE THAN THE REFUSAL. `decideApproval` builds its
+ * scope from the APPROVER (`scopeFromUserContext`), and `openApprovalRequest`
+ * stores `requested_by_member_id: null` for every AI-filed row, so nothing on
+ * the row says who asked. A registry RSVP tool taking `member_id` from
+ * `scope.memberId` would therefore record the approving PARENT as attending —
+ * and because `event_rsvps_once UNIQUE (event_id, member_id)` (0047) makes the
+ * write an upsert, it would silently replace that parent's own earlier answer.
+ * An honest "Bubaly could not finish it" beats destroying a reply nobody
+ * touched.
+ *
+ * What unblocks it is recording the asker: `wrapToolsWithTrust` does not even
+ * receive the acting member id today, so plumbing it through to
+ * `gateAiAction` and on to `requested_by_member_id` is the prerequisite, and it
+ * fixes the milder version of the same problem for notes and goals at the same
+ * time (see the ledger).
  */
 export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
-  add_note: 'nothing outside lib/assistant/tools.ts writes `notes`',
-  add_goal: 'nothing outside lib/assistant/tools.ts writes `goals`',
-  rsvp_to_event: 'nothing under lib/ai/tools/ writes `event_rsvps`',
+  rsvp_to_event: 'the replay runs as the approver and the row does not record who asked, so it would answer for the wrong person and overwrite their reply',
 };
 
 export function wrapToolsWithTrust(

@@ -15,6 +15,7 @@
 // directions: a newly gated tool with no registry equivalent has to be named
 // in `APPROVAL_CANNOT_REPLAY` with a reason, and an entry that gains one has
 // to be removed. Same shape as tests/notification-write-boundary.test.ts.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { APPROVAL_CANNOT_REPLAY, TOOL_DOMAIN } from '@/lib/assistant/trust-wrapper';
 import { getTool } from '@/lib/ai/tools/registry';
@@ -48,18 +49,57 @@ describe('a gated chat tool can be replayed from its approval', () => {
     expect(unmapped, `not in TOOL_DOMAIN, so it is never gated: ${unmapped.join(', ')}`).toEqual([]);
   });
 
+  it('the replay really does run as the approver, which is why rsvp_to_event stays out', () => {
+    // The reason for the one remaining orphan is a fact about two other files,
+    // so it is pinned here rather than left in a comment that can rot:
+    //
+    //   1. the approval row records no asker for an AI-filed request, and
+    //   2. the decision action builds its scope from the person APPROVING.
+    //
+    // Together those mean a registry RSVP tool taking member_id from
+    // scope.memberId would answer for the parent, and event_rsvps_once makes
+    // that an upsert — so it would overwrite the parent's own reply. If either
+    // line below stops being true, the orphan can go.
+    expect(readFileSync('lib/trust/server.ts', 'utf8'))
+      .toContain("requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : null");
+    expect(readFileSync('app/(app)/dashboard/approvals-actions.ts', 'utf8'))
+      .toContain('scopeFromUserContext(ctx, await createServer())');
+    expect(readFileSync('lib/services/scope.ts', 'utf8'))
+      .toContain('memberId: ctx.active.member.id');
+  });
+
   it('every entry carries a reason, not just a name', () => {
     for (const [name, reason] of Object.entries(APPROVAL_CANNOT_REPLAY)) {
       expect(reason.length, `${name} has no reason`).toBeGreaterThan(20);
     }
   });
 
-  it('the three known orphans are exactly the ones with no service behind them', () => {
-    // Pinned by name so the count cannot drift silently. Each is written only
-    // in lib/assistant/tools.ts: there is no lib/services/notes, no
-    // lib/services/goals, and nothing under lib/ai/tools/ writes event_rsvps.
-    expect(Object.keys(APPROVAL_CANNOT_REPLAY).sort()).toEqual(['add_goal', 'add_note', 'rsvp_to_event']);
+  it('names the one orphan that is left, and it is left on purpose', () => {
+    // add_note and add_goal left the list because notes.create and goals.create
+    // resolve them — forced, not remembered: the stale-entry check above went
+    // red the moment those tools landed.
+    //
+    // rsvp_to_event stays, and NOT because writing the tool is hard. The replay
+    // runs under the APPROVER's scope and the approval row stores
+    // requested_by_member_id: null for every AI-filed row, so a tool taking
+    // member_id from scope.memberId would record the parent as attending — and
+    // event_rsvps_once makes that an upsert, so it would overwrite the parent's
+    // own reply. A refusal beats destroying an answer nobody touched.
+    expect(Object.keys(APPROVAL_CANNOT_REPLAY)).toEqual(['rsvp_to_event']);
   });
+
+  it('the ratchet still bites', () => {
+    // A shrinking allow-list is exactly when a coverage test quietly stops
+    // testing, so this proves the assertion fails for a NEW orphan rather than
+    // trusting it to.
+    const orphansFor = (gated: string[]) =>
+      gated.filter((name) => !getTool(name) && !(name in APPROVAL_CANNOT_REPLAY));
+
+    expect(orphansFor(GATED)).toEqual([]);
+    expect(orphansFor([...GATED, 'brand_new_gated_write'])).toEqual(['brand_new_gated_write']);
+  });
+
+
 
   it('the tools that DO resolve reach a real registry tool, not a same-named stub', () => {
     // The point of the registry lookup is that the replay writes the same row

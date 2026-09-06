@@ -388,4 +388,5 @@ export const calendarTools: ToolDefinition[] = [
       return ok({ busy_days: res.data });
     },
   }),
+
 ];
