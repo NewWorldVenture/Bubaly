@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   CheckSquare, Plus, Trash2, Check, Flag, Calendar as CalendarIcon, Search, X,
   Pencil, Loader2, ListChecks, Sparkles, User as UserIcon,
@@ -9,6 +9,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -76,6 +78,10 @@ export function TodosModule() {
   const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
   const [newListOpen, setNewListOpen] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
+  // Held across retries of one quick add and cleared once the row lands, so a
+  // second press after a lost response is deduplicated while a task typed again
+  // tomorrow is a new one. See lib/utils/submission-id.ts.
+  const quickSubmission = useRef('');
   const [quickBusy, setQuickBusy] = useState(false);
 
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<TodoList>({
@@ -173,11 +179,8 @@ export function TodosModule() {
 
   function toggleItem(item: TodoItem) {
     return run(`toggle:${item.id}`, async () => {
-      const { error } = await createClient().from('todo_items').update({
-        is_done: !item.is_done,
-        completed_at: item.is_done ? null : new Date().toISOString(),
-      }).eq('id', item.id);
-      if (error) throw error;
+      const result = await completeTodoAction(item.id, !item.is_done);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
@@ -185,8 +188,10 @@ export function TodosModule() {
   function deleteItem(id: string) {
     if (!confirm('Delete this task?')) return;
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('todo_items').delete().eq('id', id);
-      if (error) throw error;
+      // Through the service, which filters `family_id` as well as `id`. The
+      // client delete filtered on `id` alone and left tenancy to RLS.
+      const result = await deleteTodoAction(id);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
@@ -210,11 +215,16 @@ export function TodosModule() {
       const listId = await ensureListId();
       if (!listId) return;
       const due = when === 'today' ? todayStr : when === 'tomorrow' ? tomorrowStr : weekEndStr;
-      const { error } = await createClient().from('todo_items').insert({
-        family_id: familyId, list_id: listId, title, due_date: due,
-        priority: 'medium', created_by: selfId, assigned_to_id: selfId,
+      // One id per quick-add attempt, minted when the title is typed and cleared
+      // when the row lands. A second press after a lost response is the same
+      // task; typing "Call the dentist" again tomorrow is a different one.
+      quickSubmission.current ||= newSubmissionId();
+      const result = await createTodoAction({
+        title, listId, dueDate: due, priority: 'medium',
+        assigneeId: selfId, submissionId: quickSubmission.current,
       });
-      if (error) { toastError(describeDbError(error)); return; }
+      if (!result.ok) { toastError(result.error); return; }
+      quickSubmission.current = '';
       setQuickTitle('');
       success('Task added');
       void refreshItems();
@@ -599,6 +609,12 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   const [dueDate, setDueDate] = useState(item?.due_date ?? '');
   const [assignedTo, setAssignedTo] = useState(item?.assigned_to_id ?? '');
   const [listId, setListId] = useState(item?.list_id ?? lists[0]?.id ?? '');
+  // One id for this composition of this task, held across every retry of it. The
+  // modal unmounts on save and on close, so the next New Task mints a new one and
+  // two children each needing "Pack the kit" both get a row; a Save pressed again
+  // after a response that never arrived reuses this one and gets the first back.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -609,16 +625,17 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
     if (!listId) { toastError('Pick a category'); return; }
     setLoading(true);
     try {
-      const supabase = createClient();
-      // list_id is fixed at creation (the generated Update type excludes it).
-      const payload = {
+      // list_id is fixed at creation, so it is a create-only field — the service's
+      // update patch has no way to express a move between lists either.
+      const fields = {
         title: trimmed, notes: notes.trim() || null, priority,
-        due_date: dueDate || null, assigned_to_id: assignedTo || null,
+        dueDate: dueDate || null, assigneeId: assignedTo || null,
       };
-      const { error } = item
-        ? await supabase.from('todo_items').update(payload).eq('id', item.id)
-        : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId, created_by: selfId });
-      if (error) { toastError(describeDbError(error)); return; }
+      // No family_id and no created_by: the action reads both from the session.
+      const result = item
+        ? await updateTodoAction(item.id, fields)
+        : await createTodoAction({ ...fields, listId, submissionId: submissionId.current });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

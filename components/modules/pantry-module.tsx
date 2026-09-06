@@ -8,6 +8,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
+import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -69,26 +71,25 @@ export function PantryModule() {
     void refresh();
   }
 
-  // Add a set of items to the family's grocery list (creating one if needed).
+  // Add a set of items to the family's grocery list.
+  //
+  // The find-the-list-or-create-one dance this used to do in the browser is
+  // `ensureDefaultList`, which the service calls when no list id is given — the
+  // exact fork the service layer exists to remove. Restocking is also where the
+  // duplicate bites hardest: the low-stock items are the staples most likely to
+  // be on the list already.
   async function addToGrocery(rows: PantryItem[]) {
     if (rows.length === 0) return;
-    const supabase = createClient();
-    let { data: list } = await supabase.from('grocery_lists').select('id')
-      .eq('family_id', familyId).eq('is_archived', false).order('created_at').limit(1).maybeSingle();
-    if (!list) {
-      const { data: created, error } = await supabase.from('grocery_lists')
-        .insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
-      if (error || !created) return toastError(describeDbError(error, 'Could not create a grocery list'));
-      list = created;
-    }
-    const items = rows.map((r) => ({
-      family_id: familyId, list_id: list!.id, name: r.name,
-      quantity: r.unit ? `${r.low_threshold ?? 1} ${r.unit}` : null,
-      category: r.category ?? 'Pantry', created_by: userId,
-    }));
-    const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) return toastError(describeDbError(error));
-    success(`Added ${items.length} item${items.length > 1 ? 's' : ''} to your grocery list`);
+    const result = await addGroceryItemsAction({
+      items: rows.map((r) => ({
+        name: r.name,
+        quantity: r.unit ? `${r.low_threshold ?? 1} ${r.unit}` : null,
+        category: r.category ?? 'Pantry',
+      })),
+    });
+    if (!result.ok) return toastError(result.error);
+    if (groceryAddWasNoOp(result)) return toastError(describeGroceryAdd(result));
+    success(describeGroceryAdd(result));
   }
 
   if (loading) return <SkeletonList />;

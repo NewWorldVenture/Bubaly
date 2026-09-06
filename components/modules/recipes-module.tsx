@@ -9,6 +9,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
+import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -171,24 +173,30 @@ export function RecipesModule() {
     setViewing(null);
   }
 
+  // A recipe's ingredients are the family's staples, so this is where duplicate
+  // lines pile up fastest: adding tacos when milk, onions and tortillas are
+  // already on the list used to append all three again. The service skips them
+  // by normalised name and says how many it skipped.
   async function addItemsToList(recipe: Recipe, listId: string): Promise<boolean> {
-    const supabase = createClient();
     const ingredients = (recipe.ingredients as unknown as Ingredient[]) ?? [];
     const multiplier = (servingsOverride ?? recipe.servings) / recipe.servings;
-    const items = ingredients.map((ing) => {
-      const qty = scaleQuantity(ing.quantity, multiplier);
-      return {
-        family_id: familyId,
-        list_id: listId,
-        name: ing.name,
-        quantity: qty ? `${qty} ${ing.unit ?? ''}`.trim() : null,
-        category: 'Pantry',
-        created_by: userId,
-      };
+    const result = await addGroceryItemsAction({
+      listId,
+      items: ingredients.map((ing) => {
+        const qty = scaleQuantity(ing.quantity, multiplier);
+        return {
+          name: ing.name,
+          quantity: qty ? `${qty} ${ing.unit ?? ''}`.trim() : null,
+          // Unchanged: every ingredient has always been filed under Pantry here.
+          // The service would categorise by aisle instead, which is better, but
+          // that is a change to what the list looks like and not to who writes it.
+          category: 'Pantry',
+        };
+      }),
     });
-    const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) { toastError(describeDbError(error)); return false; }
-    success(`${items.length} ingredients added to your grocery list!`);
+    if (!result.ok) { toastError(result.error); return false; }
+    if (groceryAddWasNoOp(result)) toastError(describeGroceryAdd(result));
+    else success(describeGroceryAdd(result));
     return true;
   }
 
@@ -196,7 +204,7 @@ export function RecipesModule() {
     const supabase = createClient();
     const { data: list } = await supabase
       .from('grocery_lists').select('id')
-      .eq('family_id', familyId).eq('is_archived', false)
+      .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
       .order('created_at').limit(1).maybeSingle();
     if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
     await addItemsToList(recipe, list.id);

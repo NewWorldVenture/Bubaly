@@ -37,6 +37,22 @@ export type GroceryItem = Tables<'grocery_items'>;
 export const DEFAULT_GROCERY_LIST_NAME = 'Groceries';
 
 /**
+ * "Not archived", asked of BOTH columns that answer it.
+ *
+ * `grocery_lists` carries two: `is_archived` from 0002 and `archived_at` from
+ * 0014, added when the table grew multi-store lists. Nothing in the application
+ * ever sets `is_archived` to true — the only archive writer is the shopping
+ * module, which stamps `archived_at`. So a family who archives their list sees
+ * it disappear from the shopping page while every `is_archived`-only reader,
+ * this service included, still calls it the family's open list. Bubaly then adds
+ * the milk to a list nobody can see.
+ *
+ * Reading both is the conservative repair: it fixes the lists already archived
+ * as well as the ones archived next, and it changes no write. Consolidating the
+ * two columns is a migration and a decision about which one wins, and does not
+ * belong in the same commit as the read that stops being wrong.
+ */
+/**
  * Store-aisle keywords, longest-match-wins. Categories exist so a list can be
  * walked in one pass through the store instead of criss-crossing it; an
  * uncategorised item sorts to the end rather than into a wrong aisle.
@@ -82,6 +98,7 @@ export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceRes
     .select('id')
     .eq('family_id', scope.familyId)
     .eq('is_archived', false)
+    .is('archived_at', null)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -197,6 +214,7 @@ export async function listOpen(
       .select('id')
       .eq('family_id', scope.familyId)
       .eq('is_archived', false)
+      .is('archived_at', null)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();

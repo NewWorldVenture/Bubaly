@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
@@ -12,6 +12,8 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -223,18 +225,22 @@ export function RemindersModule() {
     });
   }
 
+  // One submission id per suggestion template, so a double-tap on "Water the
+  // plants" adds it once — while adding it again next week is a new composition.
+  const quickAddIds = useRef<Record<string, string>>({});
+
   function quickAdd(suggestion: typeof AI_SUGGESTIONS[0]) {
     return run(`quickadd:${suggestion.title}`, async () => {
-      const { error } = await createClient().from('family_reminders').insert({
-        family_id: familyId,
-        created_by: userId,
+      const result = await createReminderAction({
         title: suggestion.title,
         kind: suggestion.kind,
         priority: suggestion.priority,
         notes: suggestion.notes,
-        ai_suggested: true,
+        aiSuggested: true,
+        submissionId: quickAddIds.current[suggestion.title] ||= newSubmissionId(),
       });
-      if (error) throw error;
+      if (!result.ok) throw new Error(result.error);
+      quickAddIds.current[suggestion.title] = '';
       success('Reminder added from suggestion');
       void refresh();
     });

@@ -13,7 +13,7 @@
 // `chore_assignments.member_id` is NOT NULL, so a chore cannot be assigned to
 // "the family"; a chore with nobody to do it is a chore nobody does.
 import 'server-only';
-import type { Priority, RecurrenceFreq, TaskStatus, Tables } from '@/lib/database.types';
+import type { Priority, RecurrenceFreq, TaskStatus, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, withIdempotency } from '../idempotency';
@@ -168,6 +168,95 @@ export async function assignTodo(scope: ServiceScope, todoId: string, memberId: 
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
   return ok(data);
+}
+
+export type UpdateTodoPatch = {
+  title?: string;
+  notes?: string | null;
+  /** `YYYY-MM-DD` — `todo_items.due_date` is a date column, not a timestamp. */
+  dueDate?: string | null;
+  priority?: string;
+  /** `family_members.id`; null unassigns. */
+  assigneeId?: string | null;
+  tags?: string[];
+};
+
+/**
+ * Edit a to-do.
+ *
+ * `list_id` is deliberately absent: it is fixed at creation and the generated
+ * Update type excludes it, so a caller cannot move a task between lists by
+ * accident here.
+ *
+ * Only the keys actually present are written, so a modal showing four fields
+ * cannot blank the two it never rendered — the same contract `updateEvent`
+ * keeps, and the reason a spread of the form's state is not good enough.
+ */
+export async function updateTodo(scope: ServiceScope, todoId: string, patch: UpdateTodoPatch): Promise<ServiceResult<TodoItem>> {
+  const update: Updatable<'todo_items'> = {};
+
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (!title) return fail('A task needs a title.', { code: SERVICE_CODES.invalidInput });
+    update.title = title;
+  }
+  if (patch.dueDate !== undefined) {
+    if (patch.dueDate && !DAY_KEY.test(patch.dueDate)) {
+      return fail('A due date must look like 2026-09-05.', { code: SERVICE_CODES.invalidInput });
+    }
+    update.due_date = patch.dueDate || null;
+  }
+  if (patch.notes !== undefined) update.notes = patch.notes?.trim() || null;
+  if (patch.assigneeId !== undefined) update.assigned_to_id = patch.assigneeId;
+  if (patch.tags !== undefined) update.tags = patch.tags;
+  // An unrecognised priority is dropped rather than sent on: the column is
+  // constrained, and a rejected write would lose the rest of the edit with it.
+  if (patch.priority !== undefined && TODO_PRIORITIES.includes(patch.priority)) update.priority = patch.priority;
+
+  if (Object.keys(update).length === 0) {
+    return fail('Nothing to change on that task.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  const { data, error } = await scope.db
+    .from('todo_items')
+    .update(update)
+    .eq('id', todoId)
+    .eq('family_id', scope.familyId)
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:tasks] to-do update failed', error);
+    return fail(describeDbError(error, 'Could not update that task.'), { code: SERVICE_CODES.db });
+  }
+  // No row means the id belongs to another family (or is gone). "Not found"
+  // rather than "denied" avoids confirming that the id exists.
+  if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'tasks',
+    title: `Updated the task "${data.title}"`,
+    href: '/dashboard/todos',
+    memberId: data.assigned_to_id,
+  });
+  return ok(data);
+}
+
+export async function deleteTodo(scope: ServiceScope, todoId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  const { data, error } = await scope.db
+    .from('todo_items')
+    .delete()
+    .eq('id', todoId)
+    .eq('family_id', scope.familyId)
+    .select('id, title')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:tasks] to-do delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that task.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, { agent: 'tasks', title: `Removed the task "${data.title}"`, href: '/dashboard/todos' });
+  return ok({ id: data.id, title: data.title });
 }
 
 export type SearchTodosInput = {

@@ -5,7 +5,7 @@
 // notice: being told the same thing twice (so the occurrence is reserved
 // before anything is filed), and a paused Bubaly still doing work on a
 // schedule set up before it was paused.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createRequest: vi.fn(),
@@ -91,7 +91,24 @@ const RULE = {
   next_run_at: '2026-09-05T12:00:00.000Z', said: 'every Sunday at 5pm', is_enabled: true,
 };
 
+/**
+ * A fixed Saturday afternoon, so "the next Sunday 5pm" is a fact rather than a
+ * question about when the suite happens to run.
+ *
+ * The worker reads `new Date()` directly, and the reschedule assertion below
+ * names a real instant — `2026-09-06T21:00:00.000Z`. That made the test pass
+ * only while the wall clock was BEFORE that moment: once it passed, "the next
+ * Sunday 5pm in New York" rolled a week forward and the case failed on every
+ * run, on every branch, for a reason nothing in the diff could explain.
+ *
+ * Only `Date` is faked. Faking timers wholesale would stall the awaits in the
+ * route under test.
+ */
+const FROZEN_NOW = new Date('2026-09-05T13:00:00.000Z');
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FROZEN_NOW);
   vi.clearAllMocks();
   state.rules = [{ ...RULE }];
   state.families = [{ id: 'fam-1', timezone: 'America/New_York' }];
@@ -101,6 +118,8 @@ beforeEach(() => {
   mocks.createRequest.mockResolvedValue({ ok: true, data: { id: 'req-1' } });
   mocks.createRun.mockResolvedValue({ ok: true, data: { id: 'run-1' } });
 });
+
+afterEach(() => { vi.useRealTimers(); });
 
 describe('the routine worker', () => {
   it('refuses an unauthorized caller', async () => {
