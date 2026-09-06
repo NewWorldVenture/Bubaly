@@ -11,6 +11,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/response-schema';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,15 +37,26 @@ export async function POST(req: NextRequest) {
       raw.type === 'evening' ? 'evening' : raw.type === 'weekly' ? 'weekly' : 'morning';
 
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    const todayStart = `${today}T00:00:00.000Z`;
-    const todayEnd   = `${today}T23:59:59.999Z`;
-    const weekEnd    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) + 'T23:59:59.999Z';
+    // The family's day, not UTC's. `now.toISOString().slice(0, 10)` is the UTC
+    // date: for a family in Los Angeles at 5pm it is already tomorrow, so the
+    // brief covered the wrong day and `brief.asOfDate` (which IS family-local)
+    // disagreed with the events listed beside it. The timezone was four lines
+    // away the whole time.
+    const tz = ctx.active.family.timezone || 'America/New_York';
+    const today = dayKeyInTz(now, tz);
+    const bounds = zonedDayBoundsMs(today, tz);
+    const todayStart = new Date(bounds.start).toISOString();
+    const todayEnd   = new Date(bounds.end - 1).toISOString();
+    const weekEndKey = dayKeyInTz(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), tz);
+    const weekEnd    = new Date(zonedDayBoundsMs(weekEndKey, tz).end - 1).toISOString();
 
     // Window for the cross-domain concierge digest (bills, maintenance, trips,
     // pantry, warranties) — look a little further ahead so nothing is missed.
-    const horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const todayDow = now.getUTCDay(); // 0=Sun, matches medication_schedules.days_of_week
+    const horizon = dayKeyInTz(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), tz);
+    // Which day's doses are due is a question about the family's day: at 8pm in
+    // Los Angeles `getUTCDay()` has already rolled over to tomorrow, so a
+    // family read the wrong day's medication schedule every evening.
+    const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay(); // 0=Sun, matches medication_schedules.days_of_week
 
     const [
       { data: members },
@@ -74,7 +86,7 @@ export async function POST(req: NextRequest) {
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(15),
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
-      supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEnd.slice(0, 10)).order('plan_date').limit(14),
+      supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
       // ── Cross-domain concierge signals (previously invisible to the briefing) ──
       supabase.from('bills').select('name, amount, due_date, status').eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
@@ -96,8 +108,10 @@ export async function POST(req: NextRequest) {
     const memberMap = new Map((members ?? []).map(m => [m.id, m]));
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
 
-    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const fmtDate = (iso: string) => iso.slice(0, 10);
+    // Times a parent reads at 7am are their times. Without `timeZone` these
+    // rendered in the server's zone, which on Vercel is UTC.
+    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+    const fmtDate = (iso: string) => dayKeyInTz(new Date(iso), tz);
 
     // ── Build the deterministic cross-domain concierge digest ─────────────────
     const fmtTimeOfDay = (t: string | null) => {
@@ -137,7 +151,7 @@ export async function POST(req: NextRequest) {
     const digest = buildConciergeDigest(conciergeSnapshot);
 
     const context = `
-TODAY: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+TODAY: ${now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${now.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })}
 FAMILY NAME: ${ctx.active.family.name}
 MEMBERS: ${(members ?? []).map(m => `${m.display_name} (${m.role})`).join(', ')}
 GENERATING FOR: ${ctx.active.member?.display_name ?? 'family'}
@@ -250,7 +264,23 @@ ${UNTRUSTED_CONTENT_RULE}
       text: `${i.title} — ${i.detail}`,
       urgency: (i.urgency === 'soon' ? 'medium' : 'high') as 'high' | 'medium' | 'low',
     }));
-    const subtitle = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const subtitle = now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' });
+
+    // Built from rows already read, so the deterministic path says as much as
+    // it honestly can rather than defaulting to "nothing".
+    const fallbackConflicts = todayConflicts(todayEvents ?? [], tz).slice(0, 6);
+    const fallbackKidsNeeds = kidsNeedsFrom(
+      (schoolEvents ?? []) as { title: string; starts_at: string; member_id: string | null }[],
+      (sportsEvents ?? []) as { title: string; starts_at: string; member_id: string | null }[],
+      memberMap,
+      today,
+      tz,
+    );
+    const fallbackMeals = (mealPlans ?? [])
+      .map((m) => m as unknown as { plan_date: string; meal_type: string; meals: { name: string } | null })
+      .filter((m) => m.plan_date === today)
+      .slice(0, 6)
+      .map((m) => ({ meal: m.meal_type, name: m.meals?.name ?? null, status: m.meals?.name ? 'planned' : 'not planned yet' }));
 
     let briefing: Record<string, unknown> | null = null;
 
@@ -283,9 +313,14 @@ ${UNTRUSTED_CONTENT_RULE}
           emoji: '📅',
           color: 'blue',
         })),
-        conflicts: [],
-        kidsNeeds: [],
-        meals: [],
+        // These three were hardcoded empty while the rows to fill them were
+        // fetched in the same `Promise.all` twenty lines up, and the clashes
+        // were computed by `buildBrief` moments later. A family whose AI is
+        // unconfigured — or whose model returned unparseable JSON, which takes
+        // this same path — was told their day was clear when it was not.
+        conflicts: fallbackConflicts,
+        kidsNeeds: fallbackKidsNeeds,
+        meals: fallbackMeals,
         reminders: digestReminders,
         operationsScore: {
           overall: digest.counts.overdue > 0 ? 60 : digest.counts.today > 3 ? 75 : 90,
@@ -316,7 +351,7 @@ ${UNTRUSTED_CONTENT_RULE}
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
-    }, ctx.active.family.timezone ?? 'America/New_York');
+    }, tz);
 
     briefing = {
       ...briefing,
@@ -343,4 +378,50 @@ ${UNTRUSTED_CONTENT_RULE}
     console.error('Briefing error:', err);
     return NextResponse.json({ error: 'Failed to generate briefing' }, { status: 500 });
   }
+}
+
+/** Overlapping events on the family's day, described the way the card renders them. */
+function todayConflicts(
+  events: { title: string; starts_at: string; ends_at: string | null }[],
+  tz: string,
+): { description: string; suggestion: string }[] {
+  const at = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  const out: { description: string; suggestion: string }[] = [];
+  for (let i = 0; i < events.length; i += 1) {
+    for (let j = i + 1; j < events.length; j += 1) {
+      const a = events[i];
+      const b = events[j];
+      const aStart = Date.parse(a.starts_at);
+      const bStart = Date.parse(b.starts_at);
+      const aEnd = a.ends_at ? Date.parse(a.ends_at) : aStart + 3_600_000;
+      const bEnd = b.ends_at ? Date.parse(b.ends_at) : bStart + 3_600_000;
+      if (!(aStart < bEnd && bStart < aEnd)) continue;
+      out.push({
+        description: `${a.title} and ${b.title} overlap at ${at(new Date(Math.max(aStart, bStart)).toISOString())}`,
+        suggestion: 'Decide who covers which, or move one.',
+      });
+    }
+  }
+  return out;
+}
+
+/** What each child has on today, from the school and sports rows already read. */
+function kidsNeedsFrom(
+  school: { title: string; starts_at: string; member_id: string | null }[],
+  sports: { title: string; starts_at: string; member_id: string | null }[],
+  members: Map<string, { display_name: string }>,
+  dayKey: string,
+  tz: string,
+): { name: string; items: string[] }[] {
+  const byMember = new Map<string, string[]>();
+  for (const row of [...school, ...sports]) {
+    if (!row.member_id) continue;
+    if (dayKeyInTz(new Date(row.starts_at), tz) !== dayKey) continue;
+    const name = members.get(row.member_id)?.display_name;
+    if (!name) continue;
+    const items = byMember.get(name) ?? [];
+    if (items.length < 4) items.push(row.title);
+    byMember.set(name, items);
+  }
+  return [...byMember.entries()].slice(0, 6).map(([name, items]) => ({ name, items }));
 }

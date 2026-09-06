@@ -277,12 +277,19 @@ describe('Daily Brief route schema boundary', () => {
     headline: '2 items need attention',
   };
 
+  // The fixture family carries no timezone, so the route falls back to
+  // America/New_York — and every date in the brief is rendered there. Before,
+  // `toLocaleDateString`/`toLocaleTimeString` were called with no `timeZone`,
+  // so a family read their day in whatever zone the server happened to be in
+  // (UTC on Vercel): a 3pm soccer practice for a New York family is 11am.
+  const FAMILY_TZ = 'America/New_York';
+
   function expectedFallback(type = 'morning') {
     return {
       greeting: `Good ${type === 'evening' ? 'evening' : 'morning'}, Alex!`,
-      subtitle: now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+      subtitle: now.toLocaleDateString('en-US', { timeZone: FAMILY_TZ, weekday: 'long', month: 'long', day: 'numeric' }),
       familySummary: ['1 bill need attention', '1 pantry need attention'],
-      schedule: [{ time: new Date(event.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), title: event.title, member: 'Sam', emoji: '\ud83d\udcc5', color: 'blue' }],
+      schedule: [{ time: new Date(event.starts_at).toLocaleTimeString('en-US', { timeZone: FAMILY_TZ, hour: 'numeric', minute: '2-digit' }), title: event.title, member: 'Sam', emoji: '\ud83d\udcc5', color: 'blue' }],
       conflicts: [],
       kidsNeeds: [],
       meals: [],
@@ -353,7 +360,85 @@ describe('Daily Brief route schema boundary', () => {
   // rendered as what Bubaly did for the family. So the route replaces it with
   // the runs that really reached a terminal state: the model may describe the
   // day, it does not decide what happened.
-  describe('the caller may not write the system prompt', () => {
+  describe('the fallback says what it already knows', () => {
+  it('reports a clash it computed instead of an empty list', async () => {
+    // `conflicts`, `kidsNeeds` and `meals` were hardcoded `[]` while the rows
+    // to fill them were fetched in the same Promise.all — so a family whose AI
+    // is unconfigured, or whose model returned unparseable JSON (the same
+    // path), was told their day was clear when two things overlapped.
+    mocks.isAIConfigured.mockResolvedValue(false);
+    const clash = [
+      { title: 'Soccer practice', starts_at: '2026-09-05T15:00:00.000Z', ends_at: '2026-09-05T16:30:00.000Z', location: null, category: 'sports', assignee_id: 'child' },
+      { title: 'Dentist', starts_at: '2026-09-05T16:00:00.000Z', ends_at: '2026-09-05T17:00:00.000Z', location: null, category: 'medical', assignee_id: 'child' },
+    ];
+    mocks.from.mockImplementation((table: string) => queryResult(
+      table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
+        : table === 'calendar_events' ? clash
+        : table === 'meal_plans' ? [{ plan_date: '2026-09-05', meal_type: 'dinner', meals: { name: 'Tacos' } }]
+        : table === 'school_events' ? [{ title: 'Bring a costume', starts_at: '2026-09-05T13:00:00.000Z', event_type: 'other', notes: null, member_id: 'child' }]
+        : [],
+    ));
+
+    const res = await requestBriefing();
+    const body = await res.json() as { briefing: { conflicts: unknown[]; meals: unknown[]; kidsNeeds: unknown[] } };
+
+    expect(body.briefing.conflicts).toHaveLength(1);
+    expect(body.briefing.conflicts[0]).toMatchObject({ description: expect.stringContaining('Soccer practice and Dentist overlap') });
+    expect(body.briefing.meals).toEqual([{ meal: 'dinner', name: 'Tacos', status: 'planned' }]);
+    expect(body.briefing.kidsNeeds).toEqual([{ name: 'Sam', items: ['Bring a costume'] }]);
+  });
+
+  it('still says nothing when there is genuinely nothing', async () => {
+    mocks.isAIConfigured.mockResolvedValue(false);
+    const res = await requestBriefing();
+    const body = await res.json() as { briefing: { conflicts: unknown[]; meals: unknown[]; kidsNeeds: unknown[] } };
+    expect(body.briefing).toMatchObject({ conflicts: [], meals: [], kidsNeeds: [] });
+  });
+});
+
+describe('the day the brief covers is the family’s day', () => {
+  it('a Los Angeles family at 11:30pm gets tonight, not tomorrow', async () => {
+    // `now.toISOString().slice(0, 10)` is the UTC date. At 23:30 in Los Angeles
+    // that is already tomorrow, so the brief queried tomorrow's events and
+    // `brief.asOfDate` — which IS family-local — disagreed with the events
+    // listed beside it in the same response.
+    vi.setSystemTime(new Date('2026-09-06T06:30:00.000Z')); // 11:30pm Sep 5, LA
+    mocks.requireUserContext.mockResolvedValue({
+      user: { id: 'user' },
+      active: {
+        familyId: 'family',
+        family: { name: 'Example Family', timezone: 'America/Los_Angeles' },
+        member: { display_name: 'Alex Example' },
+      },
+    });
+    // The fake's builder returns itself from every method, so recording has to
+    // happen inside it rather than around it.
+    const windows: Record<string, [string, string, unknown][]> = {};
+    mocks.from.mockImplementation((table: string) => {
+      const data = table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }] : [];
+      const promise = Promise.resolve({ data, error: null });
+      const query: Record<string, unknown> = { then: promise.then.bind(promise) };
+      for (const method of ['select', 'eq', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not']) {
+        query[method] = vi.fn(() => query);
+      }
+      for (const method of ['gte', 'lte']) {
+        query[method] = vi.fn((col: string, v: unknown) => { (windows[table] ??= []).push([method, col, v]); return query; });
+      }
+      return query;
+    });
+
+    const res = await requestBriefing();
+    expect(res.status).toBe(200);
+
+    const today = (windows.calendar_events ?? []).find((w) => w[0] === 'gte');
+    expect(today, 'no day window was applied to calendar_events').toBeTruthy();
+    // 00:00 Sep 5 in Los Angeles is 07:00 UTC on Sep 5 — the family's day,
+    // which is not the UTC date the clock says.
+    expect(String(today![2])).toBe('2026-09-05T07:00:00.000Z');
+  });
+});
+
+describe('the caller may not write the system prompt', () => {
   it('only ever uses one of three words for the brief kind', async () => {
     // `type` is interpolated into the SYSTEM prompt ("Generate a ${type} family
     // briefing") and decides which stored brief the request overwrites. It
