@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -100,10 +102,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       goals: coachGoals,
     });
 
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 600 });
-    const coaching = parseWalletCoach(completion.text || '');
-    if (!coaching.headline && coaching.insights.length === 0) {
+    // The child's name is not on the row — `childId` is already the subject of
+    // the audit-log entry below, and the request ledger does not need to repeat
+    // which kid is being coached about money.
+    const coaching = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'wallet.coach.child', text: 'Money coaching for one child' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 600 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseWalletCoach(completion.text || '');
+        if (!parsed.headline && parsed.insights.length === 0) {
+          obs.failed(new Error('The coaching reply had no headline or insights.'));
+          return null;
+        }
+        return parsed;
+      },
+    );
+    if (!coaching) {
       return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
     }
 

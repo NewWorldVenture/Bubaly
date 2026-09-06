@@ -167,8 +167,27 @@ describe('runAssistantTurn (JSON transport)', () => {
     ]);
     expect(result.persisted).toBe(true);
     expect(result.model).toBe('test-model');
-    expect(inserts).toHaveLength(1);
-    const rows = inserts[0].rows as Row[];
+    // Addressed by table, not by position: the turn now also asks for an
+    // `ai_requests` row, so `inserts[0]` is no longer a stable way to name the
+    // message write.
+    const messageInsert = inserts.find((i) => i.table === 'ai_messages');
+    expect(messageInsert, 'the turn must persist its messages').toBeTruthy();
+    // The request row is attributed to the PERSON who typed the message, even
+    // though the scope's actorKind is 'ai' for the tool writes. `createRequest`
+    // reads only familyId/userId/memberId from the scope, and this pins that.
+    // (This stub's `insert` has no `.select().single()`, so the row never
+    // actually opens — `withAiRequest` logs and continues with a null request
+    // id. What is asserted here is the payload the engine asked for.)
+    const requestInsert = inserts.find((i) => i.table === 'ai_requests');
+    expect(requestInsert, 'the turn must open a request row').toBeTruthy();
+    expect(requestInsert!.rows).toMatchObject({
+      family_id: input.familyId,
+      requested_by: input.userId,
+      conversation_id: input.conversationId,
+      feature: 'assistant.turn',
+      request_text: 'Plan tacos for Saturday',
+    });
+    const rows = messageInsert!.rows as Row[];
     expect(rows[0]).toMatchObject({ role: 'user', content: 'Plan tacos for Saturday', conversation_id: input.conversationId });
     expect(rows[1]).toMatchObject({ role: 'assistant', content: 'I’ve done part of that. Could not create the chore.' });
     expect((rows[1].tool_calls as unknown[]).length).toBe(2);
@@ -204,7 +223,12 @@ describe('createAssistantStream (SSE transport)', () => {
       { type: 'delta', text: 'are planned.' },
       { type: 'done', content: 'Tacos are planned.', persisted: true },
     ]);
-    expect(inserts).toHaveLength(1);
+    expect(inserts.find((i) => i.table === 'ai_messages'), 'the stream must persist its messages').toBeTruthy();
+    // The streaming transport names itself separately from the JSON one, so a
+    // family reporting "it stops halfway" can be told which transport they were
+    // on — the two fail in different ways.
+    expect(inserts.find((i) => i.table === 'ai_requests')?.rows)
+      .toMatchObject({ feature: 'assistant.stream', conversation_id: input.conversationId });
   });
 
   it('falls back to a non-streaming run when the stream dies before any text', async () => {

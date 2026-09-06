@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -59,16 +61,29 @@ export async function POST(req: Request) {
     'Only use the facts provided — never invent names, places, or times. Return one option per line, no numbering.';
 
   try {
-    const completion = await provider.complete({
-      system,
-      messages: [{ role: 'user', content: `Event A: ${fmt(a)}\nEvent B: ${fmt(b)}\n\nHow can we resolve this clash?` }],
-      tools: [],
-    });
-    const ideas = completion.text
-      .split('\n')
-      .map((l) => l.replace(/^[\s\-*\d.)]+/, '').trim())
-      .filter(Boolean)
-      .slice(0, 3);
+    const ideas = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'calendar.resolve-conflict', text: 'Resolve a calendar clash' },
+      async (obs) => {
+        const completion = await provider.complete({
+          system,
+          messages: [{ role: 'user', content: `Event A: ${fmt(a)}\nEvent B: ${fmt(b)}\n\nHow can we resolve this clash?` }],
+          tools: [],
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = completion.text
+          .split('\n')
+          .map((l) => l.replace(/^[\s\-*\d.)]+/, '').trim())
+          .filter(Boolean)
+          .slice(0, 3);
+        // A distinct shape of silence: this route answers 200 with `ideas: []`
+        // when nothing parses, so the parent sees "no suggestions" — which is
+        // exactly what a working model with nothing to say would produce. The
+        // response is unchanged; the row is the only place the difference lives.
+        if (parsed.length === 0) obs.failed(new Error('The model returned no usable options.'));
+        return parsed;
+      },
+    );
     return NextResponse.json({ ideas });
   } catch (err) {
     console.error('Conflict-resolution assistant error:', err);
