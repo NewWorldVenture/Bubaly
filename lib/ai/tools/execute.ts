@@ -47,7 +47,7 @@ import {
   HIGH_STAKES_AI_DOMAINS, riskToDecision,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
-import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { getAISettings } from '@/lib/services/ai-settings';
 import { getTool } from './registry';
@@ -429,7 +429,28 @@ async function openApproval(
   decision: Decision,
   meta: GateMeta,
 ): Promise<string | null> {
-  const { data, error } = await (await trustWriter(scope))
+  const writer = await trustWriter(scope);
+  // The SECOND filer of approval_requests. `openApprovalRequest` (lib/trust/
+  // server.ts) is the other, and 0273 deduped it — but this one opens a row when
+  // the RISK TIER tightened an `allow` the engine had already permitted, so
+  // without the same key a resend on that path still files two identical cards.
+  // The key is computed by the same function on purpose: one definition of what
+  // makes two requests the same action.
+  const dedupeKey = approvalDedupeKey(scope.familyId, {
+    actor: { kind: meta.actorKind, id: meta.actorId, role: roleOf(scope.role) },
+    domain: tool.domain,
+    capability: meta.capability,
+    agent: meta.actorKind === 'ai_agent' ? 'Bubaly' : undefined,
+    onBehalfOfMemberId: scope.memberId,
+    payload: { name: tool.name, args: input as Record<string, unknown> },
+  });
+
+  const existing = await writer.from('approval_requests')
+    .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
+    .limit(1).maybeSingle();
+  if (existing.data?.id) return existing.data.id;
+
+  const { data, error } = await writer
     .from('approval_requests')
     .insert({
       family_id: scope.familyId,
@@ -448,14 +469,22 @@ async function openApproval(
       approval_model: decision.approvalModel ?? 'single',
       required_approvals: decision.requiredApprovals ?? 1,
       status: 'pending',
+      dedupe_key: dedupeKey,
     })
     .select('id')
     .single();
-  if (error || !data) {
-    console.error('[tool-exec] could not open an approval request', error);
-    return null;
+  if (data?.id) return data.id;
+  // 23505: a concurrent resend won between the lookup and the insert. Its row is
+  // the answer — returning null here would park the step on an approval that
+  // exists, reported as one that could not be opened.
+  if (error?.code === '23505') {
+    const raced = await writer.from('approval_requests')
+      .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
+      .limit(1).maybeSingle();
+    if (raced.data?.id) return raced.data.id;
   }
-  return data.id;
+  console.error('[tool-exec] could not open an approval request', error);
+  return null;
 }
 
 /**

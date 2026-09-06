@@ -59,3 +59,4 @@ probe in this directory:
 | `family-facts-provenance-check.sql` | A memory records where it came from. |
 | `ai-surface-role-privacy-check.sql` | A child cannot read or create AI plans, memory or routines; the asking parent still can. |
 | `dead-letter-reconcile-check.sql` | A dead-lettered run leaves no step, request or legacy status claiming success. |
+| `approval-dedupe-check.sql` | A resent request cannot file a second *pending* approval card; a re-ask after a decision still can. |

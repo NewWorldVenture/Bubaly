@@ -5,6 +5,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/location/geo';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
 
@@ -77,14 +79,32 @@ export async function updateMyLocation(input: {
     if (recipients.length) {
       const verb = transition === 'left' ? 'left' : 'arrived at';
       const placeName = transition === 'left' ? (oldName ?? 'a place') : current!.name;
-      // Best-effort family alert — log a failure so a silently dropped place
-      // notification (a safety signal) is observable rather than invisible.
-      const { error: notifyErr } = await supabase.from('notifications').insert(recipients.map((r) => ({
-        family_id: familyId, user_id: r.user_id, type: 'system' as const,
-        title: `${member.display_name} ${verb} ${placeName}`, body: null,
-        related_type: 'location_events', related_id: null,
-      })));
-      if (notifyErr) console.error('[locator] place-alert notifications insert failed', { familyId, error: notifyErr });
+      // Through the service, for the duplicate guard: a phone whose GPS jitters
+      // across a geofence edge re-posts the same transition, and a raw insert
+      // sent every one of them.
+      //
+      // MARKED URGENT, departing from the note that had this down as "not
+      // urgent, should move". Deferring it is the harm here: the geofence alerts
+      // that quiet hours would actually hold are the night-time ones, and a
+      // child LEAVING the house at 2am is precisely the alert a parent must not
+      // receive at 7am. Daytime arrivals are outside the window anyway, so
+      // marking this urgent costs a family nothing and protects the one case
+      // that matters.
+      const scope = await systemScopeForFamily(supabase, familyId);
+      if (!scope) {
+        console.error('[locator] could not build a scope for place alerts', { familyId });
+      } else {
+        // Best-effort family alert — log a failure so a silently dropped place
+        // notification (a safety signal) is observable rather than invisible.
+        const sent = await notify(scope, {
+          recipients: recipients.map((r) => r.id),
+          type: 'system',
+          title: `${member.display_name} ${verb} ${placeName}`,
+          relatedType: 'location_events',
+          urgent: true,
+        });
+        if (!sent.ok) console.error('[locator] place-alert notifications failed', { familyId, error: sent.error });
+      }
     }
   }
 

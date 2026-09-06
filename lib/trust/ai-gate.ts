@@ -53,7 +53,17 @@ export type AiGateRequest = {
 export type AiGateOutcome =
   | { effect: 'allow' }
   | { effect: 'deny'; reason: string }
-  | { effect: 'require_approval'; reason: string; approvalId: string | null };
+  | {
+      effect: 'require_approval';
+      reason: string;
+      approvalId: string | null;
+      /**
+       * The approval was ALREADY waiting — this call filed nothing new. A resent
+       * chat message must say so rather than reporting a fresh send, or one
+       * intent reads as two cards in a parent's inbox (0273).
+       */
+      alreadyPending?: boolean;
+    };
 
 export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRequest): Promise<AiGateOutcome> {
   const settings = await readAISettings(supabase, familyId);
@@ -73,7 +83,8 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     payload: req.payload,
     context: { confidence: req.confidence ?? 0.85 },
   };
-  const { decision: engineDecision, approvalId: engineApprovalId } = await evaluateTrust(supabase, familyId, evaluateRequest);
+  const { decision: engineDecision, approvalId: engineApprovalId, alreadyPending: engineAlreadyPending }
+    = await evaluateTrust(supabase, familyId, evaluateRequest);
 
   // The registry knows this tool's declared risk under its legacy name (these
   // surfaces spell tools the old way, and every one is a registry alias), so
@@ -105,14 +116,22 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     // The engine files its own approval row; a tier that tightened an `allow`
     // into an approval has to file one too, or "sent for parent approval" names
     // nothing a parent can find.
-    const approvalId = engineApprovalId
-      ?? await openApprovalRequest(
+    // A tier that tightened an `allow` files its own row; the engine's own
+    // `alreadyPending` carries through when it filed one.
+    const opened = engineApprovalId
+      ? null
+      : await openApprovalRequest(
         supabase,
         familyId,
         { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json>, onBehalfOfMemberId: req.onBehalfOfMemberId ?? null },
         decision,
       );
-    return { effect: 'require_approval', reason: decision.reason, approvalId: approvalId ?? null };
+    return {
+      effect: 'require_approval',
+      reason: decision.reason,
+      approvalId: engineApprovalId ?? opened?.id ?? null,
+      alreadyPending: engineAlreadyPending || (opened?.alreadyPending ?? false),
+    };
   }
   return { effect: 'allow' };
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -28,6 +31,22 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createServiceClient();
+
+  // One scope per family, built once. Each household's quiet hours are its own,
+  // and `systemScopeForFamily` reads the real timezone rather than defaulting —
+  // a window evaluated in the wrong zone holds a notice at six in the evening
+  // and lets one through at two in the morning.
+  const scopes = new Map<string, ServiceScope | null>();
+  const notifyFamily = async (
+    familyId: string,
+    n: { title: string; body: string; relatedType: string; relatedId: string | null },
+  ): Promise<boolean> => {
+    if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
+    const scope = scopes.get(familyId);
+    if (!scope) return false;
+    const sent = await notify(scope, { recipients: 'family', type: 'system', ...n });
+    return sent.ok;
+  };
   const nowIso = new Date().toISOString();
 
   const { data: due, error } = await admin
@@ -59,32 +78,39 @@ export async function GET(req: NextRequest) {
 
     if (result.sold && result.winner_family_id && result.title) {
       const price = `$${(Number(result.current_bid_cents ?? 0) / 100).toFixed(2)}`;
-      const { error: notificationError } = await admin.from('notifications').insert([
-        { family_id: result.winner_family_id, user_id: null, type: 'system' as const,
-          title: `You won "${result.title}"`, body: `Final price ${price}. Open your orders to arrange pickup.`,
-          related_type: 'marketplace_orders', related_id: result.order_id ?? null },
-        ...(result.seller_family_id ? [{ family_id: result.seller_family_id, user_id: null, type: 'system' as const,
-          title: `Auction sold: "${result.title}"`, body: `Sold for ${price}. Confirm pickup in your orders.`,
-          related_type: 'marketplace_orders', related_id: result.order_id ?? null }] : []),
-      ]).select('id');
-      if (notificationError) {
+      // Two families, so two scopes: quiet hours belong to the household being
+      // notified, and this cron runs at 10:00 UTC — late evening for a family in
+      // New Zealand and the small hours for some. Not urgent: an auction that
+      // closed is still closed in the morning.
+      const notified = await Promise.all([
+        notifyFamily(result.winner_family_id, {
+          title: `You won "${result.title}"`,
+          body: `Final price ${price}. Open your orders to arrange pickup.`,
+          relatedType: 'marketplace_orders', relatedId: result.order_id ?? null,
+        }),
+        ...(result.seller_family_id ? [notifyFamily(result.seller_family_id, {
+          title: `Auction sold: "${result.title}"`,
+          body: `Sold for ${price}. Confirm pickup in your orders.`,
+          relatedType: 'marketplace_orders', relatedId: result.order_id ?? null,
+        })] : []),
+      ]);
+      if (notified.some((sent) => !sent)) {
         failed++;
-        console.error('Auction winner notification failed:', notificationError);
+        console.error('Auction winner notification failed');
       }
       sold++;
       continue;
     }
 
     if (result.had_bids && result.title && result.seller_family_id) {
-      const { error: notificationError } = await admin.from('notifications').insert({
-        family_id: result.seller_family_id, user_id: null, type: 'system' as const,
+      const sent = await notifyFamily(result.seller_family_id, {
         title: `Auction ended: "${result.title}"`,
         body: 'The reserve was not met, so it did not sell. Relist it or lower the reserve.',
-        related_type: 'marketplace_listings', related_id: listing.id,
+        relatedType: 'marketplace_listings', relatedId: listing.id,
       });
-      if (notificationError) {
+      if (!sent) {
         failed++;
-        console.error('Auction seller notification failed:', notificationError);
+        console.error('Auction seller notification failed');
       }
     }
     unsold++;

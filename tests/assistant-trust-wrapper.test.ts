@@ -10,7 +10,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // regression can't let a tool write without a trust check.
 
 const evaluateTrust = vi.fn();
-const openedApprovals = vi.fn<(...args: unknown[]) => string | null>(() => 'appr-1');
+// `openApprovalRequest` returns { id, alreadyPending } since 0273 — a resent
+// message must be told its approval is already waiting rather than that a fresh
+// one was sent.
+type Opened = { id: string; alreadyPending: boolean } | null;
+const openedApprovals = vi.fn<(...args: unknown[]) => Opened>(() => ({ id: 'appr-1', alreadyPending: false }));
 vi.mock('@/lib/trust/server', () => ({
   evaluateTrust: (...args: unknown[]) => evaluateTrust(...args),
   // The wrapper files its own approval row when the risk tier tightens an
@@ -63,7 +67,7 @@ function wrapOne(name: string, role: string | null = 'child', supabase = fakeSup
 beforeEach(() => {
   evaluateTrust.mockReset();
   openedApprovals.mockReset();
-  openedApprovals.mockReturnValue('appr-1');
+  openedApprovals.mockReturnValue({ id: 'appr-1', alreadyPending: false });
 });
 
 describe('A-15 wrapToolsWithTrust gates every write tool', () => {
