@@ -182,8 +182,6 @@ export async function runAction(
   call: { name: string; args: Record<string, any> },
   opts: RunActionOptions = {},
 ): Promise<{ ok: boolean; data?: unknown; error?: string; summary?: string }> {
-  const { supabase, familyId, userId } = ctx;
-
   if (getTool(call.name)) {
     const scoped = await resolveScope(ctx);
     if (!scoped.ok) return { ok: false, error: scoped.error };
@@ -206,36 +204,16 @@ export async function runAction(
     }
   }
 
-  try {
-    switch (call.name) {
-      // ── Notes ──────────────────────────────────────────────────────────────
-      case 'add_note': {
-        const body: string = call.args.body ?? '';
-        if (!body) return { ok: false, error: 'note body is required' };
-        const { data, error } = await supabase.from('notes').insert({
-          family_id: familyId, created_by: userId,
-          title: call.args.title ?? null, body,
-        }).select().single();
-        if (error) return actionFailure('save the note', error);
-        return { ok: true, data, summary: 'Saved a family note.' };
-      }
+  // Everything this file used to hand-roll now has a registry tool, so an
+  // unresolved name is a name nothing can do — a hallucination, or a tool
+  // deleted without its callers. Either way the honest answer is a refusal, not
+  // a silent no-op (§43 default deny).
+  //
+  // The `add_note` and `add_goal` branches that stood here were reachable only
+  // while `getTool` returned null for them. `notes.create` and `goals.create`
+  // resolve those names now, so the branches became unreachable — and dead code
+  // that still looks like the live path is how the next reader learns the wrong
+  // thing about where notes are written.
+  return { ok: false, error: 'That action is not available.' };
 
-      // ── Goals ──────────────────────────────────────────────────────────────
-      case 'add_goal': {
-        const title: string = call.args.title ?? '';
-        if (!title) return { ok: false, error: 'goal title is required' };
-        const { data, error } = await supabase.from('goals').insert({
-          family_id: familyId, created_by: userId,
-          title, description: call.args.description ?? null, target_date: call.args.target_date ?? null,
-        }).select().single();
-        if (error) return actionFailure('create the goal', error);
-        return { ok: true, data, summary: `Created goal "${title}".` };
-      }
-
-      default:
-        return { ok: false, error: 'That action is not available.' };
-    }
-  } catch (e) {
-    return actionFailure('complete the requested action', e);
-  }
 }

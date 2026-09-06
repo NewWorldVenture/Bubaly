@@ -90,7 +90,11 @@ const DAY_MS = 86_400_000;
 const dateOnly = (v: string | Date) => (typeof v === 'string' ? new Date(`${v.slice(0, 10)}T00:00:00`) : new Date(v.getFullYear(), v.getMonth(), v.getDate()));
 export const dayDiff = (from: string | Date, to: string | Date) => Math.round((dateOnly(to).getTime() - dateOnly(from).getTime()) / DAY_MS);
 export const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-export const addDays = (iso: string, days: number) => isoDate(new Date(dateOnly(iso).getTime() + days * DAY_MS));
+export const addDays = (iso: string, days: number) => {
+  const date = dateOnly(iso);
+  date.setDate(date.getDate() + days);
+  return isoDate(date);
+};
 
 /** Template rows that apply to this move. */
 export function applicableTemplate(move: Pick<MoveLike, 'move_kind' | 'has_kids' | 'has_pets' | 'is_renting_out'>): TaskTemplate[] {

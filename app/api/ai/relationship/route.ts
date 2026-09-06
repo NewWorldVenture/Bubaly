@@ -8,7 +8,8 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { upcomingDates, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import {
   buildRelationshipDigestPrompt, parseRelationshipDigest, suggestGiftsFromWishlist,
-  type WishItemLite,
+  buildRelationshipGiftHistory, RELATIONSHIP_GIFT_HISTORY_LIMIT,
+  type WishItemLite, type RelationshipDigestContext,
 } from '@/lib/relationship/gifts';
 
 // A family can generate this many AI digests per day. Generous for normal use,
@@ -17,7 +18,7 @@ const RELATIONSHIP_AI_DAILY_LIMIT = 20;
 const AI_AUDIT_ACTION = 'relationship_ai_digest';
 
 // POST /api/ai/relationship — the Relationship Helper digest. Reads upcoming
-// dates + partner preferences + the partner's wishlist, then asks the AI for
+// dates + partner preferences + wishlist + recorded gift outcomes, then asks the AI for
 // warm, specific nudges and tailored gift ideas. Returns structured JSON.
 export async function POST() {
   try {
@@ -64,13 +65,32 @@ export async function POST() {
       title: u.title, kind: u.kind, countdown: formatCountdown(u.days), milestone: milestoneLabel(u),
     }));
 
+    const recipient = {
+      familyId,
+      partnerMemberId: profile?.partner_member_id ?? null,
+      partnerName: profile?.partner_name ?? null,
+    };
+    let giftHistory = buildRelationshipGiftHistory(null, recipient);
+    if (recipient.partnerMemberId || recipient.partnerName?.trim()) {
+      // Same cookie-bound client and active-family scope as the existing UI.
+      // One extra row detects incomplete coverage without an unbounded read.
+      const { data: giftRows, error: giftError } = await supabase.from('relationship_gift_ideas')
+        .select('id, family_id, for_member_id, for_name, title, status, source, wishlist_item_id')
+        .eq('family_id', familyId).in('status', ['purchased', 'given'])
+        .order('updated_at', { ascending: false }).order('id', { ascending: true })
+        .limit(RELATIONSHIP_GIFT_HISTORY_LIMIT + 1);
+      giftHistory = buildRelationshipGiftHistory(giftError ? null : giftRows, recipient);
+    }
+
     // Partner's wishlist (if linked) → ranked gift candidates for grounding.
     let wishlist: { title: string; priceCents: number | null }[] = [];
     if (profile?.partner_member_id) {
       const { data: items } = await supabase.from('wishlist_items')
         .select('id, title, url, price, priority, is_purchased, claimed_by')
         .eq('family_id', familyId).eq('member_id', profile.partner_member_id).limit(50);
-      wishlist = suggestGiftsFromWishlist((items ?? []) as WishItemLite[], { maxBudgetCents: profile.gift_budget_cents ?? null })
+      wishlist = suggestGiftsFromWishlist((items ?? []) as WishItemLite[], {
+        maxBudgetCents: profile.gift_budget_cents ?? null, giftHistory,
+      })
         .map((c) => ({ title: c.title, priceCents: c.priceCents }));
     }
 
@@ -81,17 +101,22 @@ export async function POST() {
       loveLanguages: profile?.love_languages ?? [],
       giftBudgetCents: profile?.gift_budget_cents ?? null,
       wishlist,
+      giftHistory,
     });
 
     const provider = await resolveProvider();
     const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 700 });
-    const digest = parseRelationshipDigest(completion.text || '');
+    const digest = parseRelationshipDigest(completion.text || '', giftHistory);
     if (!digest.headline && digest.prompts.length === 0 && digest.giftIdeas.length === 0) {
       return NextResponse.json({ error: 'Could not generate suggestions right now. Please try again.' }, { status: 502 });
     }
     // Best-effort metering record (never blocks the response).
     await logAudit(supabase, { familyId, actorId: ctx.user.id, action: AI_AUDIT_ACTION, resource: 'relationship' });
-    return NextResponse.json({ digest });
+    const context: RelationshipDigestContext = {
+      familyId, userId: ctx.user.id, memberId: ctx.active.member.id,
+      partnerMemberId: recipient.partnerMemberId, partnerName: recipient.partnerName,
+    };
+    return NextResponse.json({ digest, context });
   } catch (err) {
     console.error('Relationship AI error:', err);
     return NextResponse.json({ error: 'Something went wrong generating suggestions.' }, { status: 500 });

@@ -78,7 +78,7 @@ export const memoryTools: ToolDefinition[] = [
       asked_for: z.boolean().nullish().describe('True ONLY when the person asked in so many words to remember this ("remember that…", "note that…"). Anything you worked out yourself is not asked for.'),
       confidence: z.number().int().nullish().describe('0–100, how sure you are — used when this is your own inference'),
       note: z.string().nullish().describe('Context or evidence'),
-      expires_at: z.string().nullish().describe('Date after which this stops being true, as YYYY-MM-DD (or a full ISO datetime WITH a Z or ±HH:MM offset — a time with no zone is refused, because when a fact expires must not depend on which server wrote it). Use it for anything that will go stale on its own — a clothing size, a school year, a policy term. Omit for a fact that simply is.'),
+      expires_at: z.string().nullish().describe('Expiry as YYYY-MM-DD (midnight UTC) or an ISO timestamp with a timezone offset. Use for temporary facts such as clothing sizes or a school year. Omitted/null or blank means no deadline, including when restating an existing fact.'),
     }),
     output: z.object({
       kind: z.enum(['fact', 'suggestion']),
@@ -88,10 +88,11 @@ export const memoryTools: ToolDefinition[] = [
       member_id: z.string().nullable(),
       confirmed: z.boolean(),
       updated: z.boolean(),
+      expires_at: z.string().nullable(),
     }),
     idempotencyFrom: (input) => {
       const key = input.key.trim().toLowerCase();
-      return key ? `memory.remember:${input.member_id ?? input.member ?? ''}:${key}:${input.content.trim().toLowerCase()}` : null;
+      return key ? `memory.remember:${input.member_id ?? input.member ?? ''}:${key}:${input.content.trim().toLowerCase()}:${input.expires_at ?? ''}` : null;
     },
     summarize: (_input, output) => (output.confirmed
       ? `${output.updated ? 'Updated' : 'Remembered'}: ${output.label} — ${output.value}`
@@ -132,10 +133,10 @@ export const memoryTools: ToolDefinition[] = [
       if (!res.ok) return res;
       if (res.data.kind === 'fact') {
         const fact = res.data.fact;
-        return ok({ kind: 'fact' as const, id: fact.id, label: fact.label, value: fact.value, member_id: fact.member_id, confirmed: true, updated: res.data.updated });
+        return ok({ kind: 'fact' as const, id: fact.id, label: fact.label, value: fact.value, member_id: fact.member_id, confirmed: true, updated: res.data.updated, expires_at: fact.expires_at });
       }
       const s = res.data.suggestion;
-      return ok({ kind: 'suggestion' as const, id: s.id, label: s.label, value: s.value, member_id: s.member_id, confirmed: false, updated: res.data.duplicate });
+      return ok({ kind: 'suggestion' as const, id: s.id, label: s.label, value: s.value, member_id: s.member_id, confirmed: false, updated: res.data.duplicate, expires_at: s.expires_at ?? null });
     },
     verify: async (scope, _input, output) => {
       const table = output.kind === 'fact' ? 'family_facts' : 'family_playbook_suggestions';

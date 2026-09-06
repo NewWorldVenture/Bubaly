@@ -114,39 +114,73 @@ the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
 
-- **The registry path was looser than the hand-written one it replaces.** Two
-  data-integrity bugs found while designing §30's delegation, both live, both in
-  code the delegation would have leaned on.
+- **§30, two of the three writes that had nowhere to land.** `add_note`,
+  `add_goal` and `rsvp_to_event` were gated in chat with no registry tool, so a
+  parent could grant the approval and read back *"Bubaly has no tool called
+  \"add_note\""*. `notes.create` and `goals.create` close two of them.
 
-  **A recurring reminder with no time was stored and could never fire.**
-  `createReminder` refused a timeless non-location reminder only when
-  `recurrence === 'none'`, so "remind me every day to stretch" — which
-  `reminders.create` turns into `kind: 'recurring'` with no `remind_at` — slipped
-  past and wrote `remind_at` NULL. Every reader excludes it: `listDue` filters
-  `.not('remind_at','is',null)`, the notification cron
-  (`lib/server/notifications.ts`) filters the same, and `nextRemindAt` takes the
-  *current* `remind_at` as the point to count forward from, so the row can never
-  acquire one later. It appeared in the module with no time, never became
-  overdue, and never notified anyone.
+  **What that does and does not buy, stated exactly.** It does NOT put a ledger
+  row under a chat write: `assistant-engine.ts` excludes `notes.create` from the
+  chat toolbox the moment `add_note` resolves — that exclusion is the whole
+  point — so the hand-written tool still writes raw SQL there. What now reaches
+  `executeTool`, with its `ai_tool_calls` row, its gate and its output
+  validation, is the APPROVAL REPLAY (which previously just failed) and MAGIC
+  IMPORT (`lib/ai/actions.ts`, which previously hand-rolled its own insert). The
+  chat path's own ledger gap is the shadowing, and it stays open.
 
-  A test had pinned the old behaviour — *"accepts a recurring reminder with no
-  explicit first time"* — asserting acceptance and never that the reminder could
-  fire. That is how it looked deliberate for so long, and is worth remembering:
-  a test that pins the write without pinning the effect makes a dud look like a
-  feature.
+  **The chat toolbox does not change, and that is the load-bearing property.**
+  `assistant-engine.ts` excludes a registry tool when `getTool(flatName)`
+  resolves, and `mergeToolSets` dedupes on the WIRE name — where the registry's
+  is `notes_create`, a different string from `add_note` that it could never see
+  as the same tool. So the ALIAS is the entire mechanism. Drop one and the model
+  is offered both spellings of one capability: the flat name through
+  `wrapToolsWithTrust`, the underscored one skipping the wrapper and gated
+  inside `executeTool`, with only the second writing a ledger row.
+  `tests/assistant-toolbox-invariance.test.ts` reproduces the engine's own merge
+  and fails on exactly that.
 
-  **`createChore` had no floor on points.** The chat tool clamped with
-  `Math.max(0, …)`; the registry's schema was `z.number().int().nullish()`, so a
-  chore that TAKES points away for doing it was writable. Now refused at both the
-  service and the schema, rather than clamped — silently turning -5 into 0
-  answers a request nobody made. Zero still works, because a chore with no reward
-  is a real thing a family wants.
+  **Risk is `medium` on purpose.** `ai-gate.ts` reads
+  `registryTool ? effectiveRisk(settings, tool) : 'medium'`, so these names were
+  taking the hard-coded fallback. Declaring `low` — which every other `tasks.*`
+  tool declares — would have quietly LOOSENED the chat gate for children.
 
-  Scope, stated exactly: `createReminder` has one caller,
-  `lib/ai/tools/reminders.ts`, so this closes the AI path. The reminders module
-  still inserts into `family_reminders` directly and can still store a timeless
-  reminder — that is the §7 row, not this one.
+  **`rsvp_to_event` was designed, written, and then pulled.** An adversarial
+  review of the tranche caught what the design missed, and it is worth recording
+  because it is a property of the approval system rather than of the tool:
+  `decideApproval` builds its scope from the APPROVER (`scopeFromUserContext`),
+  and `openApprovalRequest` stores `requested_by_member_id: null` for every
+  AI-filed row — `gateAiAction` passes `actor.kind: 'ai_agent'`. **Nothing on the
+  row says who asked.** A registry RSVP tool taking `member_id` from
+  `scope.memberId` would therefore record the approving PARENT as attending, and
+  because `event_rsvps_once UNIQUE (event_id, member_id)` (0047) makes the write
+  an upsert, it would silently replace that parent's own earlier answer. Today's
+  honest refusal is better than a destroyed reply, so the entry stays in
+  `APPROVAL_CANNOT_REPLAY` with that as its reason, and a test pins the two
+  facts it depends on so the orphan can be removed the moment they change.
 
+  **The same flaw in a milder form is shipping, and is named rather than
+  hidden.** `notes.created_by` and `goals.created_by` also come from the scope,
+  so an approved note is attributed to the approver — `activity/page.tsx` renders
+  `created_by` as who "added note", and a teen's approved note will read
+  "Mum added note". Nothing is destroyed and the family gets the note they asked
+  for, which is why this ships where the RSVP does not.
+
+  **The prerequisite for both is one change: record the asker.**
+  `wrapToolsWithTrust` does not even receive the acting member id today. Plumbing
+  it through to `gateAiAction` and on to `requested_by_member_id`, then binding
+  the replay to it, fixes the attribution and unblocks the RSVP. Two things to
+  handle in that tranche, both found by the same review: `member_id` would be an
+  EDITABLE field on the approval card (`NON_EDITABLE_KEYS` does not list it), so
+  a manager could retarget a queued RSVP onto another member; and
+  `recordActivity` returns early when `scope.actorKind === 'member'`, so no
+  approved write gets an activity line at all — the feed entry these services
+  record is written on plan runs and skipped on every approval replay.
+
+  Also deleted: the `add_note`/`add_goal` branches in `lib/ai/actions.ts`,
+  unreachable once the tools registered.
+
+  Still open in §30: the eight chat writes that shadow registry tools which DO
+  exist, and whose delegation is the one rejected above.
 
 - **§21/§57, a gated chat action tells the truth.** Three separate ways the one
   screen a family talks to lied about what had happened, all of them live and
