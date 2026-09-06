@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
 import { calendarReadiness } from '@/lib/readiness/calendar-source';
+import { collectTomorrowReadiness } from '@/lib/readiness/collect-tomorrow';
 import type { Evidence, ReadinessCoverage } from '@/lib/readiness/assess';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -72,7 +73,6 @@ export default async function ReadinessPage() {
 
   // Legacy non-calendar horizon counts remain best-effort. Calendar coverage
   // is explicit: a failed or capped read cannot establish that a week is clear.
-  const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
   const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
   // A failed read and a genuinely quiet week both arrive as zero, and the §51
   // card now makes positive claims ("Documents are current"). So each of these
@@ -97,29 +97,26 @@ export default async function ReadinessPage() {
     return { value: n, known: true };
   };
   const [
-    tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
+    tomorrow, weekEventsRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
+    collectTomorrowReadiness(supabase, familyId, ctx.active.family?.timezone, now),
     // Exact accessible-row count detects both this cap and server-side limits.
     supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
       .order('starts_at').limit(200),
-    cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
     cnt(supabase.from('prep_plan_steps').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('due_date', todayStr)),
     cnt(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', weekEndStr)),
     cnt(supabase.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayStr).lte('expires_at', monthEndKey)),
     cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),
     cnt(supabase.from('prep_plans').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'active')),
   ]);
-  const tomorrowCalendar = calendarReadiness(tomorrowEventsRes);
   const weeklyCalendar = calendarReadiness(weekEventsRes, activeMembersRes);
   // The rest of the sources, in the same vocabulary. `cnt` swallowed a failure
   // into a zero, which the ✓ list would have reported as "Documents are
   // current".
   const readCoverage: Partial<Record<Evidence, ReadinessCoverage>> = {};
-  if (!dinnerTomorrowRes.known) readCoverage.meals_tomorrow = 'unknown';
+  readCoverage.meals_tomorrow = tomorrow.coverage.meals_tomorrow;
   if (!mealsRes.data) readCoverage.meals_week = 'unknown';
   if (!overduePrepSteps.known) readCoverage.prep_steps = 'unknown';
   if (!openPrepPlans.known) readCoverage.prep_plans = 'unknown';
@@ -128,7 +125,7 @@ export default async function ReadinessPage() {
   if (!upcomingTripsMonth.known) readCoverage.trips = 'unknown';
 
   const coverageIncomplete = [
-    tomorrowCalendar.calendarCoverage, weeklyCalendar.calendarCoverage, weeklyCalendar.workloadCoverage,
+    tomorrow.tomorrowCalendarCoverage, weeklyCalendar.calendarCoverage, weeklyCalendar.workloadCoverage,
     ...Object.values(readCoverage),
   ].some((coverage) => coverage !== 'complete');
 
@@ -136,13 +133,13 @@ export default async function ReadinessPage() {
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
-    tomorrowConflicts: tomorrowCalendar.conflicts, tomorrowUnassigned: tomorrowCalendar.unassigned,
-    dinnerPlannedTomorrow: dinnerTomorrowRes.value > 0,
+    tomorrowConflicts: tomorrow.tomorrowConflicts, tomorrowUnassigned: tomorrow.tomorrowUnassigned,
+    dinnerPlannedTomorrow: tomorrow.dinnerPlannedTomorrow,
     conflictsWeek: weeklyCalendar.conflicts, unplannedDinnersWeek,
     overduePrepSteps: overduePrepSteps.value, billsDueWeek: billsDueWeek.value,
     expiringDocsMonth: expiringDocsMonth.value, overloadedMembers: weeklyCalendar.overloadedMembers,
     upcomingTripsMonth: upcomingTripsMonth.value, openPrepPlans: openPrepPlans.value,
-    tomorrowCalendarCoverage: tomorrowCalendar.calendarCoverage,
+    tomorrowCalendarCoverage: tomorrow.tomorrowCalendarCoverage,
     weekCalendarCoverage: weeklyCalendar.calendarCoverage,
     workloadCoverage: weeklyCalendar.workloadCoverage,
     coverage: readCoverage,
