@@ -6,8 +6,12 @@
 // `server-only`, and the trust page hands its rows to a client component. The
 // classification of a payload and the choice of which fields a manager may
 // edit must be ONE rule, or the Edit modal would offer fields the service then
-// refuses. Keeping the rule here, with no imports, lets both sides use it.
+// refuses. Keeping the rule here, importing only pure modules, lets both sides
+// use it.
 import type { WriteBackKind } from '@/lib/concierge/apply';
+// Pure, and shared with the service that enforces it: the card must say what
+// the engine will actually require, not a second opinion about it.
+import { thresholdFor } from '@/lib/approvals/threshold';
 
 /** A field a manager may change on the Edit path — scalars only, so the form stays honest. */
 export type EditableField = {
@@ -38,6 +42,15 @@ export type ApprovalCardData = {
   editableFields?: EditableField[];
   agent?: string | null;
   priority?: string | null;
+  /**
+   * How many approvals this needs under its model, and how many are in.
+   * Optional because a card stored before these existed has neither; the
+   * renderer treats a missing threshold as a plain single approval.
+   */
+  requiredApprovals?: number;
+  approvalsRecorded?: number;
+  /** True when only a parent's yes counts (the two-parent model). */
+  parentsOnly?: boolean;
 };
 
 /**
@@ -59,6 +72,7 @@ export type TrustApproval = {
   confidence: number | null;
   reasoning: string | null;
   required_approvals: number;
+  approval_model?: string | null;
   approvals: unknown;
   status: string;
   priority: string;
@@ -168,10 +182,22 @@ export function consequencesOf(row: Pick<TrustApproval, 'consequences'>): string
  * Card data for one row. `requestedBy` is resolved by the caller (a member's
  * name, or null) — an AI request is always shown as "Bubaly".
  */
-export function toApprovalCardData(row: TrustApproval, opts: { requestedBy: string | null; canEdit: boolean }): ApprovalCardData {
+export function toApprovalCardData(
+  row: TrustApproval,
+  opts: { requestedBy: string | null; canEdit: boolean; managerCount?: number },
+): ApprovalCardData {
   const classified = classifyPayload(row);
   const editableFields = editableFieldsFor(editableArgsOf(classified));
+  // What the request is waiting for is part of the request. Before this, a
+  // parent tapping Approve on a two-parent row learned it needed a second yes
+  // only from the toast that came back.
+  const threshold = thresholdFor(row.approval_model, row.required_approvals, opts.managerCount ?? 1);
+  const votes = Array.isArray(row.approvals) ? (row.approvals as Record<string, unknown>[]) : [];
+  const recorded = votes.filter((v) => v?.decision === 'approved' && (!threshold.parentsOnly || v?.role === 'parent')).length;
   return {
+    requiredApprovals: threshold.required,
+    approvalsRecorded: recorded,
+    parentsOnly: threshold.parentsOnly,
     id: row.id,
     title: row.title,
     summary: row.summary,

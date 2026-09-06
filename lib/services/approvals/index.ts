@@ -44,7 +44,9 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
-import { isManager } from '@/lib/constants/roles';
+import { isManager, MANAGER_ROLES } from '@/lib/constants/roles';
+import { thresholdFor, type Threshold } from '@/lib/approvals/threshold';
+import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { getTool } from '@/lib/ai/tools/registry';
 import { kickRun } from '@/lib/ai/runs/continue';
@@ -84,7 +86,7 @@ export type DecideResult = { status: string; executed: boolean; resumedRunId: st
 export type EditResult = { status: 'modified' | 'pending'; resumedRunId: string | null; summary?: string };
 
 /** Card data for one row; `requestedBy` is resolved by the caller so this stays pure. */
-export function toCardData(row: ApprovalRow, opts: { requestedBy: string | null; canEdit: boolean }): ApprovalCardData {
+export function toCardData(row: ApprovalRow, opts: { requestedBy: string | null; canEdit: boolean; managerCount?: number }): ApprovalCardData {
   return toApprovalCardData(row, opts);
 }
 
@@ -137,17 +139,26 @@ export async function listPending(scope: ServiceScope): Promise<ServiceResult<Ap
   }
 
   const canEdit = isManager(scope.role);
+  // Only a consensus row's threshold depends on this, but the card must not
+  // under-report one, so it is read once for the whole inbox.
+  const { count: managerCount } = await scope.db
+    .from('family_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .in('role', MANAGER_ROLES);
   return ok(rows.map((row) => toCardData(row, {
     requestedBy: row.requested_by_kind === 'ai'
       ? 'Bubaly'
       : (row.requested_by_member_id ? names.get(row.requested_by_member_id) ?? null : null),
     canEdit,
+    managerCount: managerCount ?? 1,
   })));
 }
 
 // ─── Decision plumbing ──────────────────────────────────────────────────────
 
-type Vote = { member_id: string; decision: 'approved' | 'rejected'; note: string | null; at: string };
+type Vote = { member_id: string; decision: 'approved' | 'rejected'; note: string | null; at: string; role?: string | null };
 
 function priorVotes(row: ApprovalRow): Vote[] {
   return Array.isArray(row.approvals)
@@ -162,7 +173,11 @@ async function auditDecision(
   reason: string,
   context: Record<string, unknown> = {},
 ): Promise<void> {
-  const { error } = await scope.db.from('trust_audit_logs').insert({
+  // 0260 removed member INSERT on trust_audit_logs: the record of who approved
+  // what is evidence, so only the server writes it. Without service credentials
+  // (unit tests) this falls back to the caller's client, unchanged.
+  const writer = await ledgerWriter(scope.db);
+  const { error } = await writer.from('trust_audit_logs').insert({
     family_id: scope.familyId,
     actor_kind: 'member',
     actor_id: scope.memberId,
@@ -177,6 +192,43 @@ async function auditDecision(
   // The decision already landed; a lost audit row must be visible in the logs
   // but must not roll a parent's "yes" back into "pending".
   if (error) console.error('[service:approvals] failed to write the decision audit row', error);
+}
+
+/**
+ * The rule this row is under: how many approvals, and whether they must come
+ * from parents. `approval_model` used to be decorative — the count was read and
+ * the model never was, so "Two-parent" approved on one vote from any adult.
+ *
+ * Consensus needs to know how many people could vote, so the manager count is
+ * read here rather than guessed.
+ */
+async function thresholdOf(scope: ServiceScope, row: ApprovalRow): Promise<Threshold> {
+  const model = row.approval_model ?? 'single';
+  if (model !== 'consensus') return thresholdFor(model, row.required_approvals, 1);
+  const { count, error } = await scope.db
+    .from('family_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .in('role', MANAGER_ROLES);
+  if (error) {
+    // Consensus that cannot count its household must not quietly become
+    // "one yes"; fall back to the stricter of the stored count and two.
+    console.error('[service:approvals] could not count managers for a consensus approval', error);
+    return thresholdFor('consensus', Math.max(2, row.required_approvals ?? 2), 2);
+  }
+  return thresholdFor('consensus', row.required_approvals, count ?? 1);
+}
+
+/** "1 more parent needs" / "2 more people need" — the rule, said plainly. */
+function whoStillNeeded(t: Threshold, remaining: number): string {
+  if (t.parentsOnly) return remaining === 1 ? 'parent needs' : 'parents need';
+  return remaining === 1 ? 'person needs' : 'people need';
+}
+
+/** Approvals that count toward the threshold — a rule may not accept every yes. */
+function countingApprovals(votes: Vote[], t: Threshold): number {
+  return votes.filter((v) => v.decision === 'approved' && (!t.parentsOnly || v.role === 'parent')).length;
 }
 
 /** Preconditions shared by both decision entry points. */
@@ -644,9 +696,16 @@ export async function decide(
   }
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
-  const votes: Vote[] = [...prior, { member_id: memberId, decision, note: cleanNote, at: nowIso }];
-  const approvedCount = votes.filter((v) => v.decision === 'approved').length;
-  const required = Math.max(1, row.required_approvals ?? 1);
+  const threshold = await thresholdOf(scope, row);
+  // One "no" still stops the AI whoever says it — a rule about how many yeses
+  // are needed is not a reason to ignore an objection. A yes that cannot count
+  // is refused up front rather than recorded and quietly ignored.
+  if (decision === 'approved' && threshold.parentsOnly && scope.role !== 'parent') {
+    return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
+  }
+  const votes: Vote[] = [...prior, { member_id: memberId, decision, note: cleanNote, at: nowIso, role: scope.role ?? null }];
+  const approvedCount = countingApprovals(votes, threshold);
+  const required = threshold.required;
 
   const finalStatus: 'pending' | 'approved' | 'rejected' =
     decision === 'rejected' ? 'rejected' : approvedCount >= required ? 'approved' : 'pending';
@@ -675,7 +734,7 @@ export async function decide(
     const remaining = required - approvedCount;
     return ok({
       status: 'pending', executed: false, resumedRunId: null,
-      summary: `Your approval is recorded — ${remaining} more ${remaining === 1 ? 'person needs' : 'people need'} to approve.`,
+      summary: `Your approval is recorded — ${remaining} more ${whoStillNeeded(threshold, remaining)} to approve.`,
     });
   }
 
@@ -698,7 +757,50 @@ export async function decide(
     return ok({ status: 'rejected', executed: false, resumedRunId: null, summary: 'Declined — Bubaly will not do that.' });
   }
 
-  return performApproved(scope, row, classified, null, 'approved');
+  // The deciding vote must execute what the family agreed to. When an earlier
+  // approver edited the request, `editAndApprove` recorded their change on
+  // `edited_payload` and left the row pending — passing `null` here executed
+  // the ORIGINAL instead, silently discarding the correction that was the whole
+  // reason they engaged with it.
+  return performApproved(scope, row, classified, storedEdit(row, classified), 'approved');
+}
+
+/**
+ * The edit an earlier approver recorded, re-derived rather than trusted.
+ *
+ * `edited_payload` is a column, and `approval_requests_decide` lets any manager
+ * write any column on a pending row. So the stored object is re-merged over the
+ * original through the same allow-list `editAndApprove` uses and re-validated
+ * against the tool's schema: an edit may only change fields the card offered,
+ * and only to values the tool would have accepted at edit time. Anything else
+ * falls back to the original, which is what the approvers were shown.
+ */
+function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<string, unknown> | null {
+  const stored = asRecord(row.edited_payload);
+  if (!stored) return null;
+
+  const original = editableArgsOf(classified) ?? {};
+  const allowed = new Set(editableFieldsFor(original).map((f) => f.key));
+  const merged: Record<string, unknown> = { ...original };
+  let changed = false;
+  for (const [key, value] of Object.entries(stored)) {
+    if (!allowed.has(key)) continue;
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue;
+    if (merged[key] === value) continue;
+    merged[key] = value;
+    changed = true;
+  }
+  if (!changed) return null;
+
+  if (classified.kind === 'tool') {
+    const tool = getTool(classified.name);
+    if (!tool || !tool.input.safeParse(merged).success) {
+      console.error('[service:approvals] a stored edit no longer fits its tool; executing what was shown instead', { approval: row.id });
+      return null;
+    }
+  }
+  if (classified.kind === 'concierge_plan' && !WRITE_BACK_KINDS.some((k) => merged[k] === true)) return null;
+  return merged;
 }
 
 /**
@@ -757,13 +859,17 @@ export async function editAndApprove(
   if (prior.some((v) => v.member_id === memberId)) {
     return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
   }
-  const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso }];
+  const threshold = await thresholdOf(scope, row);
+  if (threshold.parentsOnly && scope.role !== 'parent') {
+    return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
+  }
+  const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
   const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
   // record the edited payload and this approval, and wait for the rest.
-  const approvedCount = votes.filter((v) => v.decision === 'approved').length;
-  const required = Math.max(1, row.required_approvals ?? 1);
+  const approvedCount = countingApprovals(votes, threshold);
+  const required = threshold.required;
   if (approvedCount < required) {
     const held = await flipStatus(scope, approvalId, {
       edited_payload: merged as Json,
@@ -776,7 +882,7 @@ export async function editAndApprove(
     const remaining = required - approvedCount;
     return ok({
       status: 'pending', resumedRunId: null,
-      summary: `Your edits and approval are recorded — ${remaining} more ${remaining === 1 ? 'person needs' : 'people need'} to approve.`,
+      summary: `Your edits and approval are recorded — ${remaining} more ${whoStillNeeded(threshold, remaining)} to approve.`,
     });
   }
 

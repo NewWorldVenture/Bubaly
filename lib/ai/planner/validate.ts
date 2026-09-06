@@ -210,7 +210,13 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
     emergencyDomains: inputs.emergencyDomains,
   });
 
-  if (decision.basis === 'role_default' || decision.basis === 'fallback') {
+  // Same rule as the executor's gate (lib/ai/tools/execute.ts): the tier speaks
+  // where the answer came from the generic role matrix, and also over a
+  // blanket `domain=all/capability=all` allow, which is not a decision about
+  // this action. Over a blanket it may only tighten.
+  const fromGenericRule = decision.basis === 'role_default' || decision.basis === 'fallback';
+  const blanketAllow = decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad';
+  if (fromGenericRule || blanketAllow) {
     const risked = riskToDecision({
       risk: tool.risk,
       actor,
@@ -219,7 +225,7 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
       explicitAllow: false,
       ...(behavior ? { behavior } : {}),
     });
-    if (risked) decision = risked;
+    if (risked && (fromGenericRule || risked.effect !== 'allow')) decision = risked;
   }
   return { ...decision, capability, skipped: false };
 }

@@ -312,6 +312,42 @@ describe('trust gate', () => {
     expect(family.calls.some((c) => c.table === 'todo_items')).toBe(false);
   });
 
+  it('a blanket allow cannot clear a high-risk tool — the tier still holds it for a person', async () => {
+    // The Trust form lets any manager save a policy with domain `all` and
+    // effect `allow`. That row used to short-circuit the risk tier entirely, so
+    // every destructive, expensive or irreversible tool ran with nobody asked.
+    const family = makeFamilyDb({
+      policies: [{
+        id: 'pol-blanket', domain: 'all', capability: 'all', subject_kind: 'ai',
+        effect: 'allow', conditions: {}, approval_model: 'single', required_approvals: 1, priority: 100, enabled: true,
+      }],
+      domain: calendarDomain,
+    });
+    const ledger = makeLedger();
+    ledgerHolder.client = ledger.db;
+
+    const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
+
+    expect(outcome).toMatchObject({ status: 'pending_approval' });
+    expect(family.calls.some((c) => c.table === 'calendar_events' && c.kind === 'delete')).toBe(false);
+  });
+
+  it('a policy that names the area it governs still decides — that is what a policy is for', async () => {
+    const family = makeFamilyDb({
+      policies: [{
+        id: 'pol-specific', domain: 'calendar', capability: 'automate', subject_kind: 'ai',
+        effect: 'allow', conditions: {}, approval_model: 'single', required_approvals: 1, priority: 100, enabled: true,
+      }],
+      domain: calendarDomain,
+    });
+    const ledger = makeLedger();
+    ledgerHolder.client = ledger.db;
+
+    const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
+
+    expect(outcome).toMatchObject({ status: 'ok' });
+  });
+
   it('holds a high-risk tool for approval and stores the payload so it can execute later', async () => {
     const family = makeFamilyDb({ domain: calendarDomain });
     const ledger = makeLedger();

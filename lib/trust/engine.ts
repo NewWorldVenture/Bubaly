@@ -195,6 +195,8 @@ export type Decision = {
   requiredApprovals?: number;
   /** the rule path that produced this, for explainability */
   basis: 'emergency' | 'deny_grant' | 'policy' | 'allow_grant' | 'delegation' | 'role_default' | 'risk_tier' | 'family_setting' | 'fallback';
+  /** for a `policy` allow: whether it named a domain, or applied to everything */
+  policyScope?: 'specific' | 'broad';
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -274,7 +276,18 @@ export function evaluateAction(input: EvaluateInput): Decision {
     const p = matching[0];
     if (p.effect === 'deny') return { effect: 'deny', reason: `Blocked by policy: ${DOMAIN_LABELS[domain] ?? domain}.`, policyId: p.id, basis: 'policy' };
     if (p.effect === 'allow' || p.effect === 'auto_approve') {
-      return { effect: 'allow', reason: p.effect === 'auto_approve' ? 'Auto-approved by a household policy.' : 'Allowed by a household policy.', policyId: p.id, basis: 'policy' };
+      return {
+        effect: 'allow',
+        reason: p.effect === 'auto_approve' ? 'Auto-approved by a household policy.' : 'Allowed by a household policy.',
+        policyId: p.id,
+        basis: 'policy',
+        // A policy that NAMES the area of family life it is talking about —
+        // "Bubaly may act on the calendar" — is a deliberate decision about
+        // this action, and keeps the floor. One saved with domain 'all' names
+        // nothing: it is a blanket, and a blanket must not be able to clear an
+        // action the risk tier holds for a person (lib/ai/tools/execute.ts).
+        policyScope: p.domain === 'all' ? 'broad' : 'specific',
+      };
     }
     // require_approval
     return {
@@ -430,6 +443,29 @@ export function riskToDecision(input: RiskDecisionInput): Decision | null {
     return null;
   }
 
+  // The autonomy dial (§11) is a statement about what Bubaly may DO, not about
+  // one tier of it. Reading it only inside the `medium` branch left the whole
+  // low tier — create an event, add a task, assign a chore, add to the list:
+  // most of Bubaly's writes — acting freely for a family whose settings say
+  // "Suggests only". It is checked here, above the tiers, so every write
+  // capability answers to it. 'execute' adds nothing and falls through.
+  if (input.behavior === 'recommend') {
+    return {
+      effect: 'deny',
+      reason: `Bubaly is set to recommend only, so it can suggest this ${label} change but not make it.`,
+      basis: 'risk_tier',
+    };
+  }
+  if (input.behavior === 'prepare') {
+    return {
+      effect: 'require_approval',
+      reason: `Bubaly is set to prepare work for you, so this ${label} change is waiting on your yes.`,
+      approvalModel: 'single',
+      requiredApprovals: 1,
+      basis: 'risk_tier',
+    };
+  }
+
   // High risk is destructive, expensive or hard to undo. A person decides,
   // every time, unless the family wrote a policy that says otherwise.
   if (risk === 'high') {
@@ -443,29 +479,9 @@ export function riskToDecision(input: RiskDecisionInput): Decision | null {
     };
   }
 
-  if (risk === 'medium') {
-    // 'recommend' means Bubaly may suggest and never act; 'prepare' means it
-    // may stage the work for a person to release. 'execute' adds nothing here
-    // — the role matrix (which still guards sensitive and high-stakes
-    // domains) gets the final word.
-    if (input.behavior === 'recommend') {
-      return {
-        effect: 'deny',
-        reason: `Bubaly is set to recommend only, so it can suggest this ${label} change but not make it.`,
-        basis: 'risk_tier',
-      };
-    }
-    if (input.behavior === 'prepare') {
-      return {
-        effect: 'require_approval',
-        reason: `Bubaly is set to prepare work for you, so this ${label} change is waiting on your yes.`,
-        approvalModel: 'single',
-        requiredApprovals: 1,
-        basis: 'risk_tier',
-      };
-    }
-    return null;
-  }
+  // Medium risk under 'execute': the role matrix (which still guards sensitive
+  // and high-stakes domains) gets the final word.
+  if (risk === 'medium') return null;
 
   // Low risk: the small, reversible work a family wants done without being
   // asked twice — but never inside a domain the role treats as sensitive, and

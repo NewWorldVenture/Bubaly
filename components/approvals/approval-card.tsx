@@ -18,6 +18,7 @@ import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Clock, Loader2, Pencil, Sparkles, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { describeThreshold } from '@/lib/approvals/threshold';
 import { Modal } from '@/components/ui/modal';
 import { Field, Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
@@ -86,6 +87,9 @@ export function ApprovalCard({
 
   const editable = approval.editableFields ?? [];
   const canEdit = canDecide && approval.canEdit && editable.length > 0;
+  const threshold = approval.requiredApprovals ?? 1;
+  const recorded = approval.approvalsRecorded ?? 0;
+  const needsMore = threshold > 1;
 
   const decide = useCallback((decision: 'approved' | 'rejected') => {
     if (busy) return;
@@ -185,6 +189,14 @@ export function ApprovalCard({
         </div>
       </div>
 
+      {/* What this request is waiting for. A two-parent rule that says so only
+          in the toast after you tap Approve is a rule the family cannot see. */}
+      {needsMore && (
+        <p className={cn('text-[11px] text-muted', compact ? 'mt-2' : 'mt-3')}>
+          {describeThreshold({ required: threshold, parentsOnly: approval.parentsOnly ?? false }, recorded)}
+        </p>
+      )}
+
       {canDecide ? (
         <div className={cn('flex items-center justify-end gap-2', compact ? 'mt-2' : 'mt-3')}>
           <Button
@@ -222,7 +234,7 @@ export function ApprovalCard({
             aria-label={`Approve: ${approval.title}`}
           >
             {busy === 'approving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
-            {busy === 'approving' ? 'Approving…' : 'Approve'}
+            {busy === 'approving' ? 'Approving…' : needsMore ? `Approve (${recorded + 1} of ${threshold})` : 'Approve'}
           </Button>
         </div>
       ) : (

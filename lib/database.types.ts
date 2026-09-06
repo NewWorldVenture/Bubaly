@@ -1416,9 +1416,9 @@ export interface Database {
         Partial<{ score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string }>
       >;
       emergency_sessions: T<
-        { id: string; family_id: string; kind: string; reason: string | null; activated_by: string | null; activated_at: string; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; created_at: string; updated_at: string },
-        { id?: string; family_id: string; kind?: string; reason?: string | null; activated_by?: string | null; ended_by?: string | null; ended_at?: string | null; elevated_domains?: string[] },
-        Partial<{ kind: string; reason: string | null; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; updated_at: string }>
+        { id: string; family_id: string; kind: string; reason: string | null; activated_by: string | null; activated_at: string; ended_by: string | null; ended_at: string | null; expires_at: string; elevated_domains: string[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; kind?: string; reason?: string | null; activated_by?: string | null; ended_by?: string | null; ended_at?: string | null; expires_at?: string; elevated_domains?: string[] },
+        Partial<{ kind: string; reason: string | null; ended_by: string | null; ended_at: string | null; expires_at: string; elevated_domains: string[]; updated_at: string }>
       >;
       trust_audit_logs: T<
         { id: string; family_id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; policy_id: string | null; confidence: number | null; approval_id: string | null; context: Json; device: string | null; created_at: string },
