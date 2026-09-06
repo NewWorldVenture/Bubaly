@@ -156,7 +156,11 @@ describe('runAssistantTurn (JSON transport)', () => {
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) throw new Error('prepare failed');
     const result = await runAssistantTurn(input, prepared.turn);
-    expect(result.content).toBe('Done — I’ve updated that for you.');
+    // This fixture is one success and one FAILURE, and the assertion here used
+    // to be 'Done — I’ve updated that for you.' — the bug, pinned by its own
+    // test. The chore was not created and the family was told it was. The
+    // action chips were right all along; only the sign-off lied.
+    expect(result.content).toBe('I’ve done part of that. Could not create the chore.');
     expect(result.actions).toEqual([
       { name: 'create_meal_plan_entry', ok: true, summary: 'Planned "Tacos".' },
       { name: 'add_chore', ok: false, summary: 'Could not create the chore.' },
@@ -166,7 +170,7 @@ describe('runAssistantTurn (JSON transport)', () => {
     expect(inserts).toHaveLength(1);
     const rows = inserts[0].rows as Row[];
     expect(rows[0]).toMatchObject({ role: 'user', content: 'Plan tacos for Saturday', conversation_id: input.conversationId });
-    expect(rows[1]).toMatchObject({ role: 'assistant', content: 'Done — I’ve updated that for you.' });
+    expect(rows[1]).toMatchObject({ role: 'assistant', content: 'I’ve done part of that. Could not create the chore.' });
     expect((rows[1].tool_calls as unknown[]).length).toBe(2);
     expect(updates[0].patch).toEqual({ model: 'test-model', title: 'Plan tacos for Saturday' });
   });
@@ -231,10 +235,46 @@ describe('helpers', () => {
     expect(summarizeToolResult({ ok: false })).toEqual({ ok: false, summary: 'That didn’t work.' });
     expect(summarizeToolResult('raw')).toEqual({ ok: true, summary: 'Done.' });
   });
-  it('finalizes content with action-aware fallbacks', () => {
-    expect(finalizeAssistantContent('  Hi  ', 0)).toBe('Hi');
-    expect(finalizeAssistantContent('', 2)).toBe('Done — I’ve updated that for you.');
-    expect(finalizeAssistantContent('', 0)).toBe('I’m not sure how to help with that yet.');
+  it('finalizes content with outcome-aware fallbacks', () => {
+    const done = { result: { ok: true, summary: 'Added.' } };
+    const denied = { result: { ok: false, error: 'Blocked by household policy: children cannot post announcements' } };
+    const pending = { result: { ok: true, summary: '⏳ Sent for parent approval', pending_approval: true, approval_id: 'a1' } };
+
+    // The model's own words always win.
+    expect(finalizeAssistantContent('  Hi  ', [])).toBe('Hi');
+    expect(finalizeAssistantContent('  Hi  ', [denied])).toBe('Hi');
+
+    expect(finalizeAssistantContent('', [])).toBe('I’m not sure how to help with that yet.');
+    expect(finalizeAssistantContent('', [done, done])).toBe('Done — I’ve updated that for you.');
+
+    // THE BUG THIS REPLACES: a turn whose every action was refused by the
+    // household's own policy used to sign off "Done — I’ve updated that for
+    // you." The child believed the announcement was posted; it never was.
+    expect(finalizeAssistantContent('', [denied]))
+      .toBe('Blocked by household policy: children cannot post announcements');
+    expect(finalizeAssistantContent('', [denied, denied]))
+      .toBe('Blocked by household policy: children cannot post announcements');
+
+    // A queued approval is not "done" either — nothing is written yet.
+    expect(finalizeAssistantContent('', [pending])).toBe('That needs a parent’s OK, so I’ve sent it for approval.');
+    expect(finalizeAssistantContent('', [pending, pending])).toBe('Those need a parent’s OK, so I’ve sent them for approval.');
+
+    // Mixed turns name each part rather than letting the happiest one speak.
+    expect(finalizeAssistantContent('', [done, denied]))
+      .toBe('I’ve done part of that. Blocked by household policy: children cannot post announcements');
+    expect(finalizeAssistantContent('', [done, pending])).toBe('I’ve done part of that. 1 of them needs a parent’s OK.');
+    expect(finalizeAssistantContent('', [done, pending, pending, denied]))
+      .toBe('I’ve done part of that. 2 of them need a parent’s OK. Blocked by household policy: children cannot post announcements');
+  });
+
+  it('reads the pending flag in the shape the wrapper and the registry both emit', () => {
+    // legacy-adapter.ts returns snake_case `pending_approval`; the trust
+    // wrapper used to return camelCase. Both are accepted so a turn that mixes
+    // a registry tool and a wrapped one cannot be scored two different ways.
+    const snake = { result: { ok: true, summary: 'x', pending_approval: true } };
+    const camel = { result: { ok: true, summary: 'x', pendingApproval: true } };
+    expect(finalizeAssistantContent('', [snake])).toBe('That needs a parent’s OK, so I’ve sent it for approval.');
+    expect(finalizeAssistantContent('', [camel])).toBe('That needs a parent’s OK, so I’ve sent it for approval.');
   });
   it('builds a system prompt with a localized snapshot', () => {
     const system = buildAssistantSystemPrompt({
