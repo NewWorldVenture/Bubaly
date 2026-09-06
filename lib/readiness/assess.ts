@@ -8,22 +8,26 @@
 
 export type Horizon = 'tomorrow' | 'week' | 'month';
 export type ReadinessStatus = 'ready' | 'at_risk' | 'not_ready';
+export type ReadinessCoverage = 'complete' | 'partial' | 'unknown';
 
 export type ReadinessSignals = {
   // tomorrow
-  tomorrowConflicts: number;
-  tomorrowUnassigned: number;
+  tomorrowConflicts: number | null;
+  tomorrowUnassigned: number | null;
   dinnerPlannedTomorrow: boolean;
   // this week
-  conflictsWeek: number;
+  conflictsWeek: number | null;
   unplannedDinnersWeek: number;
   overduePrepSteps: number;
   billsDueWeek: number;
   // this month
   expiringDocsMonth: number;
-  overloadedMembers: number;
+  overloadedMembers: number | null;
   upcomingTripsMonth: number;
   openPrepPlans: number;
+  tomorrowCalendarCoverage?: ReadinessCoverage;
+  weekCalendarCoverage?: ReadinessCoverage;
+  workloadCoverage?: ReadinessCoverage;
 };
 
 export const EMPTY_READINESS_SIGNALS: ReadinessSignals = {
@@ -67,15 +71,20 @@ function readyHeadline(h: Horizon): string {
 
 /** Roll live signals into three readiness cards (tomorrow, week, month). */
 export function assessReadiness(s: ReadinessSignals): ReadinessCard[] {
+  const tomorrowCoverage = s.tomorrowCalendarCoverage ?? (s.tomorrowConflicts === null || s.tomorrowUnassigned === null ? 'unknown' : 'complete');
+  const weekCoverage = s.weekCalendarCoverage ?? (s.conflictsWeek === null ? 'unknown' : 'complete');
+  const workloadCoverage = s.workloadCoverage ?? (s.overloadedMembers === null ? 'unknown' : 'complete');
   // Tomorrow.
   const tomorrow: ReadinessGap[] = [];
-  if (s.tomorrowConflicts > 0) tomorrow.push({ label: `${plural(s.tomorrowConflicts, 'schedule clash', 'schedule clashes')} tomorrow`, href: '/dashboard/conflicts', severity: 'blocker' });
-  if (s.tomorrowUnassigned > 0) tomorrow.push({ label: `${plural(s.tomorrowUnassigned, 'event')} with no owner`, href: '/dashboard/calendar', severity: 'watch' });
+  if ((s.tomorrowConflicts ?? 0) > 0) tomorrow.push({ label: `${tomorrowCoverage === 'complete' ? '' : 'At least '}${plural(s.tomorrowConflicts!, 'schedule clash', 'schedule clashes')} tomorrow`, href: '/dashboard/conflicts', severity: 'blocker' });
+  if ((s.tomorrowUnassigned ?? 0) > 0) tomorrow.push({ label: `${tomorrowCoverage === 'complete' ? '' : 'At least '}${plural(s.tomorrowUnassigned!, 'event')} with no owner`, href: '/dashboard/calendar', severity: 'watch' });
+  if (tomorrowCoverage !== 'complete') tomorrow.push({ label: tomorrowCoverage === 'partial' ? "Tomorrow's visible calendar is incomplete; conflict and assignment totals are unknown" : "Tomorrow's visible calendar could not be read; conflicts and assignments are unknown", href: '/dashboard/calendar', severity: 'watch' });
   if (!s.dinnerPlannedTomorrow) tomorrow.push({ label: "Tomorrow's dinner isn't planned", href: '/dashboard/meals', severity: 'watch' });
 
   // This week.
   const week: ReadinessGap[] = [];
-  if (s.conflictsWeek > 0) week.push({ label: `${plural(s.conflictsWeek, 'clash', 'clashes')} this week`, href: '/dashboard/conflicts', severity: 'blocker' });
+  if ((s.conflictsWeek ?? 0) > 0) week.push({ label: `${weekCoverage === 'complete' ? '' : 'At least '}${plural(s.conflictsWeek!, 'clash', 'clashes')} this week`, href: '/dashboard/conflicts', severity: 'blocker' });
+  if (weekCoverage !== 'complete') week.push({ label: weekCoverage === 'partial' ? 'Weekly visible calendar is incomplete; conflict totals are unknown' : 'Weekly visible calendar could not be read; conflict totals are unknown', href: '/dashboard/calendar', severity: 'watch' });
   if (s.overduePrepSteps > 0) week.push({ label: `${plural(s.overduePrepSteps, 'prep step')} overdue`, href: '/dashboard/prep-plans', severity: 'blocker' });
   if (s.unplannedDinnersWeek >= 3) week.push({ label: `${plural(s.unplannedDinnersWeek, 'dinner')} unplanned`, href: '/dashboard/meals', severity: 'watch' });
   if (s.billsDueWeek > 0) week.push({ label: `${plural(s.billsDueWeek, 'bill')} due`, href: '/dashboard/bills', severity: 'watch' });
@@ -84,7 +93,8 @@ export function assessReadiness(s: ReadinessSignals): ReadinessCard[] {
   const month: ReadinessGap[] = [];
   if (s.expiringDocsMonth > 0) month.push({ label: `${plural(s.expiringDocsMonth, 'document')} expiring`, href: '/dashboard/documents', severity: 'blocker' });
   if (s.openPrepPlans > 0) month.push({ label: `${plural(s.openPrepPlans, 'prep plan')} in progress`, href: '/dashboard/prep-plans', severity: 'watch' });
-  if (s.overloadedMembers > 0) month.push({ label: `${plural(s.overloadedMembers, 'person')} carrying a heavy load`, href: '/dashboard/family-operating-index', severity: 'watch' });
+  if (workloadCoverage === 'complete' && (s.overloadedMembers ?? 0) > 0) month.push({ label: `${plural(s.overloadedMembers!, 'person')} carrying a heavy load in the visible calendar`, href: '/dashboard/family-operating-index', severity: 'watch' });
+  if (workloadCoverage !== 'complete') month.push({ label: 'Workload balance is unknown: complete accessible calendar and household roster coverage is needed', href: '/dashboard/family-operating-index', severity: 'watch' });
   if (s.upcomingTripsMonth > 0) month.push({ label: `${plural(s.upcomingTripsMonth, 'trip')} to prep`, href: '/dashboard/prep-plans', severity: 'watch' });
 
   return [

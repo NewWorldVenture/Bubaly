@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   assessReadiness, overallReadiness, EMPTY_READINESS_SIGNALS, type ReadinessSignals,
 } from '@/lib/readiness/assess';
+import { calendarReadiness, type CalendarReadinessEvent } from '@/lib/readiness/calendar-source';
 
 const sig = (over: Partial<ReadinessSignals> = {}): ReadinessSignals => ({ ...EMPTY_READINESS_SIGNALS, ...over });
 
@@ -77,29 +78,101 @@ describe('overallReadiness', () => {
   });
 });
 
-// ─── The two signals the page never actually computed ──────────────────────
+const source = <T,>(data: T[], count: number | null = data.length) => ({ data, count, error: null });
+const roster = source([{ id: 'one' }, { id: 'two' }, { id: 'three' }]);
+const event = (index: number, assignee = 'one'): CalendarReadinessEvent => ({
+  id: `event-${index}`, starts_at: new Date(Date.UTC(2026, 8, 6, 8 + index * 2)).toISOString(),
+  ends_at: null, all_day: false, assignee_id: assignee,
+});
+const eight = Array.from({ length: 8 }, (_, index) => event(index));
+const weeklyCards = (result: ReturnType<typeof calendarReadiness>) => assessReadiness(sig({
+  conflictsWeek: result.conflicts, overloadedMembers: result.overloadedMembers,
+  weekCalendarCoverage: result.calendarCoverage, workloadCoverage: result.workloadCoverage,
+}));
 
-import { readFileSync } from 'node:fs';
-
-describe('the readiness page computes what it claims to know', () => {
-  const page = readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
-
-  it('no longer hands the assessor hardcoded zeros', () => {
-    // `conflictsWeek: 0` and `overloadedMembers: 0` were literals, so the week
-    // card could never report a clash and the month card could never name an
-    // overloaded person — while the rows to compute both sat in the same file.
-    const code = page.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
-    expect(code).not.toMatch(/conflictsWeek:\s*0\b/);
-    expect(code).not.toMatch(/overloadedMembers:\s*0\b/);
-    expect(page).toContain('const conflictsWeek = countOverlaps(weekEvents, HOUR)');
-    expect(page).toContain('const overloadedMembers = loads.filter(');
+describe('accessible calendar and roster coverage', () => {
+  it('includes zero-event members in the relative 8/0/0 workload average', () => {
+    const result = calendarReadiness(source(eight), roster);
+    expect(result).toMatchObject({ conflicts: 0, overloadedMembers: 1, calendarCoverage: 'complete', workloadCoverage: 'complete' });
+    expect(weeklyCards(result)[2].gaps.some((gap) => gap.label.includes('1 person carrying a heavy load'))).toBe(true);
   });
 
-  it('reads the week, not just tomorrow', () => {
-    expect(page).toContain("gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)");
+  it('distinguishes a genuinely all-zero known roster from missing coverage', () => {
+    const result = calendarReadiness(source<CalendarReadinessEvent>([]), roster);
+    expect(result.overloadedMembers).toBe(0);
+    expect(overallReadiness(weeklyCards(result))).toEqual({ score: 100, status: 'ready' });
   });
 
-  it('uses one overlap rule for both windows rather than two copies', () => {
-    expect((page.match(/countOverlaps\(/g) ?? []).length).toBe(3); // definition + two calls
+  it('does not turn a failed calendar read into zero conflicts or healthy workload', () => {
+    const result = calendarReadiness({ data: null, count: null, error: new Error('Unavailable') }, roster);
+    expect(result).toMatchObject({ conflicts: null, unassigned: null, overloadedMembers: null, calendarCoverage: 'unknown' });
+    const cards = weeklyCards(result);
+    expect(cards[1].status).toBe('at_risk');
+    expect(cards[2].status).toBe('at_risk');
+    expect(cards[1].gaps[0].label).toContain('could not be read');
+  });
+
+  it('retains a known conflict as a lower bound when 200 returned rows are capped', () => {
+    const rows = [event(0), { ...event(1), starts_at: event(0).starts_at },
+      ...Array.from({ length: 198 }, (_, index) => ({ ...event(index + 2), all_day: true }))];
+    const result = calendarReadiness(source(rows, 201), roster);
+    expect(result).toMatchObject({ conflicts: 1, calendarCoverage: 'partial', overloadedMembers: null, workloadCoverage: 'partial' });
+    const week = weeklyCards(result)[1];
+    expect(week.status).toBe('not_ready');
+    expect(week.gaps[0].label).toBe('At least 1 clash this week');
+    expect(week.gaps.some((gap) => gap.label.includes('incomplete'))).toBe(true);
+  });
+
+  it('accepts an exact 200-row result rather than guessing every full page is truncated', () => {
+    const rows = Array.from({ length: 200 }, (_, index) => ({ ...event(index), all_day: true }));
+    expect(calendarReadiness(source(rows), roster)).toMatchObject({ calendarCoverage: 'complete', workloadCoverage: 'complete', overloadedMembers: 0 });
+  });
+
+  it.each([null, 9, 7, -1])('does not certify incomplete or inconsistent exact counts: %s', (count) => {
+    const result = calendarReadiness(source(eight, count), roster);
+    expect(result.calendarCoverage).toBe('partial');
+    expect(result.overloadedMembers).toBeNull();
+    expect(overallReadiness(weeklyCards(result)).status).not.toBe('ready');
+  });
+
+  it('does not pad a partial household roster with assumed zero loads', () => {
+    expect(calendarReadiness(source(eight), source([{ id: 'one' }], 3)))
+      .toMatchObject({ conflicts: 0, calendarCoverage: 'complete', workloadCoverage: 'partial', overloadedMembers: null });
+  });
+
+  it('does not interpret a failed or empty accessible roster as healthy workload', () => {
+    for (const members of [{ data: null, count: null, error: new Error('Denied') }, source<{ id: string }>([])]) {
+      const result = calendarReadiness(source(eight), members);
+      expect(result.workloadCoverage).toBe('unknown');
+      expect(result.overloadedMembers).toBeNull();
+      expect(weeklyCards(result)[2].status).toBe('at_risk');
+    }
+  });
+
+  it('never invents or exposes inaccessible member identities from event assignees', () => {
+    const result = calendarReadiness(source([...eight, event(9, 'private-member-id')]), roster);
+    expect(result).toMatchObject({ calendarCoverage: 'complete', workloadCoverage: 'partial', overloadedMembers: null });
+    expect(JSON.stringify(result)).not.toContain('private-member-id');
+    expect(JSON.stringify(weeklyCards(result))).not.toContain('private-member-id');
+  });
+
+  it('does not count duplicate roster IDs as additional zero-load people', () => {
+    expect(calendarReadiness(source(eight), source([{ id: 'one' }, { id: 'one' }])).workloadCoverage).toBe('partial');
+  });
+
+  it('keeps the shared one-hour overlap rule and excludes all-day events', () => {
+    const rows = [event(0), { ...event(1), starts_at: '2026-09-06T08:30:00.000Z' }, { ...event(2), starts_at: event(0).starts_at, all_day: true }];
+    expect(calendarReadiness(source(rows)).conflicts).toBe(1);
+    expect(calendarReadiness(source(rows), roster).conflicts).toBe(1);
+  });
+
+  it('marks malformed timed rows incomplete without hiding a valid conflict', () => {
+    const rows = [event(0), { ...event(1), starts_at: event(0).starts_at }, { ...event(2), starts_at: 'invalid' }];
+    expect(calendarReadiness(source(rows), roster)).toMatchObject({ conflicts: 1, calendarCoverage: 'partial', overloadedMembers: null });
+  });
+
+  it('keeps unknown tomorrow coverage and null signals out of the ready state', () => {
+    const cards = assessReadiness(sig({ tomorrowConflicts: null, tomorrowUnassigned: null, conflictsWeek: null, overloadedMembers: null }));
+    expect(cards.every((card) => card.status === 'at_risk')).toBe(true);
   });
 });

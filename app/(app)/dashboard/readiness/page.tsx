@@ -5,6 +5,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
+import { calendarReadiness } from '@/lib/readiness/calendar-source';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { ErrorState } from '@/components/ui/states';
@@ -40,14 +41,14 @@ export default async function ReadinessPage() {
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr),
     supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
-    supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
+    supabase.from('family_members').select('id', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true).order('id').limit(200),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
   // The headline readiness SCORE is source-of-truth: if any of its six inputs
   // failed to read, fail closed rather than compute a reassuring-but-wrong score
   // (a dropped overdue-chores read would otherwise render as "all caught up").
-  // (The forward horizon block below is deliberately best-effort — see `cnt`.)
+  // Calendar/roster completeness is also checked before displaying the score.
   const primaryError = [
     choresOverdueRes.error,
     remindersOverdueRes.error,
@@ -72,8 +73,8 @@ export default async function ReadinessPage() {
   const { score, band, factors } = computeReadiness(input);
   const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
 
-  // Forward-looking horizon readiness (tomorrow / week / month). Counts are
-  // best-effort: a table from an unapplied migration yields 0, never an error.
+  // Legacy non-calendar horizon counts remain best-effort. Calendar coverage
+  // is explicit: a failed or capped read cannot establish that a week is clear.
   const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
   const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
   const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>) => {
@@ -83,11 +84,10 @@ export default async function ReadinessPage() {
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
-    // The week, for the card that claims to know about the week. It used to be
-    // told `conflictsWeek: 0` as a literal, so it could never report a clash.
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    // Exact accessible-row count detects both this cap and server-side limits.
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
       .order('starts_at').limit(200),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
@@ -97,39 +97,27 @@ export default async function ReadinessPage() {
     cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),
     cnt(supabase.from('prep_plans').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'active')),
   ]);
-  const tEvents = tomorrowEventsRes.data ?? [];
-  const HOUR = 3_600_000;
-  const tomorrowConflicts = countOverlaps(tEvents.filter((e) => !e.all_day), HOUR);
-  // Same overlap rule as tomorrow's, over the week — and who is carrying the
-  // day it lands on. Both were hardcoded zeros while the rows sat ten lines up,
-  // so the week card could never say "two clashes" and the month card could
-  // never name an overloaded person.
-  const weekEvents = (weekEventsRes.data ?? []).filter((e) => !e.all_day);
-  const conflictsWeek = countOverlaps(weekEvents, HOUR);
-  const perMember = new Map<string, number>();
-  for (const e of weekEvents) {
-    if (!e.assignee_id) continue;
-    perMember.set(e.assignee_id, (perMember.get(e.assignee_id) ?? 0) + 1);
-  }
-  const loads = [...perMember.values()];
-  const averageLoad = loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
-  // "Overloaded" is relative to this family, not an absolute: half again the
-  // household average, and at least four things, so a quiet week names nobody.
-  const overloadedMembers = loads.filter((n) => n >= 4 && n > averageLoad * 1.5).length;
+  const tomorrowCalendar = calendarReadiness(tomorrowEventsRes);
+  const weeklyCalendar = calendarReadiness(weekEventsRes, activeMembersRes);
+  const coverageIncomplete = [tomorrowCalendar.calendarCoverage, weeklyCalendar.calendarCoverage, weeklyCalendar.workloadCoverage]
+    .some((coverage) => coverage !== 'complete');
 
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
-    tomorrowConflicts, tomorrowUnassigned: tEvents.filter((e) => !e.assignee_id).length,
+    tomorrowConflicts: tomorrowCalendar.conflicts, tomorrowUnassigned: tomorrowCalendar.unassigned,
     dinnerPlannedTomorrow: dinnerTomorrowRes > 0,
-    conflictsWeek, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
-    expiringDocsMonth, overloadedMembers, upcomingTripsMonth, openPrepPlans,
+    conflictsWeek: weeklyCalendar.conflicts, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
+    expiringDocsMonth, overloadedMembers: weeklyCalendar.overloadedMembers, upcomingTripsMonth, openPrepPlans,
+    tomorrowCalendarCoverage: tomorrowCalendar.calendarCoverage,
+    weekCalendarCoverage: weeklyCalendar.calendarCoverage,
+    workloadCoverage: weeklyCalendar.workloadCoverage,
   };
   const horizonCards = assessReadiness(signals);
 
   // SVG ring math.
-  const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;
+  const r = 54, c = 2 * Math.PI * r, dash = ((coverageIncomplete ? 0 : score) / 100) * c;
 
   return (
     <div className="space-y-5">
@@ -143,14 +131,14 @@ export default async function ReadinessPage() {
           <svg viewBox="0 0 128 128" className="h-40 w-40 -rotate-90">
             <circle cx="64" cy="64" r={r} fill="none" stroke="currentColor" strokeWidth="12" className="text-elevated" />
             <circle cx="64" cy="64" r={r} fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round"
-              strokeDasharray={`${dash} ${c}`} className={BAND_COLOR[band]} />
+              strokeDasharray={`${dash} ${c}`} className={coverageIncomplete ? 'text-muted' : BAND_COLOR[band]} />
           </svg>
-          <p className={`-mt-28 text-4xl font-black ${BAND_COLOR[band]}`}>{score}</p>
-          <p className="mt-20 text-sm font-semibold">{BAND_LABEL[band]}</p>
+          <p className={`-mt-28 text-4xl font-black ${coverageIncomplete ? 'text-muted' : BAND_COLOR[band]}`}>{coverageIncomplete ? '?' : score}</p>
+          <p className="mt-20 text-sm font-semibold">{coverageIncomplete ? 'Coverage incomplete' : BAND_LABEL[band]}</p>
         </div>
 
         <div className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold">What&apos;s driving your score</h2>
+          <h2 className="mb-4 text-base font-semibold">{coverageIncomplete ? 'Known readiness signals' : "What's driving your score"}</h2>
           {factors.length === 0 ? (
             <p className="text-sm text-muted">Add events, chores, and meals to see what shapes your readiness.</p>
           ) : (
@@ -169,6 +157,12 @@ export default async function ReadinessPage() {
 
       <div className="pt-1">
         <h2 className="mb-3 text-base font-semibold">Are we ready?</h2>
+        <p className="mb-3 text-sm text-muted">Calendar and workload checks use only events and active household members you can access.</p>
+        {coverageIncomplete && (
+          <p role="status" className="mb-3 rounded-xl border border-border bg-surface/40 p-3 text-sm text-amber-300">
+            Readiness is not confirmed while calendar or household coverage is incomplete. Known issues remain shown below.
+          </p>
+        )}
         <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
       </div>
 
@@ -184,26 +178,4 @@ export default async function ReadinessPage() {
       )}
     </div>
   );
-}
-
-/**
- * Overlapping timed events, counted once per pair.
- *
- * An event with no end is treated as an hour long, which is what the rest of
- * the product assumes. Sorted first so the inner loop can stop early.
- */
-function countOverlaps(events: { starts_at: string; ends_at: string | null }[], defaultMs: number): number {
-  const timed = [...events].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  let count = 0;
-  for (let i = 0; i < timed.length; i += 1) {
-    const aStart = new Date(timed[i].starts_at).getTime();
-    const aEnd = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aStart + defaultMs;
-    for (let j = i + 1; j < timed.length; j += 1) {
-      const bStart = new Date(timed[j].starts_at).getTime();
-      if (bStart >= aEnd) break;
-      const bEnd = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bStart + defaultMs;
-      if (bStart < aEnd && aStart < bEnd) count += 1;
-    }
-  }
-  return count;
 }
