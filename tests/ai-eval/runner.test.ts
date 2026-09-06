@@ -52,6 +52,8 @@ type Scenario = {
    * which is exactly what parking for approval means.
    */
   expectNoToolCalls?: string[];
+  /** Tables submitRequest must not query, including direct context reads outside tools. */
+  expectNoRequestTableQueries?: string[];
 };
 
 const DIR = resolve('tests/ai-eval/scenarios');
@@ -182,6 +184,17 @@ beforeAll(() => { if (!process.env.EVAL_DEBUG) vi.spyOn(console, 'error').mockIm
 afterAll(() => { vi.restoreAllMocks(); });
 beforeEach(() => { seedHousehold(); });
 
+/** Observe actual client table access during request handling, not just the tool ledger. */
+async function observeRequestTableQueries<T>(request: () => Promise<T>) {
+  const from = vi.spyOn(client, 'from');
+  try {
+    const result = await request();
+    return { result, queriedTables: from.mock.calls.map(([table]) => String(table)) };
+  } finally {
+    from.mockRestore();
+  }
+}
+
 /** The rows the household is left with, and what really executed. */
 function assertRecordsAndLedger(scenario: Scenario, before: Record<string, number>): void {
   for (const [table, min] of Object.entries(scenario.expectRecords)) {
@@ -212,6 +225,20 @@ function assertRecordsAndLedger(scenario: Scenario, before: Record<string, numbe
 }
 
 describe('AI eval scenarios', () => {
+  it('detects a direct transaction read even when no tool call is logged', async () => {
+    const observed = await observeRequestTableQueries(async () => {
+      await client.from('transactions').select('id');
+      return 'direct read completed';
+    });
+    expect(observed.queriedTables).toContain('transactions');
+    expect(db.table('ai_tool_calls')).toHaveLength(0);
+  });
+
+  it('the teen spending refusal forbids underlying transaction queries', () => {
+    const scenario = SCENARIOS.find((entry) => entry.id === 'teen-money');
+    expect(scenario?.expectNoRequestTableQueries).toContain('transactions');
+  });
+
   it('has a scenario for every scripted prompt the provider answers', async () => {
     // A script with no scenario is a workflow nobody checks. This used to
     // compare two counts, which quietly asserted one scenario per script —
@@ -299,12 +326,18 @@ describe('AI eval scenarios', () => {
         .map((table) => [table, db.table(table).filter((r) => r.family_id === FAMILY).length]),
     );
 
-    const result = await submitRequest(scope(scenario.as), { text: scenario.prompt }, { db: client, kick: () => {}, now: NOW });
+    const { result, queriedTables } = await observeRequestTableQueries(() =>
+      submitRequest(scope(scenario.as), { text: scenario.prompt }, { db: client, kick: () => {}, now: NOW }),
+    );
+    for (const table of scenario.expectNoRequestTableQueries ?? []) {
+      expect(queriedTables, `${scenario.id} queried ${table} during request handling`).not.toContain(table);
+    }
 
     if (scenario.outcome === 'refused') {
       // Nothing was planned, and the person is told why in words they can act
-      // on. The row and ledger checks below still run: a refusal that wrote
-      // something, or that read a table on the way to refusing, is not one.
+      // on. Query assertions above cover direct request-time table access;
+      // the row and ledger checks below separately cover persisted effects
+      // and tool execution. Neither is a substitute for observing reads.
       expect(result.ok, `${scenario.id} should have been refused, but a run was created`).toBe(false);
       if (!result.ok && scenario.expectError) {
         expect(result.error, `${scenario.id} refusal wording`).toContain(scenario.expectError);
