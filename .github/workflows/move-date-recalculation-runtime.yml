@@ -1,0 +1,66 @@
+name: Move-date SQL runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/move-date-recalculation-runtime.yml'
+      - 'supabase/migrations/0245_move_planner.sql'
+      - 'supabase/migrations/0269_move_date_recalculation.sql'
+      - 'tests/fixtures/0269-move-date-recalculation-bootstrap.sql'
+      - 'tests/fixtures/0269-move-date-recalculation-runtime.sql'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moving-sql-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-contract:
+    name: PostgreSQL move-date transaction contract
+    if: github.repository == 'NewWorldVenture/Bubaly' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: bubaly_move_recalc_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: moving-ci-only-not-a-production-secret
+        options: >-
+          --health-cmd "pg_isready -U postgres -d bubaly_move_recalc_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out the exact reviewed PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Exercise actual migrations in the fresh service container
+        shell: bash
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != "NewWorldVenture/Bubaly" || "$GITHUB_EVENT_NAME" != "pull_request" || "$GITHUB_ACTIONS" != "true" || "$CI" != "true" ]]; then
+            printf '%s\n' 'This runtime proof only runs in the designated GitHub PR job.' >&2
+            exit 1
+          fi
+          if [[ ! "$PG_CONTAINER" =~ ^[0-9a-f]{12,64}$ ]]; then
+            printf '%s\n' 'A GitHub-created service-container handle is required.' >&2
+            exit 1
+          fi
+          # No host ports, database URLs, repository secrets or production connections.
+          # psql runs inside this job's new container and uses its local Unix socket.
+          cat tests/fixtures/0269-move-date-recalculation-bootstrap.sql \
+              supabase/migrations/0245_move_planner.sql \
+              supabase/migrations/0269_move_date_recalculation.sql \
+              tests/fixtures/0269-move-date-recalculation-runtime.sql \
+            | docker exec -i "$PG_CONTAINER" psql -X --set=ON_ERROR_STOP=1 \
+                --host=/var/run/postgresql --username=postgres --dbname=bubaly_move_recalc_ci
