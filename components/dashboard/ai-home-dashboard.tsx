@@ -35,7 +35,7 @@ import { topNeeds, summarizeNeeds, needsHeadline } from '@/lib/home/needs-attent
 import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type AwaitingRunRow, type RecommendationRow } from '@/lib/home/needs-sources';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { buildHomeBrief, homeBriefSummary } from '@/lib/home/home-brief';
+import { buildHomeBrief } from '@/lib/home/home-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { CircleCheck, Circle, Utensils } from 'lucide-react';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -338,23 +338,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       memberCount: (members ?? []).length,
     }, now);
 
-    // Persist today's snapshot (idempotent, one row/family/day) — the durable
-    // "never empty" record + TTFV signal. Best-effort: never block the render.
-    try {
-      await supabase.from('home_briefs').upsert({
-        family_id: familyId,
-        as_of_date: todayStart.toISOString().slice(0, 10),
-        is_sparse: homeBrief.isSparse,
-        readiness_pct: homeBrief.readinessPct,
-        week_count: homeBrief.weekCount,
-        conflict_count: homeBrief.conflictCount,
-        dinner_count: homeBrief.dinnerIdeas.length,
-        time_saved_minutes: homeBrief.timeSavedMinutes,
-        headline: homeBrief.headline,
-        brief: homeBriefSummary(homeBrief) as never,
-        created_by: ctx.user.id,
-      }, { onConflict: 'family_id,as_of_date' });
-    } catch { /* best-effort snapshot */ }
+    // Persisted snapshots are paused; render the freshly computed outcome.
   }
 
   // ── T4: the one proactive "insight of the day". Build candidate insights from

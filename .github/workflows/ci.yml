@@ -131,6 +131,12 @@ jobs:
       - name: Start isolated Supabase
         run: supabase start
 
+      - name: Verify home brief kind uniqueness in disposable PostgreSQL
+        timeout-minutes: 3
+        run: node scripts/ci-home-brief-kind-runtime.mjs
+        env:
+          BUBALY_0261_RUNTIME: '1'
+
       - name: Export local Supabase credentials
         shell: bash
         run: |
@@ -194,6 +200,31 @@ jobs:
           # deployment ignores both.
           AI_PROVIDER_STUB: '1'
           E2E_PROVIDER_STUB: '1'
+
+      # Retain only isolated-fixture DOM snapshots and screenshots on failure.
+      # Never upload traces, auth state, environment files, logs, or HTML reports.
+      - name: Upload E2E failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/**/error-context.md
+            test-results/**/*.png
+            !test-results/**/trace.zip
+            !test-results/**/storageState*
+            !test-results/**/storage-state*
+            !test-results/**/auth.json
+            !test-results/**/auth/**
+            !test-results/**/.auth/**
+            !test-results/**/.env*
+            !test-results/**/*.log
+            !test-results/**/logs/**
+            !test-results/**/*.html
+            !test-results/**/playwright-report/**
+          include-hidden-files: false
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Stop isolated Supabase
         if: always()

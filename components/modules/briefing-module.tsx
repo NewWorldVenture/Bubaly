@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { ErrorState } from '@/components/ui/states';
@@ -13,37 +13,14 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
 import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
+import {
+  briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
+  type BriefingData,
+} from '@/lib/briefing/cache-isolation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ScheduleItem { time: string; title: string; member: string; emoji: string; color: string }
-interface Conflict { description: string; suggestion: string }
-interface KidsNeeds { name: string; age?: number; items: string[] }
-interface MealInfo { meal: string; name: string | null; status: string; missing?: string[] }
-interface Reminder { text: string; urgency: 'high' | 'medium' | 'low' }
-interface OpsCategory { label: string; score: number; icon: string }
-interface BriefingData {
-  greeting: string;
-  subtitle: string;
-  familySummary: string[];
-  schedule: ScheduleItem[];
-  conflicts: Conflict[];
-  kidsNeeds: KidsNeeds[];
-  meals: MealInfo[];
-  reminders: Reminder[];
-  operationsScore: {
-    overall: number;
-    categories: OpsCategory[];
-    stressLevel: 'low' | 'moderate' | 'high';
-    stressReason: string | null;
-    recommendation: string;
-  };
-  completed?: string[];
-  outstanding?: { text: string; urgency: 'high' | 'medium' }[];
-  tomorrowPreview?: { events: number; notes: string[] };
-  weeklyHighlights?: { category: string; emoji: string; items: string[] }[];
-  weeklyConflicts?: Conflict[];
-}
+type OpsCategory = BriefingData['operationsScore']['categories'][number];
 
 type TabType = 'morning' | 'evening' | 'weekly' | 'kitchen';
 type CalEvent = Database['public']['Tables']['calendar_events']['Row'];
@@ -613,80 +590,65 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export function BriefingModule({ recap, relationships }: { recap?: React.ReactNode; relationships?: React.ReactNode } = {}) {
-  const { familyId, members } = useApp();
+type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.ReactNode };
+
+export function BriefingModule(props: BriefingModuleProps = {}) {
+  const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
-  const [briefings, setBriefings] = useState<Partial<Record<TabType, BriefingData>>>({});
-  const [digests, setDigests] = useState<Partial<Record<TabType, ConciergeDigest>>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<Partial<Record<TabType, string>>>({});
   const [now, setNow] = useState(new Date());
-  const [hydrated, setHydrated] = useState(false);
-  // Tabs we've already attempted to auto-generate, so a failure doesn't loop
-  // and switching back and forth doesn't re-fire the AI call.
-  const autoTried = useRef<Set<TabType>>(new Set());
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
 
+  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10));
+
+  useEffect(() => {
+    try {
+      purgeLegacyBriefingCache(window.sessionStorage);
+    } catch { /* Access to sessionStorage itself may be blocked. */ }
+  }, [contextKey]);
+
+  if (!contextKey) {
+    return <ErrorState message="Could not resolve your current household membership. Refresh and try again." />;
+  }
+
+  // A keyed boundary removes old content during rendering, before effect cleanup.
+  return <ScopedBriefingModule key={contextKey} contextKey={contextKey} now={now} tab={tab} setTab={setTab} {...props} />;
+}
+
+function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setTab }: BriefingModuleProps & {
+  contextKey: string;
+  now: Date;
+  tab: TabType;
+  setTab: (tab: TabType) => void;
+}) {
+  const { familyId, members } = useApp();
+  const [session] = useState(() => createBriefingSession());
+  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
+  const active = tab === 'kitchen' ? null : state[tab];
+  const loading = active ? !active.attempted || active.loading : false;
+  const error = active?.error ?? null;
+  const currentBriefing = active?.data?.briefing ?? null;
+  const generatedAt = active?.data?.generatedAt;
+  const digest = active?.data?.digest;
+  const generate = session.generate;
   const today = now.toISOString().slice(0, 10);
 
-  useEffect(() => {
-    (['morning', 'evening', 'weekly'] as const).forEach(type => {
-      try {
-        const raw = sessionStorage.getItem(`fos_briefing_${type}_${today}`);
-        if (raw) {
-          const { briefing, at, digest } = JSON.parse(raw) as { briefing: BriefingData; at: string; digest?: ConciergeDigest };
-          setBriefings(prev => ({ ...prev, [type]: briefing }));
-          setGeneratedAt(prev => ({ ...prev, [type]: at }));
-          if (digest) setDigests(prev => ({ ...prev, [type]: digest }));
-        }
-      } catch { /* ignore */ }
-    });
-    setHydrated(true);
-  }, [today]);
+  useEffect(() => () => session.clear(), [session]);
 
-  const generate = useCallback(async (type: Exclude<TabType, 'kitchen'>) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/ai/briefing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
-      });
-      if (!res.ok) throw new Error('Failed to generate briefing');
-      const { briefing, generatedAt: at, digest } = await res.json() as { briefing: BriefingData; generatedAt: string; digest?: ConciergeDigest };
-      setBriefings(prev => ({ ...prev, [type]: briefing }));
-      setGeneratedAt(prev => ({ ...prev, [type]: at }));
-      if (digest) setDigests(prev => ({ ...prev, [type]: digest }));
-      try { sessionStorage.setItem(`fos_briefing_${type}_${today}`, JSON.stringify({ briefing, at, digest })); } catch { /* ignore */ }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }, [today]);
-
-  // Frictionless: once the per-day cache has hydrated, auto-generate the active
-  // tab if it has no briefing yet — so opening the briefing just shows it,
-  // instead of asking the user to click "Generate". Guarded so a failure won't
-  // loop and tab-switching won't re-fire. Kitchen mode never auto-generates.
+  // Each tab gets one automatic attempt per mounted context. Failures stay retryable.
   useEffect(() => {
-    if (!hydrated || tab === 'kitchen') return;
-    if (briefings[tab] || loading || error) return;
-    if (autoTried.current.has(tab)) return;
-    autoTried.current.add(tab);
-    void generate(tab);
-  }, [hydrated, tab, briefings, loading, error, generate]);
+    if (tab === 'kitchen' || state[tab].attempted) return;
+    void session.generate(tab);
+  }, [session, state, tab]);
 
   // Live data for kitchen mode
   const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
     familyId,
+    deps: [contextKey],
     // rawEvents is only used for TODAY's events (filtered below + KitchenMode); the
     // weekly/tomorrow briefing data comes from a separate source. Bound to a small
     // window around today instead of loading the family's entire calendar history.
@@ -698,6 +660,7 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
   const { data: rawReminders, error: remindersError, refresh: refreshReminders } = useRealtimeQuery<ReminderRow>({
     table: 'reminders',
     familyId,
+    deps: [contextKey],
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false) as never,
   });
 
@@ -711,8 +674,6 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
   }, [rawReminders, today]);
   const kitchenError = eventsError || remindersError;
   const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };
-
-  const currentBriefing = tab !== 'kitchen' ? briefings[tab] ?? null : null;
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -751,8 +712,8 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
         </div>
         {currentBriefing && (
           <div className="flex items-center gap-3">
-            {generatedAt[tab] && (
-              <span className="text-xs text-muted">Generated {fmtTime(generatedAt[tab]!)}</span>
+            {generatedAt && (
+              <span className="text-xs text-muted">Generated {fmtTime(generatedAt)}</span>
             )}
             <Button variant="outline" size="sm"
               onClick={() => generate(tab as Exclude<TabType, 'kitchen'>)}
@@ -799,7 +760,7 @@ export function BriefingModule({ recap, relationships }: { recap?: React.ReactNo
           </div>
 
           {/* Cross-domain concierge: "What does my family need to do today?" */}
-          {digests[tab] && <div className="mb-6"><NeedsAttention digest={digests[tab]!} /></div>}
+          {digest && <div className="mb-6"><NeedsAttention digest={digest} /></div>}
 
           {tab === 'morning' && <MorningContent data={currentBriefing} relationships={relationships} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}

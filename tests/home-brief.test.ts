@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { buildHomeBrief, homeBriefSummary, type HomeBriefInput } from '@/lib/home/home-brief';
 import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
@@ -75,5 +76,23 @@ describe('buildHomeBrief', () => {
     expect(s.isSparse).toBe(true);
     expect(typeof s.readinessPct).toBe('number');
     expect(Array.isArray(s.steps)).toBe(true);
+  });
+});
+
+describe('Home snapshot containment (source contracts)', () => {
+  const dashboard = readFileSync('components/dashboard/ai-home-dashboard.tsx', 'utf8');
+
+  it('builds the fresh outcome without reading or writing the snapshot table', () => {
+    expect(dashboard).toMatch(/homeBrief = buildHomeBrief\(\{[\s\S]*?\}, now\);/);
+    expect(dashboard).not.toMatch(/\.from\(['"]home_briefs['"]\)/);
+    expect(dashboard).not.toContain('homeBriefSummary');
+  });
+
+  it('keeps rendering the computed readiness, next steps and dinner ideas', () => {
+    expect(dashboard).toContain('showOutcome && homeBrief &&');
+    expect(dashboard).toContain('{homeBrief.headline}');
+    expect(dashboard).toContain('{homeBrief.readinessPct}%');
+    expect(dashboard).toContain('homeBrief.steps.slice(0, 4).map');
+    expect(dashboard).toContain('homeBrief.dinnerIdeas.map');
   });
 });
