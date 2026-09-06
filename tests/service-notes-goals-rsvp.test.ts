@@ -5,7 +5,7 @@
 // tool to resolve, and a parent who approved "save a note" read back "Bubaly
 // has no tool called add_note".
 //
-// The headline assertions are the foreign key and the two invariants the
+// The headline assertions are the two foreign keys and the two invariants the
 // database does not keep:
 //   * notes.created_by / goals.created_by reference auth.users (0002), so the
 //     AUTH id belongs there — not the family_members id the todo tables want.
@@ -13,15 +13,18 @@
 //     `is_complete` is not derived; both rules live only in the goals module,
 //     and three readers filter on `is_complete`.
 //
-// `rsvp_to_event` is deliberately NOT here. See lib/assistant/trust-wrapper.ts
-// APPROVAL_CANNOT_REPLAY: the approval replay runs as the APPROVER and the row
-// does not record who asked, so a registry RSVP tool would answer for the wrong
-// person and its upsert would overwrite that person's own reply.
+//   * event_rsvps.member_id references family_members (0047), so the MEMBER id
+//     belongs there — and it comes from the SCOPE, never from arguments, because
+//     0047's policy has no member predicate at all. This tool waited for the
+//     approval row to record who asked: replayed under the approver's scope it
+//     would have answered for the parent and, on event_rsvps_once, upserted over
+//     their own reply.
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createNote } from '@/lib/services/notes';
 import { createGoal } from '@/lib/services/goals';
+import { rsvpToEvent } from '@/lib/services/calendar';
 import type { ServiceScope } from '@/lib/services/types';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'upsert'; filters: Record<string, unknown>; payload?: unknown };
@@ -152,4 +155,109 @@ describe('createGoal', () => {
       expect(calls).toEqual([]);
     },
   );
+});
+
+describe('rsvpToEvent', () => {
+  const EVENT = { id: 'evt-1', title: 'Swim lesson', starts_at: '2026-09-08T16:00:00Z', family_id: 'fam-1' };
+
+  it('answers for the ACTING member, never for anyone named in the arguments', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events'
+      ? { data: EVENT, error: null }
+      : { data: { id: 'rsvp-1', event_id: 'evt-1', status: 'accepted', member_id: 'member-1' }, error: null });
+
+    const res = await rsvpToEvent(
+      scopeWith(db, { memberId: 'member-teen' }),
+      // A member_id in the arguments must be ignored: 0047's policy is FOR ALL
+      // on is_family_member alone, so the app is the ONLY thing stopping a teen
+      // recording a reply in a parent's name.
+      { eventId: 'evt-1', status: 'accepted', ...({ memberId: 'member-parent' } as object) },
+    );
+    expect(res.ok).toBe(true);
+    const upsert = calls.find((c) => c.table === 'event_rsvps');
+    expect(upsert?.kind).toBe('upsert');
+    // event_rsvps.member_id → family_members (0047), NOT auth.users.
+    expect(upsert?.payload).toMatchObject({ event_id: 'evt-1', member_id: 'member-teen', status: 'accepted' });
+    expect(upsert?.payload).not.toMatchObject({ member_id: 'member-parent' });
+  });
+
+  it('takes family_id from the event, not from the caller', async () => {
+    // Nothing constrains event_rsvps.family_id to match the event's.
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events'
+      ? { data: EVENT, error: null }
+      : { data: { id: 'rsvp-1', event_id: 'evt-1', status: 'maybe' }, error: null });
+    await rsvpToEvent(scopeWith(db), { eventId: 'evt-1', status: 'maybe' });
+    expect(calls.find((c) => c.table === 'event_rsvps')?.payload).toMatchObject({ family_id: 'fam-1' });
+  });
+
+  it('refuses when the scope cannot say whose reply it is', async () => {
+    // Better to answer for nobody than for whoever sorts first in the roster,
+    // which is what this code did before.
+    const { db, calls } = makeDb(() => ({ data: null, error: null }));
+    const res = await rsvpToEvent(scopeWith(db, { memberId: null }), { eventId: 'evt-1', status: 'accepted' });
+    expect(res).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls).toEqual([]);
+  });
+
+  it('resolves a title to the NEXT occurrence, not the furthest-out one', async () => {
+    // The lookup this replaces ordered DESCENDING with limit 1, so a weekly
+    // swim lesson resolved to the last one of the term — months away — and
+    // reported success against the right title.
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events'
+      ? { data: [EVENT, { ...EVENT, id: 'evt-9', starts_at: '2026-11-24T16:00:00Z' }], error: null }
+      : { data: { id: 'rsvp-1', event_id: 'evt-1', status: 'accepted' }, error: null });
+
+    const res = await rsvpToEvent(scopeWith(db), { eventTitle: 'swim', status: 'accepted' });
+    expect(res.ok).toBe(true);
+    const lookup = calls.find((c) => c.table === 'calendar_events');
+    expect(lookup?.filters['order:starts_at'], 'must be ascending').toBe(true);
+    expect(lookup?.filters['gte:starts_at'], 'must exclude events that already happened').toBe(NOW.toISOString());
+    expect(calls.find((c) => c.table === 'event_rsvps')?.payload).toMatchObject({ event_id: 'evt-1' });
+  });
+
+  it('refuses a title that matches two different events instead of guessing', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events'
+      ? { data: [{ ...EVENT, id: 'a', title: 'Board game night' }, { ...EVENT, id: 'b', title: 'Away game vs Fairview' }], error: null }
+      : { data: null, error: null });
+
+    const res = await rsvpToEvent(scopeWith(db), { eventTitle: 'game', status: 'accepted' });
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input' });
+    if (!res.ok) expect(res.error).toMatch(/more than one/i);
+    expect(calls.some((c) => c.table === 'event_rsvps')).toBe(false);
+  });
+
+  it('accepts several occurrences of ONE event as unambiguous', async () => {
+    // A weekly lesson is not a question. Refusing here would make the tool
+    // useless for exactly the case it is most often asked about.
+    const { db } = makeDb((call) => call.table === 'calendar_events'
+      ? { data: [EVENT, { ...EVENT, id: 'evt-2', starts_at: '2026-09-15T16:00:00Z' }], error: null }
+      : { data: { id: 'rsvp-1', event_id: 'evt-1', status: 'accepted' }, error: null });
+    expect((await rsvpToEvent(scopeWith(db), { eventTitle: 'Swim lesson', status: 'accepted' })).ok).toBe(true);
+  });
+
+  it('says so when nothing upcoming matches, rather than answering for the past', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events' ? { data: [], error: null } : { data: null, error: null });
+    const res = await rsvpToEvent(scopeWith(db), { eventTitle: 'sports day', status: 'declined' });
+    expect(res).toMatchObject({ ok: false, code: 'not_found' });
+    if (!res.ok) expect(res.error).toMatch(/already happened/i);
+    expect(calls.some((c) => c.table === 'event_rsvps')).toBe(false);
+  });
+
+  it.each([
+    [{ status: 'accepted' }, /which event/i],
+    [{ eventId: 'evt-1', eventTitle: 'swim', status: 'accepted' }, /not both/i],
+    [{ eventId: 'evt-1', status: 'going' }, /accepted, maybe or declined/i],
+  ])('refuses a malformed request (%#)', async (input, message) => {
+    const { db, calls } = makeDb(() => ({ data: null, error: null }));
+    const res = await rsvpToEvent(scopeWith(db), input as Parameters<typeof rsvpToEvent>[1]);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(message);
+    expect(calls).toEqual([]);
+  });
+
+  it('will not reach an event in another family', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'calendar_events' ? { data: null, error: null } : { data: null, error: null });
+    const res = await rsvpToEvent(scopeWith(db), { eventId: 'evt-other', status: 'accepted' });
+    expect(res).toMatchObject({ ok: false, code: 'not_found' });
+    expect(calls.find((c) => c.table === 'calendar_events')?.filters).toMatchObject({ family_id: 'fam-1' });
+  });
 });

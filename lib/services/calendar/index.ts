@@ -457,3 +457,158 @@ export async function rescheduleAfter(
     endsAt: durationMs === null ? null : new Date(Date.parse(startsAt) + durationMs).toISOString(),
   });
 }
+
+// ─── RSVPs ──────────────────────────────────────────────────────────────────
+
+export type EventRsvp = Tables<'event_rsvps'>;
+export type RsvpStatus = 'accepted' | 'maybe' | 'declined';
+
+const RSVP_STATUSES: RsvpStatus[] = ['accepted', 'maybe', 'declined'];
+const RSVP_LABELS: Record<RsvpStatus, string> = { accepted: 'Going', maybe: 'Maybe', declined: "Can't make it" };
+
+/** How many title matches to look at before calling a request ambiguous. */
+const RSVP_TITLE_CANDIDATES = 6;
+
+export type ResolvedEvent = { id: string; title: string; starts_at: string; family_id: string };
+
+/**
+ * Find the ONE event a person meant by a partial title.
+ *
+ * The lookup this replaces — shared verbatim by the chat RSVP tool and its
+ * read-only twin — was:
+ *
+ *     .ilike('title', `%${title}%`).order('starts_at', { ascending: false }).limit(1)
+ *
+ * Descending order takes the MAXIMUM `starts_at`, so "RSVP yes to swim" on a
+ * weekly lesson resolved to the LAST occurrence of the term, months out, while
+ * this week's stayed blank — and said "RSVP'd Going to Swim lesson", which
+ * reads exactly like success. There was no lower bound either, so with no
+ * future match it would happily answer for an event that had already happened.
+ *
+ * The rule here is the one a person means: the NEXT occurrence. Ambiguity is
+ * refused rather than guessed, but only real ambiguity — several occurrences of
+ * one weekly lesson are not a question, whereas "game" matching both
+ * "Board game night" and "Away game vs Fairview" is, and the caller is told
+ * both so they can say which.
+ */
+export async function findEventByTitle(
+  db: ServiceScope['db'],
+  familyId: string,
+  title: string,
+  nowIso: string,
+): Promise<ServiceResult<ResolvedEvent>> {
+  const needle = title.trim();
+  if (!needle) return fail('Which event? Give me its name.', { code: SERVICE_CODES.invalidInput });
+
+  const { data, error } = await db
+    .from('calendar_events')
+    .select('id, title, starts_at, family_id')
+    .eq('family_id', familyId)
+    .ilike('title', `%${needle}%`)
+    .gte('starts_at', nowIso)
+    .order('starts_at', { ascending: true })
+    .limit(RSVP_TITLE_CANDIDATES);
+  if (error) {
+    console.error('[service:calendar] rsvp event lookup failed', error);
+    return fail(describeDbError(error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
+  }
+
+  const upcoming = (data ?? []) as ResolvedEvent[];
+  if (!upcoming.length) {
+    // Deliberately not falling back to a past event: answering for something
+    // that already happened is never what was asked, and reporting it as done
+    // is worse than saying so.
+    return fail(`No upcoming event matching "${needle}" — it may have already happened.`, { code: SERVICE_CODES.notFound });
+  }
+
+  const distinct = [...new Set(upcoming.map((e) => e.title.trim().toLowerCase()))];
+  if (distinct.length > 1) {
+    const names = [...new Set(upcoming.map((e) => e.title.trim()))].slice(0, 3).map((t) => `"${t}"`).join(', ');
+    return fail(`"${needle}" matches more than one thing — ${names}. Which one?`, { code: SERVICE_CODES.invalidInput });
+  }
+  return ok(upcoming[0]);
+}
+
+export type RsvpInput = {
+  eventId?: string | null;
+  eventTitle?: string | null;
+  status: string;
+};
+
+/**
+ * Record the ACTING person's response to an event.
+ *
+ * `member_id` comes from `scope.memberId` and from nowhere else. That is a
+ * security property here, not tidiness: `0047`'s policy is
+ * `FOR ALL … USING (is_family_member(family_id))` with no member predicate at
+ * all, so the database will happily let any member write any other member's
+ * row. The app is the only thing standing between a teen and an RSVP recorded
+ * in a parent's name, which is what happened once already when this code used
+ * `members[0]` as though it were a lookup.
+ *
+ * That is also why this tool could not ship until the approval row recorded WHO
+ * ASKED. An approved RSVP is replayed by `performApproved`, which used to run
+ * under the APPROVER's scope — so answering from `scope.memberId` would have
+ * recorded the parent as going and, because `event_rsvps_once` makes the write
+ * an upsert, replaced their own earlier reply. `scopeForApprovedWork` now hands
+ * the replay the asker's scope, and clears `memberId` outright when the asker
+ * cannot be resolved so the refusal below fires instead of a wrong answer.
+ */
+export async function rsvpToEvent(scope: ServiceScope, input: RsvpInput): Promise<ServiceResult<EventRsvp & { event_title: string; label: string }>> {
+  const status = RSVP_STATUSES.find((s) => s === input.status?.trim());
+  if (!status) return fail('An RSVP is accepted, maybe or declined.', { code: SERVICE_CODES.invalidInput });
+
+  if (!scope.memberId) {
+    return fail('Bubaly could not tell whose reply this is, so it did not answer for anyone.', { code: SERVICE_CODES.denied });
+  }
+
+  const byId = input.eventId?.trim() || null;
+  const byTitle = input.eventTitle?.trim() || null;
+  if (byId && byTitle) return fail('Name the event by id or by title, not both.', { code: SERVICE_CODES.invalidInput });
+  if (!byId && !byTitle) return fail('Which event is this a reply to?', { code: SERVICE_CODES.invalidInput });
+
+  let event: ResolvedEvent;
+  if (byId) {
+    const { data, error } = await scope.db
+      .from('calendar_events')
+      .select('id, title, starts_at, family_id')
+      .eq('id', byId)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (error) {
+      console.error('[service:calendar] rsvp event read failed', error);
+      return fail(describeDbError(error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+    event = data as ResolvedEvent;
+  } else {
+    const found = await findEventByTitle(scope.db, scope.familyId, byTitle as string, scopeNow(scope).toISOString());
+    if (!found.ok) return found;
+    event = found.data;
+  }
+
+  // family_id is taken from the EVENT, never from the caller: nothing in the
+  // schema forces `event_rsvps.family_id` to match the event's, and the row is
+  // only ever read back through a family filter.
+  const { data, error } = await scope.db
+    .from('event_rsvps')
+    .upsert(
+      { event_id: event.id, family_id: event.family_id, member_id: scope.memberId, status },
+      { onConflict: 'event_id,member_id' },
+    )
+    .select('*')
+    .single();
+  if (error || !data) {
+    console.error('[service:calendar] rsvp write failed', error);
+    return fail(describeDbError(error, 'Could not save that RSVP.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, {
+    agent: 'calendar',
+    title: `Replied "${RSVP_LABELS[status]}" to "${event.title}"`,
+    detail: event.starts_at,
+    href: '/dashboard/calendar',
+    memberId: scope.memberId,
+  });
+  return ok({ ...data, event_title: event.title, label: RSVP_LABELS[status] });
+}

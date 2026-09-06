@@ -28,6 +28,11 @@ export type EvaluateRequest = {
   payload?: Record<string, unknown>;
   /** create an approval_request row when the decision is require_approval (default true) */
   openApproval?: boolean;
+  /**
+   * `family_members.id` of the person an AGENT is acting for. Ignored when the
+   * actor is the member themselves, because then the actor already is the asker.
+   */
+  onBehalfOfMemberId?: string | null;
 };
 
 export type EvaluateOutcome = {
@@ -114,7 +119,11 @@ export async function openApprovalRequest(
     domain: req.domain,
     capability: req.capability,
     requested_by_kind: req.actor.kind === 'ai_agent' ? 'ai' : 'member',
-    requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : null,
+    // For a member the actor IS the asker. For an agent the actor is Bubaly, so
+    // the asker has to be carried alongside — without it the row records that
+    // "Bubaly asked" and loses the person it asked for, which is the whole
+    // reason an approved action could only ever be replayed as the approver.
+    requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : (req.onBehalfOfMemberId ?? null),
     agent: req.actor.kind === 'ai_agent' ? (req.agent ?? req.actor.id) : null,
     title: req.title ?? `${req.capability} · ${req.domain}`,
     summary: req.summary ?? null,
