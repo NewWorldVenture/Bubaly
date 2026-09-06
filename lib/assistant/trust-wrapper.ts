@@ -16,7 +16,7 @@ type DB = SupabaseClient<Database>;
 
 // Write tools that touch family data — all need a trust check.
 // Read tools are intentionally absent; they pass through unchanged.
-const TOOL_DOMAIN: Record<string, string> = {
+export const TOOL_DOMAIN: Record<string, string> = {
   create_calendar_event: 'calendar',
   add_chore: 'chores',
   add_grocery_item: 'shopping',
@@ -32,6 +32,34 @@ const TOOL_DOMAIN: Record<string, string> = {
   add_goal: 'tasks',
   create_announcement: 'announcements',
   rsvp_to_event: 'calendar',
+};
+
+/**
+ * Gated tools whose approval a parent can grant and Bubaly then cannot carry
+ * out on its own.
+ *
+ * `gateAiAction` stores `{name, args}` as the approval's payload, and
+ * `approveRequest` replays it with `executeTool(scope, name, args)`
+ * (lib/services/approvals/index.ts). `executeTool` resolves the name through
+ * the tool registry, so a name the registry does not know is DENIED at replay
+ * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
+ * no tool called ...".
+ *
+ * These three are written nowhere but `lib/assistant/tools.ts` — there is no
+ * `lib/services/notes`, no `lib/services/goals`, and nothing under
+ * `lib/ai/tools/` touches `event_rsvps` — so there is no registry tool for the
+ * replay to find. Until they have one, the family is TOLD that, in the
+ * approval line itself, rather than discovering it after a parent has already
+ * said yes.
+ *
+ * `tests/assistant-approval-replay.test.ts` fails in both directions: a new
+ * gated tool with no registry equivalent has to be added here, and an entry
+ * that gains one has to be removed.
+ */
+export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
+  add_note: 'nothing outside lib/assistant/tools.ts writes `notes`',
+  add_goal: 'nothing outside lib/assistant/tools.ts writes `goals`',
+  rsvp_to_event: 'nothing under lib/ai/tools/ writes `event_rsvps`',
 };
 
 export function wrapToolsWithTrust(
@@ -70,10 +98,29 @@ export function wrapToolsWithTrust(
           return { ok: false, error: `Blocked by household policy: ${outcome.reason}` };
         }
         if (outcome.effect === 'require_approval') {
+          // "Sent for parent approval" has to name a row a parent can actually
+          // find. `gateAiAction` files it and hands back its id; when the insert
+          // failed there is no request, nothing was written, and nobody was
+          // asked — so the honest answer is a failure, not a queue.
+          if (!outcome.approvalId) {
+            return { ok: false, error: `Bubaly could not send that for approval, so ${lower(title)} did not happen. Please try again.` };
+          }
+          // The shape matters: the card the family acts on is built by
+          // `approvalIdFromToolResult` (lib/ai/result-cards.ts), which reads
+          // snake_case `pending_approval` plus an `approval_id`. This used to
+          // return camelCase `pendingApproval` and drop the id it had been
+          // given, so every gated chat write said "sent for parent approval"
+          // and rendered nothing anyone could approve from the thread. The
+          // registry path already returns this shape
+          // (lib/ai/tools/legacy-adapter.ts) — the wrapper was the odd one out.
+          const caveat = APPROVAL_CANNOT_REPLAY[tool.name]
+            ? ' Once a parent approves it they will need to add it by hand — Bubaly cannot finish this one on its own yet.'
+            : '';
           return {
             ok: true,
-            summary: `⏳ Sent for parent approval — ${title}`,
-            pendingApproval: true,
+            summary: `⏳ Sent for parent approval — ${title}.${caveat}`,
+            pending_approval: true,
+            approval_id: outcome.approvalId,
           };
         }
 
@@ -82,6 +129,11 @@ export function wrapToolsWithTrust(
       },
     };
   });
+}
+
+/** A title like `Add chore: "Bins"` read back inside a sentence. */
+function lower(title: string): string {
+  return title.charAt(0).toLowerCase() + title.slice(1);
 }
 
 function fmtTitle(name: string, a: Record<string, unknown>): string {

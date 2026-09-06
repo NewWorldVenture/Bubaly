@@ -232,6 +232,14 @@ export async function createChore(
 ): Promise<ServiceResult<{ chore: Chore; assignment: ChoreAssignment | null }>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
+  // Points are a reward a child earns. A negative one would take points away
+  // for doing a chore, and nothing in the product offers that — the chat tool
+  // this service replaced clamped with `Math.max(0, …)`, and the clamp was lost
+  // on the way to the registry. Refused rather than clamped: silently turning
+  // -5 into 0 answers a request nobody made.
+  if (input.points != null && (!Number.isFinite(input.points) || input.points < 0)) {
+    return fail('A chore cannot be worth negative points.', { code: SERVICE_CODES.invalidInput });
+  }
 
   const { data: chore, error } = await scope.db
     .from('chores')

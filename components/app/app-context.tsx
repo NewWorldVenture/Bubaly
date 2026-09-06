@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import type { Tables, DashboardView } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -69,6 +70,10 @@ export function AppProvider({
 
   // Keep the member roster live across the app.
   useEffect(() => {
+    // `family_members` is not published: a roster change is an invite being
+    // accepted, not two people racing, and a reload picks it up. Holding a
+    // socket that can never fire on every screen is the dishonest half.
+    if (!isRealtimePublished('family_members')) return;
     const supabase = createClient();
     const channel = supabase
       .channel(`members:${value.familyId}`)
