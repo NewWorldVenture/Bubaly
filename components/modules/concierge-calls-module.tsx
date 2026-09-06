@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
+import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, MiniEmpty } from '@/components/family/shell';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 
   // Realtime: reflect status changes (queued → calling → completed) live.
   useEffect(() => {
+    if (!isRealtimePublished('concierge_calls')) return;
     const supabase = createClient();
     const ch = supabase.channel(`concierge_calls:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'concierge_calls', filter: `family_id=eq.${familyId}` },

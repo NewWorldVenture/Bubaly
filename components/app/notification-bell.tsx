@@ -19,6 +19,13 @@ export function NotificationBell() {
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('is_read', false)
+        // Due only. A notification can be scheduled ahead — `notify()` takes an
+        // explicit `sendAt`, and the AI's `notifications.notify` tool offers it
+        // as "Earliest delivery" — and a badge for something that has not
+        // happened yet is a nudge to open the app and find nothing. `send_at`
+        // is `not null default now()` (0002_tables.sql:415), so this hides
+        // nothing that is already due.
+        .lte('send_at', new Date().toISOString())
         .or(`user_id.eq.${userId},user_id.is.null`);
       // On a transient read failure, keep the current badge rather than falsely
       // clearing it to 0 (which would tell the user they have no notifications).

@@ -58,6 +58,9 @@ export type AISettingsPatch = {
   quietHours?: { start: number; end: number } | null;
 };
 
+/** The longest night a family may declare. Beyond this it is a mute switch wearing a schedule's clothes. */
+const MAX_QUIET_HOURS = 14;
+
 function validate(patch: AISettingsPatch): string | null {
   if (patch.behavior !== undefined && !isBehavior(patch.behavior)) return 'That autonomy level is not one Bubaly offers.';
   for (const [domain, behavior] of Object.entries(patch.categoryBehavior ?? {})) {
@@ -70,6 +73,15 @@ function validate(patch: AISettingsPatch): string | null {
   if (quiet) {
     const whole = (n: number) => Number.isInteger(n) && n >= 0 && n <= 23;
     if (!whole(quiet.start) || !whole(quiet.end)) return 'Quiet hours are whole hours between 0 and 23.';
+    // A window has to leave a waking day on the other side of it. `{0, 23}`
+    // passed the bounds check and is a 23-hour mute switch — legal to save,
+    // impossible to notice, and with nothing in the product that would explain
+    // why Bubaly had gone silent. Quiet hours are for a night, not for a life.
+    if (quiet.start === quiet.end) return 'Quiet hours need a start and an end that differ.';
+    const span = (quiet.end - quiet.start + 24) % 24;
+    if (span > MAX_QUIET_HOURS) {
+      return `Quiet hours can cover at most ${MAX_QUIET_HOURS} hours. To stop Bubaly entirely, switch it off above.`;
+    }
   }
   return null;
 }

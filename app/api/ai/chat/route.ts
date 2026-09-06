@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
-import { summarizeToolResult } from '@/lib/ai/assistant-engine';
+import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const provider = await resolveProvider();
-    const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows, tz });
+    const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, memberId: ctx.active.member?.id ?? null, members: memberRows, tz });
     const tools = wrapToolsWithTrust(rawTools, supabase, familyId, ctx.active.role);
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
@@ -181,7 +181,9 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const assistantContent = content.trim() || (actions.length ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.');
+        // The same rule as the live surface, from the same function: a turn
+        // whose actions were all refused must not sign off with "Done".
+        const assistantContent = finalizeAssistantContent(content, actions);
 
         // Persist both turns + the structured actions, then finish the conversation.
         let persistenceError: unknown = null;

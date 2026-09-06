@@ -1,6 +1,15 @@
-// Pure family-readiness scoring — unit tested, no dependencies.
+// Household ACTIVITY scoring — pure, unit tested, no dependencies.
 // A lightweight 0–100 score derived from real activity, shown to Free users to
 // create demand for the Plus "Stress" / "Operations" scores.
+//
+// NOT §51's readiness, though the file is named `readiness` and sits beside it.
+// This answers "how much is this family running through Bubaly" — meals
+// planned, calendar current, chores kept on top of. §51's question is "is
+// anything still open for tomorrow, this week, this month", and it lives in
+// `./assess.ts`. The two ran side by side on the Family Readiness page under
+// one word, so a household could read "78 · Looking good" above
+// "40 · Not ready" and reasonably think one of them was wrong. They measure
+// different things and the page now says which is which; keep it that way.
 
 export type ReadinessInput = {
   choresOverdue: number;
@@ -9,8 +18,6 @@ export type ReadinessInput = {
   mealsPlanned: number;
   /** Events scheduled in the next 7 days. */
   eventsUpcoming: number;
-  /** Unchecked grocery items. */
-  groceryActive: number;
   activeMembers: number;
 };
 

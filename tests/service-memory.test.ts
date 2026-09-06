@@ -69,7 +69,7 @@ const FACT = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 const SUGGESTION = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'sug-1', family_id: 'fam-1', member_id: 'member-2', category: 'preference', label: 'Go-to dinner', value: 'Taco night',
-  evidence: 'Mentioned in a conversation', confidence: 70, signature: 'ai_memory:abc', status: 'suggested', fact_id: null,
+  evidence: 'Mentioned in a conversation', confidence: 70, expires_at: null, signature: 'ai_memory:abc', status: 'suggested', fact_id: null,
   created_by: 'auth-user-1', created_at: NOW.toISOString(), updated_at: NOW.toISOString(), ...overrides,
 });
 
@@ -372,5 +372,164 @@ describe('clearAiMemory', () => {
     const { db, calls } = makeDb(() => ({ data: [], error: null }));
     expect(await clearAiMemory(scopeWith(db, { role: 'child' }))).toMatchObject({ ok: false, code: 'denied' });
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('a deadline survives the whole memory lifecycle (0268)', () => {
+  it('keeps an expiry a restatement supplies, instead of clearing it', () => {
+    // The update path wrote `expires_at: null` unconditionally, so "remember
+    // the swim class runs until December" made an existing fact permanent.
+    return (async () => {
+      const { db, calls } = makeDb((call) => (call.kind === 'update'
+        ? { data: FACT({ expires_at: '2026-12-01T00:00:00.000Z' }), error: null }
+        : { data: FACT(), error: null }));
+      await rememberFact(scopeWith(db), {
+        key: 'Swim class', content: 'Thursdays', source: 'user', memberId: 'member-2',
+        expiresAt: '2026-12-01T00:00:00.000Z',
+      });
+      const update = calls.find((c) => c.kind === 'update');
+      expect(update?.payload).toMatchObject({ expires_at: '2026-12-01T00:00:00.000Z' });
+    })();
+  });
+
+  it('still clears the expiry when a restatement names none', () => {
+    // Restating a value says it is true now, not that it expires when the old
+    // one did.
+    return (async () => {
+      const { db, calls } = makeDb((call) => (call.kind === 'update'
+        ? { data: FACT(), error: null }
+        : { data: FACT({ expires_at: '2026-01-01T00:00:00.000Z' }), error: null }));
+      await rememberFact(scopeWith(db), { key: 'Swim class', content: 'Fridays', source: 'user', memberId: 'member-2' });
+      const update = calls.find((c) => c.kind === 'update');
+      expect(update?.payload).toMatchObject({ expires_at: null });
+    })();
+  });
+
+  it("carries a deadline into the inbox for a fact Bubaly only suspects", async () => {
+    const { db, calls } = makeDb((call) => (call.table === 'family_playbook_suggestions' && call.kind === 'insert'
+      ? { data: SUGGESTION({ expires_at: '2026-12-01T00:00:00.000Z' }), error: null }
+      : { data: null, error: null }));
+    const res = await rememberFact(scopeWith(db), {
+      key: 'Swim class', content: 'Thursdays', source: 'ai_conversation', confidence: 70,
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+    expect(res.ok && res.data.kind).toBe('suggestion');
+    const insert = calls.find((c) => c.table === 'family_playbook_suggestions' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ expires_at: '2026-12-01T00:00:00.000Z' });
+  });
+
+  it('and across to the fact when a person accepts it', async () => {
+    // Without this, accepting a card offered as "until December" produced a
+    // belief with no end — the same discard as the confidence score, one field
+    // over.
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') {
+        return { data: SUGGESTION({ expires_at: '2026-12-01T00:00:00.000Z' }), error: null };
+      }
+      if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      return { data: null, error: null };
+    });
+    await confirmFact(scopeWith(db), 'sug-1');
+    const insert = calls.find((c) => c.table === 'family_facts' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ expires_at: '2026-12-01T00:00:00.000Z' });
+  });
+
+  it.each([
+    // Unreadable.
+    'next Marchh', '2026-13-45', 'sometime', 'until the season ends',
+    // Readable by `Date.parse` and WRONG, which is the harder half. Each of
+    // these is silently rolled forward into a date the caller never named:
+    // 2026-02-30 -> Mar 2, 2026-09-31 -> Oct 1, 2026-02-29 -> Mar 1 (2026 is
+    // not a leap year).
+    '2026-02-30', '2026-09-31', '2026-02-29',
+    // Readable and AMBIGUOUS: no zone, so `Date.parse` resolves it against
+    // whatever TZ the process happens to run under. When a fact stops being
+    // true must not depend on which machine wrote it.
+    '2026-09-06T08:00:00', '2026-09-06T08:00',
+  ])(
+    'refuses a deadline it cannot read, or would have to guess at (%s), rather than saving the memory forever',
+    async (expiresAt) => {
+      // `normalizeExpiry` mapped an unparseable value to null, so a caller who
+      // asked for a bound and typed it wrong got permanence — the one outcome
+      // they did not ask for, with nothing said. A caller who names NO deadline
+      // still gets a permanent fact; that is the difference between silence and
+      // a mistake.
+      const { db, calls } = makeDb(() => ({ data: null, error: null }));
+      const res = await rememberFact(scopeWith(db), {
+        key: 'Swim class', content: 'Thursdays', source: 'user', memberId: 'member-2', expiresAt,
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toContain('expiry date could not be read');
+      // And nothing was written on the way to refusing — not the fact, not a card.
+      expect(calls.some((c) => c.kind === 'insert' || c.kind === 'update')).toBe(false);
+    },
+  );
+
+  it.each([
+    ['2026-12-01', '2026-12-01T00:00:00.000Z'],
+    ['2026-02-28', '2026-02-28T00:00:00.000Z'],
+    ['2028-02-29', '2028-02-29T00:00:00.000Z'],          // a real leap day, kept
+    ['2026-09-06T08:00:00Z', '2026-09-06T08:00:00.000Z'],
+    ['2026-09-06T08:00:00+02:00', '2026-09-06T06:00:00.000Z'],
+    ['  2026-12-01  ', '2026-12-01T00:00:00.000Z'],       // trimmed, not refused
+  ])('accepts an unambiguous deadline (%s) and stores exactly that instant', async (expiresAt, stored) => {
+    const { db, calls } = makeDb((call) => (call.kind === 'insert' ? { data: FACT(), error: null } : { data: null, error: null }));
+    const res = await rememberFact(scopeWith(db), {
+      key: 'Swim class', content: 'Thursdays', source: 'user', memberId: 'member-2', expiresAt,
+    });
+    expect(res.ok).toBe(true);
+    const insert = calls.find((c) => c.kind === 'insert' && c.table === 'family_facts');
+    expect(insert?.payload).toMatchObject({ expires_at: stored });
+  });
+
+  it.each([null, undefined, '', '   '])('treats an absent deadline (%s) as no shelf life, not an error', async (expiresAt) => {
+    const { db } = makeDb((call) => (call.kind === 'insert' ? { data: FACT(), error: null } : { data: null, error: null }));
+    const res = await rememberFact(scopeWith(db), {
+      key: 'Shoe size', content: '3', source: 'user', memberId: 'member-2', expiresAt,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it('refuses to confirm a card whose own deadline has already passed', async () => {
+    // The insert would succeed and produce a fact that `isExpiredFact` hides
+    // from every read: the parent presses Confirm, and nothing appears. Saying
+    // so is the honest answer; the card stays open to be dismissed.
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') {
+        return { data: SUGGESTION({ expires_at: '2026-09-04T00:00:00.000Z' }), error: null };
+      }
+      return { data: null, error: null };
+    });
+    const res = await confirmFact(scopeWith(db), 'sug-1');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('already lapsed');
+    expect(calls.some((c) => c.table === 'family_facts' && c.kind === 'insert')).toBe(false);
+    // The card is not marked accepted either — it is still there to dismiss.
+    expect(calls.some((c) => c.table === 'family_playbook_suggestions' && c.kind === 'update')).toBe(false);
+  });
+
+  it('still confirms a card whose deadline is in the future', async () => {
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') {
+        return { data: SUGGESTION({ expires_at: '2026-09-06T00:00:00.000Z' }), error: null };
+      }
+      if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      return { data: null, error: null };
+    });
+    const res = await confirmFact(scopeWith(db), 'sug-1');
+    expect(res.ok).toBe(true);
+    const insert = calls.find((c) => c.table === 'family_facts' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ expires_at: '2026-09-06T00:00:00.000Z' });
+  });
+
+  it('leaves a suggestion with no deadline without one', async () => {
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') return { data: SUGGESTION(), error: null };
+      if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      return { data: null, error: null };
+    });
+    await confirmFact(scopeWith(db), 'sug-1');
+    const insert = calls.find((c) => c.table === 'family_facts' && c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({ expires_at: null });
   });
 });

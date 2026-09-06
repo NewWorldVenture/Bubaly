@@ -21,6 +21,8 @@ function fakeDb(captured: Captured): DbArg {
 const ctx: AssistantCtx = {
   familyId: 'fam-1',
   userId: 'user-1',
+  // The acting person's roster id, which is a different key from `userId`.
+  memberId: 'mem-self',
   members: [{ id: 'mem-emma', display_name: 'Emma' }],
   tz: 'America/New_York',
 };

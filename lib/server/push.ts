@@ -121,22 +121,34 @@ export function pushConfigured(): { web: boolean; native: boolean } {
 }
 
 /**
- * Deliver pushes for notification rows that haven't been pushed yet (pushed_at
- * is null), then stamp pushed_at so they're never pushed twice. Whole-family
- * notifications (user_id null) fan out to every active member. Call after the
- * notification engine runs (cron + on-demand). Idempotent.
+ * Deliver pushes for notification rows that are DUE (`send_at` has passed) and
+ * haven't been pushed yet (pushed_at is null), then stamp pushed_at so they're
+ * never pushed twice. Whole-family notifications (user_id null) fan out to every
+ * active member. Call after the notification engine runs (cron + on-demand).
+ * Idempotent.
  *
  * Push tracks its own pushed_at (separate from the email digest's sent_at) so a
  * notification can be both pushed AND emailed in the same cron run.
+ *
+ * The `send_at` filter is what makes a scheduled notification actually wait.
+ * `notify()` lets a caller set a future `sendAt`, and defers past a recipient's
+ * quiet hours by moving `send_at` to the end of the window — and the AI's own
+ * `notifications.notify` tool exposes it as "Earliest delivery, ISO 8601". The
+ * in-app list (`listUnread`) and the email digest (`deliverNotificationEmails`)
+ * both honour it. Push did not: it selected on `pushed_at` alone, so a notice
+ * scheduled for 8am tomorrow buzzed the phone on the next two-hourly scan —
+ * tonight. `send_at` is `not null default now()` (0002_tables.sql:415), so this
+ * withholds nothing that was due.
  */
 export async function dispatchPendingPushes(
   supabase: DB,
-  opts: { familyId?: string; limit?: number } = {},
+  opts: { familyId?: string; limit?: number; now?: Date } = {},
 ): Promise<{ notifications: number; result: PushResult }> {
   let q = supabase
     .from('notifications')
     .select('id, family_id, user_id, title, body, related_type, related_id')
     .is('pushed_at', null)
+    .lte('send_at', (opts.now ?? new Date()).toISOString())
     .order('created_at', { ascending: true })
     .limit(opts.limit ?? 200);
   if (opts.familyId) q = q.eq('family_id', opts.familyId);

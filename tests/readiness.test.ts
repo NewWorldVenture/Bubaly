@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeReadiness, bandFor } from '@/lib/readiness/score';
 
-const base = { choresOverdue: 0, remindersOverdue: 0, mealsPlanned: 0, eventsUpcoming: 0, groceryActive: 0, activeMembers: 1 };
+const base = { choresOverdue: 0, remindersOverdue: 0, mealsPlanned: 0, eventsUpcoming: 0, activeMembers: 1 };
 
 describe('bandFor', () => {
   it('maps scores to bands', () => {

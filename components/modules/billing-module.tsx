@@ -28,6 +28,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
@@ -574,6 +575,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   useEffect(() => {
     void loadSub();
+    // `subscriptions` is not published, so this channel could only ever sit
+    // idle. Checkout returns through a full navigation, which reloads the plan.
+    if (!isRealtimePublished('subscriptions')) return;
     const sb = createClient();
     const channel = sb
       .channel(`subscription:${familyId}`)

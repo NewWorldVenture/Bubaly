@@ -56,6 +56,10 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
+  // This exact public path exposes only the artifact's revision. Do not refresh
+  // sessions or interpret OAuth query parameters for this read-only response.
+  if (path === '/api/build-info') return res;
+
   // If an OAuth code lands on the wrong path, forward it to /auth/callback
   const code = req.nextUrl.searchParams.get('code');
   if (code && path !== '/auth/callback') {

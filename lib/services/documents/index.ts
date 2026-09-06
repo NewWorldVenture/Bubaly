@@ -37,17 +37,14 @@ const DEFAULT_URL_TTL_SECONDS = 120;
 const MAX_URL_TTL_SECONDS = 15 * 60;
 const MAX_ROWS = 500;
 
-/** Categories treated as sensitive regardless of the Secure Vault flag. */
-export const SENSITIVE_CATEGORIES = new Set([
-  'legal', 'medical', 'health', 'financial', 'finance', 'tax', 'taxes', 'insurance',
-  'passport', 'passports', 'id', 'identity', 'visa', 'bank', 'banking', 'will', 'estate',
-]);
 
 const DOC_KINDS: VacDocKind[] = ['passport', 'id', 'visa', 'ticket', 'boarding_pass', 'hotel_confirmation', 'rental_confirmation', 'insurance', 'itinerary', 'medical', 'other'];
 
-export function isSensitiveDocument(doc: Pick<DocumentRow, 'is_secure' | 'category'>): boolean {
-  return doc.is_secure || SENSITIVE_CATEGORIES.has((doc.category ?? '').trim().toLowerCase());
-}
+// One definition, in `lib/documents/sensitivity` so the browser can honour it
+// too — the Files hub is where a person is about to put a passport in the
+// Vault, and a rule the client cannot see is a rule it cannot obey.
+export { SENSITIVE_CATEGORIES, isSensitiveCategory, isSensitiveDocument } from '@/lib/documents/sensitivity';
+import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 
 /** Parents and adults may hold sensitive files; a cron with no human behind it may not. */
 function canReadSensitive(scope: ServiceScope): boolean {

@@ -1,9 +1,10 @@
 // Behavioural tests for the notifications service — the single entry point
 // that replaces fifteen ad-hoc inserts. Covers recipient resolution against
 // the real column shape (`notifications.user_id` references auth.users, NULL =
-// the whole family), the unread-duplicate guard, quiet-hours deferral through
-// the documented `user_preferences.notification_prefs.quietHours` seam, and
-// failing closed when the duplicate read cannot answer.
+// the whole family), the unread-duplicate guard, quiet-hours deferral from the
+// FAMILY window in `family_ai_settings` (see the block below for why it moved
+// off the per-user seam), and failing closed when the duplicate read cannot
+// answer.
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -154,39 +155,82 @@ describe('notify', () => {
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
-  it('defers delivery past a recipient’s quiet hours, in the family timezone', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'user_preferences') {
-        return { data: [{ user_id: 'auth-user-2', notification_prefs: { quietHours: { start: 21, end: 7 } } }], error: null };
-      }
-      return defaultRespond(call);
-    });
+  // QUIET HOURS MOVED STORE, deliberately. This used to read each recipient's
+  // `user_preferences.notification_prefs.quietHours` — which `0004` makes
+  // own-row-only, so a lookup of the RECIPIENTS' rows could return at most the
+  // SENDER's. A parent notifying a teen applied the parent's window to the
+  // teen, or (far more often) read nothing and deferred no one. The window now
+  // comes from `family_ai_settings`, which is family-scoped and readable for
+  // every recipient on every path, including the service-role cron that sends
+  // most notifications. One family window is a weaker promise than a per-person
+  // one; it is the one the database can actually keep.
+  const withQuietHours = (start: number, end: number) => (call: Call) => (
+    call.table === 'family_ai_settings'
+      ? { data: { family_id: 'fam-1', quiet_hours_start: start, quiet_hours_end: end }, error: null }
+      : defaultRespond(call)
+  );
 
-    // "Now" is 22:00 local — inside a 21:00→07:00 window — so delivery moves to
-    // 07:00 local the next morning (11:00Z).
+  it('holds a notification raised inside the family’s quiet hours until it ends', async () => {
+    const { db, calls } = makeDb(withQuietHours(21, 7));
+
+    // "Now" is 22:00 local — inside 21:00→07:00 — so delivery moves to 07:00
+    // local the next morning (11:00Z).
     const res = await notify(scopeWith(db), { recipients: ['member-2', 'member-3'], type: 'chore_due', title: 'Chore due' });
-    expect(res).toMatchObject({ ok: true, data: { created: 2, deferred: 1 } });
+    expect(res).toMatchObject({ ok: true, data: { created: 2, deferred: 2 } });
     const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
-    expect(rows.find((r) => r.user_id === 'auth-user-2')?.send_at).toBe('2026-09-06T11:00:00.000Z');
-    // The member with no preference on file is unaffected.
-    expect(rows.find((r) => r.user_id === 'auth-user-3')?.send_at).toBe(NOW.toISOString());
+    for (const row of rows) expect(row.send_at).toBe('2026-09-06T11:00:00.000Z');
   });
 
-  it('ignores quiet hours for an urgent notification', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'user_preferences') {
-        return { data: [{ user_id: 'auth-user-2', notification_prefs: { quietHours: { start: 21, end: 7 } } }], error: null };
-      }
-      return defaultRespond(call);
-    });
-    const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'medication_due', title: 'Dose now', urgent: true });
+  it('sends immediately outside the window', async () => {
+    const { db, calls } = makeDb(withQuietHours(1, 5));
+    const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'chore_due', title: 'Chore due' });
     expect(res).toMatchObject({ ok: true, data: { deferred: 0 } });
     const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
     expect(rows[0].send_at).toBe(NOW.toISOString());
-    // An urgent send never reads preferences at all.
-    expect(calls.some((c) => c.table === 'user_preferences')).toBe(false);
   });
 
+  it('never moves a time the caller named', async () => {
+    // "Remind me at 10:30pm to put the bins out" is not a courtesy notice to
+    // hold until morning — it is the entire request. Quiet hours move the
+    // DEFAULT instant, never a deliberate one.
+    const { db, calls } = makeDb(withQuietHours(21, 7));
+    const at = '2026-09-05T22:30:00.000Z';
+    const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'grocery_reminder', title: 'Bins out', sendAt: at });
+    expect(res).toMatchObject({ ok: true, data: { deferred: 0 } });
+    const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
+    expect(rows[0].send_at).toBe(at);
+  });
+
+  it('fails open when the settings read errors rather than holding until morning', async () => {
+    // A settings read that failed says nothing about whether it is night. A
+    // notification that arrives is recoverable; one silently held for eight
+    // hours is not.
+    const { db, calls } = makeDb((call) => (
+      call.table === 'family_ai_settings' ? { data: null, error: { message: 'timeout' } } : defaultRespond(call)
+    ));
+    const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'chore_due', title: 'Chore due' });
+    expect(res).toMatchObject({ ok: true, data: { deferred: 0 } });
+    const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
+    expect(rows[0].send_at).toBe(NOW.toISOString());
+  });
+
+  it('ignores a window that is not a real window', async () => {
+    for (const [start, end] of [[21, 21], [-1, 7], [21, 99]]) {
+      const { db, calls } = makeDb(withQuietHours(start, end));
+      const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'chore_due', title: 'Chore due' });
+      expect(res, `${start}->${end}`).toMatchObject({ ok: true, data: { deferred: 0 } });
+      const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
+      expect(rows[0].send_at).toBe(NOW.toISOString());
+    }
+  });
+
+  it('ignores quiet hours for an urgent notification', async () => {
+    const { db, calls } = makeDb(withQuietHours(21, 7));
+    const res = await notify(scopeWith(db), { recipients: ['member-2'], type: 'system', title: 'Left the geofence', urgent: true });
+    expect(res).toMatchObject({ ok: true, data: { deferred: 0 } });
+    const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
+    expect(rows[0].send_at).toBe(NOW.toISOString());
+  });
   it('ignores a malformed quietHours value instead of throwing', async () => {
     const { db } = makeDb((call) => {
       if (call.table === 'user_preferences') {

@@ -78,7 +78,7 @@ export const memoryTools: ToolDefinition[] = [
       asked_for: z.boolean().nullish().describe('True ONLY when the person asked in so many words to remember this ("remember that…", "note that…"). Anything you worked out yourself is not asked for.'),
       confidence: z.number().int().nullish().describe('0–100, how sure you are — used when this is your own inference'),
       note: z.string().nullish().describe('Context or evidence'),
-      expires_at: z.string().nullish().describe('ISO date after which this stops being true. Use it for anything that will go stale on its own — a clothing size, a school year, a policy term. Omit for a fact that simply is.'),
+      expires_at: z.string().nullish().describe('Date after which this stops being true, as YYYY-MM-DD (or a full ISO datetime WITH a Z or ±HH:MM offset — a time with no zone is refused, because when a fact expires must not depend on which server wrote it). Use it for anything that will go stale on its own — a clothing size, a school year, a policy term. Omit for a fact that simply is.'),
     }),
     output: z.object({
       kind: z.enum(['fact', 'suggestion']),

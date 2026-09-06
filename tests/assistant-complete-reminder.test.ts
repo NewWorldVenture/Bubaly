@@ -24,7 +24,7 @@ function fakeDb(selectRows: Record<string, unknown>[], captured: Captured): DbAr
   return { from: () => make() } as unknown as DbArg;
 }
 
-const ctx: AssistantCtx = { familyId: 'fam-1', userId: 'user-1', members: [], tz: 'America/New_York' };
+const ctx: AssistantCtx = { familyId: 'fam-1', userId: 'user-1', memberId: 'mem-self', members: [], tz: 'America/New_York' };
 
 function tool(name: string, selectRows: Record<string, unknown>[], captured: Captured) {
   const t = buildAssistantTools(fakeDb(selectRows, captured), ctx).find((x) => x.name === name);

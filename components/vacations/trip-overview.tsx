@@ -14,7 +14,7 @@ import { ReadinessRing } from './vacations-list';
 import { computeReadiness } from '@/lib/vacations/readiness';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
-import { tripNights, countdownLabel } from '@/lib/vacations/dates';
+import { dateRange, countdownLabel } from '@/lib/vacations/dates';
 import { dollars, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
 
@@ -84,7 +84,14 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
     packingTotal: packing.length, packingPacked: packing.filter((p) => p.packed).length,
     documentsCount: docs.length, emergencyContactsCount: emergency.length,
     budgetPlannedCents: budget.planned_cents, itineraryDays: daysWithItems,
-    tripDays: tripNights(trip?.start_date, trip?.end_date) ?? 0, isInternational: trip?.is_international ?? false,
+    // INCLUSIVE days, matching `lib/services/trips computeReadiness`. This read
+    // `tripNights` — end minus start — while the server used
+    // `dateRange(...).length`, always one more. The itinerary factor is
+    // `daysWithItems / tripDays` and `daysWithItems` counts `vacation_days`
+    // rows, which are the inclusive dates, so the nights denominator inflated
+    // the score here and the same trip scored differently in the AI card.
+    tripDays: trip?.start_date && trip?.end_date ? dateRange(trip.start_date, trip.end_date).length : 0,
+    isInternational: trip?.is_international ?? false,
   }), [trip, members, lodging, transportTotal, transportBooked, activities, reservations, packing, docs, emergency, budget, daysWithItems]);
 
   // Persist the latest score so the trips list can display it (insert only when changed).

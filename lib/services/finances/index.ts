@@ -76,6 +76,28 @@ function assertFinanceReader(scope: ServiceScope): ServiceResult<null> {
   return fail('Family finances are private to the adults in this family.', { code: SERVICE_CODES.denied });
 }
 
+/**
+ * The same rule for the two writes, which had no rule at all.
+ *
+ * Seven reads in this file assert `assertFinanceReader` and the two writes
+ * did not, which mattered because 0267's RLS cannot see them: the run executor
+ * writes with the SERVICE ROLE, so the database's new boundary is bypassed on
+ * exactly the path the AI takes. A teen asking Bubaly to set a budget was held
+ * by the trust engine's risk tier, and by nothing else if a household had ever
+ * saved a broad allow policy.
+ *
+ * `system` is allowed for the same reason it is on the read: a cron doing the
+ * household's own work has no person to ask, and the trust gate has already
+ * decided whether that work may happen.
+ */
+function assertFinanceWriter(scope: ServiceScope, noun = 'change the family budget'): ServiceResult<null> {
+  if (scope.role === 'system' || isManager(scope.role)) return ok(null);
+  return fail(`Only a parent or another adult can ${noun}.`, { code: SERVICE_CODES.denied });
+}
+
+/** 0256's CHECK on `transactions.source`. */
+const TRANSACTION_SOURCES = ['manual', 'receipt', 'import', 'ai'];
+
 // ── date windows ──────────────────────────────────────────────────────────────
 
 export type DateRange = { from: string; to: string };
@@ -632,6 +654,8 @@ export async function updateBudget(
   scope: ServiceScope,
   input: UpdateBudgetInput,
 ): Promise<ServiceResult<{ budget: BudgetRow; created: boolean; previousAmount: number | null }>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
   const category = input.category?.trim() ?? '';
   if (!category) return fail('A budget needs a category.', { code: SERVICE_CODES.invalidInput });
   if (!Number.isFinite(input.amount) || input.amount < 0) {
@@ -692,6 +716,139 @@ export async function updateBudget(
   return ok({ budget: data, created: true, previousAmount: null });
 }
 
+export type CreateTransactionInput = {
+  /** What the family would call it: "Groceries", "Swim class fees". */
+  name: string;
+  /** Dollars, unsigned. Direction lives in `type`, not in the sign. */
+  amount: number;
+  type?: TransactionType;
+  merchant?: string | null;
+  category?: string | null;
+  /** YYYY-MM-DD. Defaults to today in the family's zone. */
+  date?: string | null;
+  notes?: string | null;
+  /** All three are verified to belong to THIS family before they are written. */
+  accountId?: string | null;
+  memberId?: string | null;
+  receiptDocumentId?: string | null;
+  /** 0256's CHECK: manual | receipt | import | ai. */
+  source?: string | null;
+};
+
+/**
+ * Record a purchase on the household books.
+ *
+ * This is the first writer `transactions` has ever had outside the wallet's own
+ * UI action. Until it existed the assistant could analyse a family's spending
+ * six different ways and could not record a single charge, which is why §26 —
+ * hand Bubaly a receipt and have the purchase land — had nowhere to start.
+ *
+ * DEDUPLICATION IS DELIBERATELY ABSENT, and that is the safe choice rather than
+ * the lazy one. `0256` migrated `fingerprint` and a partial unique index on
+ * (family_id, fingerprint), and the obvious fingerprint — family + merchant +
+ * amount + date, as that migration's own header suggests — is a money-losing
+ * bug: two coffees at one shop on one day for one price hash identically, so
+ * the second insert collides and a "treat it as a duplicate" handler discards a
+ * real charge and tells the family everything is fine. Deriving it from the
+ * receipt instead only moves the loss: one photo of a Costco receipt split into
+ * Groceries and Household is two charges with one document.
+ *
+ * A duplicate guard needs the identity of a CHARGE, and nothing in the product
+ * can produce one yet — that arrives with the intake that reads a receipt into
+ * line items. So `fingerprint` stays null, the index (partial, `where
+ * fingerprint is not null`) does not apply, and two identical purchases are two
+ * rows. Re-recording the same charge is a visible, correctable mistake; losing
+ * one is neither.
+ *
+ * `idempotency_key` is likewise not written. `lib/database.types.ts` types the
+ * column on this table and NO migration adds it — `0256` gave it only to its
+ * six keyed tables — so writing it would be a PGRST204 against real schema.
+ * Repeat-call protection on the plan path comes from `executeTool`'s own
+ * `ai_tool_calls` reservation, which the run executor keys per step.
+ *
+ * SIGN. Amount is stored unsigned with direction in `type`, matching the wallet
+ * action (`app/(app)/wallet/hub-actions.ts`) and `listTransactions`, which sums
+ * unsigned. `components/modules/billing-module.tsx` stores expenses negative,
+ * which disagrees with both; that divergence predates this and is not resolved
+ * here, but a third writer picking the majority convention is the safer default.
+ */
+export async function createTransaction(
+  scope: ServiceScope,
+  input: CreateTransactionInput,
+): Promise<ServiceResult<TransactionRow>> {
+  const allowed = assertFinanceWriter(scope, 'record a purchase on the household books');
+  if (!allowed.ok) return allowed;
+
+  const name = input.name?.trim() ?? '';
+  if (!name) return fail('A transaction needs a name.', { code: SERVICE_CODES.invalidInput });
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return fail('A transaction needs an amount above zero. Use the type to say whether money came in or went out.', { code: SERVICE_CODES.invalidInput });
+  }
+  const date = input.date?.trim() || dayKeyInTz(scopeNow(scope), scope.tz);
+  if (!DAY_KEY.test(date)) return fail('The date must be YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
+  const source = input.source?.trim() || (scope.actorKind === 'ai' ? 'ai' : 'manual');
+  if (!TRANSACTION_SOURCES.includes(source)) {
+    return fail(`A transaction's source must be one of: ${TRANSACTION_SOURCES.join(', ')}.`, { code: SERVICE_CODES.invalidInput });
+  }
+
+  // Every one of these three is a foreign key WITHOUT a family predicate
+  // (`0006` for the account, `0110` for the member, `0256` for the document),
+  // and every one can arrive from model output. A service-role write would
+  // otherwise staple another household's account, member or receipt onto this
+  // household's books — the RLS that guards the row does not guard what the row
+  // points at.
+  for (const [table, id, noun] of [
+    ['financial_accounts', input.accountId, 'account'],
+    ['family_members', input.memberId, 'member'],
+    ['documents', input.receiptDocumentId, 'receipt'],
+  ] as const) {
+    if (!id) continue;
+    const { data, error } = await scope.db
+      .from(table)
+      .select('id')
+      .eq('family_id', scope.familyId)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      console.error(`[service:finances] ${table} check failed`, error);
+      return fail(describeDbError(error, `Could not check that ${noun}.`), { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail(`That ${noun} does not belong to this family.`, { code: SERVICE_CODES.notFound });
+  }
+
+  const amount = toDollars(toCents(input.amount));
+  const { data, error } = await scope.db
+    .from('transactions')
+    .insert({
+      family_id: scope.familyId,
+      name,
+      amount,
+      type: input.type ?? 'expense',
+      merchant: input.merchant?.trim() || null,
+      category: input.category?.trim() || null,
+      date,
+      notes: input.notes?.trim() || null,
+      account_id: input.accountId ?? null,
+      member_id: input.memberId ?? null,
+      receipt_document_id: input.receiptDocumentId ?? null,
+      source,
+      created_by: scope.userId,
+    })
+    .select('*')
+    .single();
+  if (error || !data) {
+    console.error('[service:finances] transaction insert failed', error);
+    return fail(describeDbError(error, 'Could not record that transaction.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, {
+    agent: 'finances',
+    title: `Recorded ${formatDollars(toCents(data.amount))}${data.merchant ? ` at ${data.merchant}` : ''}`,
+    href: '/dashboard/finances',
+  });
+  return ok(data);
+}
+
 export type CreateSavingsGoalInput = {
   name: string;
   targetAmount: number;
@@ -701,6 +858,8 @@ export type CreateSavingsGoalInput = {
 };
 
 export async function createSavingsGoal(scope: ServiceScope, input: CreateSavingsGoalInput): Promise<ServiceResult<SavingsGoalRow>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
   const name = input.name?.trim() ?? '';
   if (!name) return fail('A savings goal needs a name.', { code: SERVICE_CODES.invalidInput });
   if (!Number.isFinite(input.targetAmount) || input.targetAmount <= 0) {

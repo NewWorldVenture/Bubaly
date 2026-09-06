@@ -5,6 +5,8 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
+import { calendarReadiness } from '@/lib/readiness/calendar-source';
+import type { Evidence, ReadinessCoverage } from '@/lib/readiness/assess';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { ErrorState } from '@/components/ui/states';
@@ -31,7 +33,6 @@ export default async function ReadinessPage() {
     remindersOverdueRes,
     mealsRes,
     eventsUpcomingRes,
-    groceryActiveRes,
     activeMembersRes,
     famPlanLevel,
   ] = await Promise.all([
@@ -39,21 +40,19 @@ export default async function ReadinessPage() {
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString()),
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr),
     supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
-    supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
+    supabase.from('family_members').select('id', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true).order('id').limit(200),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
   // The headline readiness SCORE is source-of-truth: if any of its six inputs
   // failed to read, fail closed rather than compute a reassuring-but-wrong score
   // (a dropped overdue-chores read would otherwise render as "all caught up").
-  // (The forward horizon block below is deliberately best-effort — see `cnt`.)
+  // Calendar/roster completeness is also checked before displaying the score.
   const primaryError = [
     choresOverdueRes.error,
     remindersOverdueRes.error,
     mealsRes.error,
     eventsUpcomingRes.error,
-    groceryActiveRes.error,
     activeMembersRes.error,
   ].find(Boolean);
   if (primaryError) {
@@ -66,28 +65,45 @@ export default async function ReadinessPage() {
     remindersOverdue: remindersOverdueRes.count ?? 0,
     mealsPlanned: new Set((mealsRes.data ?? []).map((m) => m.plan_date)).size,
     eventsUpcoming: eventsUpcomingRes.count ?? 0,
-    groceryActive: groceryActiveRes.count ?? 0,
     activeMembers: activeMembersRes.count ?? 0,
   };
   const { score, band, factors } = computeReadiness(input);
   const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
 
-  // Forward-looking horizon readiness (tomorrow / week / month). Counts are
-  // best-effort: a table from an unapplied migration yields 0, never an error.
+  // Legacy non-calendar horizon counts remain best-effort. Calendar coverage
+  // is explicit: a failed or capped read cannot establish that a week is clear.
   const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
   const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
-  const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>) => {
-    const { count: n, error } = await q; return error ? 0 : (n ?? 0);
+  // A failed read and a genuinely quiet week both arrive as zero, and the §51
+  // card now makes positive claims ("Documents are current"). So each of these
+  // reports whether it succeeded, and the assessor is told which sources it can
+  // and cannot speak for.
+  //
+  // An ABSENT count is not a confirmed zero either. A `head: true` count query
+  // carries its answer in the Content-Range header, and supabase-js reports a
+  // missing or unparseable header as `{ count: null, error: null }` — no error
+  // to catch. Coercing that to 0 would turn "we could not count your documents"
+  // into "your documents are current", which is precisely the claim §51 must
+  // never invent.
+  //
+  // So `known` is not "no error" but "a number a count could actually be": a
+  // safe non-negative integer. NaN, ±Infinity, 0.5 and -1 all come from a header
+  // that was parsed wrongly, not from a household that has -1 documents, and
+  // each one would otherwise be believed. Rejecting the shape rather than
+  // enumerating the failures is what makes the next malformed header safe too.
+  const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>): Promise<{ value: number; known: boolean }> => {
+    const { count: n, error } = await q;
+    if (error || typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0) return { value: 0, known: false };
+    return { value: n, known: true };
   };
   const [
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
-    // The week, for the card that claims to know about the week. It used to be
-    // told `conflictsWeek: 0` as a literal, so it could never report a clash.
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    // Exact accessible-row count detects both this cap and server-side limits.
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
       .order('starts_at').limit(200),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
@@ -97,38 +113,46 @@ export default async function ReadinessPage() {
     cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),
     cnt(supabase.from('prep_plans').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'active')),
   ]);
-  const tEvents = tomorrowEventsRes.data ?? [];
-  const HOUR = 3_600_000;
-  const tomorrowConflicts = countOverlaps(tEvents.filter((e) => !e.all_day), HOUR);
-  // Same overlap rule as tomorrow's, over the week — and who is carrying the
-  // day it lands on. Both were hardcoded zeros while the rows sat ten lines up,
-  // so the week card could never say "two clashes" and the month card could
-  // never name an overloaded person.
-  const weekEvents = (weekEventsRes.data ?? []).filter((e) => !e.all_day);
-  const conflictsWeek = countOverlaps(weekEvents, HOUR);
-  const perMember = new Map<string, number>();
-  for (const e of weekEvents) {
-    if (!e.assignee_id) continue;
-    perMember.set(e.assignee_id, (perMember.get(e.assignee_id) ?? 0) + 1);
-  }
-  const loads = [...perMember.values()];
-  const averageLoad = loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
-  // "Overloaded" is relative to this family, not an absolute: half again the
-  // household average, and at least four things, so a quiet week names nobody.
-  const overloadedMembers = loads.filter((n) => n >= 4 && n > averageLoad * 1.5).length;
+  const tomorrowCalendar = calendarReadiness(tomorrowEventsRes);
+  const weeklyCalendar = calendarReadiness(weekEventsRes, activeMembersRes);
+  // The rest of the sources, in the same vocabulary. `cnt` swallowed a failure
+  // into a zero, which the ✓ list would have reported as "Documents are
+  // current".
+  const readCoverage: Partial<Record<Evidence, ReadinessCoverage>> = {};
+  if (!dinnerTomorrowRes.known) readCoverage.meals_tomorrow = 'unknown';
+  if (!mealsRes.data) readCoverage.meals_week = 'unknown';
+  if (!overduePrepSteps.known) readCoverage.prep_steps = 'unknown';
+  if (!openPrepPlans.known) readCoverage.prep_plans = 'unknown';
+  if (!billsDueWeek.known) readCoverage.bills = 'unknown';
+  if (!expiringDocsMonth.known) readCoverage.documents = 'unknown';
+  if (!upcomingTripsMonth.known) readCoverage.trips = 'unknown';
+
+  const coverageIncomplete = [
+    tomorrowCalendar.calendarCoverage, weeklyCalendar.calendarCoverage, weeklyCalendar.workloadCoverage,
+    ...Object.values(readCoverage),
+  ].some((coverage) => coverage !== 'complete');
 
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
-    tomorrowConflicts, tomorrowUnassigned: tEvents.filter((e) => !e.assignee_id).length,
-    dinnerPlannedTomorrow: dinnerTomorrowRes > 0,
-    conflictsWeek, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
-    expiringDocsMonth, overloadedMembers, upcomingTripsMonth, openPrepPlans,
+    tomorrowConflicts: tomorrowCalendar.conflicts, tomorrowUnassigned: tomorrowCalendar.unassigned,
+    dinnerPlannedTomorrow: dinnerTomorrowRes.value > 0,
+    conflictsWeek: weeklyCalendar.conflicts, unplannedDinnersWeek,
+    overduePrepSteps: overduePrepSteps.value, billsDueWeek: billsDueWeek.value,
+    expiringDocsMonth: expiringDocsMonth.value, overloadedMembers: weeklyCalendar.overloadedMembers,
+    upcomingTripsMonth: upcomingTripsMonth.value, openPrepPlans: openPrepPlans.value,
+    tomorrowCalendarCoverage: tomorrowCalendar.calendarCoverage,
+    weekCalendarCoverage: weeklyCalendar.calendarCoverage,
+    workloadCoverage: weeklyCalendar.workloadCoverage,
+    coverage: readCoverage,
   };
   const horizonCards = assessReadiness(signals);
 
-  // SVG ring math.
+  // SVG ring math for the activity panel below. It is NOT greyed by horizon
+  // coverage: its own six inputs are primary reads that fail the whole page
+  // (`primaryError`), so it is never assembled from a source that failed. The
+  // readiness answer above reports its own coverage, per source.
   const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;
 
   return (
@@ -138,7 +162,24 @@ export default async function ReadinessPage() {
         <h1 className="text-lg font-bold">Family Readiness</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* §51's readiness, and the only thing on this page that answers "are we
+          ready?". It used to sit BELOW a second, larger 0–100 ring computed by
+          `lib/readiness/score.ts` under the same word, so a family could read
+          "78 · Looking good" and "40 · Not ready" on one screen about what
+          looked like one question. That score is a real measure of a different
+          thing — how much the household is currently doing in the app — and it
+          keeps its place further down under a name that says so. */}
+      <div>
+        <p className="mb-3 text-sm text-muted">Calendar and workload checks use only events and active household members you can access.</p>
+        {coverageIncomplete && (
+          <p role="status" className="mb-3 rounded-xl border border-border bg-surface/40 p-3 text-sm text-amber-300">
+            Readiness is not confirmed while some of it could not be read. Known issues remain shown below.
+          </p>
+        )}
+        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
+      </div>
+
+      <div className="grid gap-4 pt-1 lg:grid-cols-3">
         <div className="flex flex-col items-center justify-center rounded-3xl border border-border bg-surface/40 p-6">
           <svg viewBox="0 0 128 128" className="h-40 w-40 -rotate-90">
             <circle cx="64" cy="64" r={r} fill="none" stroke="currentColor" strokeWidth="12" className="text-elevated" />
@@ -150,9 +191,14 @@ export default async function ReadinessPage() {
         </div>
 
         <div className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold">What&apos;s driving your score</h2>
+          <h2 className="text-base font-semibold">How much your family is running through Bubaly</h2>
+          <p className="mb-4 mt-1 text-sm text-muted">
+            A measure of activity — planned meals, an up-to-date calendar, chores kept on top of. Not the same question as
+            &ldquo;are we ready?&rdquo; above, which is about what is still open. Its own six inputs are required reads, so
+            this number is never assembled from a source that failed.
+          </p>
           {factors.length === 0 ? (
-            <p className="text-sm text-muted">Add events, chores, and meals to see what shapes your readiness.</p>
+            <p className="text-sm text-muted">Add events, chores, and meals to see what shapes this.</p>
           ) : (
             <ul className="space-y-2">
               {factors.map((f, i) => (
@@ -167,11 +213,6 @@ export default async function ReadinessPage() {
         </div>
       </div>
 
-      <div className="pt-1">
-        <h2 className="mb-3 text-base font-semibold">Are we ready?</h2>
-        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
-      </div>
-
       {!isPlus && (
         <Link href="/dashboard/billing?upgrade=1&need=2" className="group flex items-center gap-4 rounded-3xl border border-brand/30 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 transition hover:border-brand/50">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15"><Sparkles className="h-5 w-5 text-brand-text" /></div>
@@ -184,26 +225,4 @@ export default async function ReadinessPage() {
       )}
     </div>
   );
-}
-
-/**
- * Overlapping timed events, counted once per pair.
- *
- * An event with no end is treated as an hour long, which is what the rest of
- * the product assumes. Sorted first so the inner loop can stop early.
- */
-function countOverlaps(events: { starts_at: string; ends_at: string | null }[], defaultMs: number): number {
-  const timed = [...events].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  let count = 0;
-  for (let i = 0; i < timed.length; i += 1) {
-    const aStart = new Date(timed[i].starts_at).getTime();
-    const aEnd = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aStart + defaultMs;
-    for (let j = i + 1; j < timed.length; j += 1) {
-      const bStart = new Date(timed[j].starts_at).getTime();
-      if (bStart >= aEnd) break;
-      const bEnd = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bStart + defaultMs;
-      if (bStart < aEnd && aStart < bEnd) count += 1;
-    }
-  }
-  return count;
 }

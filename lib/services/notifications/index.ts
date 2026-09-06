@@ -28,6 +28,7 @@ import 'server-only';
 import type { Json, NotificationType, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
+import { getAISettings } from '../ai-settings';
 import { dayKeyInTz, hourInTz, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -61,18 +62,6 @@ export type NotifyResult = {
 };
 
 type QuietHours = { start: number; end: number };
-
-/** Parse `notification_prefs.quietHours` defensively — it is free-form jsonb written by other surfaces. */
-function readQuietHours(prefs: Json | null | undefined): QuietHours | null {
-  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) return null;
-  const raw = (prefs as Record<string, Json | undefined>).quietHours;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const start = Number((raw as Record<string, Json | undefined>).start);
-  const end = Number((raw as Record<string, Json | undefined>).end);
-  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
-  if (start < 0 || start > 23 || end < 0 || end > 23 || start === end) return null;
-  return { start, end };
-}
 
 /** True when `hour` falls inside a window that may wrap midnight (22 → 7). */
 function inQuietHours(hour: number, quiet: QuietHours): boolean {
@@ -133,17 +122,35 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
   if (targets.length === 0) return ok({ created: 0, ids: [], duplicates, skippedMemberIds, deferred: 0 });
 
   // ── Quiet hours ───────────────────────────────────────────────────────────
+  //
+  // The window comes from `family_ai_settings` (0257), which is family-scoped
+  // and therefore readable for EVERY recipient on every path — including the
+  // service-role cron that sends most notifications.
+  //
+  // It used to come from `user_preferences.notification_prefs.quietHours`, and
+  // that could never have worked: `0004` makes `user_preferences` own-row-only,
+  // so a lookup of the RECIPIENTS' rows returns at most the SENDER's. A parent
+  // notifying a teen read the parent's preference and applied it to the teen,
+  // or more often read nothing at all. One family window is a weaker promise
+  // than a per-person one, and it is a promise the database can actually keep.
   const now = scopeNow(scope);
-  const baseSendAt = input.sendAt && Number.isFinite(Date.parse(input.sendAt))
-    ? new Date(Date.parse(input.sendAt))
-    : now;
-  const quietByUser = input.urgent ? new Map<string, QuietHours>() : await loadQuietHours(scope, targets);
+  const explicit = input.sendAt && Number.isFinite(Date.parse(input.sendAt));
+  const baseSendAt = explicit ? new Date(Date.parse(input.sendAt as string)) : now;
+  // A caller who NAMED a time has already decided when this should land —
+  // "remind me at 10:30pm to put the bins out" is not a courtesy notice to hold
+  // until morning, it is the whole point. Quiet hours move the default, never a
+  // deliberate instant.
+  const quiet = input.urgent || explicit ? null : await familyQuietHours(scope);
+  // An hour we cannot compute is not an hour inside the window: a failed or
+  // unset timezone must not silently hold a notification for eight hours. When
+  // the local hour is unknown, send now and let the family see it.
+  const localHour = quiet ? hourInTz(baseSendAt, scope.tz) : null;
+  const holdable = quiet !== null && Number.isInteger(localHour) && inQuietHours(localHour as number, quiet);
 
   let deferred = 0;
   const rows = targets.map((userId) => {
     let sendAt = baseSendAt.toISOString();
-    const quiet = userId ? quietByUser.get(userId) : undefined;
-    if (quiet && inQuietHours(hourInTz(baseSendAt, scope.tz), quiet)) {
+    if (holdable && quiet) {
       sendAt = quietHoursEnd(baseSendAt, quiet, scope.tz);
       deferred += 1;
     }
@@ -213,24 +220,23 @@ async function resolveRecipients(
  * delivering a notification at a slightly wrong time is better than not
  * delivering it, so this degrades rather than fails.
  */
-async function loadQuietHours(scope: ServiceScope, userIds: (string | null)[]): Promise<Map<string, QuietHours>> {
-  const ids = userIds.filter((id): id is string => typeof id === 'string');
-  const map = new Map<string, QuietHours>();
-  if (ids.length === 0) return map;
-
-  const { data, error } = await scope.db
-    .from('user_preferences')
-    .select('user_id, notification_prefs')
-    .in('user_id', ids);
-  if (error) {
+async function familyQuietHours(scope: ServiceScope): Promise<QuietHours | null> {
+  try {
+    const settings = await getAISettings(scope);
+    const quiet = settings.quietHours;
+    if (!quiet) return null;
+    // Same shape check the old per-user parser applied, because the value comes
+    // from two integer columns rather than a validated object.
+    if (!Number.isInteger(quiet.start) || !Number.isInteger(quiet.end)) return null;
+    if (quiet.start < 0 || quiet.start > 23 || quiet.end < 0 || quiet.end > 23) return null;
+    if (quiet.start === quiet.end) return null;
+    return quiet;
+  } catch (error) {
+    // Fail OPEN. A settings read that failed is not a reason to hold someone's
+    // notification until morning; it is a reason to send it and move on.
     console.error('[service:notifications] quiet-hours read failed', error);
-    return map;
+    return null;
   }
-  for (const row of data ?? []) {
-    const quiet = readQuietHours(row.notification_prefs);
-    if (quiet) map.set(row.user_id, quiet);
-  }
-  return map;
 }
 
 /** Mark one notification read for the acting user. */

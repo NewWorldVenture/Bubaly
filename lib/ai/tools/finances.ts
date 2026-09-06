@@ -15,7 +15,7 @@
 import 'server-only';
 import { z } from 'zod';
 import {
-  budgetVsActual, comparePeriods, createSavingsGoal, formatDollars, listTransactions, merchantMovement,
+  budgetVsActual, comparePeriods, createSavingsGoal, createTransaction, formatDollars, listTransactions, merchantMovement,
   recurringChanges, spendingByCategory, toCents, unusualTransactions, updateBudget,
 } from '@/lib/services/finances';
 import { ok } from '@/lib/services/types';
@@ -292,6 +292,61 @@ export const financeTools: ToolDefinition[] = [
     },
   }),
 
+  defineTool({
+    name: 'finances.createTransaction',
+    aliases: ['create_transaction', 'record_purchase', 'record_transaction'],
+    description: 'Record a purchase or a payment on the household books. Amount is dollars and always positive — say which way the money went with `type`.',
+    domain: 'finances',
+    capability: 'create',
+    risk: 'medium',
+    readOnly: false,
+    activityFrom: 'service',
+    input: z.object({
+      name: z.string().describe('What the family would call it: "Groceries", "Swim class fees"'),
+      amount: z.number().describe('Dollars, always positive'),
+      type: z.enum(['income', 'expense', 'transfer']).nullish().describe('Defaults to expense'),
+      merchant: z.string().nullish(),
+      category: z.string().nullish(),
+      date: z.string().nullish().describe('YYYY-MM-DD; defaults to today in the family time zone'),
+      notes: z.string().nullish(),
+      account_id: z.string().nullish().describe('A financial_accounts id belonging to this family'),
+      member_id: z.string().nullish().describe('Who spent it — a family_members id'),
+      receipt_document_id: z.string().nullish().describe('The documents id of the receipt this came from, if there is one'),
+    }),
+    output: z.object({
+      id: z.string(), name: z.string(), amount: z.number(),
+      type: z.enum(['income', 'expense', 'transfer']), date: z.string(), merchant: z.string().nullable(),
+    }),
+    // NO natural key, deliberately. `resolveIdempotencyKey` only consults this
+    // when the caller supplies none, and the run executor always supplies a
+    // per-step key — so this is the chat path's protection, and there is no
+    // honest natural key for a charge. Two identical purchases are two real
+    // rows; see `createTransaction`'s header on why a merchant+amount+date key
+    // would silently delete the second one.
+    idempotencyFrom: () => null,
+    summarize: (_input, output) => `Recorded ${formatDollars(toCents(output.amount))}${output.merchant ? ` at ${output.merchant}` : ''} on ${output.date}`,
+    consequences: (input) => [
+      `Adds ${Number.isFinite(input.amount) ? formatDollars(toCents(input.amount)) : 'a charge'}${input.merchant ? ` at ${input.merchant}` : ''} to the household books, where it counts against the budget.`,
+    ],
+    resource: (output) => ({ table: 'transactions', id: output.id }),
+    execute: async (scope, input) => {
+      const res = await createTransaction(scope, {
+        name: input.name,
+        amount: input.amount,
+        type: input.type ?? undefined,
+        merchant: input.merchant ?? null,
+        category: input.category ?? null,
+        date: input.date ?? null,
+        notes: input.notes ?? null,
+        accountId: input.account_id ?? null,
+        memberId: input.member_id ?? null,
+        receiptDocumentId: input.receipt_document_id ?? null,
+      });
+      if (!res.ok) return res;
+      const t = res.data;
+      return ok({ id: t.id, name: t.name, amount: Number(t.amount), type: t.type, date: t.date, merchant: t.merchant });
+    },
+  }),
   defineTool({
     name: 'finances.createSavingsGoal',
     aliases: ['create_savings_goal', 'add_savings_goal'],

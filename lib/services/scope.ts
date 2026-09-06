@@ -65,6 +65,32 @@ export function scopeForSystem(
   };
 }
 
+/**
+ * A system scope for a webhook or a cron that knows only a family id.
+ *
+ * The timezone read is the point. `scopeForSystem` falls back to `DEFAULT_TZ`
+ * when a caller has none, and for anything time-sensitive that fallback is
+ * worse than no scope at all: quiet hours evaluated against the wrong zone hold
+ * a family's notification at six in the evening and let one through at two in
+ * the morning. A caller that does not know the family's zone should ask for it,
+ * not assume it.
+ *
+ * Returns null when the family cannot be read, so a caller fails visibly rather
+ * than acting for a household it could not identify.
+ */
+export async function systemScopeForFamily(
+  db: SupabaseClient<Database>,
+  familyId: string,
+  extra?: Partial<ServiceScope>,
+): Promise<ServiceScope | null> {
+  const { data, error } = await db.from('families').select('id, timezone').eq('id', familyId).maybeSingle();
+  if (error || !data) {
+    console.error('[scope] family read failed', { familyId, error });
+    return null;
+  }
+  return scopeForSystem(db, data, extra);
+}
+
 /** The scope's clock. Tests inject `now`; production reads the real one. */
 export function scopeNow(scope: Pick<ServiceScope, 'now'>): Date {
   return scope.now ? new Date(scope.now.getTime()) : new Date();

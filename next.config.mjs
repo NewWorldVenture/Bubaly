@@ -1,9 +1,15 @@
 import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
+import { parseBuildRevision } from './lib/build-identity.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Next inlines this literal into the build artifact. Never derive identity
+  // from a request or substitute a branch/revision when the build input is absent.
+  env: {
+    BUBALY_BUILD_REVISION: parseBuildRevision(process.env.VERCEL_GIT_COMMIT_SHA) ?? '',
+  },
   // Pin tracing to this project (a stray lockfile in the home dir confuses inference).
   outputFileTracingRoot: import.meta.dirname,
   images: {
