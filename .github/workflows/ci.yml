@@ -131,6 +131,12 @@ jobs:
       - name: Start isolated Supabase
         run: supabase start
 
+      - name: Verify home brief kind uniqueness in disposable PostgreSQL
+        timeout-minutes: 3
+        run: node scripts/ci-home-brief-kind-runtime.mjs
+        env:
+          BUBALY_0261_RUNTIME: '1'
+
       - name: Export local Supabase credentials
         shell: bash
         run: |

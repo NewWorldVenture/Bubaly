@@ -7,6 +7,10 @@ on:
         description: Apply the pinned 0240-0254 release after the read-only preflight
         type: boolean
         default: false
+      require_applied:
+        description: Read-only proof that the exact reviewed release is already applied
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,22 +31,29 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       APPLY_RELEASE: ${{ inputs.apply }}
+      REQUIRE_APPLIED: ${{ inputs.require_applied }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Release preview or atomic apply
+      - name: Release preview, read-only proof, or atomic apply
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$APPLY_RELEASE" = "true" ]; then
+          if [ "$APPLY_RELEASE" = "true" ] && [ "$REQUIRE_APPLIED" = "true" ]; then
+            echo "::error::apply and require_applied cannot be combined."
+            exit 1
+          fi
+          if [ "$REQUIRE_APPLIED" = "true" ]; then
+            node scripts/apply-production-forward-release.mjs --require-applied
+          elif [ "$APPLY_RELEASE" = "true" ]; then
             node scripts/apply-production-forward-release.mjs --apply
           else
             node scripts/apply-production-forward-release.mjs
           fi
       - name: Verify household and AI schema
-        if: success() && inputs.apply
+        if: success() && (inputs.apply || inputs.require_applied)
         shell: bash
         run: |
           set -euo pipefail
@@ -52,7 +63,7 @@ jobs:
           done
           exit 1
       - name: Capture metadata after release attempt
-        if: always()
+        if: always() && !inputs.require_applied
         run: node scripts/audit-production-migration-state.mjs
       - uses: actions/upload-artifact@v4
         if: always()

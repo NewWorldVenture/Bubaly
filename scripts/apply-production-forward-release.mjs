@@ -27,6 +27,18 @@ export function readReleaseFiles(manifest, read = (file) => readFileSync(file, '
   }).sort((a, b) => a.version.localeCompare(b.version));
 }
 
+export function releaseModeFromArgs(args) {
+  if (args.some((arg) => !['--apply', '--require-applied'].includes(arg))) {
+    throw new Error('Unknown release option; use --apply or --require-applied, or omit both for preview.');
+  }
+  const apply = args.includes('--apply');
+  const requireApplied = args.includes('--require-applied');
+  if (apply && requireApplied) {
+    throw new Error('--apply and --require-applied cannot be combined.');
+  }
+  return { apply, requireApplied };
+}
+
 export function assertNoNewerMigrations(migrationNames) {
   const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));
   const newer = migrationNames.filter((file) => {
@@ -180,9 +192,12 @@ export function buildReleaseSql(manifest, files) {
 }
 
 export async function runForwardRelease({
-  manifest, files, projectRef, token, apply = false, fetchImpl = fetch,
+  manifest, files, projectRef, token, apply = false, requireApplied = false, fetchImpl = fetch,
   listMigrationFiles = () => readdirSync(new URL('../supabase/migrations/', import.meta.url)),
 }) {
+  if (apply && requireApplied) {
+    throw new Error('--apply and --require-applied cannot be combined.');
+  }
   // Preview and already-applied results must not conceal a newer unreviewed migration.
   assertNoNewerMigrations(listMigrationFiles());
   if (projectRef !== PROJECT || projectRef !== manifest.projectRef || !token) {
@@ -192,6 +207,10 @@ export async function runForwardRelease({
   if (sameRows(snapshot.migrations, releaseLedger(manifest))) {
     assertReleased(snapshot, manifest);
     return { status: 'already_applied', release: manifest.release };
+  }
+  if (requireApplied) {
+    const observedVersions = snapshot.migrations.map(({ version }) => version).join(', ') || '(none)';
+    throw new Error('Reviewed release is not applied: the exact baseline plus pinned release ledger is required; observed versions: ' + observedVersions + '.');
   }
   assertPreflight(snapshot, manifest);
   if (!apply) {
@@ -233,11 +252,12 @@ export async function runForwardRelease({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
+    const mode = releaseModeFromArgs(process.argv.slice(2));
     const manifest = JSON.parse(readFileSync('supabase/production-forward-release.json', 'utf8'));
     const files = readReleaseFiles(manifest);
     const result = await runForwardRelease({
       manifest, files, projectRef: process.env.SUPABASE_PROJECT_REF,
-      token: process.env.SUPABASE_ACCESS_TOKEN, apply: process.argv.includes('--apply'),
+      token: process.env.SUPABASE_ACCESS_TOKEN, ...mode,
     });
     mkdirSync('.next', { recursive: true });
     writeFileSync('.next/production-forward-release-result.json', JSON.stringify(result, null, 2));

@@ -344,6 +344,7 @@ describe('Daily Brief route schema boundary', () => {
     // that really finished. Here no run has, so the honest answer is none.
     expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tools: [], maxTokens: 2000 }));
+    expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
     expect(fetch).not.toHaveBeenCalled();
   });
 
