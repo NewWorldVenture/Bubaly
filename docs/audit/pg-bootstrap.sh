@@ -62,7 +62,7 @@ SQL
 echo "== migrations =="
 applied=0
 failed=()
-for f in $(ls "$ROOT"/supabase/migrations/*.sql | sort); do
+for f in "$ROOT"/supabase/migrations/*.sql; do   # glob is already lexicographic
   if psql -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>/tmp/pgbootstrap.err; then
     applied=$((applied + 1))
   else

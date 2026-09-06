@@ -61,7 +61,7 @@ begin
     exception when insufficient_privilege then
       member_rows := -1;   -- no grant at all: also blind, and worth naming as such
     end;
-    perform set_config('role', 'postgres', true);
+    perform set_config('role', 'none', true);   -- back to the session user, whatever it is called
 
     checked := checked + 1;
     if member_rows <= 0 then
