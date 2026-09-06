@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
@@ -112,15 +114,24 @@ export async function POST(req: NextRequest) {
   const preview = body.length > 100 ? `${body.slice(0, 100)}…` : body;
 
   try {
-    await supabase.from('notifications').insert({
-      family_id: familyId,
-      user_id: null,
-      type: 'system',
-      title: `💬 Text from ${callerDisplay}`,
-      body: preview,
-      related_type: 'guardian_communications',
-      related_id: comm?.id ?? null,
-    });
+    // Through notify() rather than a raw insert, so a routine screened text
+    // obeys the family's quiet hours. This row fires for EVERY message that is
+    // not blocked or spam — it is the most frequent notification the product
+    // writes, and a raw insert made it the one most likely to wake a house at
+    // two in the morning. Not `urgent`: a text from the dentist can wait until
+    // the window ends. A genuine emergency comes through /api/guardian/escalate,
+    // which is marked urgent and still lands immediately.
+    const scope = await systemScopeForFamily(supabase, familyId);
+    if (scope) {
+      await notify(scope, {
+        recipients: 'family',
+        type: 'system',
+        title: `💬 Text from ${callerDisplay}`,
+        body: preview,
+        relatedType: 'guardian_communications',
+        relatedId: comm?.id ?? null,
+      });
+    }
   } catch { /* non-fatal */ }
 
   // Suggest trust upgrade if this is a repeated unknown contact
