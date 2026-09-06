@@ -53,11 +53,11 @@ export const PlanStepSchema = z.object({
   step_type: z.enum(PLAN_STEP_TYPES).describe('retrieve = read-only tool; act = tool that changes something; verify = re-check the result; notify = tell people; approval = wait for a person before continuing; followup = pause and continue later'),
   tool_name: z.string().nullable().describe('The exact tool name from the catalogue for retrieve/act steps; null for other step types'),
   description: z.string().describe('One plain sentence a family member reads on the run timeline, e.g. "Plan seven dinners around soccer nights"'),
-  input: z.string().describe('The step\'s arguments as a JSON object encoded as a string, e.g. "{\\"title\\":\\"Dentist\\",\\"starts_at\\":\\"2026-09-12T09:00:00\\"}". Use "{}" when there are none'),
+  input: z.string().describe('The step\'s arguments as a JSON object encoded as a string, e.g. "{\\"title\\":\\"Dentist\\",\\"starts_at\\":\\"2026-09-12T09:00:00\\"}". Use "{}" when there are none. To use what an earlier step produced, put {"$fromStep":"<that step\'s key>","path":"id"} where the value goes — and list that key in depends_on'),
   depends_on: z.array(z.string()).describe('Keys of steps that must finish first. Independent retrieve steps should list none so they run in parallel'),
   condition: PlanConditionSchema.nullable().describe('Run this step only when the condition holds; null to always run'),
   approval_required: z.boolean().nullable().describe('true when a person should say yes before this runs; null to let household policy decide'),
-  verify: z.string().nullable().describe('Optional JSON verification spec to run after this step, e.g. "{\\"checks\\":[{\\"kind\\":\\"count_at_least\\",\\"table\\":\\"meal_plans\\",\\"min\\":5}]}"; null for none'),
+  verify: z.string().nullable().describe('Optional JSON verification spec to run after this step. Prefer naming what THIS step wrote: "{\\"checks\\":[{\\"kind\\":\\"records_exist\\",\\"table\\":\\"calendar_events\\",\\"ids\\":[{\\"$fromStep\\":\\"the key of this step\\",\\"path\\":\\"id\\"}]}]}". A bare count proves nothing when the family already had rows. null for none'),
 }).strict();
 
 export const PlanFollowupSchema = z.object({

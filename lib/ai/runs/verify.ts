@@ -17,6 +17,7 @@ import 'server-only';
 import { z } from 'zod';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { BINDING_KEY } from './bindings';
 
 /**
  * Tables a verification may re-read: the family-scoped tables the AI's own
@@ -40,9 +41,24 @@ const scalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
  * `count_at_least` — a fan-out produced enough rows (e.g. seven meal plans).
  * `no_calendar_conflicts` — nothing double-books the window we just filled.
  */
+/**
+ * An id a step will produce, written before the run starts.
+ *
+ * A spec is validated at PLAN time, when the rows it will name do not exist
+ * yet, and run at EXECUTION time, when `resolveBindings` has already replaced
+ * every binding with the real id. So the schema accepts both shapes and the
+ * runner refuses a binding that reached it — a check that quietly treated
+ * `{"$fromStep":…}` as an id would look like it passed while proving nothing,
+ * which is the exact failure this whole mechanism exists to end.
+ */
+const idOrBinding = z.union([
+  z.string().uuid(),
+  z.object({ [BINDING_KEY]: z.string().min(1), path: z.string().min(1) }).strict(),
+]);
+
 export const verificationCheckSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('records_exist'), table: tableSchema, ids: z.array(z.string().uuid()).min(1).max(100), label: z.string().max(120).optional() }),
-  z.object({ kind: z.literal('fields_match'), table: tableSchema, id: z.string().uuid(), expect: z.record(scalar), label: z.string().max(120).optional() }),
+  z.object({ kind: z.literal('records_exist'), table: tableSchema, ids: z.array(idOrBinding).min(1).max(100), label: z.string().max(120).optional() }),
+  z.object({ kind: z.literal('fields_match'), table: tableSchema, id: idOrBinding, expect: z.record(scalar), label: z.string().max(120).optional() }),
   z.object({ kind: z.literal('count_at_least'), table: tableSchema, min: z.number().int().min(1).max(500), where: z.record(scalar).optional(), label: z.string().max(120).optional() }),
   z.object({ kind: z.literal('no_calendar_conflicts'), start: z.string().min(4), end: z.string().min(4), label: z.string().max(120).optional() }),
 ]);
@@ -130,21 +146,28 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
   }
 
   if (check.kind === 'records_exist') {
+    const ids = check.ids.filter((id): id is string => typeof id === 'string');
+    if (ids.length !== check.ids.length) {
+      return { kind: check.kind, label, verified: false, detail: 'Bubaly could not work out which records this was meant to check.' };
+    }
     const { data, error } = await reader
       .from(check.table)
       .select('id')
       .eq('family_id', scope.familyId)
-      .in('id', check.ids)
-      .limit(check.ids.length);
+      .in('id', ids)
+      .limit(ids.length);
     if (error) return { kind: check.kind, label, verified: false, detail: describeDbError(error, 'Bubaly could not re-read what it wrote.') };
     const found = new Set((data ?? []).map((row) => String(row.id)));
-    const missing = check.ids.filter((id) => !found.has(id));
+    const missing = ids.filter((id) => !found.has(id));
     return missing.length
-      ? { kind: check.kind, label, verified: false, detail: `${missing.length} of ${check.ids.length} records are missing.` }
-      : { kind: check.kind, label, verified: true, detail: `All ${check.ids.length} records are there.` };
+      ? { kind: check.kind, label, verified: false, detail: `${missing.length} of ${ids.length} records are missing.` }
+      : { kind: check.kind, label, verified: true, detail: `All ${ids.length} records are there.` };
   }
 
   if (check.kind === 'fields_match') {
+    if (typeof check.id !== 'string') {
+      return { kind: check.kind, label, verified: false, detail: 'Bubaly could not work out which record this was meant to check.' };
+    }
     const { data, error } = await reader
       .from(check.table)
       .select('*')

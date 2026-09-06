@@ -6,8 +6,11 @@
 //
 //  1. A missing row is the DEFAULTS, never "anything goes". Every reader gets
 //     a fully-populated object, so no call site has to decide what absent
-//     means — and the defaults are the cautious ones (`prepare`: Bubaly gets
-//     the work ready and a person says go).
+//     means. The dial itself defaults to `execute` — see DEFAULT_AI_SETTINGS
+//     below for why: it is what a family had before 0257, and the trust engine
+//     is what actually holds the line (sensitive domains and `high` risk still
+//     want a person, whatever the dial says). Absent is therefore "carry on as
+//     before", not "anything goes", and tightening is a parent's choice.
 //
 //  2. A risk override may RAISE a tool's tier and may only lower it where
 //     lowering is safe. Money and documents (§12, D17) keep `medium` as their

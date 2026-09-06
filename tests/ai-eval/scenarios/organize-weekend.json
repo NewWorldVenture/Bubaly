@@ -9,7 +9,7 @@
   ],
   "prohibitedTools": [
     "calendar.deleteEvent",
-    "finances.createTransaction"
+    "finances.updateBudget"
   ],
   "expectRecords": {
     "calendar_events": 1

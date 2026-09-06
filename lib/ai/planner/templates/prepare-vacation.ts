@@ -1,9 +1,10 @@
 // Workflow E — Prepare our vacation (§18, §8's twenty-step example). Owner:
 // the Travel Planner.
 //
-// Every step keys off a `vacation_id`, and a step's arguments cannot be read
-// from another step's output at run time — so the trip has to be on file
-// BEFORE the plan is written. The context's travel slice carries the upcoming
+// Every step keys off a `vacation_id`. A step CAN now read an earlier step's
+// output (`$fromStep`, lib/ai/runs/bindings.ts) — the verify step below uses it
+// to name the rows this run wrote — but a trip already on file is still what
+// lets the whole skeleton be written at once. The context's travel slice carries the upcoming
 // trips; when it holds one that matches, the template writes its id into
 // every step. When it holds none, the skeleton's first step puts the trip on
 // file and the guidance tells the model to stop there and follow up, rather
@@ -84,10 +85,15 @@ export const prepareVacationTemplate: WorkflowTemplate = {
       // "prepared" if the dates are on the calendar and the reminder exists.
       key: 'check_trip', stepType: 'verify', description: 'Check the trip is really on the calendar and reminded',
       dependsOn: ['calendar', 'critical_reminder'],
+      // Named, not counted. `count_at_least` on a family-wide table is
+      // satisfied by rows the family already had — this run could have written
+      // nothing and still passed. `$fromStep` binds the ids these two steps
+      // actually produced (lib/ai/runs/bindings.ts), which is the check §13
+      // asks for and the one `records_exist` was built for.
       input: (ctx) => ({
         checks: [
-          { kind: 'count_at_least', table: 'calendar_events', min: 1, label: 'Travel dates are on the calendar' },
-          { kind: 'count_at_least', table: 'family_reminders', min: 1, label: 'The pre-trip reminder is set' },
+          { kind: 'records_exist', table: 'calendar_events', ids: [{ $fromStep: 'calendar', path: 'id' }], label: 'Travel dates are on the calendar' },
+          { kind: 'records_exist', table: 'family_reminders', ids: [{ $fromStep: 'critical_reminder', path: 'id' }], label: 'The pre-trip reminder is set' },
           { kind: 'no_calendar_conflicts', start: localTime(departureKey(ctx), 0), end: localTime(departureKey(ctx), 23, 59), label: 'Departure day is clear' },
         ],
       }),
