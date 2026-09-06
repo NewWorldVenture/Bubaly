@@ -40,6 +40,30 @@ describe('the grocery surface adds through the service', () => {
     expect(insertsIn(file)).toEqual([]);
   });
 
+  it.each([
+    'components/modules/shopping-module.tsx',
+    'components/modules/meals-module.tsx',
+  ])('%s issues no direct update or delete either', (file) => {
+    // The tick-off and the removes filtered `id` alone and left tenancy to RLS.
+    const ANY_WRITE = /\.from\(\s*['"]grocery_items['"]\s*\)[\s\S]{0,200}?\.(insert|update|upsert|delete)\s*\(/g;
+    expect([...code(file).matchAll(ANY_WRITE)].map((m) => m[1])).toEqual([]);
+  });
+
+  it('clears the cart by LIST, never by ids the browser was holding', () => {
+    // `.in('id', checkedIds)` cleared whatever the last render saw, so an item a
+    // partner ticked on another phone between render and tap survived.
+    const src = code('components/modules/shopping-module.tsx');
+    expect(src).toMatch(/clearCheckedGroceriesAction\(activeListId\)/);
+    expect(src).not.toMatch(/\.in\('id',/);
+  });
+
+  it('the meals page reuses the shopping page’s tick-off rather than spelling its own', () => {
+    // Two versions of one operation on one table is how the forks this work
+    // removes began.
+    expect(code('components/modules/meals-module.tsx'))
+      .toMatch(/setGroceryItemCheckedAction/);
+  });
+
   it.each(SURFACE)('%s reaches the list through the server action instead', (file) => {
     expect(code(file)).toMatch(/from '@\/app\/\(app\)\/dashboard\/grocery\/actions'/);
   });

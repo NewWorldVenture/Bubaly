@@ -260,6 +260,23 @@ export async function checkItem(scope: ServiceScope, itemId: string, checked = t
   return ok(data);
 }
 
+/** Take one item off the list. Family-scoped, where the client filtered `id` alone. */
+export async function removeItem(scope: ServiceScope, itemId: string): Promise<ServiceResult<{ id: string }>> {
+  const { data, error } = await scope.db
+    .from('grocery_items')
+    .delete()
+    .eq('id', itemId)
+    .eq('family_id', scope.familyId)
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:groceries] remove item failed', error);
+    return fail(describeDbError(error, 'Could not remove that item.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That item could not be found.', { code: SERVICE_CODES.notFound });
+  return ok({ id: data.id });
+}
+
 /**
  * Remove everything already in the cart. Deleting rather than archiving
  * matches how the shopping module treats a finished trip; the meal plan that

@@ -28,7 +28,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { createReminder } from '@/lib/services/reminders';
+import { createReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
 import { makeKey } from '@/lib/services/idempotency';
 import { dayKeyInTz, scopeFromUserContext, zonedTimeMs } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
@@ -122,5 +122,43 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
   } catch (err) {
     console.error('[reminder-action] create failed', err);
     return { ok: false, error: describeActionError(err, 'Could not set that reminder.') };
+  }
+}
+
+export async function deleteReminderAction(reminderId: string): Promise<ReminderActionResult> {
+  if (!reminderId) return { ok: false, error: 'That reminder could not be found.' };
+  // Outside the try: `requireUserContext` redirects by throwing.
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const scope = scopeFromUserContext(ctx, supabase);
+
+  try {
+    const result = await deleteReminder(scope, reminderId);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.id };
+  } catch (err) {
+    console.error('[reminder-action] delete failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not remove that reminder.') };
+  }
+}
+
+/** Push a reminder out by `minutes` from now. */
+export async function snoozeReminderAction(reminderId: string, minutes: number): Promise<ReminderActionResult> {
+  if (!reminderId) return { ok: false, error: 'That reminder could not be found.' };
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const scope = scopeFromUserContext(ctx, supabase);
+
+  try {
+    const result = await snoozeReminder(scope, reminderId, minutes);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.id };
+  } catch (err) {
+    console.error('[reminder-action] snooze failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not snooze that reminder.') };
   }
 }

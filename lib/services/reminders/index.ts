@@ -173,6 +173,32 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
   return ok(data);
 }
 
+/**
+ * Remove a reminder.
+ *
+ * Family-scoped, where the module deleted on `id` alone and left tenancy to RLS.
+ * Unlike the editor and the recurrence respawn — which cannot route through this
+ * service until it can express migration 0100's columns — a delete needs nothing
+ * the service does not already have.
+ */
+export async function deleteReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  const { data, error } = await scope.db
+    .from('family_reminders')
+    .delete()
+    .eq('id', reminderId)
+    .eq('family_id', scope.familyId)
+    .select('id, title')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:reminders] delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that reminder.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, { agent: 'reminders', title: `Removed the reminder "${data.title}"`, href: '/dashboard/reminders' });
+  return ok({ id: data.id, title: data.title });
+}
+
 /** Push a reminder out by `minutes` from now (not from its original time). */
 export async function snoozeReminder(scope: ServiceScope, reminderId: string, minutes: number): Promise<ServiceResult<FamilyReminder>> {
   const mins = Math.round(minutes);

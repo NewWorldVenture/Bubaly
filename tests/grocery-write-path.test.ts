@@ -23,7 +23,9 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
-import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
+import {
+  addGroceryItemsAction, clearCheckedGroceriesAction, removeGroceryItemAction, setGroceryItemCheckedAction,
+} from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 
 const FAMILY = 'family-1';
@@ -224,5 +226,59 @@ describe('a caller who is not signed in', () => {
     );
     await expect(addGroceryItemsAction({ items: [{ name: 'Milk' }] })).rejects.toThrow('NEXT_REDIRECT');
     expect(itemsOn()).toHaveLength(0);
+  });
+});
+
+describe('ticking off, removing, and clearing the cart', () => {
+  beforeEach(() => {
+    db.seed('grocery_items', [
+      { id: 'milk', family_id: FAMILY, list_id: LIST, name: 'Milk', is_checked: false },
+      { id: 'eggs', family_id: FAMILY, list_id: LIST, name: 'Eggs', is_checked: true },
+      { id: 'theirs', family_id: 'family-2', list_id: 'other-list', name: 'Bread', is_checked: true },
+    ]);
+  });
+
+  it('ticks an item off and puts it back', async () => {
+    expect((await setGroceryItemCheckedAction('milk', true)).ok).toBe(true);
+    expect(db.table('grocery_items').find((r) => r.id === 'milk')!.is_checked).toBe(true);
+
+    expect((await setGroceryItemCheckedAction('milk', false)).ok).toBe(true);
+    expect(db.table('grocery_items').find((r) => r.id === 'milk')!.is_checked).toBe(false);
+  });
+
+  it('removes one item', async () => {
+    expect((await removeGroceryItemAction('milk')).ok).toBe(true);
+    expect(names()).toEqual(['Eggs']);
+  });
+
+  it('clears what is checked ON THE LIST, not what a stale render held', async () => {
+    // The client sent `.in('id', checkedIds)` from its last render, so an item a
+    // partner ticked on another phone between render and tap survived the clear.
+    // Standing in for that partner: milk becomes checked after the page rendered.
+    db.table('grocery_items').find((r) => r.id === 'milk')!.is_checked = true;
+
+    const result = await clearCheckedGroceriesAction(LIST);
+    expect(result.ok && result.removed).toBe(2);
+    expect(itemsOn()).toHaveLength(0);
+  });
+
+  it('leaves the unchecked alone', async () => {
+    const result = await clearCheckedGroceriesAction(LIST);
+    expect(result.ok && result.removed).toBe(1);
+    expect(names()).toEqual(['Milk']);
+  });
+
+  it('cannot tick off or remove another household’s item', async () => {
+    expect((await setGroceryItemCheckedAction('theirs', false)).ok).toBe(false);
+    expect((await removeGroceryItemAction('theirs')).ok).toBe(false);
+    // Both survive, unchanged: the client filtered `id` alone.
+    const theirs = db.table('grocery_items').find((r) => r.id === 'theirs')!;
+    expect(theirs.is_checked).toBe(true);
+  });
+
+  it('cannot clear another household’s list', async () => {
+    const result = await clearCheckedGroceriesAction('other-list');
+    expect(result.ok && result.removed).toBe(0);
+    expect(db.table('grocery_items').some((r) => r.id === 'theirs')).toBe(true);
   });
 });

@@ -9,6 +9,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
+import { setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -171,15 +173,17 @@ export function MealsModule() {
   }, [recipes, recipeSearch]);
 
   async function removePlan(id: string) {
-    const { error } = await createClient().from('meal_plans').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const result = await removeMealPlanAction(id);
+    if (!result.ok) return toastError(result.error);
     void refresh();
   }
 
   async function addFromLibrary(mealId: string, date: string, mealType: MealType) {
-    const { error } = await createClient().from('meal_plans')
-      .insert({ family_id: familyId, meal_id: mealId, plan_date: date, meal_type: mealType, created_by: userId });
-    if (error) return toastError(describeDbError(error));
+    // `setSlot` REPLACES what is already in the slot. The raw insert stacked a
+    // second row on the same date and meal type, leaving two dinners on one
+    // Tuesday with nothing to say which the family meant.
+    const result = await planMealAction({ mealId, date, mealType });
+    if (!result.ok) return toastError(result.error);
     setAddCell(null); void refresh();
   }
 
@@ -190,8 +194,10 @@ export function MealsModule() {
   }
 
   async function toggleGrocery(item: Tables<'grocery_items'>) {
-    const { error } = await createClient().from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
-    if (error) return toastError(describeDbError(error));
+    // The shopping page's action, not a second spelling of it — two versions of
+    // one operation on one table is how the forks this work removes began.
+    const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
+    if (!result.ok) return toastError(result.error);
     void refreshGrocery();
   }
 

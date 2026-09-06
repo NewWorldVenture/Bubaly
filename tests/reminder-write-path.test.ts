@@ -15,7 +15,7 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
-import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { createReminderAction, deleteReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 
 const FAMILY = 'family-1';
 const TAP_ONE = '11111111-1111-4111-8111-111111111111';
@@ -186,5 +186,36 @@ describe('validation and auth', () => {
     );
     await expect(createReminderAction({ ...fromACall, submissionId: TAP_ONE })).rejects.toThrow('NEXT_REDIRECT');
     expect(reminders()).toHaveLength(0);
+  });
+});
+
+describe('removing a reminder', () => {
+  it('removes the family’s own', async () => {
+    const created = await createReminderAction({ ...fromACall, submissionId: TAP_ONE });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    expect((await deleteReminderAction(created.id)).ok).toBe(true);
+    expect(reminders()).toHaveLength(0);
+  });
+
+  it('cannot remove another household’s — the client filtered id alone', async () => {
+    db.seed('family_reminders', [{ id: 'theirs', family_id: 'family-2', title: 'Not ours', remind_at: '2026-09-20T09:00:00.000Z' }]);
+    const result = await deleteReminderAction('theirs');
+    expect(result.ok).toBe(false);
+    expect(db.table('family_reminders').some((r) => r.id === 'theirs')).toBe(true);
+  });
+
+  it('refuses an empty id rather than issuing an unfiltered delete', async () => {
+    await createReminderAction({ ...fromACall, submissionId: TAP_ONE });
+    expect((await deleteReminderAction('')).ok).toBe(false);
+    expect(reminders()).toHaveLength(1);
+  });
+
+  it('is redirected when signed out', async () => {
+    mocks.requireUserContext.mockRejectedValueOnce(
+      Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/login;307;' }),
+    );
+    await expect(deleteReminderAction('some-id')).rejects.toThrow('NEXT_REDIRECT');
   });
 });

@@ -434,6 +434,28 @@ export async function setSlot(scope: ServiceScope, input: PlanEntryInput): Promi
   return ok({ ...slot, replaced: res.data.replaced > 0 });
 }
 
+/**
+ * Clear one planned meal.
+ *
+ * Family-scoped, where the module deleted on `id` alone and left tenancy to RLS.
+ * The meal itself survives — a plan slot is a placement, not the recipe.
+ */
+export async function removeSlot(scope: ServiceScope, planId: string): Promise<ServiceResult<{ id: string }>> {
+  const { data, error } = await scope.db
+    .from('meal_plans')
+    .delete()
+    .eq('id', planId)
+    .eq('family_id', scope.familyId)
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:meals] remove slot failed', error);
+    return fail(describeDbError(error, 'Could not clear that meal.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That planned meal could not be found.', { code: SERVICE_CODES.notFound });
+  return ok({ id: data.id });
+}
+
 // ── Recipes ─────────────────────────────────────────────────────────────────
 
 export type RecipeSummary = {
