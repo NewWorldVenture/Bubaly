@@ -30,6 +30,20 @@ export type AiGateRequest = {
   actorRole: TrustRole;
   /** Display name of the agent asking, for the approval row. */
   agent: string;
+  /**
+   * The `family_members.id` of the person Bubaly is acting FOR.
+   *
+   * The actor is the agent — `actor.kind` is `'ai_agent'` — which is why
+   * `openApprovalRequest` left `requested_by_member_id` null on every AI-filed
+   * row. Nothing on the row said who asked, so an approval granted hours later
+   * could only be replayed as the APPROVER: a note attributed to the parent who
+   * released it, and (before it was pulled) an RSVP answering for them.
+   *
+   * Null when the surface genuinely cannot tell — a cron, or a session whose
+   * roster row is missing. The replay then falls back to the approver, which is
+   * what it always did.
+   */
+  onBehalfOfMemberId?: string | null;
   title: string;
   payload: Record<string, unknown>;
   confidence?: number;
@@ -92,7 +106,12 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     // into an approval has to file one too, or "sent for parent approval" names
     // nothing a parent can find.
     const approvalId = engineApprovalId
-      ?? await openApprovalRequest(supabase, familyId, { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json> }, decision);
+      ?? await openApprovalRequest(
+        supabase,
+        familyId,
+        { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json>, onBehalfOfMemberId: req.onBehalfOfMemberId ?? null },
+        decision,
+      );
     return { effect: 'require_approval', reason: decision.reason, approvalId: approvalId ?? null };
   }
   return { effect: 'allow' };

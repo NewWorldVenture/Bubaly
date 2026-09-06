@@ -148,8 +148,13 @@ export async function listPending(scope: ServiceScope): Promise<ServiceResult<Ap
     .eq('is_active', true)
     .in('role', MANAGER_ROLES);
   return ok(rows.map((row) => toCardData(row, {
+    // A parent deciding this needs to know who it is FOR. Bubaly filed it, but
+    // it was somebody's request — and until the asker was recorded on the row
+    // there was nothing to show, so every AI approval read simply "Bubaly".
     requestedBy: row.requested_by_kind === 'ai'
-      ? 'Bubaly'
+      ? (row.requested_by_member_id && names.get(row.requested_by_member_id)
+        ? `Bubaly, for ${names.get(row.requested_by_member_id)}`
+        : 'Bubaly')
       : (row.requested_by_member_id ? names.get(row.requested_by_member_id) ?? null : null),
     canEdit,
     managerCount: managerCount ?? 1,
@@ -579,6 +584,65 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  * Turn an approved (or modified) row into work. `args` is the edited payload
  * when the Edit path is in play, otherwise the stored one.
  */
+/**
+ * The scope an APPROVED AI action should run under.
+ *
+ * `decideApproval` builds its scope from whoever is deciding, so replaying a
+ * tool under it made Bubaly's work look like the approver's: a note the teen
+ * asked for stamped `created_by` = the parent (and rendered on the activity page
+ * as "Mum added note"), and — before that tool was pulled — an RSVP answering
+ * for the parent and upserting over their own reply.
+ *
+ * Two things move, and only for rows BUBALY filed:
+ *
+ *   * `memberId`/`userId` become the ASKER's, so every `created_by` and
+ *     member-scoped column names the person who wanted the thing. Safe under
+ *     RLS: the database client stays the approver's session, and no table the
+ *     AI writes carries a `created_by = auth.uid()` predicate (`0004` applies
+ *     that only to `families` and `user_preferences`).
+ *   * `actorKind` becomes `'ai'`, because it IS Bubaly doing the work — a human
+ *     released it, they did not type it. That also restores the family activity
+ *     line: `recordActivity` returns early for `actorKind === 'member'`, so
+ *     until now NO approved write appeared in the feed at all.
+ *
+ * Confined to `requested_by_kind === 'ai'` — the same condition that already
+ * decides `skipTrust`. A member-filed row keeps the decider's scope, because its
+ * gate is re-evaluated under the approver's authority and re-labelling the actor
+ * would change that evaluation.
+ */
+export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow): Promise<ServiceScope> {
+  if (row.requested_by_kind !== 'ai') return scope;
+  if (!row.requested_by_member_id) return unattributed(scope);
+
+  const { data: asker, error } = await scope.db
+    .from('family_members')
+    .select('id, user_id')
+    .eq('id', row.requested_by_member_id)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (error || !asker) {
+    if (error) console.error('[service:approvals] could not resolve the asker', error);
+    return unattributed(scope);
+  }
+  return { ...scope, actorKind: 'ai', memberId: asker.id, userId: asker.user_id ?? scope.userId };
+}
+
+/**
+ * An AI row whose asker cannot be resolved — a pre-existing row filed before the
+ * asker was recorded, or a roster entry since removed.
+ *
+ * `memberId` is CLEARED rather than left as the approver's. A tool that does not
+ * need it is unaffected; one that makes a first-person statement — an RSVP —
+ * refuses, because its own guard is "Bubaly could not tell whose reply this is,
+ * so it did not answer for anyone". Falling back to the decider would answer for
+ * the wrong person and, on `event_rsvps_once`, upsert over their own reply.
+ * Refusing something a parent approved is a bad outcome; recording it against
+ * them is a worse one.
+ */
+function unattributed(scope: ServiceScope): ServiceScope {
+  return { ...scope, actorKind: 'ai', memberId: null };
+}
+
 async function performApproved(
   scope: ServiceScope,
   row: ApprovalRow,
@@ -631,8 +695,9 @@ async function performApproved(
       }
 
       const args = edited ?? classified.args;
+      const actingScope = await scopeForApprovedWork(scope, row);
       const outcome = await executeTool(
-        { ...scope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
+        { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
         classified.name,
         args,
         {
