@@ -344,6 +344,89 @@ describe('Daily Brief route schema boundary', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each(['success', 'failure', 'configuration failure', 'resolution failure'])('normalizes an invalid stored zone to UTC with provider %s', async (providerResult) => {
+    const utcNow = new Date('2026-09-06T01:00:00.000Z');
+    vi.setSystemTime(utcNow);
+    mocks.requireUserContext.mockResolvedValue({
+      user: { id: 'user' },
+      active: { familyId: 'family', family: { name: 'Example Family', timezone: 'Invalid/Stored_Zone' }, member: { display_name: 'Alex Example' } },
+    });
+    const schoolQuery = queryResult([]);
+    mocks.from.mockImplementation((table: string) => table === 'school_events' ? schoolQuery : queryResult(
+      table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
+        : table === 'calendar_events' ? [{ ...event, starts_at: '2026-09-06T00:30:00.000Z' }] : [],
+    ));
+    if (providerResult !== 'success') {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const error = new Error('Mock provider failure');
+      if (providerResult === 'configuration failure') mocks.isAIConfigured.mockRejectedValue(error);
+      else if (providerResult === 'resolution failure') mocks.resolveProvider.mockRejectedValue(error);
+      else mocks.complete.mockRejectedValue(error);
+    }
+
+    const response = await requestBriefing();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(Object.keys(body).sort()).toEqual(['briefing', 'digest', 'generatedAt']);
+    expect(body).toMatchObject({ digest, generatedAt: utcNow.toISOString(), briefing: { completed: [] } });
+    expect(schoolQuery.gte).toHaveBeenCalledWith('starts_at', '2026-09-06T00:00:00.000Z');
+    expect(schoolQuery.lte).toHaveBeenCalledWith('starts_at', '2026-09-13T23:59:59.999Z');
+    expect(mocks.complete).toHaveBeenCalledTimes(providerResult === 'success' || providerResult === 'failure' ? 1 : 0);
+    if (providerResult === 'success') {
+      expect(body.briefing).toEqual({ ...validBriefing(), completed: [] });
+    } else {
+      expect(body.briefing.subtitle).toBe('Sunday, September 6');
+      expect(body.briefing.schedule).toEqual([
+        { time: '12:30 AM', title: event.title, member: 'Sam', emoji: '\ud83d\udcc5', color: 'blue' },
+      ]);
+    }
+    expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(['authorization', 'source read'])('does not turn an %s error into a fallback briefing', async (boundary) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('Mock request boundary failure');
+    if (boundary === 'authorization') mocks.requireUserContext.mockRejectedValue(error);
+    else mocks.from.mockImplementation(() => { throw error; });
+
+    const response = await requestBriefing();
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to generate briefing' });
+    expect(mocks.isAIConfigured).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps same-name children separate with independent four-item fallback limits', async () => {
+    mocks.isAIConfigured.mockResolvedValue(false);
+    const memberIds = ['child-a', 'child-b'];
+    const schoolEvents = memberIds.flatMap((memberId) => Array.from({ length: 3 }, (_, index) => ({
+      title: `${memberId} school ${index + 1}`, starts_at: '2026-09-05T13:00:00.000Z',
+      event_type: 'other', notes: null, member_id: memberId,
+    })));
+    const sportsEvents = memberIds.flatMap((memberId) => Array.from({ length: 3 }, (_, index) => ({
+      title: `${memberId} sports ${index + 1}`, starts_at: '2026-09-05T18:00:00.000Z', member_id: memberId,
+    })));
+    mocks.from.mockImplementation((table: string) => queryResult(
+      table === 'family_members' ? memberIds.map((id) => ({ id, display_name: 'Sam', role: 'child' }))
+        : table === 'school_events' ? schoolEvents
+        : table === 'sports_events' ? sportsEvents
+        : table === 'calendar_events' ? [event] : [],
+    ));
+
+    const response = await requestBriefing();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.briefing.kidsNeeds).toEqual(memberIds.map((id) => ({
+      name: 'Sam', items: [`${id} school 1`, `${id} school 2`, `${id} school 3`, `${id} sports 1`],
+    })));
+    expect(body.briefing.completed).toEqual([]);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each(['morning', 'evening', 'weekly'])('preserves valid %s output and the public response envelope', async (type) => {
     const response = await requestBriefing(type);
     expect(response.status).toBe(200);
@@ -570,8 +653,17 @@ describe('what Bubaly claims to have done', () => {
     const failingMock = stage === 'configuration' ? mocks.isAIConfigured : stage === 'resolution' ? mocks.resolveProvider : mocks.complete;
     failingMock.mockRejectedValue(new Error('Mock provider unavailable'));
     const response = await requestBriefing();
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: 'Failed to generate briefing' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      briefing: { ...expectedFallback(), completed: [] },
+      digest,
+      generatedAt: now.toISOString(),
+    });
+    expect(mocks.requireUserContext).toHaveBeenCalledTimes(1);
+    expect(mocks.from).toHaveBeenCalledWith('family_members');
+    expect(mocks.from).toHaveBeenCalledWith('calendar_events');
+    expect(mocks.from).toHaveBeenCalledWith('family_automation_runs');
+    expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
     expect(fetch).not.toHaveBeenCalled();
   });
 });
