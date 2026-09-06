@@ -5,6 +5,7 @@ import { Copy, Check, Share2, Ticket } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { applyReferralCodeAction } from '@/app/(app)/referrals/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Row = { id: string; email: string | null; status: string; rewardCents: number; createdAt: string };
 
@@ -22,6 +23,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferred, rows }: {
   code: string; link: string; rewardLabel: string; enabled: boolean; alreadyReferred: boolean; rows: Row[];
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [entry, setEntry] = useState('');
@@ -58,23 +60,23 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-border bg-surface/40 p-6">
-        <h2 className="text-base font-semibold">Your referral link</h2>
-        {!enabled && <p className="mt-1 text-sm text-amber-300">The referral program is currently paused.</p>}
+        <h2 className="text-base font-semibold">{t('referral.yourReferralLink')}</h2>
+        {!enabled && <p className="mt-1 text-sm text-amber-300">{t('referral.theReferralProgramIsCurrentlyPaused')}</p>}
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2 rounded-xl border border-border bg-bg px-4 py-3">
             <span className="text-lg font-bold tracking-widest">{code}</span>
-            <button onClick={() => copy(code, 'code')} className="ml-auto rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" title="Copy code">
+            <button onClick={() => copy(code, 'code')} className="ml-auto rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" title={t('referral.copyCode')}>
               {copied === 'code' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
           <div className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-bg px-4 py-3">
             <span className="truncate text-sm text-muted">{link}</span>
-            <button onClick={() => copy(link, 'link')} className="ml-auto rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" title="Copy link">
+            <button onClick={() => copy(link, 'link')} className="ml-auto rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" title={t('referral.copyLink')}>
               {copied === 'link' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
           <button onClick={share} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand/90">
-            <Share2 className="h-4 w-4" /> Share
+            <Share2 className="h-4 w-4" /> {t('referral.share')}
           </button>
         </div>
       </section>
@@ -83,9 +85,9 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
         <section className="rounded-3xl border border-border bg-surface/40 p-6">
           <div className="flex items-center gap-2">
             <Ticket className="h-4 w-4 text-brand-text" />
-            <h2 className="text-base font-semibold">Have a referral code?</h2>
+            <h2 className="text-base font-semibold">{t('referral.haveAReferralCode')}</h2>
           </div>
-          <p className="mt-1 text-sm text-muted">Enter a friend&apos;s code to claim {rewardLabel} when you upgrade.</p>
+          <p className="mt-1 text-sm text-muted">{t('referral.enterAFriendAposSCode')} {rewardLabel} {t('referral.whenYouUpgrade')}</p>
           <div className="mt-4 flex gap-2">
             <input
               value={entry}
@@ -101,7 +103,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
       )}
 
       <section className="rounded-3xl border border-border bg-surface/40 p-6">
-        <h2 className="mb-4 text-base font-semibold">Families you&apos;ve invited</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('referral.familiesYouAposVeInvited')}</h2>
         {rows.length ? (
           <ul className="divide-y divide-border">
             {rows.map((r) => (
@@ -118,7 +120,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
             ))}
           </ul>
         ) : (
-          <p className="py-6 text-center text-sm text-muted">No referrals yet — share your link to get started!</p>
+          <p className="py-6 text-center text-sm text-muted">{t('referral.noReferralsYetShareYourLink')}</p>
         )}
       </section>
     </div>

@@ -11,8 +11,10 @@ import { ShieldCheck } from 'lucide-react';
 import { adminSetSuperAdminAction } from '@/app/(app)/admin/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; isAdmin: boolean; locked: boolean }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [on, setOn] = useState(isAdmin);
@@ -20,8 +22,8 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
 
   if (locked) {
     return (
-      <span title="Set via code / SUPER_ADMIN_EMAILS env" className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text/80">
-        <ShieldCheck className="h-3.5 w-3.5" /> Admin (code)
+      <span title={t('superAdminToggle.setViaCodeSuperAdminEmails')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text/80">
+        <ShieldCheck className="h-3.5 w-3.5" /> {t('superAdminToggle.adminCode')}
       </span>
     );
   }

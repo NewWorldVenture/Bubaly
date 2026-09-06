@@ -14,12 +14,14 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { CHECK_IN_STATUS, relTime } from '@/lib/family/safety';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type CheckIn = Tables<'safety_check_ins'>;
 
 const ORDER = ['safe', 'on_my_way', 'arrived', 'need_help'] as const;
 
 export function CheckInView() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -64,13 +66,13 @@ export function CheckInView() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Check In" description="Let everyone know you're safe with one tap." />
+      <PageHeader title={t('checkIn.checkIn')} description="Let everyone know you're safe with one tap." />
 
       {/* Composer */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          <Input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Where are you? (optional)" />
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" />
+          <Input value={place} onChange={(e) => setPlace(e.target.value)} placeholder={t('checkIn.whereAreYouOptional')} />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('checkIn.addANoteOptional')} />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {ORDER.map((s) => {
@@ -88,7 +90,7 @@ export function CheckInView() {
 
       {/* Feed */}
       {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load family check-ins. Refresh and try again." onRetry={refresh} /> : (rows ?? []).length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No check-ins yet" description="Tap a status above to post your first check-in." />
+        <EmptyState icon={ShieldCheck} title={t('checkIn.noCheckInsYet')} description="Tap a status above to post your first check-in." />
       ) : (
         <div className="space-y-2">
           {(rows ?? []).map((c) => {

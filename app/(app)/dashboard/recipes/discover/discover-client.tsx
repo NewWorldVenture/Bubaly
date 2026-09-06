@@ -6,6 +6,7 @@ import { Search, Plus, Check, ChefHat, Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { saveDiscoveredRecipe } from './actions';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Result = {
   sourceProvider: string; sourceRecipeId: string; sourceUrl: string | null;
@@ -15,6 +16,7 @@ type Result = {
 };
 
 export function DiscoverClient() {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Result[] | null>(null);
@@ -58,8 +60,8 @@ export function DiscoverClient() {
       <div className="flex items-center gap-3">
         <Link href="/dashboard/recipes" className="text-muted hover:text-fg"><ArrowLeft className="h-5 w-5" /></Link>
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold"><ChefHat className="h-5 w-5 text-brand-text" /> Discover Recipes</h1>
-          <p className="text-sm text-muted">Search free recipe libraries and save favorites to your family vault.</p>
+          <h1 className="flex items-center gap-2 text-xl font-bold"><ChefHat className="h-5 w-5 text-brand-text" /> {t('dashboardRecipesDiscoverDiscoverClient.discoverRecipes')}</h1>
+          <p className="text-sm text-muted">{t('dashboardRecipesDiscoverDiscoverClient.searchFreeRecipeLibrariesAndSave')}</p>
         </div>
       </div>
 
@@ -68,7 +70,7 @@ export function DiscoverClient() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             value={q} onChange={(e) => setQ(e.target.value)} autoFocus
-            placeholder="Try “chicken”, “tacos”, “pasta”…"
+            placeholder={t('dashboardRecipesDiscoverDiscoverClient.tryChickenTacosPasta')}
             className="h-11 w-full rounded-xl border border-border bg-bg pl-10 pr-3 text-sm outline-none focus:border-brand"
           />
         </div>
@@ -84,7 +86,7 @@ export function DiscoverClient() {
       )}
 
       {!searching && results && results.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted">No recipes found — try another search.</div>
+        <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted">{t('dashboardRecipesDiscoverDiscoverClient.noRecipesFoundTryAnotherSearch')}</div>
       )}
 
       {!searching && results && results.length > 0 && (
@@ -123,7 +125,7 @@ export function DiscoverClient() {
 
       {!searching && !results && (
         <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted">
-          Search thousands of free recipes and build your family vault.
+          {t('dashboardRecipesDiscoverDiscoverClient.searchThousandsOfFreeRecipesAnd')}
         </div>
       )}
     </div>

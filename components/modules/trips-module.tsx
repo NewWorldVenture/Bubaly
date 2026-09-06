@@ -24,6 +24,7 @@ import {
   TRIP_STATUS_LABELS, TRIP_ITEM_KIND_LABELS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'trips'>;
 type TripItem = Tables<'trip_items'>;
@@ -51,6 +52,7 @@ const blankTrip = {
 };
 
 export function TripsModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -187,7 +189,7 @@ export function TripsModule() {
     return (
       <div>
         <button onClick={() => setSelectedId(null)} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg mb-4">
-          <ArrowLeft className="h-4 w-4" /> All trips
+          <ArrowLeft className="h-4 w-4" /> {tr('trips.allTrips')}
         </button>
 
         <div className="rounded-2xl bg-gradient-to-r from-sky-900/40 to-indigo-900/40 border border-sky-500/20 p-6 mb-6">
@@ -202,8 +204,8 @@ export function TripsModule() {
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg/80">
                 {selected.destination && <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{selected.destination}</span>}
                 <span className="inline-flex items-center gap-1"><CalendarRange className="h-4 w-4" />{fmtRange(selected)}{duration ? ` · ${duration} day${duration > 1 ? 's' : ''}` : ''}</span>
-                {until != null && until > 0 && <span className="text-sky-300 font-medium">{until} day{until > 1 ? 's' : ''} to go</span>}
-                {until != null && until === 0 && <span className="text-emerald-300 font-medium">Starts today!</span>}
+                {until != null && until > 0 && <span className="text-sky-300 font-medium">{until} day{until > 1 ? 's' : ''} {tr('trips.toGo')}</span>}
+                {until != null && until === 0 && <span className="text-emerald-300 font-medium">{tr('trips.startsToday')}</span>}
               </div>
               {selected.traveler_ids.length > 0 && (
                 <div className="mt-2 flex items-center gap-1.5">
@@ -220,15 +222,15 @@ export function TripsModule() {
             </div>
             {canEdit && (
               <div className="flex items-center gap-1 flex-shrink-0">
-                <button onClick={() => openEditTrip(selected)} aria-label="Edit trip" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => removeTrip(selected)} aria-label="Delete trip" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => openEditTrip(selected)} aria-label={tr('trips.editTrip')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => removeTrip(selected)} aria-label={tr('trips.deleteTrip')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
               </div>
             )}
           </div>
           {/* Overall progress */}
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs text-muted mb-1">
-              <span>Trip checklist</span><span>{progress.done}/{progress.total} done</span>
+              <span>{tr('trips.tripChecklist')}</span><span>{progress.done}/{progress.total} done</span>
             </div>
             <div className="h-2 bg-elevated rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${progress.percent}%` }} />
@@ -257,7 +259,7 @@ export function TripsModule() {
                   )}
                 </div>
                 {list.length === 0 ? (
-                  <p className="text-xs text-muted py-2">Nothing here yet.</p>
+                  <p className="text-xs text-muted py-2">{tr('trips.nothingHereYet')}</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {list.map((it) => (
@@ -273,7 +275,7 @@ export function TripsModule() {
                           {it.assignee_id && <div className="text-[11px] text-muted mt-0.5">{memberName(it.assignee_id)}</div>}
                         </div>
                         {canEdit && (
-                          <button onClick={() => removeItem(it)} aria-label="Remove" className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-rose-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => removeItem(it)} aria-label={tr('trips.remove')} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-rose-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
                         )}
                       </li>
                     ))}
@@ -287,22 +289,22 @@ export function TripsModule() {
         {/* Item modal */}
         <Modal open={itemModal} onClose={() => setItemModal(false)} title={`Add ${TRIP_ITEM_KIND_LABELS[itemForm.kind].toLowerCase()} item`}>
           <form onSubmit={saveItem} className="space-y-4">
-            <Field label="Item" required>
-              {(id) => <Input id={id} value={itemForm.label} onChange={(e) => setItemForm((f) => ({ ...f, label: e.target.value }))} placeholder="e.g. Passports, sunscreen, hotel check-in" autoFocus />}
+            <Field label={tr('trips.item')} required>
+              {(id) => <Input id={id} value={itemForm.label} onChange={(e) => setItemForm((f) => ({ ...f, label: e.target.value }))} placeholder={tr('trips.eGPassportsSunscreenHotelCheck')} autoFocus />}
             </Field>
-            <Field label="Details">
-              {(id) => <Input id={id} value={itemForm.details} onChange={(e) => setItemForm((f) => ({ ...f, details: e.target.value }))} placeholder="Confirmation #, notes…" />}
+            <Field label={tr('trips.details')}>
+              {(id) => <Input id={id} value={itemForm.details} onChange={(e) => setItemForm((f) => ({ ...f, details: e.target.value }))} placeholder={tr('trips.confirmationNotes')} />}
             </Field>
-            <Field label="Assign to">
+            <Field label={tr('trips.assignTo')}>
               {(id) => (
                 <Select id={id} value={itemForm.assignee_id} onChange={(e) => setItemForm((f) => ({ ...f, assignee_id: e.target.value }))}>
-                  <option value="">Anyone</option>
+                  <option value="">{tr('trips.anyone')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setItemModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setItemModal(false)}>{tr('trips.cancel')}</Button>
               <Button type="submit" disabled={savingItem}>{savingItem ? 'Saving…' : 'Add item'}</Button>
             </div>
           </form>
@@ -315,25 +317,25 @@ export function TripsModule() {
   return (
     <div>
       <PageHeader
-        title="Trip Planner"
+        title={tr('trips.tripPlanner')}
         description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="trips" />
-            {canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+            {canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('trips.newTrip')}</Button>}
           </div>
         }
       />
 
       <div className="flex items-center gap-1.5 mb-4">
-        <button onClick={() => setShowPast(false)} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', !showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>Upcoming</button>
-        <button onClick={() => setShowPast(true)} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>All trips</button>
+        <button onClick={() => setShowPast(false)} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', !showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>{tr('trips.upcoming')}</button>
+        <button onClick={() => setShowPast(true)} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>{tr('trips.allTrips')}</button>
       </div>
 
       {visibleTrips.length === 0 ? (
         <EmptyState icon={Plane} title={showPast ? 'No trips yet' : 'No upcoming trips'}
           description={canEdit ? 'Plan your next family getaway with packing lists, reservations, and a shared checklist.' : 'No trips are planned yet.'}
-          action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>} />
+          action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('trips.newTrip')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleTrips.map((t) => {
@@ -355,13 +357,13 @@ export function TripsModule() {
                   {t.destination && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{t.destination}</span>}
                   <span className="inline-flex items-center gap-1"><CalendarRange className="h-3.5 w-3.5" />{fmtRange(t)}</span>
                 </div>
-                {until != null && until > 0 && t.status !== 'completed' && <div className="mt-2 text-xs font-medium text-sky-300">{until} day{until > 1 ? 's' : ''} to go</div>}
+                {until != null && until > 0 && t.status !== 'completed' && <div className="mt-2 text-xs font-medium text-sky-300">{until} day{until > 1 ? 's' : ''} {tr('trips.toGo')}</div>}
                 {prog.total > 0 && (
                   <div className="mt-3">
                     <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
                       <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${prog.percent}%` }} />
                     </div>
-                    <div className="mt-1 text-[11px] text-muted">{prog.done}/{prog.total} checklist done</div>
+                    <div className="mt-1 text-[11px] text-muted">{prog.done}/{prog.total} {tr('trips.checklistDone')}</div>
                   </div>
                 )}
               </button>
@@ -373,21 +375,21 @@ export function TripsModule() {
       {/* Trip modal */}
       <Modal open={tripModal} onClose={() => setTripModal(false)} title={tripForm.id ? 'Edit trip' : 'New trip'}>
         <form onSubmit={saveTrip} className="space-y-4">
-          <Field label="Trip name" required>
-            {(id) => <Input id={id} value={tripForm.name} onChange={(e) => setTripForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Summer at the lake" autoFocus />}
+          <Field label={tr('trips.tripName')} required>
+            {(id) => <Input id={id} value={tripForm.name} onChange={(e) => setTripForm((f) => ({ ...f, name: e.target.value }))} placeholder={tr('trips.eGSummerAtTheLake')} autoFocus />}
           </Field>
-          <Field label="Destination">
-            {(id) => <Input id={id} value={tripForm.destination} onChange={(e) => setTripForm((f) => ({ ...f, destination: e.target.value }))} placeholder="Lake Tahoe, CA" />}
+          <Field label={tr('trips.destination')}>
+            {(id) => <Input id={id} value={tripForm.destination} onChange={(e) => setTripForm((f) => ({ ...f, destination: e.target.value }))} placeholder={tr('trips.lakeTahoeCa')} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Start date">
+            <Field label={tr('trips.startDate')}>
               {(id) => <Input id={id} type="date" value={tripForm.start_date} onChange={(e) => setTripForm((f) => ({ ...f, start_date: e.target.value }))} />}
             </Field>
-            <Field label="End date">
+            <Field label={tr('trips.endDate')}>
               {(id) => <Input id={id} type="date" value={tripForm.end_date} onChange={(e) => setTripForm((f) => ({ ...f, end_date: e.target.value }))} />}
             </Field>
           </div>
-          <Field label="Status">
+          <Field label={tr('trips.status')}>
             {(id) => (
               <Select id={id} value={tripForm.status} onChange={(e) => setTripForm((f) => ({ ...f, status: e.target.value as TripStatus }))}>
                 {(Object.keys(TRIP_STATUS_LABELS) as TripStatus[]).map((s) => <option key={s} value={s}>{TRIP_STATUS_LABELS[s]}</option>)}
@@ -395,7 +397,7 @@ export function TripsModule() {
             )}
           </Field>
           <div>
-            <span className="block text-sm font-medium text-fg mb-1.5">Travelers</span>
+            <span className="block text-sm font-medium text-fg mb-1.5">{tr('trips.travelers')}</span>
             <div className="flex flex-wrap gap-1.5">
               {members.map((m) => (
                 <button key={m.id} type="button" onClick={() => toggleTraveler(m.id)}
@@ -406,11 +408,11 @@ export function TripsModule() {
               ))}
             </div>
           </div>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={tripForm.notes} onChange={(e) => setTripForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Flights, budget, ideas…" />}
+          <Field label={tr('trips.notes')}>
+            {(id) => <Textarea id={id} value={tripForm.notes} onChange={(e) => setTripForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('trips.flightsBudgetIdeas')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setTripModal(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setTripModal(false)}>{tr('trips.cancel')}</Button>
             <Button type="submit" disabled={savingTrip}>{savingTrip ? 'Saving…' : tripForm.id ? 'Save changes' : 'Create trip'}</Button>
           </div>
         </form>

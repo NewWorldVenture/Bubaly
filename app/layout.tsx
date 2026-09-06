@@ -4,6 +4,9 @@ import { ThemeScript } from '@/components/theme/theme-script';
 import { ToastProvider } from '@/components/ui/toast';
 import { AndroidBackHandler } from '@/components/app/android-back-handler';
 import { LAUNCH_SCREENS, launchScreenHref, launchScreenMedia } from '@/lib/pwa/launch-screens';
+import { LocaleProvider } from '@/components/i18n/locale-provider';
+import { LanguagePicker } from '@/components/i18n/language-picker';
+import { getLocaleContext } from '@/lib/i18n/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -56,9 +59,14 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Resolved server-side from cookie → edge geo → Accept-Language, so the first
+  // paint is already in the visitor's language. Doing this in the browser would
+  // flash English on every load for everyone outside the US.
+  const { locale, source, messages } = await getLocaleContext();
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale.code} dir={locale.dir} suppressHydrationWarning>
       <head>
         <ThemeScript />
         {/* Next emits the standard `mobile-web-app-capable` for appleWebApp.capable.
@@ -78,7 +86,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans antialiased">
         <AndroidBackHandler />
-        <ToastProvider>{children}</ToastProvider>
+        <LocaleProvider locale={locale} source={source} messages={messages}>
+          <ToastProvider>{children}</ToastProvider>
+          {/* Reachable from every page, signed in or out — changing language and
+              changing back should never require finding a settings screen. */}
+          <LanguagePicker />
+        </LocaleProvider>
       </body>
     </html>
   );

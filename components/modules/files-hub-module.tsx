@@ -27,6 +27,7 @@ import {
 } from '@/lib/files/overview';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Document = Tables<'documents'>;
 
@@ -48,6 +49,7 @@ const toDocLike = (d: Document): DocLike => ({
 });
 
 export function FilesHubModule({ view }: { view: FileView }) {
+  const t = useTranslations();
   const { familyId, userId, role } = useApp();
   // 0266 made the Secure Vault a database boundary rather than a folder label:
   // a non-manager no longer reads, moves or deletes a sensitive file. The check
@@ -167,7 +169,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       <PageHeader
         title={meta.title}
         description={meta.description}
-        action={<Button onClick={() => { setTitle(''); setCategory(''); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> Upload</Button>}
+        action={<Button onClick={() => { setTitle(''); setCategory(''); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button>}
       />
 
       {/* Summary tiles */}
@@ -202,10 +204,10 @@ export function FilesHubModule({ view }: { view: FileView }) {
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${meta.title.toLowerCase()}`} className="pl-9" aria-label="Search files" />
+          <Input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${meta.title.toLowerCase()}`} className="pl-9" aria-label={t('filesHub.searchFiles')} />
         </div>
         <div className="relative">
-          <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>Sort <ChevronDown className="h-3.5 w-3.5" /></Button>
+          <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>{t('filesHub.sort')} <ChevronDown className="h-3.5 w-3.5" /></Button>
           {sortOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
@@ -224,7 +226,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       {visible.length === 0 ? (
         <EmptyState icon={ViewIcon} title={query ? 'No matching files' : `No files in ${meta.title} yet`}
           description={query ? 'Try a different search.' : 'Upload a file to get started.'}
-          action={!query ? <Button onClick={() => setOpen(true)}><Upload className="h-4 w-4" /> Upload</Button> : undefined} />
+          action={!query ? <Button onClick={() => setOpen(true)}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((d) => {
@@ -253,12 +255,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
                   <p className="text-xs text-muted">{d.category?.trim() || 'General'} · {formatBytes(d.size_bytes)}</p>
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-                  {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> Secure</span>}
+                  {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> {t('filesHub.secure')}</span>}
                   <span>{fmtDate(full.created_at)}</span>
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
                   <Button size="sm" variant="outline" className="flex-1" onClick={() => download(d.id)} loading={busy === d.id}>
-                    <Download className="h-3.5 w-3.5" /> Open
+                    <Download className="h-3.5 w-3.5" /> {t('filesHub.open')}
                   </Button>
                   <button onClick={() => remove(d.id)} disabled={busy === d.id} aria-label={`Delete ${d.title}`}
                     className="rounded-lg p-2 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
@@ -274,7 +276,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       {/* Upload modal */}
       <Modal open={open} title={`Upload to ${meta.title}`} onClose={() => { setOpen(false); setFile(null); }}>
         <form onSubmit={upload} className="space-y-4">
-          <Field label="File" required>
+          <Field label={t('filesHub.file')} required>
             {(id) => (
               <div>
                 <input ref={fileRef} id={id} type="file" className="hidden"
@@ -287,11 +289,11 @@ export function FilesHubModule({ view }: { view: FileView }) {
               </div>
             )}
           </Field>
-          <Field label="Name" required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Passport.pdf" />}</Field>
-          <Field label="Folder">{(id) => <Input id={id} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Travel, School, Finances" />}</Field>
-          {view === 'vault' && <p className="flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> Uploaded here, this file is added to the Secure Vault.</p>}
+          <Field label={t('filesHub.name')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Passport.pdf" />}</Field>
+          <Field label={t('filesHub.folder')}>{(id) => <Input id={id} value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('filesHub.eGTravelSchoolFinances')} />}</Field>
+          {view === 'vault' && <p className="flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('filesHub.uploadedHereThisFileIsAdded')}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setFile(null); }}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setFile(null); }}>{t('filesHub.cancel')}</Button>
             <Button type="submit" loading={saving}>{saving ? 'Uploading…' : 'Upload'}</Button>
           </div>
         </form>

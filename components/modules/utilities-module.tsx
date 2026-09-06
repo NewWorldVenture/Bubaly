@@ -15,6 +15,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Bill = Tables<'utility_bills'>;
 const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
@@ -33,6 +34,7 @@ const SEVERITY_CLS: Record<SavingsFinding['severity'], string> = {
 };
 
 export function UtilitiesModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -86,31 +88,31 @@ export function UtilitiesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> Utility Tracking</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> {t('utilities.utilityTracking')}</h3>
         <div className="flex items-center gap-2">
           {kinds.length > 0 && (
             <Button variant="secondary" onClick={analyze} disabled={analyzing}>
-              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI Savings
+              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {t('utilities.aiSavings')}
             </Button>
           )}
           <AiInsight kind="utilities" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add bill</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('utilities.addBill')}</Button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
-        <p className="text-xs text-muted">Current monthly run-rate (latest bill per utility)</p>
+        <p className="text-xs text-muted">{t('utilities.currentMonthlyRunRateLatestBill')}</p>
         <p className="text-2xl font-bold">{usd(total)}<span className="text-sm font-normal text-muted">/mo</span></p>
       </div>
 
       {savings && (
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand-text" /> Savings analysis</h4>
+            <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand-text" /> {t('utilities.savingsAnalysis')}</h4>
             <span className="text-xs text-muted">~{usd(savings.summary.annualTotalCents)}/yr {savings.aiUsed ? '· AI' : '· data-based'}</span>
           </div>
           {savings.findings.length === 0 && !savings.recommendations ? (
-            <p className="text-sm text-muted">Your utilities look steady — no spikes or sharp increases to flag right now.</p>
+            <p className="text-sm text-muted">{t('utilities.yourUtilitiesLookSteadyNoSpikes')}</p>
           ) : (
             <>
               {savings.findings.length > 0 && (
@@ -134,7 +136,7 @@ export function UtilitiesModule() {
       )}
 
       {kinds.length === 0 ? (
-        <EmptyState icon={Gauge} title="No utility bills yet" description="Log bills to monitor costs and spot increases over time." />
+        <EmptyState icon={Gauge} title={t('utilities.noUtilityBillsYet')} description="Log bills to monitor costs and spot increases over time." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {kinds.map((kind) => {
@@ -169,29 +171,29 @@ export function UtilitiesModule() {
         {all.slice(0, 30).map((b) => (
           <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3 text-sm">
             <span>{utilityLabel(b.kind)} · <span className="font-medium">{usd(b.amount_cents)}</span> · {fmtDate(b.period_month)}{b.usage ? ` · ${b.usage}${b.unit ?? ''}` : ''}</span>
-            <button onClick={() => remove(b.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={() => remove(b.id)} className="text-muted hover:text-danger" aria-label={t('utilities.delete')}><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
       </div>
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Add utility bill">
+        <Modal open onClose={() => setForm(null)} title={t('utilities.addUtilityBill')}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Utility">{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{UTILITY_KINDS.map((k) => <option key={k} value={k}>{utilityLabel(k)}</option>)}</Select>}</Field>
-              <Field label="Month">{(id) => <Input id={id} type="date" value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} />}</Field>
+              <Field label={t('utilities.utility')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{UTILITY_KINDS.map((k) => <option key={k} value={k}>{utilityLabel(k)}</option>)}</Select>}</Field>
+              <Field label={t('utilities.month')}>{(id) => <Input id={id} type="date" value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
-              <Field label="Provider">{(id) => <Input id={id} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />}</Field>
+              <Field label={t('utilities.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label={t('utilities.provider')}>{(id) => <Input id={id} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Usage (optional)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} />}</Field>
-              <Field label="Unit (kWh, gal…)">{(id) => <Input id={id} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />}</Field>
+              <Field label={t('utilities.usageOptional')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} />}</Field>
+              <Field label={t('utilities.unitKwhGal')}>{(id) => <Input id={id} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />}</Field>
             </div>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
+            <Field label={t('utilities.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('utilities.cancel')}</Button>
               <Button type="submit">Add</Button>
             </div>
           </form>

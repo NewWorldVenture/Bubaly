@@ -22,6 +22,7 @@ import {
   type ConnectionLike, type ProviderState, type ConnectionStatus,
 } from '@/lib/connections/providers';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Connection = Tables<'family_connections'>;
 
@@ -36,6 +37,7 @@ const STATUS_STYLE: Record<ConnectionStatus, string> = {
 };
 
 export function ConnectionsModule() {
+  const t = useTranslations();
   const { familyId } = useApp();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -63,15 +65,15 @@ export function ConnectionsModule() {
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
-        title="Connections"
+        title={t('connections.connections')}
         description="Bubaly connects supported calendar services your family already uses. Link one to bring its events into your hubs."
       />
 
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
         <Network className="h-4 w-4 text-brand-text" />
         {connected > 0
-          ? <span><span className="font-semibold text-fg">{connected}</span> {connected === 1 ? 'service' : 'services'} connected across {grouped.length} categories.</span>
-          : <span>Nothing connected yet — link a supported calendar to get started.</span>}
+          ? <span><span className="font-semibold text-fg">{connected}</span> {connected === 1 ? 'service' : 'services'} {t('connections.connectedAcross')} {grouped.length} categories.</span>
+          : <span>{t('connections.nothingConnectedYetLinkASupported')}</span>}
       </div>
 
       <div className="space-y-6">
@@ -96,14 +98,14 @@ export function ConnectionsModule() {
                       <div className="mt-2">
                         {p.connected ? (
                           <button onClick={() => disconnect(p)} className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-rose-400">
-                            <X className="h-3.5 w-3.5" /> Disconnect
+                            <X className="h-3.5 w-3.5" /> {t('connections.disconnect')}
                           </button>
                         ) : p.syncProvider ? (
                           <button onClick={() => router.push(`/dashboard/sync/accounts/${p.syncProvider}`)} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-fg transition hover:border-brand/40 hover:bg-elevated">
-                            <Plug className="h-3.5 w-3.5" /> Open secure setup
+                            <Plug className="h-3.5 w-3.5" /> {t('connections.openSecureSetup')}
                           </button>
                         ) : (
-                          <span className="text-xs text-muted">Live connection setup unavailable</span>
+                          <span className="text-xs text-muted">{t('connections.liveConnectionSetupUnavailable')}</span>
                         )}
                       </div>
                     </div>

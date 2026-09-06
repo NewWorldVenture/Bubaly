@@ -6,11 +6,13 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync history' };
 export const dynamic = 'force-dynamic';
 
 export default async function SyncHistoryPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -28,9 +30,9 @@ export default async function SyncHistoryPage() {
     console.error('[sync-history] family sync history read failed', readError);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync history</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncHistory.syncHistory')}</h1>
         <ErrorState message="Could not load your sync history from Supabase. Refresh and try again." />
-        <a href="/dashboard/sync/history" className="text-sm font-medium text-brand-text underline">Refresh sync history</a>
+        <a href="/dashboard/sync/history" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncHistory.refreshSyncHistory')}</a>
       </div>
     );
   }
@@ -41,14 +43,14 @@ export default async function SyncHistoryPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync history</h1>
-        <p className="mt-1 text-sm text-muted">Every sync run and account action, kept for audit. No sync silently fails — failures are recorded here.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncHistory.syncHistory')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('dashboardSyncHistory.everySyncRunAndAccountAction')}</p>
       </div>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Recent runs</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncHistory.recentRuns')}</h2>
         {runs.length === 0 ? (
-          <p className="text-sm text-muted">No sync runs recorded yet.</p>
+          <p className="text-sm text-muted">{t('dashboardSyncHistory.noSyncRunsRecordedYet')}</p>
         ) : (
           <div className="space-y-2">
             {runs.map((r) => (
@@ -65,9 +67,9 @@ export default async function SyncHistoryPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Account activity</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncHistory.accountActivity')}</h2>
         {audit.length === 0 ? (
-          <p className="text-sm text-muted">No account activity recorded yet.</p>
+          <p className="text-sm text-muted">{t('dashboardSyncHistory.noAccountActivityRecordedYet')}</p>
         ) : (
           <div className="space-y-1.5">
             {audit.map((a) => (

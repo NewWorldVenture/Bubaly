@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Audit Logs', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ const ACTION_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral' |
 type Params = { searchParams: Promise<{ q?: string; action?: string; page?: string }> };
 
 export default async function AuditLogsPage({ searchParams }: Params) {
+  const t = await getTranslations();
   const sp = await searchParams;
   const supabase = createServiceClient();
 
@@ -60,13 +62,13 @@ export default async function AuditLogsPage({ searchParams }: Params) {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted">Complete audit trail of all system actions.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminAuditLogs.auditLogs')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminAuditLogs.completeAuditTrailOfAllSystem')}</p>
       </div>
 
       <Card>
         <FilterForm action="/admin/audit-logs">
-          <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search logs by action, resource, actor..." />
+          <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('adminAuditLogs.searchLogsByActionResourceActor')} />
           <FilterSelect name="action" defaultValue={actionFilter} options={[
             { value: '', label: 'All Actions' },
             ...actions.map((a) => ({ value: a, label: a })),
@@ -74,17 +76,17 @@ export default async function AuditLogsPage({ searchParams }: Params) {
         </FilterForm>
 
         {pageRows.length === 0 ? (
-          <div className="mt-6"><EmptyState icon={ClipboardList} title="No audit logs found" /></div>
+          <div className="mt-6"><EmptyState icon={ClipboardList} title={t('adminAuditLogs.noAuditLogsFound')} /></div>
         ) : (
           <div className="table-responsive mt-4">
             <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">Action</th>
-                  <th className="px-3 py-2 font-medium">Resource</th>
-                  <th className="px-3 py-2 font-medium">Actor</th>
-                  <th className="px-3 py-2 font-medium">Family</th>
-                  <th className="px-3 py-2 font-medium">Timestamp</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAuditLogs.action')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAuditLogs.resource')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAuditLogs.actor')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAuditLogs.family')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAuditLogs.timestamp')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -121,7 +123,7 @@ export default async function AuditLogsPage({ searchParams }: Params) {
         )}
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-          <span>Showing {filtered.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} logs</span>
+          <span>{t('adminAuditLogs.showing')} {filtered.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} logs</span>
           <div className="flex gap-1">
             {pageSafe > 1 && (
               <a href={`/admin/audit-logs?${new URLSearchParams({ ...hiddenParams, page: String(pageSafe - 1) })}`}

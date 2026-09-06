@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowUp } from 'lucide-react';
 import { buildAssistantUrl } from '@/lib/ai/prefill';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
  * Home-screen "ask anything" bar. Routes to the AI Assistant with the question
@@ -11,6 +12,7 @@ import { buildAssistantUrl } from '@/lib/ai/prefill';
  * from the home screen without an extra hop.
  */
 export function HomeAskBar() {
+  const t = useTranslations();
   const router = useRouter();
   const [q, setQ] = useState('');
 
@@ -29,8 +31,8 @@ export function HomeAskBar() {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Ask Bubaly anything…"
-        aria-label="Ask Bubaly anything"
+        placeholder={t('homeAskBar.askBubalyAnything')}
+        aria-label={t('homeAskBar.askBubalyAnything')}
         className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
       />
       <button

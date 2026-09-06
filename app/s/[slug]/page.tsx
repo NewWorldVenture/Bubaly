@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { SurveyForm } from './survey-form';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Share your feedback · Bubaly', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function PublicSurveyPage({ params }: { params: Promise<{ slug: string }> }) {
+  const t = await getTranslations();
   const { slug } = await params;
   const supabase = createServiceClient();
   const { data: survey } = await supabase
@@ -20,13 +22,13 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ s
   return (
     <main className="mx-auto flex min-h-[100dvh] max-w-xl flex-col justify-center px-5 py-10">
       <div className="mb-6 text-center">
-        <span className="text-lg font-bold tracking-tight">Bubaly</span>
+        <span className="text-lg font-bold tracking-tight">{t('s.bubaly')}</span>
       </div>
       <div className="glass-card p-6 sm:p-8">
         {closed ? (
           <div className="text-center">
-            <h1 className="text-xl font-semibold">This survey isn’t available</h1>
-            <p className="mt-1 text-sm text-muted">It may have closed or the link is incorrect.</p>
+            <h1 className="text-xl font-semibold">{t('s.thisSurveyIsntAvailable')}</h1>
+            <p className="mt-1 text-sm text-muted">{t('s.itMayHaveClosedOrThe')}</p>
           </div>
         ) : (
           <SurveyForm
@@ -41,7 +43,7 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ s
           />
         )}
       </div>
-      <p className="mt-4 text-center text-[11px] text-muted">Powered by Bubaly</p>
+      <p className="mt-4 text-center text-[11px] text-muted">{t('s.poweredByBubaly')}</p>
     </main>
   );
 }

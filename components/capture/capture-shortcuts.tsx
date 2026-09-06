@@ -32,6 +32,7 @@ import {
   sanitizeShortcutKeys, resolveSavedShortcuts,
 } from '@/lib/capture/shortcuts';
 import { loadCaptureShortcuts, saveCaptureShortcutsAction } from '@/app/(app)/capture/shortcuts-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type Shortcut = { key: string; icon: typeof Calendar; label: string; href: string; hint: string };
 
@@ -161,6 +162,7 @@ export function CaptureShortcuts({
   /** Hide the built-in Customize/Done toggle when the host renders its own. */
   showCustomizeButton?: boolean;
 }) {
+  const t = useTranslations();
   const { keys, persist } = useCaptureShortcuts(initialKeys);
   const [editingInternal, setEditingInternal] = useState(false);
   const editing = editingProp ?? editingInternal;
@@ -195,8 +197,8 @@ export function CaptureShortcuts({
               className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text transition hover:bg-brand/10"
             >
               {editing
-                ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> Done</>
-                : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
+                ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> {t('captureShortcuts.done')}</>
+                : <><Settings2 className="h-3.5 w-3.5" /> {t('captureShortcuts.customize')}</>}
             </button>
           )}
         </div>
@@ -209,7 +211,7 @@ export function CaptureShortcuts({
           onClick={() => setEditing(true)}
           className="w-full rounded-2xl border-2 border-dashed border-border px-3 py-4 text-center text-xs text-muted transition hover:border-brand/40 hover:text-brand-text"
         >
-          No shortcuts yet — tap to add up to {MAX_CAPTURE_SHORTCUTS}.
+          {t('captureShortcuts.noShortcutsYetTapToAdd')} {MAX_CAPTURE_SHORTCUTS}.
         </button>
       )}
 
@@ -263,7 +265,7 @@ export function CaptureShortcuts({
             className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border px-2 py-3 text-center text-muted transition hover:border-brand/40 hover:text-brand-text"
           >
             <Plus className="h-5 w-5" />
-            <span className="text-xs font-semibold">Add shortcut</span>
+            <span className="text-xs font-semibold">{t('captureShortcuts.addShortcut')}</span>
             <span className="text-[10px]">{keys.length}/{MAX_CAPTURE_SHORTCUTS}</span>
           </button>
         )}

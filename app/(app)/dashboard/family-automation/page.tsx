@@ -9,6 +9,7 @@ import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
 import { DeleteButton, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Automation' };
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,7 @@ const ACTIONS = [
 const label = (list: { value: string; label: string }[], v: string) => list.find((x) => x.value === v)?.label ?? v;
 
 export default async function FamilyAutomationPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -78,27 +80,27 @@ export default async function FamilyAutomationPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Life Automation"
+        title={t('dashboardFamilyAutomation.familyLifeAutomation')}
         description="Set rules that watch your real data and act — with parent approval for anything sensitive."
         action={manager ? (
           <Link
             href="/dashboard/concierge"
             className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
           >
-            <Plus className="h-4 w-4" aria-hidden /> Ask Bubaly for a routine
+            <Plus className="h-4 w-4" aria-hidden /> {t('dashboardFamilyAutomation.askBubalyForARoutine')}
           </Link>
         ) : undefined}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Active rules" value={enabled} icon={Zap} accent="bg-violet-600" />
-        <StatTile label="Total rules" value={rules?.length ?? 0} icon={ToggleRight} accent="bg-blue-600" />
-        <StatTile label="Pending approval" value={pending?.length ?? 0} icon={Clock} accent="bg-orange-500" />
-        <StatTile label="Recently run" value={recent?.length ?? 0} icon={CheckCircle2} accent="bg-emerald-600" />
+        <StatTile label={t('dashboardFamilyAutomation.activeRules')} value={enabled} icon={Zap} accent="bg-violet-600" />
+        <StatTile label={t('dashboardFamilyAutomation.totalRules')} value={rules?.length ?? 0} icon={ToggleRight} accent="bg-blue-600" />
+        <StatTile label={t('dashboardFamilyAutomation.pendingApproval')} value={pending?.length ?? 0} icon={Clock} accent="bg-orange-500" />
+        <StatTile label={t('dashboardFamilyAutomation.recentlyRun')} value={recent?.length ?? 0} icon={CheckCircle2} accent="bg-emerald-600" />
       </div>
 
       {pending && pending.length > 0 && (
-        <SectionCard title="Pending Approvals" description="The AI proposed these — approve to let them run">
+        <SectionCard title={t('dashboardFamilyAutomation.pendingApprovals')} description="The AI proposed these — approve to let them run">
           <ul className="space-y-2.5">
             {pending.map((run) => (
               <li key={run.id} className="flex items-center gap-3 rounded-xl border border-orange-400/20 bg-orange-500/5 p-3">
@@ -115,7 +117,7 @@ export default async function FamilyAutomationPage() {
       )}
 
       <SectionCard
-        title="Bubaly routines"
+        title={t('dashboardFamilyAutomation.bubalyRoutines')}
         description="Things you asked Bubaly to do on a schedule. Each one files a request when it is due — it is planned and gated like anything else you ask for."
       >
         {routines.length > 0 ? (
@@ -143,7 +145,7 @@ export default async function FamilyAutomationPage() {
       </SectionCard>
 
       <SectionCard
-        title="Automation Rules"
+        title={t('dashboardFamilyAutomation.automationRules')}
         description="Older rules. Their triggers are not evaluated by anything — a routine above is what actually runs."
       >
         {rules && rules.length > 0 ? (
@@ -168,7 +170,7 @@ export default async function FamilyAutomationPage() {
       </SectionCard>
 
       {recent && recent.length > 0 && (
-        <SectionCard title="Recent Runs">
+        <SectionCard title={t('dashboardFamilyAutomation.recentRuns')}>
           <ul className="divide-y divide-border">
             {recent.map((run) => (
               <li key={run.id} className="flex items-center gap-3 py-2.5 text-sm">

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Timer as TimerIcon, X } from 'lucide-react';
 import { TIMER_PRESETS, formatDuration } from '@/lib/display/ambient';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type RunningTimer = {
   id: string;
@@ -60,6 +61,7 @@ function chime() {
 }
 
 export function KitchenTimers() {
+  const tr = useTranslations();
   const [timers, setTimers] = useState<RunningTimer[]>([]);
   const [picking, setPicking] = useState(false);
   const [customMin, setCustomMin] = useState('');
@@ -122,9 +124,9 @@ export function KitchenTimers() {
           }}
         >
           <input value={customMin} onChange={(e) => setCustomMin(e.target.value.replace(/\D/g, ''))}
-            inputMode="numeric" placeholder="Minutes…" aria-label="Custom timer minutes"
+            inputMode="numeric" placeholder="Minutes…" aria-label={tr('kitchenTimers.customTimerMinutes')}
             className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand" />
-          <button type="submit" className="h-9 shrink-0 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!customMin}>Start</button>
+          <button type="submit" className="h-9 shrink-0 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!customMin}>{tr('kitchenTimers.start')}</button>
           <button type="button" onClick={() => setPicking(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"><X className="h-4 w-4" /></button>
         </form>
       </div>
@@ -137,7 +139,7 @@ export function KitchenTimers() {
         <button onClick={() => setPicking(true)}
           className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 text-white/50 transition hover:border-white/30 hover:text-white">
           <TimerIcon className="h-8 w-8" />
-          <span className="text-sm font-semibold">Start a timer</span>
+          <span className="text-sm font-semibold">{tr('kitchenTimers.startATimer')}</span>
         </button>
       ) : (
         <>
@@ -170,7 +172,7 @@ export function KitchenTimers() {
           </ul>
           <button onClick={() => setPicking(true)}
             className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-white/10 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/20">
-            <Plus className="h-3.5 w-3.5" /> Add timer
+            <Plus className="h-3.5 w-3.5" /> {tr('kitchenTimers.addTimer')}
           </button>
         </>
       )}

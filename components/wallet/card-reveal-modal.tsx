@@ -9,10 +9,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { prepareCardRevealAction, createCardRevealAction } from '@/app/(app)/money/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function CardRevealModal({ cardId, childName, onClose }: {
   cardId: string; childName: string; onClose: () => void;
 }) {
+  const tr = useTranslations();
+  const t = useTranslations();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const numberRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,7 @@ export function CardRevealModal({ cardId, childName, onClose }: {
       <div className="space-y-4">
         {state === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
-            <Loader2 className="h-5 w-5 animate-spin" /> Opening a secure session…
+            <Loader2 className="h-5 w-5 animate-spin" /> {t('cardRevealModal.openingASecureSession')}
           </div>
         )}
         {state === 'error' && (
@@ -72,11 +75,11 @@ export function CardRevealModal({ cardId, childName, onClose }: {
         )}
         <div className={state === 'ready' ? 'block' : 'hidden'}>
           <div className="rounded-2xl bg-gradient-to-br from-brand to-violet-700 p-5 text-white">
-            <p className="text-[10px] uppercase tracking-widest text-white/60">Card number</p>
+            <p className="text-[10px] uppercase tracking-widest text-white/60">{t('cardRevealModal.cardNumber')}</p>
             <div ref={numberRef} className="mt-1 min-h-6" />
             <div className="mt-4 flex gap-8">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/60">Expires</p>
+                <p className="text-[10px] uppercase tracking-widest text-white/60">{t('cardRevealModal.expires')}</p>
                 <div ref={expiryRef} className="mt-1 min-h-5" />
               </div>
               <div>
@@ -87,8 +90,7 @@ export function CardRevealModal({ cardId, childName, onClose }: {
           </div>
           <p className="mt-3 flex items-start gap-2 text-xs text-muted">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
-            Shown via Stripe&apos;s secure display — the number never touches Bubaly&apos;s servers.
-            This reveal is logged for the family.
+            {tr('cardRevealModal.shownViaStripesSecureDisplayThe')}
           </p>
         </div>
       </div>

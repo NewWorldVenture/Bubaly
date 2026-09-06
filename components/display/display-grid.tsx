@@ -25,6 +25,7 @@ import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weat
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
 import { HintsTicker } from './hints-ticker';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
@@ -133,6 +134,7 @@ function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName
 // condensed layout / fewer rows (so it never clips), a taller tile shows more.
 // ── Service launcher tile — ANY app feature can live on the display ──────────
 function ServiceTile({ href }: { href: string }) {
+  const tr = useTranslations();
   const item = ALL_SERVICES_BY_HREF.get(href);
   const Icon = item?.icon ?? Sparkles;
   const label = item?.label
@@ -149,7 +151,7 @@ function ServiceTile({ href }: { href: string }) {
       </span>
       <span className="max-w-full truncate px-2 text-sm font-bold text-white">{label}</span>
       <span className="inline-flex items-center gap-1 text-[11px] text-white/45 transition group-hover:text-white/70">
-        Open <ArrowRight className="h-3 w-3" />
+        {tr('displayGrid.open')} <ArrowRight className="h-3 w-3" />
       </span>
     </Link>
   );
@@ -158,6 +160,7 @@ function ServiceTile({ href }: { href: string }) {
 function WidgetBody({ widget, size, data, memberById, now }: {
   widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
+  const tr = useTranslations();
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
     case 'weather': return <WeatherTile size={size} />;
@@ -241,7 +244,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
           <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
           <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto text-sm text-white/60 scrollbar-none">
             {data.grocery.items.slice(0, tileListLimit(size, 4)).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
-            {data.grocery.count === 0 && <li>List is empty</li>}
+            {data.grocery.count === 0 && <li>{tr('displayGrid.listIsEmpty')}</li>}
           </ul>
         </div>
       );
@@ -345,6 +348,7 @@ function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
 function NowNextStrip({ events, memberById, now }: {
   events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
+  const tr = useTranslations();
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -366,7 +370,7 @@ function NowNextStrip({ events, memberById, now }: {
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
       {current && <Cell label="Now" ev={current} tone="bg-emerald-400/20 text-emerald-300" />}
-      {next && <Cell label="Next" ev={next} tone="bg-violet-400/20 text-violet-200" />}
+      {next && <Cell label={tr('displayGrid.next')} ev={next} tone="bg-violet-400/20 text-violet-200" />}
     </div>
   );
 }
@@ -385,14 +389,15 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 }
 
 function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onChange: (patch: Partial<DisplaySettings>) => void }) {
+  const tr = useTranslations();
   const seg = 'rounded-lg px-3 py-1.5 text-sm font-semibold transition';
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><Settings2 className="h-4 w-4" /> Display settings</p>
+      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><Settings2 className="h-4 w-4" /> {tr('displayGrid.displaySettings')}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {/* Clock format */}
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
-          <span className="text-sm">Clock</span>
+          <span className="text-sm">{tr('displayGrid.clock')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
             <button className={cn(seg, !settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: false })}>12h</button>
             <button className={cn(seg, settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: true })}>24h</button>
@@ -400,7 +405,7 @@ function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onCh
         </div>
         {/* Temp unit */}
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
-          <span className="text-sm">Temperature</span>
+          <span className="text-sm">{tr('displayGrid.temperature')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
             <button className={cn(seg, settings.tempUnit === 'F' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'F' })}>°F</button>
             <button className={cn(seg, settings.tempUnit === 'C' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'C' })}>°C</button>
@@ -408,15 +413,15 @@ function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onCh
         </div>
         {/* Background: ambient gradient vs family photos */}
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
-          <span className="text-sm">Background</span>
+          <span className="text-sm">{tr('displayGrid.background')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
-            <button className={cn(seg, settings.background === 'gradient' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'gradient' })}>Ambient</button>
-            <button className={cn(seg, settings.background === 'photos' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'photos' })}>Photos</button>
+            <button className={cn(seg, settings.background === 'gradient' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'gradient' })}>{tr('displayGrid.ambient')}</button>
+            <button className={cn(seg, settings.background === 'photos' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'photos' })}>{tr('displayGrid.photos')}</button>
           </div>
         </div>
         {/* Gradient theme */}
         <label className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-          Color mood
+          {tr('displayGrid.colorMood')}
           <select value={settings.theme} onChange={(e) => onChange({ theme: e.target.value as ThemeChoice })}
             className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm capitalize text-white">
             {THEME_OPTIONS.map((t) => <option key={t} value={t} className="bg-slate-900">{t === 'auto' ? 'Auto (time of day)' : t}</option>)}
@@ -424,15 +429,15 @@ function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onCh
         </label>
         {/* Photo frame idle */}
         <label className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-          Photo frame
+          {tr('displayGrid.photoFrame')}
           <select value={settings.idleMinutes} onChange={(e) => onChange({ idleMinutes: Number(e.target.value) })}
             className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-white">
             {IDLE_OPTIONS.map((m) => <option key={m} value={m} className="bg-slate-900">{m === 0 ? 'Off' : `After ${m} min idle`}</option>)}
           </select>
         </label>
-        <Toggle on={settings.seconds} onChange={(v) => onChange({ seconds: v })} label="Show seconds" />
-        <Toggle on={settings.ambient} onChange={(v) => onChange({ ambient: v })} label="Ambient wash" />
-        <Toggle on={settings.screensaver} onChange={(v) => onChange({ screensaver: v })} label="Burn-in protection" />
+        <Toggle on={settings.seconds} onChange={(v) => onChange({ seconds: v })} label={tr('displayGrid.showSeconds')} />
+        <Toggle on={settings.ambient} onChange={(v) => onChange({ ambient: v })} label={tr('displayGrid.ambientWash')} />
+        <Toggle on={settings.screensaver} onChange={(v) => onChange({ screensaver: v })} label={tr('displayGrid.burnInProtection')} />
       </div>
     </div>
   );
@@ -467,6 +472,7 @@ const DRIFT_CSS = `@keyframes displayDrift{0%,100%{transform:translate(0,0)}25%{
 export function DisplayShell({ initialTiles, initialSettings, data, familyId, userId }: {
   initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
@@ -574,7 +580,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
         <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/50">
-              <DayIcon className="h-3.5 w-3.5" /> Bubaly Kitchen
+              <DayIcon className="h-3.5 w-3.5" /> {tr('displayGrid.bubalyKitchen')}
             </p>
             <h1 className="mt-1 truncate text-3xl font-black sm:text-4xl lg:text-5xl">{greeting(part, data.familyName)}</h1>
           </div>
@@ -586,11 +592,11 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                 className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
                 {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
-              <button onClick={() => setEditing((v) => !v)} title="Edit display"
+              <button onClick={() => setEditing((v) => !v)} title={tr('displayGrid.editDisplay')}
                 className={cn('grid h-10 w-10 place-items-center rounded-full transition', editing ? 'bg-brand text-white' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
                 <Pencil className="h-4 w-4" />
               </button>
-              <Link href="/dashboard" title="Exit display"
+              <Link href="/dashboard" title={tr('displayGrid.exitDisplay')}
                 className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
                 <X className="h-4 w-4" />
               </Link>
@@ -610,9 +616,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           <div className="mt-5 space-y-4">
             <SettingsPanel settings={settings} onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))} />
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><Plus className="h-4 w-4" /> Add tile</button>
-              <button onClick={resetDefault} className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10">Reset layout</button>
-              <button onClick={cancel} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><X className="h-4 w-4" /> Cancel</button>
+              <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><Plus className="h-4 w-4" /> {tr('displayGrid.addTile')}</button>
+              <button onClick={resetDefault} className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10">{tr('displayGrid.resetLayout')}</button>
+              <button onClick={cancel} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><X className="h-4 w-4" /> {tr('displayGrid.cancel')}</button>
               <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
@@ -698,8 +704,8 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
         {/* Footer band (padded clear of the hints ticker; hidden on the kiosk
             fit so the grid gets the full viewport — the pencil still edits) */}
         <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40', !editing && 'lg:hidden')}>
-          <Sparkles className="h-3.5 w-3.5" /> {data.familyName} · Bubaly Kitchen Display
-          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">Customize <ArrowRight className="h-3 w-3" /></button>}
+          <Sparkles className="h-3.5 w-3.5" /> {data.familyName} {tr('displayGrid.bubalyKitchenDisplay')}
+          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
         </p>
       </div>
 

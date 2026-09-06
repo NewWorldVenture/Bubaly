@@ -12,6 +12,7 @@ import { PUBLIC_ROUTES } from './public-routes';
 //   3. no focusable text input renders < 16px (iOS/iPadOS zoom-on-focus guard,
 //      M-002) — verified from the *computed* style, so it catches any input the
 //      global CSS rule missed.
+//   4. the floating language picker does not cover any on-screen control.
 
 test.describe('mobile invariants on public routes', () => {
   test('viewport meta opts into safe areas', async ({ page }) => {
@@ -46,6 +47,36 @@ test.describe('mobile invariants on public routes', () => {
         return bad;
       });
       expect(smallInputs, `${path} has inputs < 16px (iOS will zoom): ${smallInputs.join(', ')}`).toEqual([]);
+
+      // (4) The language picker floats over every page, so it must never land on
+      // top of a control. It shipped 214px wide — 54% of a phone — which put its
+      // body across the click point of any full-width button in its band, and at
+      // z-90 it also outranked the cookie banner and the PWA prompt. Both are
+      // invisible to a DOM-only check: the element is present, styled and
+      // "visible", and only a hit test at the point a finger actually lands
+      // shows the picker answering instead.
+      const covered = await page.evaluate(() => {
+        const picker = document.querySelector('[data-testid="language-picker"]');
+        if (!picker) return ['language picker is not rendered'];
+        const blocked: string[] = [];
+        const sel = 'a[href],button,input,select,textarea,[role=button]';
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+          if (picker.contains(el)) continue;
+          const r = el.getBoundingClientRect();
+          // Only controls wholly on screen: a partially-scrolled element has no
+          // meaningful click point yet, and clamping one into view invents a
+          // collision that a real tap would never make.
+          if (r.width < 1 || r.height < 1) continue;
+          if (r.top < 0 || r.left < 0 || r.bottom > window.innerHeight || r.right > window.innerWidth) continue;
+          if (getComputedStyle(el).visibility === 'hidden') continue;
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (hit && picker.contains(hit)) {
+            blocked.push((el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 40));
+          }
+        }
+        return blocked;
+      });
+      expect(covered, `${path}: language picker covers ${covered.join(' | ')}`).toEqual([]);
     });
   }
 });

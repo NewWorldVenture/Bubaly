@@ -9,6 +9,7 @@ import { PLANS, type Plan } from '@/lib/constants/plans';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Subscriptions', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,7 @@ function PlanDonut({ counts, total }: { counts: Map<string, number>; total: numb
 }
 
 export default async function AdminSubscriptionsPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'plans';
   const supabase = createServiceClient();
@@ -128,8 +130,8 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Subscriptions</h1>
-        <p className="mt-1 text-sm text-muted">Manage subscription plans, pricing, and customer subscriptions.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminSubscriptions.subscriptions')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminSubscriptions.manageSubscriptionPlansPricingAndCustomer')}</p>
       </div>
 
       <div className="tab-bar border-b border-border pb-px">
@@ -161,27 +163,27 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           </div>
 
           <div className="grid-stats">
-            <StatCard icon={Users} label="Active subscriptions" value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand-text" />
+            <StatCard icon={Users} label={tr('adminSubscriptions.activeSubscriptions')} value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand-text" />
             <StatCard icon={DollarSign} label="MRR" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
             <StatCard icon={DollarSign} label="ARR" value={fmtMoney(arr)} tone="bg-accent/10 text-accent" />
-            <StatCard icon={TrendingDown} label="Churn (30d)" value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
+            <StatCard icon={TrendingDown} label={tr('adminSubscriptions.churn30d')} value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
             <Card>
-              <h2 className="mb-4 text-base font-semibold">Subscriptions over time <span className="text-muted">(last 30 days)</span></h2>
+              <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.subscriptionsOverTime')} <span className="text-muted">{tr('adminSubscriptions.last30Days')}</span></h2>
               <GrowthChart timestamps={subs.map((s) => s.created_at)} />
             </Card>
             <Card>
-              <h2 className="mb-3 text-base font-semibold">By plan</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('adminSubscriptions.byPlan')}</h2>
               <PlanDonut counts={countsByPlan} total={activeSubs.length} />
             </Card>
           </div>
 
           <Card>
-            <h2 className="mb-4 text-base font-semibold">Recent subscriptions</h2>
+            <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.recentSubscriptions')}</h2>
             {subs.length === 0 ? (
-              <EmptyState icon={CreditCard} title="No subscriptions yet" />
+              <EmptyState icon={CreditCard} title={tr('adminSubscriptions.noSubscriptionsYet')} />
             ) : (
               <ul className="space-y-2">
                 {subs.slice(0, 8).map((s) => (
@@ -200,20 +202,20 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
 
       {tab === 'all' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">All subscriptions <span className="text-muted">({subs.length})</span></h2>
+          <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.allSubscriptions')} <span className="text-muted">({subs.length})</span></h2>
           {subs.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No subscriptions yet" />
+            <EmptyState icon={CreditCard} title={tr('adminSubscriptions.noSubscriptionsYet')} />
           ) : (
             <div className="table-responsive">
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">Family</th>
-                    <th className="px-3 py-2 font-medium">Plan</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Seats</th>
-                    <th className="px-3 py-2 font-medium">Renews</th>
-                    <th className="px-3 py-2 font-medium">Started</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.family')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.plan')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.status')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.seats')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.renews')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminSubscriptions.started')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -238,12 +240,12 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Receipt className="h-4 w-4 text-muted" />
-            <h2 className="text-base font-semibold">Recent invoices, direct from Stripe</h2>
+            <h2 className="text-base font-semibold">{tr('adminSubscriptions.recentInvoicesDirectFromStripe')}</h2>
           </div>
           {stripeError ? (
-            <EmptyState icon={Receipt} title="Stripe isn’t connected" description={stripeError} />
+            <EmptyState icon={Receipt} title={tr('adminSubscriptions.stripeIsntConnected')} description={stripeError} />
           ) : invoices.length === 0 ? (
-            <EmptyState icon={Receipt} title="No invoices yet" />
+            <EmptyState icon={Receipt} title={tr('adminSubscriptions.noInvoicesYet')} />
           ) : (
             <ul className="space-y-2">
               {invoices.map((inv) => (

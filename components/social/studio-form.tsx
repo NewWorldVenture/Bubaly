@@ -14,10 +14,12 @@ import { createPostAction, type CreatePostResult } from '@/app/(app)/dashboard/s
 import { PlatformDot } from './platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type AccountLite = { id: string; platform: SocialPlatform; display_name: string | null; handle: string | null; status: string };
 
 export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
+  const tr = useTranslations();
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -101,11 +103,11 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
       {/* Editor */}
       <div className="space-y-4 lg:col-span-2">
         <Card>
-          <label className="mb-1 block text-xs font-medium text-muted">Draft title (internal)</label>
+          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.draftTitleInternal')}</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Spring break recap"
+            placeholder={tr('studio.springBreakRecap')}
             className="mb-3 w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
 
@@ -124,15 +126,15 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
             ))}
           </div>
 
-          <label className="mb-1 block text-xs font-medium text-muted">Caption / body</label>
+          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.captionBody')}</label>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={6}
-            placeholder="Write your post… use #hashtags and @mentions where supported."
+            placeholder={tr('studio.writeYourPostUseHashtagsAnd')}
             className="w-full resize-y rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
-          <label className="mb-1 mt-3 block text-xs font-medium text-muted">Link (optional)</label>
+          <label className="mb-1 mt-3 block text-xs font-medium text-muted">{tr('studio.linkOptional')}</label>
           <input
             value={link}
             onChange={(e) => setLink(e.target.value)}
@@ -144,7 +146,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
         {/* Per-platform previews + counters */}
         {selectedPlatforms.length > 0 && (
           <Card>
-            <h3 className="mb-3 text-sm font-semibold">Per-platform preview</h3>
+            <h3 className="mb-3 text-sm font-semibold">{tr('studio.perPlatformPreview')}</h3>
             <div className="space-y-3">
               {selectedPlatforms.map((p) => {
                 const remaining = charsRemaining(body, p);
@@ -172,7 +174,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
         {issues.length > 0 && (
           <Card>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Validation
+              <AlertTriangle className="h-4 w-4 text-warning" /> {tr('studio.validation')}
             </h3>
             <ul className="space-y-1 text-sm">
               {issues.map((i, idx) => (
@@ -206,7 +208,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
                       </li>
                     ))}
                     {result.outcome.targets.length === 0 && (
-                      <li className="text-xs text-muted">No publish targets selected — pick connected accounts to publish.</li>
+                      <li className="text-xs text-muted">{tr('studio.noPublishTargetsSelectedPickConnected')}</li>
                     )}
                   </ul>
                 )}
@@ -223,7 +225,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
       {/* Side: targets, AI, actions */}
       <div className="space-y-4">
         <Card>
-          <h3 className="mb-2 text-sm font-semibold">Target platforms</h3>
+          <h3 className="mb-2 text-sm font-semibold">{tr('studio.targetPlatforms')}</h3>
           <div className="flex flex-wrap gap-2">
             {PLATFORMS.map((p) => (
               <button
@@ -241,10 +243,10 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
         </Card>
 
         <Card>
-          <h3 className="mb-2 text-sm font-semibold">Publish to accounts</h3>
+          <h3 className="mb-2 text-sm font-semibold">{tr('studio.publishToAccounts')}</h3>
           {accounts.length === 0 ? (
             <p className="text-xs text-muted">
-              No connected accounts. You can still save a draft or schedule; connect accounts to publish.
+              {tr('studio.noConnectedAccountsYouCanStill')}
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -263,21 +265,21 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
         {/* AI assistant */}
         <Card>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-brand-text" /> AI assistant
+            <Sparkles className="h-4 w-4 text-brand-text" /> {tr('studio.aiAssistant')}
           </h3>
           <select value={aiKind} onChange={(e) => setAiKind(e.target.value as AiGenerationKind)} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
             {AI_GENERATION_KINDS.map((k) => <option key={k} value={k}>{AI_KIND_LABELS[k]}</option>)}
           </select>
-          <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="Topic or instruction" className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+          <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder={tr('studio.topicOrInstruction')} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <div className="mb-2 flex gap-2">
-            <input value={aiTone} onChange={(e) => setAiTone(e.target.value)} placeholder="Tone" className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <input value={aiTone} onChange={(e) => setAiTone(e.target.value)} placeholder={tr('studio.tone')} className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
             <select value={aiPlatform} onChange={(e) => setAiPlatform(e.target.value as SocialPlatform | '')} className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
-              <option value="">Any platform</option>
+              <option value="">{tr('studio.anyPlatform')}</option>
               {PLATFORMS.map((p) => <option key={p} value={p}>{PROVIDERS[p].label}</option>)}
             </select>
           </div>
           <button type="button" onClick={runAi} disabled={aiBusy} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-brand text-sm font-medium text-brand-fg disabled:opacity-60">
-            {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Generate
+            {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {tr('studio.generate')}
           </button>
           {aiError && <p className="mt-2 text-xs text-danger">{aiError}</p>}
           {aiOutput && (
@@ -285,7 +287,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
               <p className="whitespace-pre-wrap rounded-lg border border-border bg-elevated p-2 text-xs">{aiOutput}</p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setBody(aiOutput)} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">Use</button>
-                <button type="button" onClick={() => setBody((b) => (b ? b + '\n\n' + aiOutput : aiOutput))} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">Append</button>
+                <button type="button" onClick={() => setBody((b) => (b ? b + '\n\n' + aiOutput : aiOutput))} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">{tr('studio.append')}</button>
               </div>
             </div>
           )}
@@ -293,7 +295,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
 
         {/* Actions */}
         <Card>
-          <label className="mb-1 block text-xs font-medium text-muted">Schedule for</label>
+          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.scheduleFor')}</label>
           <input
             type="datetime-local"
             value={scheduledFor}
@@ -302,16 +304,16 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           />
           <div className="space-y-2">
             <button type="button" disabled={pending} onClick={() => submit('draft')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-elevated disabled:opacity-60">
-              <Save className="h-4 w-4" /> Save draft
+              <Save className="h-4 w-4" /> {tr('studio.saveDraft')}
             </button>
             <button type="button" disabled={pending || !scheduledFor} onClick={() => submit('schedule')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-elevated text-sm font-medium hover:bg-elevated/70 disabled:opacity-50">
-              <CalendarClock className="h-4 w-4" /> Schedule
+              <CalendarClock className="h-4 w-4" /> {tr('studio.schedule')}
             </button>
             <button type="button" disabled={pending || hasErrors || selectedAccounts.length === 0} onClick={() => submit('publish')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-medium text-brand-fg shadow-glow disabled:opacity-50">
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Publish now
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {tr('studio.publishNow')}
             </button>
-            {hasErrors && <p className="text-center text-[11px] text-danger">Resolve validation errors to publish.</p>}
-            {!hasErrors && selectedAccounts.length === 0 && <p className="text-center text-[11px] text-muted">Select at least one account to publish.</p>}
+            {hasErrors && <p className="text-center text-[11px] text-danger">{tr('studio.resolveValidationErrorsToPublish')}</p>}
+            {!hasErrors && selectedAccounts.length === 0 && <p className="text-center text-[11px] text-muted">{tr('studio.selectAtLeastOneAccountTo')}</p>}
           </div>
         </Card>
       </div>

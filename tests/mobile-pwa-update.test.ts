@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // Mobile production-readiness (Phase 16 — PWA update UX): a PWA must surface a
@@ -7,9 +8,9 @@ import fs from 'node:fs';
 // worker and shows a mobile-safe "new version available → Reload" banner. The
 // service worker must also never cache authenticated Supabase/API responses.
 
-const reg = fs.readFileSync('components/pwa/register-sw.tsx', 'utf8');
+const reg = readUiSource('components/pwa/register-sw.tsx');
 const sw = fs.readFileSync('public/sw.js', 'utf8');
-const manifest = fs.readFileSync('app/manifest.ts', 'utf8');
+const manifest = readUiSource('app/manifest.ts');
 
 describe('PWA surfaces a visible update prompt (Phase 16)', () => {
   it('detects a new worker (updatefound + installed / controllerchange)', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // A-05 (agent-05 / CLAUDE-FRONTEND-01, PLA-0822): the Photos module had 8 icon-only
@@ -8,8 +9,8 @@ import fs from 'node:fs';
 // could not operate the lightbox (§23 workflow-blocking a11y). Each now carries an
 // aria-label. This guard locks the labels in.
 
-const src = fs.readFileSync('components/modules/photos-module.tsx', 'utf8');
-const contacts = fs.readFileSync('components/modules/contacts-module.tsx', 'utf8');
+const src = readUiSource('components/modules/photos-module.tsx');
+const contacts = readUiSource('components/modules/contacts-module.tsx');
 
 describe('contacts module icon-only controls have accessible names (A-05 a11y)', () => {
   it('call/email quick-actions are labeled with the contact name', () => {

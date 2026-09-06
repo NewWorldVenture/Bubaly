@@ -11,6 +11,7 @@ import { fetchForecast, reverseGeocode, weatherInfo, type Forecast } from '@/lib
 import { tempFromFahrenheit, type TempUnit } from '@/lib/display/ambient';
 import { isCompactTile, type TileSize } from '@/lib/display/tiles';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type WeatherState = {
   status: 'loading' | 'denied' | 'ready';
@@ -92,13 +93,14 @@ export function WeatherChip() {
  * with the grid's row-spans.
  */
 export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
+  const t = useTranslations();
   const { state, unit } = useWeatherCtx();
   if (state.status === 'loading') return <div className="h-full animate-pulse rounded-xl bg-white/5" />;
   if (state.status === 'denied' || !state.forecast) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-white/50">
         <CloudSun className="h-9 w-9" />
-        <p className="mt-2 text-sm">Enable location for weather</p>
+        <p className="mt-2 text-sm">{t('displayWeather.enableLocationForWeather')}</p>
       </div>
     );
   }
@@ -114,7 +116,7 @@ export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
         <span className={cn('leading-none', compact ? 'text-4xl' : 'text-5xl')}>{info.icon}</span>
         <div className="min-w-0">
           <p className={cn('font-black leading-none', compact ? 'text-4xl' : 'text-5xl')}>{tempFromFahrenheit(f.current.temp, unit)}</p>
-          <p className="mt-0.5 truncate text-sm text-white/60">{info.label} · feels {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
+          <p className="mt-0.5 truncate text-sm text-white/60">{info.label} {t('displayWeather.feels')} {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
         </div>
       </div>
       {/* Forecast strip only when there's vertical room — this is the piece that

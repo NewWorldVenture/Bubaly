@@ -20,6 +20,7 @@ import {
   categoryBreakdown, balanceScore, limitProgress, underLimitStreak, type ScreenEntryLike,
 } from '@/lib/screen-time/insights';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Entry = Tables<'screen_time_entries'>;
 type Limit = Tables<'screen_time_limits'>;
@@ -28,6 +29,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const blank = () => ({ id: '', member_id: '', entry_date: today(), minutes: '30', category: 'entertainment', device: '', note: '' });
 
 export function ScreenTimeModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -102,10 +104,10 @@ export function ScreenTimeModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> Screen Time & Balance</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> {t('screenTime.screenTimeBalance')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="screen_time" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('screenTime.logTime')}</Button>
         </div>
       </div>
 
@@ -126,7 +128,7 @@ export function ScreenTimeModule() {
               <div className="flex items-center gap-2">
                 <Avatar name={m?.display_name ?? 'Member'} size={28} />
                 <p className="font-semibold">{m?.display_name ?? 'Member'}</p>
-                <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title="Set daily limit">
+                <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title={t('screenTime.setDailyLimit')}>
                   <Settings2 className="h-4 w-4" />
                 </button>
               </div>
@@ -137,7 +139,7 @@ export function ScreenTimeModule() {
                 </div>
                 <div className="text-right text-xs">
                   <p className="inline-flex items-center gap-1"><Gauge className="h-3 w-3 text-brand-text" /> {balance}/100 balance</p>
-                  <p className="text-muted">{formatMinutes(week)} this week</p>
+                  <p className="text-muted">{formatMinutes(week)} {t('screenTime.thisWeek')}</p>
                 </div>
               </div>
               {limit > 0 && (
@@ -147,7 +149,7 @@ export function ScreenTimeModule() {
                   </div>
                   <p className="mt-1 flex items-center justify-between text-[11px] text-muted">
                     <span>{prog.over ? `Over by ${formatMinutes(prog.used - prog.limit)}` : `${formatMinutes(prog.remaining)} left`}</span>
-                    {streak > 0 && <span className="inline-flex items-center gap-1 text-amber-500"><Flame className="h-3 w-3" /> {streak}d under</span>}
+                    {streak > 0 && <span className="inline-flex items-center gap-1 text-amber-500"><Flame className="h-3 w-3" /> {streak}{t('screenTime.dUnder')}</span>}
                   </p>
                 </div>
               )}
@@ -169,7 +171,7 @@ export function ScreenTimeModule() {
       {/* Recent entries */}
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={MonitorSmartphone} title="No screen time logged" description="Log time by category to track balance and limits." />
+          <EmptyState icon={MonitorSmartphone} title={t('screenTime.noScreenTimeLogged')} description="Log time by category to track balance and limits." />
         ) : all.slice(0, 50).map((e) => {
           const m = e.member_id ? memberById.get(e.member_id) : null;
           return (
@@ -182,7 +184,7 @@ export function ScreenTimeModule() {
                 {e.note && <p className="text-xs text-muted">{e.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
               </div>
-              <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+              <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label={t('screenTime.delete')}><Trash2 className="h-4 w-4" /></button>
             </div>
           );
         })}
@@ -191,29 +193,29 @@ export function ScreenTimeModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit screen time' : 'Log screen time'}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Child">
+            <Field label={t('screenTime.child')}>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(ev) => setForm({ ...form, member_id: ev.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">{t('screenTime.select')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Date">{(id) => <Input id={id} type="date" value={form.entry_date} onChange={(ev) => setForm({ ...form, entry_date: ev.target.value })} />}</Field>
-              <Field label="Minutes">{(id) => <Input id={id} type="number" min="0" max="1440" value={form.minutes} onChange={(ev) => setForm({ ...form, minutes: ev.target.value })} />}</Field>
+              <Field label={t('screenTime.date')}>{(id) => <Input id={id} type="date" value={form.entry_date} onChange={(ev) => setForm({ ...form, entry_date: ev.target.value })} />}</Field>
+              <Field label={t('screenTime.minutes')}>{(id) => <Input id={id} type="number" min="0" max="1440" value={form.minutes} onChange={(ev) => setForm({ ...form, minutes: ev.target.value })} />}</Field>
             </div>
-            <Field label="Category">
+            <Field label={t('screenTime.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(ev) => setForm({ ...form, category: ev.target.value })}>
                   {SCREEN_CATEGORIES.map((c) => <option key={c} value={c}>{categoryMeta(c).label}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Device (optional)">{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder="iPad, Switch, TV…" />}</Field>
-            <Field label="Note (optional)">{(id) => <Textarea id={id} value={form.note} onChange={(ev) => setForm({ ...form, note: ev.target.value })} />}</Field>
+            <Field label={t('screenTime.deviceOptional')}>{(id) => <Input id={id} value={form.device} onChange={(ev) => setForm({ ...form, device: ev.target.value })} placeholder={t('screenTime.ipadSwitchTv')} />}</Field>
+            <Field label={t('screenTime.noteOptional')}>{(id) => <Textarea id={id} value={form.note} onChange={(ev) => setForm({ ...form, note: ev.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('screenTime.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>
@@ -221,15 +223,15 @@ export function ScreenTimeModule() {
       )}
 
       {limitFor && (
-        <Modal open onClose={() => setLimitFor(null)} title="Daily screen-time limit">
+        <Modal open onClose={() => setLimitFor(null)} title={t('screenTime.dailyScreenTimeLimit')}>
           <form onSubmit={saveLimit} className="space-y-3">
-            <Field label="Daily limit (minutes)">
+            <Field label={t('screenTime.dailyLimitMinutes')}>
               {(id) => <Input id={id} type="number" min="0" max="1440" value={limitFor.minutes} onChange={(ev) => setLimitFor({ ...limitFor, minutes: ev.target.value })} />}
             </Field>
-            <p className="text-xs text-muted">Set 0 to remove the limit.</p>
+            <p className="text-xs text-muted">{t('screenTime.set0ToRemoveTheLimit')}</p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setLimitFor(null)}>Cancel</Button>
-              <Button type="submit">Save limit</Button>
+              <Button type="button" variant="secondary" onClick={() => setLimitFor(null)}>{t('screenTime.cancel')}</Button>
+              <Button type="submit">{t('screenTime.saveLimit')}</Button>
             </div>
           </form>
         </Modal>

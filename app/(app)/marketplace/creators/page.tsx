@@ -7,11 +7,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { FollowButton } from '@/components/marketplace/follow-button';
 import { rankCreators, type CreatorStore } from '@/lib/marketplace/discover';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Creators · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceCreatorsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -62,17 +64,17 @@ export default async function MarketplaceCreatorsPage() {
 
   return (
     <div>
-      <PageHeader title="Creators" description="Verified & trusted sellers — the family storefronts, ranked by rating and following." />
+      <PageHeader title={t('marketplaceCreators.creators')} description="Verified & trusted sellers — the family storefronts, ranked by rating and following." />
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Marketplace creators data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('marketplaceCreators.marketplaceCreatorsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some creator details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{t('marketplaceCreators.someCreatorDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Users className="mx-auto mb-2 h-6 w-6" />
-          No storefronts yet — <Link href="/marketplace/store" className="text-brand-text hover:underline">open the first one</Link>.
+          {t('marketplaceCreators.noStorefrontsYet')} <Link href="/marketplace/store" className="text-brand-text hover:underline">{t('marketplaceCreators.openTheFirstOne')}</Link>.
         </div>
       ) : (
         <ul className="grid gap-2.5 sm:grid-cols-2">

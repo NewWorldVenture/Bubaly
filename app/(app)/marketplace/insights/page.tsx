@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { marketplaceInsights, type InsightListing } from '@/lib/marketplace/insights';
 import { KIND_LABELS, CATEGORY_LABELS, formatCents, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Pulse · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ function Tile({ icon: Icon, label, value }: { icon: typeof Activity; label: stri
 }
 
 export default async function MarketplaceInsightsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -58,20 +60,20 @@ export default async function MarketplaceInsightsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Marketplace Pulse" description="The state of your family's board — supply, demand, prices, and what's hot right now." />
+      <PageHeader title={t('marketplaceInsights.marketplacePulse')} description="The state of your family's board — supply, demand, prices, and what's hot right now." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile icon={Package} label="Active listings" value={ins.totalActive} />
-        <Tile icon={HelpCircle} label="Open requests" value={ins.totalWanted} />
-        <Tile icon={Tag} label="Categories" value={ins.categories.length} />
-        <Tile icon={TrendingUp} label="Demand gaps" value={ins.demandGaps.length} />
+        <Tile icon={Package} label={t('marketplaceInsights.activeListings')} value={ins.totalActive} />
+        <Tile icon={HelpCircle} label={t('marketplaceInsights.openRequests')} value={ins.totalWanted} />
+        <Tile icon={Tag} label={t('marketplaceInsights.categories')} value={ins.categories.length} />
+        <Tile icon={TrendingUp} label={t('marketplaceInsights.demandGaps')} value={ins.demandGaps.length} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Supply by type */}
         <section className="rounded-2xl border border-border bg-surface/30 p-4">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Package className="h-4 w-4 text-brand-text" /> Supply by type</h2>
-          {ins.byKind.length === 0 ? <p className="text-sm text-muted">No active listings yet.</p> : (
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Package className="h-4 w-4 text-brand-text" /> {t('marketplaceInsights.supplyByType')}</h2>
+          {ins.byKind.length === 0 ? <p className="text-sm text-muted">{t('marketplaceInsights.noActiveListingsYet')}</p> : (
             <div className="space-y-2.5">
               {ins.byKind.map((k) => <Bar key={k.kind} label={kindLabel(k.kind)} value={k.count} max={maxKind} />)}
             </div>
@@ -80,9 +82,9 @@ export default async function MarketplaceInsightsPage() {
 
         {/* Demand gaps */}
         <section className="rounded-2xl border border-border bg-surface/30 p-4">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> Where demand outruns supply</h2>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> {t('marketplaceInsights.whereDemandOutrunsSupply')}</h2>
           {ins.demandGaps.length === 0 ? (
-            <p className="text-sm text-muted">Supply is keeping up with requests — nice and balanced.</p>
+            <p className="text-sm text-muted">{t('marketplaceInsights.supplyIsKeepingUpWithRequests')}</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {ins.demandGaps.slice(0, 6).map((c) => (
@@ -98,12 +100,12 @@ export default async function MarketplaceInsightsPage() {
 
       {/* Price benchmarks */}
       <section className="rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Tag className="h-4 w-4 text-brand-text" /> Price benchmarks (for sale)</h2>
-        {ins.prices.length === 0 ? <p className="text-sm text-muted">No priced listings yet.</p> : (
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Tag className="h-4 w-4 text-brand-text" /> {t('marketplaceInsights.priceBenchmarksForSale')}</h2>
+        {ins.prices.length === 0 ? <p className="text-sm text-muted">{t('marketplaceInsights.noPricedListingsYet')}</p> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">
               <thead className="border-b border-border text-[11px] uppercase tracking-wide text-muted">
-                <tr><th className="py-2 font-medium">Category</th><th className="py-2 font-medium">Listings</th><th className="py-2 font-medium">Median</th><th className="py-2 font-medium">Average</th></tr>
+                <tr><th className="py-2 font-medium">{t('marketplaceInsights.category')}</th><th className="py-2 font-medium">{t('marketplaceInsights.listings')}</th><th className="py-2 font-medium">{t('marketplaceInsights.median')}</th><th className="py-2 font-medium">{t('marketplaceInsights.average')}</th></tr>
               </thead>
               <tbody>
                 {ins.prices.map((p) => (
@@ -122,8 +124,8 @@ export default async function MarketplaceInsightsPage() {
 
       {/* Hot right now */}
       <section className="rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> Hot right now</h2>
-        {ins.hot.length === 0 ? <p className="text-sm text-muted">No engagement yet — saves and offers surface the hottest items here.</p> : (
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> {t('marketplaceInsights.hotRightNow')}</h2>
+        {ins.hot.length === 0 ? <p className="text-sm text-muted">{t('marketplaceInsights.noEngagementYetSavesAndOffers')}</p> : (
           <ul className="space-y-2">
             {ins.hot.map((h) => (
               <li key={h.listingId}>

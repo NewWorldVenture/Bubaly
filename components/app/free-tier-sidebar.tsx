@@ -33,6 +33,7 @@ import { loadSidebarPrefs, saveSidebarNavAction } from '@/app/(app)/dashboard/na
 import { useApp } from './app-context';
 import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
  * Live unread-messages count for the sidebar badge. Seeds from the server
@@ -188,6 +189,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
   onPinAll: (hrefs: string[]) => void; onUnpinAll: (hrefs: string[]) => void;
   onReset: () => void; isDefault: boolean; busy: boolean;
 }) {
+  const t = useTranslations();
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const manager = isManager(role);
   const descriptions = useServiceDescriptions();
@@ -207,11 +209,10 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
 
   if (!open) return null;
   return (
-    <Modal open onClose={onClose} title="All Services" className="sm:max-w-2xl lg:max-w-3xl">
+    <Modal open onClose={onClose} title={t('freeTierSidebar.allServices')} className="sm:max-w-2xl lg:max-w-3xl">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
         <p className="text-xs text-muted">
-          <Star className="mr-0.5 inline h-3 w-3 -translate-y-px fill-brand text-brand-text" /> pins a service to your
-          sidebar · <span className="font-semibold text-fg">{inTierHrefs.length}</span> in your plan
+          <Star className="mr-0.5 inline h-3 w-3 -translate-y-px fill-brand text-brand-text" /> {t('freeTierSidebar.pinsAServiceToYourSidebar')} <span className="font-semibold text-fg">{inTierHrefs.length}</span> {t('freeTierSidebar.inYourPlan')}
         </p>
         <div className="flex gap-2">
           <button
@@ -219,7 +220,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
             onClick={() => onPinAll(inTierHrefs)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
           >
-            <ListPlus className="h-3.5 w-3.5" /> Pin all in my plan
+            <ListPlus className="h-3.5 w-3.5" /> {t('freeTierSidebar.pinAllInMyPlan')}
           </button>
           <button
             type="button" disabled={busy || !inTierHrefs.some((h) => pinned.has(h))}
@@ -231,10 +232,10 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
           <button
             type="button" disabled={busy || isDefault}
             onClick={onReset}
-            title="Reset your sidebar to your plan’s default layout"
+            title={t('freeTierSidebar.resetYourSidebarToYourPlans')}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
           >
-            <RotateCcw className="h-3.5 w-3.5" /> Reset
+            <RotateCcw className="h-3.5 w-3.5" /> {t('freeTierSidebar.reset')}
           </button>
         </div>
       </div>
@@ -314,6 +315,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
 }
 
 export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  const t = useTranslations();
   const { familyId, userId, unreadMessages, role, isSuperAdmin, planLevel, featureTiers } = useApp();
   const { error: toastError, success } = useToast();
   const [allOpen, setAllOpen] = useState(false);
@@ -407,7 +409,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg xl:px-4 xl:py-3 xl:text-base"
         >
           <ALL_SERVICES_ICON className="h-5 w-5 shrink-0" />
-          All Services
+          {t('freeTierSidebar.allServices')}
         </button>
 
         {/* Push the footer to the bottom */}

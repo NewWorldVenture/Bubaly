@@ -8,10 +8,12 @@ import { upsertStoreAction } from '@/app/(app)/marketplace/actions';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea, Field } from '@/components/ui/input';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type StoreSeed = { name: string; tagline: string; description: string; emoji: string };
 
 export function StoreForm({ initial }: { initial: StoreSeed | null }) {
+  const t = useTranslations();
   const [form, setForm] = useState<StoreSeed>(initial ?? { name: '', tagline: '', description: '', emoji: '' });
   const [pending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
@@ -32,17 +34,17 @@ export function StoreForm({ initial }: { initial: StoreSeed | null }) {
         <h2 className="text-sm font-semibold">{initial ? 'Your store' : 'Open your store'}</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
-        <Field label="Store name" required>
+        <Field label={t('store.storeName')} required>
           {(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Baby Gear Co." required />}
         </Field>
-        <Field label="Emoji">
+        <Field label={t('store.emoji')}>
           {(id) => <Input id={id} value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} placeholder="🧸" maxLength={4} />}
         </Field>
       </div>
-      <Field label="Tagline">
+      <Field label={t('store.tagline')}>
         {(id) => <Input id={id} value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} placeholder="Quality hand-me-downs, priced to move" />}
       </Field>
-      <Field label="About">
+      <Field label={t('store.about')}>
         {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} placeholder="What do you list?" />}
       </Field>
       <Button type="submit" disabled={pending || !form.name.trim()}>

@@ -23,6 +23,7 @@ import {
   annualPremium, renewalUrgency, upcomingRenewals, premiumByType,
   insuranceSummary, fmtMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -38,6 +39,7 @@ function fmtDate(d: string): string {
 }
 
 export function InsuranceModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -70,9 +72,9 @@ export function InsuranceModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Insurance Hub"
+        title={tr('insurance.insuranceHub')}
         description="Every household policy in one place, with AI-managed renewal and coverage awareness."
-        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add policy</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button></div>}
       />
 
       {policies.data.length > 0 && (
@@ -80,7 +82,7 @@ export function InsuranceModule() {
           {/* Spend */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4 text-brand-text" /> Annual premiums
+              <Wallet className="h-4 w-4 text-brand-text" /> {tr('insurance.annualPremiums')}
             </div>
             <p className="mt-2 text-2xl font-bold">{fmtMoney(summary.annualPremium)}</p>
             <p className="mt-1 text-xs text-muted">≈ {fmtMoney(summary.monthlyPremium)}/mo across {summary.count} {summary.count === 1 ? 'policy' : 'policies'}</p>
@@ -99,7 +101,7 @@ export function InsuranceModule() {
           {/* AI awareness */}
           <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
             <div className="flex items-center gap-2 text-sm font-semibold text-brand-text">
-              <Sparkles className="h-4 w-4" /> Insurance awareness
+              <Sparkles className="h-4 w-4" /> {tr('insurance.insuranceAwareness')}
             </div>
             <p className={cn('mt-2 text-lg font-bold', summary.lapsed > 0 ? 'text-rose-300' : summary.dueSoon > 0 || summary.gaps.length > 0 ? 'text-amber-300' : 'text-emerald-300')}>
               {summary.text}
@@ -109,9 +111,9 @@ export function InsuranceModule() {
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
                 <div className="text-xs text-amber-200">
-                  <span className="font-medium">Possible coverage gaps: </span>
+                  <span className="font-medium">{tr('insurance.possibleCoverageGaps')} </span>
                   {summary.gaps.map((g) => `${policyTypeMeta(g).emoji} ${policyTypeMeta(g).label}`).join(', ')}.
-                  <span className="text-amber-200/70"> No active policy on file — add one if you&apos;re covered elsewhere.</span>
+                  <span className="text-amber-200/70"> {tr('insurance.noActivePolicyOnFileAdd')}</span>
                 </div>
               </div>
             )}
@@ -132,14 +134,14 @@ export function InsuranceModule() {
                 ))}
               </ul>
             ) : (
-              summary.gaps.length === 0 && <p className="mt-2 text-sm text-muted">No renewals due soon. Upcoming renewals appear here within 30 days.</p>
+              summary.gaps.length === 0 && <p className="mt-2 text-sm text-muted">{tr('insurance.noRenewalsDueSoonUpcomingRenewals')}</p>
             )}
           </div>
         </div>
       )}
 
       {policies.data.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No policies yet" description="Add your health, auto, home, life, and other policies to track renewals, premiums, and coverage." />
+        <EmptyState icon={ShieldCheck} title={tr('insurance.noPoliciesYet')} description="Add your health, auto, home, life, and other policies to track renewals, premiums, and coverage." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {policies.data.map((p) => {
@@ -200,6 +202,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
   familyId: string; userId: string; members: { id: string; display_name: string }[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -233,37 +236,37 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title="Add a policy" onClose={onClose}>
+    <Modal open title={tr('insurance.addAPolicy')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Type">{(id) => <Select id={id} name="policy_type" defaultValue="auto">{POLICY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}</Select>}</Field>
-          <Field label="Insurer" required>{(id) => <Input id={id} name="insurer" autoFocus placeholder="State Farm" />}</Field>
+          <Field label={tr('insurance.type')}>{(id) => <Select id={id} name="policy_type" defaultValue="auto">{POLICY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}</Select>}</Field>
+          <Field label={tr('insurance.insurer')} required>{(id) => <Input id={id} name="insurer" autoFocus placeholder={tr('insurance.stateFarm')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Policy number">{(id) => <Input id={id} name="policy_number" placeholder="Optional" />}</Field>
-          <Field label="Covers">{(id) => <Select id={id} name="member_id" defaultValue=""><option value="">Whole family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('insurance.policyNumber')}>{(id) => <Input id={id} name="policy_number" placeholder={tr('insurance.optional')} />}</Field>
+          <Field label={tr('insurance.covers')}>{(id) => <Select id={id} name="member_id" defaultValue=""><option value="">{tr('insurance.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Premium">{(id) => <Input id={id} name="premium_amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="150" />}</Field>
-          <Field label="Billed">{(id) => <Select id={id} name="premium_frequency" defaultValue="monthly">{PREMIUM_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select>}</Field>
+          <Field label={tr('insurance.premium')}>{(id) => <Input id={id} name="premium_amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="150" />}</Field>
+          <Field label={tr('insurance.billed')}>{(id) => <Select id={id} name="premium_frequency" defaultValue="monthly">{PREMIUM_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Coverage amount">{(id) => <Input id={id} name="coverage_amount" type="number" step="1" min="0" placeholder="250000" />}</Field>
-          <Field label="Deductible">{(id) => <Input id={id} name="deductible" type="number" step="1" min="0" placeholder="1000" />}</Field>
+          <Field label={tr('insurance.coverageAmount')}>{(id) => <Input id={id} name="coverage_amount" type="number" step="1" min="0" placeholder="250000" />}</Field>
+          <Field label={tr('insurance.deductible')}>{(id) => <Input id={id} name="deductible" type="number" step="1" min="0" placeholder="1000" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Effective date">{(id) => <Input id={id} name="effective_date" type="date" />}</Field>
-          <Field label="Renewal date" hint="Powers renewal reminders">{(id) => <Input id={id} name="renewal_date" type="date" />}</Field>
+          <Field label={tr('insurance.effectiveDate')}>{(id) => <Input id={id} name="effective_date" type="date" />}</Field>
+          <Field label={tr('insurance.renewalDate')} hint="Powers renewal reminders">{(id) => <Input id={id} name="renewal_date" type="date" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Agent name">{(id) => <Input id={id} name="agent_name" placeholder="Optional" />}</Field>
-          <Field label="Agent phone">{(id) => <Input id={id} name="agent_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
+          <Field label={tr('insurance.agentName')}>{(id) => <Input id={id} name="agent_name" placeholder={tr('insurance.optional')} />}</Field>
+          <Field label={tr('insurance.agentPhone')}>{(id) => <Input id={id} name="agent_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
         </div>
-        <Field label="Claims phone">{(id) => <Input id={id} name="claim_phone" type="tel" placeholder="Optional" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Coverage details, riders…" />}</Field>
+        <Field label={tr('insurance.claimsPhone')}>{(id) => <Input id={id} name="claim_phone" type="tel" placeholder={tr('insurance.optional')} />}</Field>
+        <Field label={tr('insurance.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={tr('insurance.coverageDetailsRiders')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Add policy</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('insurance.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('insurance.addPolicy')}</Button>
         </div>
       </form>
     </Modal>
@@ -273,6 +276,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
 function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
 }) {
+  const tr = useTranslations();
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
   const u = renewalUrgency(policy.renewal_date);
@@ -324,7 +328,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
             {policy.claim_phone && (
               <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
                 <AlertTriangle className="h-4 w-4 text-amber-300" />
-                <span>Claims</span>
+                <span>{tr('insurance.claims')}</span>
                 <a href={`tel:${policy.claim_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand-text"><Phone className="h-3.5 w-3.5" /> {policy.claim_phone}</a>
               </div>
             )}
@@ -334,8 +338,8 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
         {policy.notes && <p className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm text-muted">{policy.notes}</p>}
 
         <div className="flex justify-between border-t border-border pt-3">
-          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> Remove</Button>
-          <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Close</Button>
+          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>
+          <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('insurance.close')}</Button>
         </div>
       </div>
     </Modal>

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { addKeyword, archiveSeoKeyword, archiveSeoPage, saveSeoPage, updateSeoKeyword } from '../actions';
 import { SeoTabs } from './seo-tabs';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · SEO', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,7 @@ const PAGE_STATUSES = ['active', 'noindex', 'archived'];
 const KEYWORD_LIMIT = 100;
 
 export default async function SeoPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [keywordCountResult, keywordsResult, pagesResult] = await Promise.all([
     supabase.from('marketing_seo_keywords').select('id', { count: 'exact', head: true }),
@@ -51,14 +53,14 @@ export default async function SeoPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SEO</h1>
-          <p className="mt-1 text-sm text-muted">Track search intent, keywords, and the audit status of every indexable marketing page.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingSeo.marketingSeo')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('adminMarketingSeo.trackSearchIntentKeywordsAndThe')}</p>
         </div>
         <Link href="/admin/marketing/aeo" className="text-sm font-medium text-brand-text hover:underline">AEO →</Link>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
-        SEO here uses <strong className="text-fg">first-party data only</strong>. Rankings, search volume, and backlinks are never invented — connect Google Search Console for those. AI keyword ideas are clearly labeled as suggestions.
+        {t('adminMarketingSeo.seoHereUses')} <strong className="text-fg">{t('adminMarketingSeo.firstPartyDataOnly')}</strong>. Rankings, search volume, and backlinks are never invented — connect Google Search Console for those. AI keyword ideas are clearly labeled as suggestions.
       </div>
 
       <SeoTabs
@@ -69,8 +71,8 @@ export default async function SeoPage() {
             count: SITE_PAGES.length,
             panel: (
               <Card>
-                <h2 className="mb-3 font-semibold">Indexable pages</h2>
-                <p className="mb-3 text-xs text-muted">The public routes that should be crawled and indexed. Open any to preview, or view the generated sitemap / robots file.</p>
+                <h2 className="mb-3 font-semibold">{t('adminMarketingSeo.indexablePages')}</h2>
+                <p className="mb-3 text-xs text-muted">{t('adminMarketingSeo.thePublicRoutesThatShouldBe')}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {SITE_PAGES.map((p) => (
                     <a key={p} href={p} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm hover:bg-elevated">
@@ -80,8 +82,8 @@ export default async function SeoPage() {
                   ))}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <a href="/sitemap.xml" target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 hover:bg-elevated">View sitemap.xml</a>
-                  <a href="/robots.txt" target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 hover:bg-elevated">View robots.txt</a>
+                  <a href="/sitemap.xml" target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 hover:bg-elevated">{t('adminMarketingSeo.viewSitemapXml')}</a>
+                  <a href="/robots.txt" target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 hover:bg-elevated">{t('adminMarketingSeo.viewRobotsTxt')}</a>
                 </div>
               </Card>
             ),
@@ -94,13 +96,13 @@ export default async function SeoPage() {
               <Card>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold">SEO Page Registry</h2>
+                    <h2 className="font-semibold">{t('adminMarketingSeo.seoPageRegistry')}</h2>
                     <p className="mt-1 text-xs text-muted">The stored title, description, audit score, and index policy for each public route — the source that drives page metadata.</p>
                   </div>
                   <span className="text-xs text-muted">{seoPages.length} tracked</span>
                 </div>
                 {seoPages.length === 0 ? (
-                  <p className="mt-4 text-sm text-muted">No page audits yet. Add the first route below.</p>
+                  <p className="mt-4 text-sm text-muted">{t('adminMarketingSeo.noPageAuditsYetAddThe')}</p>
                 ) : (
                   <div className="mt-4 space-y-2">
                     {seoPages.map((page) => (
@@ -129,14 +131,14 @@ export default async function SeoPage() {
                   </div>
                 )}
                 <details className="mt-3 rounded-xl border border-dashed border-border p-3">
-                  <summary className="cursor-pointer text-sm font-medium">Add page audit</summary>
+                  <summary className="cursor-pointer text-sm font-medium">{t('adminMarketingSeo.addPageAudit')}</summary>
                   <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
                     <input name="path" required placeholder="/pricing" className={inputCls} />
-                    <input name="title" placeholder="SEO title" className={inputCls} />
-                    <input name="meta_description" placeholder="Meta description" className={`${inputCls} sm:col-span-2`} />
-                    <input name="score" type="number" min="0" max="100" placeholder="Score 0–100" className={inputCls} />
+                    <input name="title" placeholder={t('adminMarketingSeo.seoTitle')} className={inputCls} />
+                    <input name="meta_description" placeholder={t('adminMarketingSeo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
+                    <input name="score" type="number" min="0" max="100" placeholder={t('adminMarketingSeo.score0100')} className={inputCls} />
                     <select name="status" defaultValue="active" className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                    <button type="submit" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">Add page audit</button>
+                    <button type="submit" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingSeo.addPageAudit')}</button>
                   </form>
                 </details>
               </Card>
@@ -150,18 +152,18 @@ export default async function SeoPage() {
               <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
                 <Card>
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h2 className="font-semibold">Tracked keywords</h2>
+                    <h2 className="font-semibold">{t('adminMarketingSeo.trackedKeywords')}</h2>
                     {keywordTotal > keywords.length && (
-                      <span className="text-xs text-muted">Latest {keywords.length} of {keywordTotal.toLocaleString()}</span>
+                      <span className="text-xs text-muted">{t('adminMarketingSeo.latest')} {keywords.length} of {keywordTotal.toLocaleString()}</span>
                     )}
                   </div>
                   {keywordTotal === 0 ? (
-                    <EmptyState icon={Search} title="No keywords tracked" description="Add target keywords in the panel on the right." />
+                    <EmptyState icon={Search} title={t('adminMarketingSeo.noKeywordsTracked')} description="Add target keywords in the panel on the right." />
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead><tr className="border-b border-border text-left text-xs text-muted">
-                          <th className="px-3 py-2 font-medium">Keyword</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Target</th><th className="px-3 py-2 font-medium">Source</th><th className="px-3 py-2 font-medium">Actions</th>
+                          <th className="px-3 py-2 font-medium">{t('adminMarketingSeo.keyword')}</th><th className="px-3 py-2 font-medium">{t('adminMarketingSeo.intent')}</th><th className="px-3 py-2 font-medium">{t('adminMarketingSeo.target')}</th><th className="px-3 py-2 font-medium">{t('adminMarketingSeo.source')}</th><th className="px-3 py-2 font-medium">{t('adminMarketingSeo.actions')}</th>
                         </tr></thead>
                         <tbody className="divide-y divide-border/60">
                           {(keywords ?? []).map((k) => (
@@ -196,12 +198,12 @@ export default async function SeoPage() {
                 </Card>
 
                 <Card className="h-fit">
-                  <h2 className="mb-3 font-semibold">Track a keyword</h2>
+                  <h2 className="mb-3 font-semibold">{t('adminMarketingSeo.trackAKeyword')}</h2>
                   <form action={addKeyword} className="space-y-3 text-sm">
-                    <input name="keyword" required placeholder="family organization app" className={inputCls} />
-                    <select name="intent" className={inputCls}><option value="">Intent (optional)</option>{INTENTS.map((i) => <option key={i} value={i}>{i}</option>)}</select>
-                    <select name="target_path" className={inputCls}><option value="">Target page (optional)</option>{SITE_PAGES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
-                    <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Add keyword</button>
+                    <input name="keyword" required placeholder={t('adminMarketingSeo.familyOrganizationApp')} className={inputCls} />
+                    <select name="intent" className={inputCls}><option value="">{t('adminMarketingSeo.intentOptional')}</option>{INTENTS.map((i) => <option key={i} value={i}>{i}</option>)}</select>
+                    <select name="target_path" className={inputCls}><option value="">{t('adminMarketingSeo.targetPageOptional')}</option>{SITE_PAGES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
+                    <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSeo.addKeyword')}</button>
                   </form>
                 </Card>
               </div>

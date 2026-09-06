@@ -5,11 +5,13 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDateTime } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketingAuditPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: logs, error: logsError } = await supabase.from('marketing_audit_logs').select('*').order('created_at', { ascending: false }).limit(200);
   if (logsError) {
@@ -19,9 +21,9 @@ export default async function MarketingAuditPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">Every create, update, and status change in the Marketing module is recorded here.</p>
+      <p className="text-sm text-muted">{t('adminMarketingAudit.everyCreateUpdateAndStatusChange')}</p>
       {(logs ?? []).length === 0 ? (
-        <EmptyState icon={ScrollText} title="No marketing activity yet" description="Actions you take in this module will appear here." />
+        <EmptyState icon={ScrollText} title={t('adminMarketingAudit.noMarketingActivityYet')} description="Actions you take in this module will appear here." />
       ) : (
         <Card className="p-0">
           <ul className="divide-y divide-border/60">

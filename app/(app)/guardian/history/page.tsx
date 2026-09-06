@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { CallHistory } from '@/components/guardian/call-history';
 import { Clock, ArrowLeft } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Communication History · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  const t = await getTranslations();
   const { page } = await searchParams;
   const pageNum = parseInt(page ?? '1', 10);
   const pageSize = 50;
@@ -44,7 +46,7 @@ export default async function HistoryPage({
           <Clock className="h-5 w-5 text-purple-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">Communication History</h1>
+          <h1 className="text-xl font-bold leading-tight">{t('guardianHistory.communicationHistory')}</h1>
           <p className="text-sm text-muted">{count ?? 0} total</p>
         </div>
       </div>
@@ -60,16 +62,16 @@ export default async function HistoryPage({
               href={`/guardian/history?page=${pageNum - 1}`}
               className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-surface transition"
             >
-              Previous
+              {t('guardianHistory.previous')}
             </a>
           )}
-          <span className="text-sm text-muted">Page {pageNum} of {totalPages}</span>
+          <span className="text-sm text-muted">{t('guardianHistory.page')} {pageNum} of {totalPages}</span>
           {pageNum < totalPages && (
             <a
               href={`/guardian/history?page=${pageNum + 1}`}
               className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-surface transition"
             >
-              Next
+              {t('guardianHistory.next')}
             </a>
           )}
         </div>

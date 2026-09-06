@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import {
   assessReadiness, overallReadiness, EMPTY_READINESS_SIGNALS, type ReadinessSignals,
 } from '@/lib/readiness/assess';
@@ -305,7 +306,7 @@ describe('the overload rule the readiness month card leans on', () => {
 });
 
 describe('the readiness page answers once, and with the rules its links point at', () => {
-  const page = readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
+  const page = readUiSource('app/(app)/dashboard/readiness/page.tsx');
   const source = readFileSync('lib/readiness/calendar-source.ts', 'utf8');
 
   it('answers "are we ready?" with one number, above the activity score', () => {

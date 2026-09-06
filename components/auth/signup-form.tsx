@@ -15,8 +15,10 @@ import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { describeDbError } from '@/lib/supabase/errors';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SignupForm() {
+  const t = useTranslations();
   const router = useRouter();
   const params = useSearchParams();
   const { error: toastError } = useToast();
@@ -75,12 +77,12 @@ export function SignupForm() {
     return (
       <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
         <MailCheck className="h-12 w-12 text-brand-text" />
-        <h1 className="mt-4 text-xl font-semibold">Check your email</h1>
+        <h1 className="mt-4 text-xl font-semibold">{t('signup.checkYourEmail')}</h1>
         <p className="mt-2 text-sm text-muted">
-          We sent a confirmation link to verify your address. Click it to finish setting up your family.
+          {t('signup.weSentAConfirmationLinkTo')}
         </p>
         <Link href="/login" className="mt-6 text-sm font-medium text-brand-text hover:underline">
-          Back to sign in
+          {t('signup.backToSignIn')}
         </Link>
       </div>
     );
@@ -101,9 +103,9 @@ export function SignupForm() {
         <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
           <Sparkles className="h-7 w-7 text-brand-text" />
         </span>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">A safe place for your family</h1>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{t('signup.aSafePlaceForYourFamily')}</h1>
         <p className="mt-2 text-sm text-muted">
-          One calm home for your calendar, lists, meals, and more
+          {t('signup.oneCalmHomeForYourCalendar')}
           {plan ? ` — start on the ${plan} plan, free` : ' — free to start, no credit card'}.
         </p>
       </div>
@@ -132,35 +134,35 @@ export function SignupForm() {
             onClick={() => setShowPhone(true)}
             className={authButtonClass}
           >
-            <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
+            <Smartphone className="h-[18px] w-[18px]" /> {t('signup.continueWithPhone')}
           </button>
           <button
             type="button"
             onClick={() => setShowEmail(true)}
             className={authButtonClass}
           >
-            <Mail className="h-[18px] w-[18px]" /> Continue with email
+            <Mail className="h-[18px] w-[18px]" /> {t('signup.continueWithEmail')}
           </button>
           <button
             type="button"
             onClick={() => setShowPhone(true)}
             className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
           >
-            Continue without email
+            {t('signup.continueWithoutEmail')}
           </button>
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
-          <Field label="Your name" error={errors.fullName} required>
+          <Field label={t('signup.yourName')} error={errors.fullName} required>
             {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
           </Field>
-          <Field label="Email" error={errors.email} required>
+          <Field label={t('signup.email')} error={errors.email} required>
             {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
           </Field>
-          <Field label="Password" error={errors.password} hint="At least 8 characters" required>
+          <Field label={t('signup.password')} error={errors.password} hint="At least 8 characters" required>
             {(id) => <Input id={id} name="password" type="password" autoComplete="new-password" placeholder="••••••••" />}
           </Field>
-          <Button type="submit" loading={loading} className="w-full">Create account</Button>
+          <Button type="submit" loading={loading} className="w-full">{t('signup.createAccount')}</Button>
         </form>
       )}
       </>
@@ -169,8 +171,8 @@ export function SignupForm() {
       <LegalConsent />
 
       <p className="mt-5 text-center text-sm text-muted">
-        Already have an account?{' '}
-        <Link href="/login" className="font-medium text-brand-text hover:underline">Sign in</Link>
+        {t('signup.alreadyHaveAnAccount')}{' '}
+        <Link href="/login" className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</Link>
       </p>
     </div>
   );

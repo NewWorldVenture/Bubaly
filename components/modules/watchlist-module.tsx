@@ -19,6 +19,7 @@ import {
   WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, AGE_RATINGS, TIME_PRESETS, kindMeta, serviceLabel, ratingMinAge,
   ageOn, pickTonight, watchlistAudienceAges, watchlistSummary,
 } from '@/lib/watchlist/picker';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Title = Tables<'watchlist_titles'>;
 type Vote = Tables<'watchlist_votes'>;
@@ -30,6 +31,7 @@ function fmtDate(d: string): string {
 }
 
 export function WatchlistModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -117,16 +119,16 @@ export function WatchlistModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Family Watchlist"
+        title={tr('watchlist.familyWatchlist')}
         description="One list for movie night: everyone votes, ages and runtimes are respected, and tonight’s pick is one tap instead of an hour of scrolling."
-        action={<div className="flex items-center gap-2"><AiInsight kind="watchlist" iconOnly /><Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> Add title</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="watchlist" iconOnly /><Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> {tr('watchlist.addTitle')}</Button></div>}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Popcorn className="h-4 w-4" /> Tonight</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Popcorn className="h-4 w-4" /> {tr('watchlist.tonight')}</div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted">Who’s watching:</span>
+            <span className="text-xs text-muted">{tr('watchlist.whosWatching')}</span>
             {members.map((m) => {
               const on = audience.includes(m.id);
               const age = ageOn(m.birthday, today);
@@ -141,7 +143,7 @@ export function WatchlistModule() {
               <button key={id} type="button" aria-pressed={true} aria-label={`Remove unavailable participant ${index + 1} from tonight`}
                 onClick={() => setAudience(audience.filter((selectedId) => selectedId !== id))}
                 className="rounded-full border border-brand bg-brand/15 px-3 py-1 text-xs text-brand-text coarse:min-h-11">
-                Unavailable participant {index + 1}: remove from tonight
+                {tr('watchlist.unavailableParticipant')} {index + 1}{tr('watchlist.removeFromTonight')}
               </button>
             ))}
           </div>
@@ -150,8 +152,8 @@ export function WatchlistModule() {
             {TIME_PRESETS.map((m) => (
               <button key={m} aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={cn('rounded-full border px-2.5 py-1 text-xs coarse:min-h-11', minutes === m ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{m} min</button>
             ))}
-            <Select value={service} onChange={(e) => setService(e.target.value as WatchService | 'any')} aria-label="Service" className="w-auto">
-              <option value="any">Any service</option>
+            <Select value={service} onChange={(e) => setService(e.target.value as WatchService | 'any')} aria-label={tr('watchlist.service')} className="w-auto">
+              <option value="any">{tr('watchlist.anyService')}</option>
               {WATCH_SERVICES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </Select>
           </div>
@@ -160,12 +162,12 @@ export function WatchlistModule() {
             <div role="status" className="mt-4 space-y-1 text-sm text-brand-text">
               <p className="font-medium">{tonight.audienceEligibility.blocker}</p>
               {ageClarificationNames.length > 0 && (
-                <p>Age needs clarification for {ageClarificationNames.join(', ')}. Add or correct each date of birth in their member profile.</p>
+                <p>{tr('watchlist.ageNeedsClarificationFor')} {ageClarificationNames.join(', ')}{tr('watchlist.addOrCorrectEachDateOf')}</p>
               )}
               {unavailableAudience.length > 0 && (
                 <p>Some selected participants are no longer available in the household. Restore their member profiles, or remove them above if they are not watching.</p>
               )}
-              <p>Select everyone who is watching. Only deselect someone if they will not be watching.</p>
+              <p>{tr('watchlist.selectEveryoneWhoIsWatchingOnly')}</p>
             </div>
           ) : topPicks.length === 0 ? (
             <p className="mt-4 text-sm text-muted">
@@ -182,7 +184,7 @@ export function WatchlistModule() {
                     <p className="truncate text-sm font-semibold">{i === 0 ? '🏆 ' : ''}{p.title.title}{p.title.year ? ` (${p.title.year})` : ''}</p>
                     <p className="truncate text-xs text-muted">{p.reasons.join(' · ') || 'on the list'} · {serviceLabel(p.title.service)}</p>
                   </div>
-                  <Button size="sm" onClick={() => setWatchedForm(p.title)}><Check className="h-3.5 w-3.5" /> We watched it</Button>
+                  <Button size="sm" onClick={() => setWatchedForm(p.title)}><Check className="h-3.5 w-3.5" /> {tr('watchlist.weWatchedIt')}</Button>
                 </li>
               ))}
             </ul>
@@ -190,30 +192,30 @@ export function WatchlistModule() {
         </div>
 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><Tv className="h-4 w-4 text-brand-text" /> Queue</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><Tv className="h-4 w-4 text-brand-text" /> {tr('watchlist.queue')}</div>
           <p className="mt-2 text-xl font-bold">{summary.text}</p>
           <p className="mt-1 text-xs text-muted">
-            {summary.watchedThisMonth} watched this month{summary.avgRating !== null ? ` · avg rating ${summary.avgRating}/5` : ''}{summary.topService ? ` · mostly ${summary.topService}` : ''}
+            {summary.watchedThisMonth} {tr('watchlist.watchedThisMonth')}{summary.avgRating !== null ? ` · avg rating ${summary.avgRating}/5` : ''}{summary.topService ? ` · mostly ${summary.topService}` : ''}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Status">
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('watchlist.status')}>
         {[{ value: 'want', label: 'Want to watch' }, { value: 'watching', label: 'Watching' }, { value: 'watched', label: 'Watched' }, { value: 'skipped', label: 'Skipped' }, { value: 'all', label: 'All' }].map((t) => (
           <button key={t.value} role="tab" aria-selected={statusTab === t.value} onClick={() => setStatusTab(t.value as WatchStatus | 'all')}
             className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', statusTab === t.value ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
             {t.label}
           </button>
         ))}
-        <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as WatchKind | 'all')} aria-label="Kind" className="w-auto">
-          <option value="all">All kinds</option>
+        <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as WatchKind | 'all')} aria-label={tr('watchlist.kind')} className="w-auto">
+          <option value="all">{tr('watchlist.allKinds')}</option>
           {WATCH_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
         </Select>
         <span className="text-xs text-muted">{filtered.length} title{filtered.length === 1 ? '' : 's'}</span>
       </div>
 
       {titles.data.length === 0 ? (
-        <EmptyState icon={Clapperboard} title="The watchlist is empty" description="Add movies and shows the family keeps saying “we should watch that” about." action={<Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> Add the first title</Button>} />
+        <EmptyState icon={Clapperboard} title={tr('watchlist.theWatchlistIsEmpty')} description="Add movies and shows the family keeps saying “we should watch that” about." action={<Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> {tr('watchlist.addTheFirstTitle')}</Button>} />
       ) : (
         <ul className="grid gap-2 lg:grid-cols-2">
           {filtered.map((t) => {
@@ -230,13 +232,13 @@ export function WatchlistModule() {
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5">
-                  <button onClick={() => castVote(t, 'love')} aria-label="Love it" aria-pressed={mine === 'love'} className={cn('rounded-lg p-1.5 text-xs', mine === 'love' ? 'text-rose-400' : 'text-muted hover:text-fg')}><Heart className="h-4 w-4" fill={mine === 'love' ? 'currentColor' : 'none'} />{counts.love > 0 && <span className="ml-0.5">{counts.love}</span>}</button>
-                  <button onClick={() => castVote(t, 'up')} aria-label="Thumbs up" aria-pressed={mine === 'up'} className={cn('rounded-lg p-1.5 text-xs', mine === 'up' ? 'text-emerald-400' : 'text-muted hover:text-fg')}><ThumbsUp className="h-4 w-4" />{counts.up > 0 && <span className="ml-0.5">{counts.up}</span>}</button>
-                  <button onClick={() => castVote(t, 'down')} aria-label="Thumbs down" aria-pressed={mine === 'down'} className={cn('rounded-lg p-1.5 text-xs', mine === 'down' ? 'text-amber-400' : 'text-muted hover:text-fg')}><ThumbsDown className="h-4 w-4" />{counts.down > 0 && <span className="ml-0.5">{counts.down}</span>}</button>
+                  <button onClick={() => castVote(t, 'love')} aria-label={tr('watchlist.loveIt')} aria-pressed={mine === 'love'} className={cn('rounded-lg p-1.5 text-xs', mine === 'love' ? 'text-rose-400' : 'text-muted hover:text-fg')}><Heart className="h-4 w-4" fill={mine === 'love' ? 'currentColor' : 'none'} />{counts.love > 0 && <span className="ml-0.5">{counts.love}</span>}</button>
+                  <button onClick={() => castVote(t, 'up')} aria-label={tr('watchlist.thumbsUp')} aria-pressed={mine === 'up'} className={cn('rounded-lg p-1.5 text-xs', mine === 'up' ? 'text-emerald-400' : 'text-muted hover:text-fg')}><ThumbsUp className="h-4 w-4" />{counts.up > 0 && <span className="ml-0.5">{counts.up}</span>}</button>
+                  <button onClick={() => castVote(t, 'down')} aria-label={tr('watchlist.thumbsDown')} aria-pressed={mine === 'down'} className={cn('rounded-lg p-1.5 text-xs', mine === 'down' ? 'text-amber-400' : 'text-muted hover:text-fg')}><ThumbsDown className="h-4 w-4" />{counts.down > 0 && <span className="ml-0.5">{counts.down}</span>}</button>
                 </div>
                 <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
-                  {t.status !== 'watched' && <button onClick={() => setWatchedForm(t)} aria-label={`Mark ${t.title} watched`} title="Watched" className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>}
-                  {t.status === 'want' && <button onClick={() => setStatus(t, 'watching')} aria-label={`Start ${t.title}`} title="Started watching" className="rounded-lg p-1.5 text-muted hover:text-fg"><Tv className="h-4 w-4" /></button>}
+                  {t.status !== 'watched' && <button onClick={() => setWatchedForm(t)} aria-label={`Mark ${t.title} watched`} title={tr('watchlist.watched')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>}
+                  {t.status === 'want' && <button onClick={() => setStatus(t, 'watching')} aria-label={`Start ${t.title}`} title={tr('watchlist.startedWatching')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Tv className="h-4 w-4" /></button>}
                   <button onClick={() => setForm({ open: true, title: t })} aria-label={`Edit ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => deleteTitle(t)} aria-label={`Remove ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </div>
@@ -247,9 +249,9 @@ export function WatchlistModule() {
       )}
 
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Star className="h-4 w-4 text-brand-text" /> Recent movie nights</div>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Star className="h-4 w-4 text-brand-text" /> {tr('watchlist.recentMovieNights')}</div>
         {sessions.data.length === 0 ? (
-          <p className="text-sm text-muted">Log what you watched and who was there — ratings feed future picks.</p>
+          <p className="text-sm text-muted">{tr('watchlist.logWhatYouWatchedAndWho')}</p>
         ) : (
           <ul className="space-y-1.5">
             {sessions.data.slice(0, 8).map((s) => (
@@ -257,7 +259,7 @@ export function WatchlistModule() {
                 <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(s.watched_on)}</span>
                 <span className="min-w-0 flex-1 truncate">{s.title_name}<span className="text-xs text-muted"> · {s.member_ids.map(memberName).join(', ') || 'family'}</span></span>
                 {s.rating ? <span className="shrink-0 text-xs text-amber-300">{'★'.repeat(s.rating)}</span> : null}
-                <button onClick={() => deleteSession(s)} aria-label="Delete session" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button onClick={() => deleteSession(s)} aria-label={tr('watchlist.deleteSession')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
               </li>
             ))}
           </ul>
@@ -277,6 +279,7 @@ export function WatchlistModule() {
 function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
   familyId: string; userId: string; memberId: string | null; title: Title | null; onClose: () => void; onSaved: (message: string) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [rating, setRating] = useState(title?.age_rating ?? 'PG');
@@ -313,26 +316,26 @@ function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
   return (
     <Modal open title={title ? `Edit · ${title.title}` : 'Add to the watchlist'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Title" required>{(id) => <Input id={id} name="title" autoFocus defaultValue={title?.title ?? ''} placeholder="The Great Garden Race" />}</Field>
+        <Field label={tr('watchlist.title')} required>{(id) => <Input id={id} name="title" autoFocus defaultValue={title?.title ?? ''} placeholder={tr('watchlist.theGreatGardenRace')} />}</Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Kind">{(id) => <Select id={id} name="kind" defaultValue={title?.kind ?? 'movie'}>{WATCH_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-          <Field label="Year">{(id) => <Input id={id} name="year" type="number" min={1900} max={2100} defaultValue={title?.year ?? ''} />}</Field>
-          <Field label="Runtime (min)">{(id) => <Input id={id} name="runtime_min" type="number" min={1} max={1440} defaultValue={title?.runtime_min ?? ''} placeholder="95" />}</Field>
+          <Field label={tr('watchlist.kind')}>{(id) => <Select id={id} name="kind" defaultValue={title?.kind ?? 'movie'}>{WATCH_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.year')}>{(id) => <Input id={id} name="year" type="number" min={1900} max={2100} defaultValue={title?.year ?? ''} />}</Field>
+          <Field label={tr('watchlist.runtimeMin')}>{(id) => <Input id={id} name="runtime_min" type="number" min={1} max={1440} defaultValue={title?.runtime_min ?? ''} placeholder="95" />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Age rating" hint="Sets the minimum age">{(id) => <Select id={id} name="age_rating" value={rating} onChange={(e) => setRating(e.target.value)}>{AGE_RATINGS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</Select>}</Field>
-          <Field label="Min age (override)">{(id) => <Input id={id} name="min_age" type="number" min={0} max={21} placeholder={String(ratingMinAge(rating))} defaultValue={title && title.min_age !== ratingMinAge(title.age_rating) ? title.min_age : ''} />}</Field>
-          <Field label="Priority">{(id) => <Select id={id} name="priority" defaultValue={title?.priority ?? 2}><option value={1}>1 · Must watch</option><option value={2}>2 · Normal</option><option value={3}>3 · Someday</option></Select>}</Field>
+          <Field label={tr('watchlist.ageRating')} hint="Sets the minimum age">{(id) => <Select id={id} name="age_rating" value={rating} onChange={(e) => setRating(e.target.value)}>{AGE_RATINGS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.minAgeOverride')}>{(id) => <Input id={id} name="min_age" type="number" min={0} max={21} placeholder={String(ratingMinAge(rating))} defaultValue={title && title.min_age !== ratingMinAge(title.age_rating) ? title.min_age : ''} />}</Field>
+          <Field label={tr('watchlist.priority')}>{(id) => <Select id={id} name="priority" defaultValue={title?.priority ?? 2}><option value={1}>{tr('watchlist.1MustWatch')}</option><option value={2}>{tr('watchlist.2Normal')}</option><option value={3}>{tr('watchlist.3Someday')}</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Where">{(id) => <Select id={id} name="service" defaultValue={title?.service ?? 'netflix'}>{WATCH_SERVICES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={title?.status ?? 'want'}>{WATCH_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.where')}>{(id) => <Select id={id} name="service" defaultValue={title?.service ?? 'netflix'}>{WATCH_SERVICES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.status')}>{(id) => <Select id={id} name="status" defaultValue={title?.status ?? 'want'}>{WATCH_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
         </div>
-        <Field label="Genres" hint="Comma-separated">{(id) => <Input id={id} name="genres" defaultValue={title?.genres.join(', ') ?? ''} placeholder="family, adventure" />}</Field>
-        <Field label="Link">{(id) => <Input id={id} name="external_url" type="url" defaultValue={title?.external_url ?? ''} placeholder="https://…" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={title?.notes ?? ''} placeholder="Grandpa recommended it; has a scary bit at 40 min…" />}</Field>
+        <Field label={tr('watchlist.genres')} hint="Comma-separated">{(id) => <Input id={id} name="genres" defaultValue={title?.genres.join(', ') ?? ''} placeholder={tr('watchlist.familyAdventure')} />}</Field>
+        <Field label={tr('watchlist.link')}>{(id) => <Input id={id} name="external_url" type="url" defaultValue={title?.external_url ?? ''} placeholder="https://…" />}</Field>
+        <Field label={tr('watchlist.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={title?.notes ?? ''} placeholder={tr('watchlist.grandpaRecommendedItHasAScary')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('watchlist.cancel')}</Button>
           <Button type="submit" loading={loading}>{title ? 'Save changes' : 'Add title'}</Button>
         </div>
       </form>
@@ -343,6 +346,7 @@ function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
 function WatchedForm({ familyId, userId, title, members, defaultAudience, onClose, onSaved }: {
   familyId: string; userId: string; title: Title; members: Tables<'family_members'>[]; defaultAudience: string[]; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [who, setWho] = useState<string[]>(defaultAudience);
@@ -368,11 +372,11 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
     <Modal open title={`We watched · ${title.title}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="When">{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayIso()} />}</Field>
-          <Field label="Family rating">{(id) => <Select id={id} name="rating" defaultValue="4"><option value="">No rating</option>{[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{'★'.repeat(r)}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.when')}>{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayIso()} />}</Field>
+          <Field label={tr('watchlist.familyRating')}>{(id) => <Select id={id} name="rating" defaultValue="4"><option value="">{tr('watchlist.noRating')}</option>{[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{'★'.repeat(r)}</option>)}</Select>}</Field>
         </div>
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted">Who watched</p>
+          <p className="mb-1.5 text-xs font-medium text-muted">{tr('watchlist.whoWatched')}</p>
           <div className="flex flex-wrap gap-2">
             {members.map((m) => {
               const on = who.includes(m.id);
@@ -380,10 +384,10 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
             })}
           </div>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Everyone loved the ending…" />}</Field>
+        <Field label={tr('watchlist.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={tr('watchlist.everyoneLovedTheEnding')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Sparkles className="h-4 w-4" /> Log movie night</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('watchlist.cancel')}</Button>
+          <Button type="submit" loading={loading}><Sparkles className="h-4 w-4" /> {tr('watchlist.logMovieNight')}</Button>
         </div>
       </form>
     </Modal>

@@ -16,6 +16,7 @@ import {
 import {
   proposeHandoffAction, confirmHandoffAction, cancelHandoffAction, completeHandoffAction,
 } from '@/app/(app)/marketplace/handoff/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type HandoffData = {
   status: HandoffStatus; proposerRole: HandoffRole; meetAt: string | null;
@@ -26,6 +27,7 @@ export type HandoffData = {
 export function HandoffPanel({ orderId, viewerRole, handoff }: {
   orderId: string; viewerRole: HandoffRole; handoff: HandoffData;
 }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, start] = useTransition();
@@ -62,7 +64,7 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
       return (
         <button onClick={() => setEditing(true)}
           className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text transition hover:bg-brand/20">
-          <MapPin className="h-3.5 w-3.5" /> Arrange pickup
+          <MapPin className="h-3.5 w-3.5" /> {tr('handoff.arrangePickup')}
         </button>
       );
     }
@@ -82,7 +84,7 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
       <p className="mt-1 text-sm">{meetSummary(h.meetAt, h.locationLabel)}</p>
       {safe && h.status !== 'completed' && (
         <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-          <ShieldCheck className="h-3 w-3" /> Public, monitored spot — the safe way to meet.
+          <ShieldCheck className="h-3 w-3" /> {tr('handoff.publicMonitoredSpotTheSafeWay')}
         </p>
       )}
       {h.notes && <p className="mt-1 text-xs text-muted">“{h.notes}”</p>}
@@ -93,32 +95,32 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
           {canConfirm(h.status, viewerRole, h.proposerRole) ? (
             <button onClick={confirm} disabled={pending}
               className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25 disabled:opacity-50 dark:text-emerald-400">
-              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Confirm pickup
+              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('handoff.confirmPickup')}
             </button>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted"><Clock className="h-3 w-3" /> Waiting for {other} to confirm</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted"><Clock className="h-3 w-3" /> {tr('handoff.waitingFor')} {other} {tr('handoff.toConfirm')}</span>
           )}
-          <button onClick={() => setEditing(true)} disabled={pending} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated disabled:opacity-50">Reschedule</button>
-          {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-rose-400 disabled:opacity-50">Cancel</button>}
+          <button onClick={() => setEditing(true)} disabled={pending} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated disabled:opacity-50">{tr('handoff.reschedule')}</button>
+          {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-rose-400 disabled:opacity-50">{tr('handoff.cancel')}</button>}
         </div>
       )}
 
       {/* Confirmed → show the code + complete-in-person input. */}
       {h.status === 'confirmed' && (
         <div className="mt-2.5 space-y-2">
-          {h.hasCalendar && <p className="flex items-center gap-1 text-[11px] text-muted"><CalendarCheck className="h-3 w-3" /> Added to your family calendar</p>}
+          {h.hasCalendar && <p className="flex items-center gap-1 text-[11px] text-muted"><CalendarCheck className="h-3 w-3" /> {tr('handoff.addedToYourFamilyCalendar')}</p>}
           {h.confirmCode && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-brand/40 bg-brand/5 px-3 py-2">
               <KeyRound className="h-4 w-4 text-brand-text" />
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Hand-off code</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted">{tr('handoff.handOffCode')}</p>
                 <p className="font-mono text-lg font-black tracking-widest">{h.confirmCode}</p>
               </div>
-              <span className="ml-auto max-w-[9rem] text-[10px] text-muted">Share this when you meet to confirm the exchange.</span>
+              <span className="ml-auto max-w-[9rem] text-[10px] text-muted">{tr('handoff.shareThisWhenYouMeetTo')}</span>
             </div>
           )}
           {canComplete(h.status) && <CompleteForm orderId={orderId} onDone={() => { success('Handed off — order complete! 🎉'); router.refresh(); }} onError={toastError} />}
-          {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="text-[11px] text-muted transition hover:text-rose-400">Cancel pickup</button>}
+          {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="text-[11px] text-muted transition hover:text-rose-400">{tr('handoff.cancelPickup')}</button>}
         </div>
       )}
     </div>
@@ -130,6 +132,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
   onSubmit: (f: { meetAtIso: string | null; locationLabel: string; locationKind: LocationKind; notes: string }) => void;
   onCancel: () => void;
 }) {
+  const tr = useTranslations();
   const times = suggestedMeetTimes();
   const [when, setWhen] = useState<string>(times[0]?.iso ?? '');
   const [customWhen, setCustomWhen] = useState('');
@@ -148,7 +151,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
   return (
     <div className="mt-2 space-y-2.5 rounded-xl border border-border bg-surface/60 p-3">
       <div>
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">When</p>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{tr('handoff.when')}</p>
         <div className="flex flex-wrap gap-1.5">
           {times.map((t) => (
             <button key={t.iso} onClick={() => { setWhen(t.iso); setCustomWhen(''); }}
@@ -163,7 +166,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
       </div>
       <div>
         <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          <ShieldCheck className="h-3 w-3 text-emerald-500" /> Safe meetup spot
+          <ShieldCheck className="h-3 w-3 text-emerald-500" /> {tr('handoff.safeMeetupSpot')}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {SAFE_SPOTS.map((s) => (
@@ -175,23 +178,24 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
             </button>
           ))}
         </div>
-        <input value={customSpot} onChange={(e) => setCustomSpot(e.target.value)} placeholder="…or type a specific place"
+        <input value={customSpot} onChange={(e) => setCustomSpot(e.target.value)} placeholder={tr('handoff.orTypeASpecificPlace')}
           className="mt-1.5 h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
       </div>
-      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Note (optional) — e.g. “I’ll be in a blue car”"
+      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={tr('handoff.noteOptionalEGIllBe')}
         className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
       <div className="flex gap-2">
         <button onClick={submit} disabled={pending}
           className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-          {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />} Propose pickup
+          {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />} {tr('handoff.proposePickup')}
         </button>
-        <button onClick={onCancel} className="text-xs text-muted hover:text-fg">Cancel</button>
+        <button onClick={onCancel} className="text-xs text-muted hover:text-fg">{tr('handoff.cancel')}</button>
       </div>
     </div>
   );
 }
 
 function CompleteForm({ orderId, onDone, onError }: { orderId: string; onDone: () => void; onError: (m: string) => void }) {
+  const tr = useTranslations();
   const [code, setCode] = useState('');
   const [pending, start] = useTransition();
   function submit() {
@@ -204,11 +208,11 @@ function CompleteForm({ orderId, onDone, onError }: { orderId: string; onDone: (
   }
   return (
     <div className="flex gap-2">
-      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Enter code to complete"
+      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder={tr('handoff.enterCodeToComplete')}
         className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-brand" />
       <button onClick={submit} disabled={pending}
         className="inline-flex h-9 items-center gap-1 rounded-lg bg-emerald-500/15 px-3 text-xs font-bold text-emerald-600 transition hover:bg-emerald-500/25 disabled:opacity-50 dark:text-emerald-400">
-        {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Complete
+        {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('handoff.complete')}
       </button>
     </div>
   );

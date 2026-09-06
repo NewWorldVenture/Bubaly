@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type ProposedEvent = {
   title: string; starts_at: string; ends_at: string | null; all_day: boolean;
@@ -29,6 +30,7 @@ function readAsBase64(file: File): Promise<{ data: string; mediaType: string }> 
 }
 
 export function ScanModule() {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export function ScanModule() {
   return (
     <div className="module-page mx-auto max-w-3xl space-y-5">
       <PageHeader
-        title="Scan Flyer → Calendar"
+        title={t('scan.scanFlyerCalendar')}
         description="Snap a photo of a school flyer, sports schedule, or invitation — or upload a PDF — and AI adds the events to your family calendar."
       />
 
@@ -129,12 +131,12 @@ export function ScanModule() {
         )}
         {scanning ? (
           <p className="flex items-center gap-2 text-sm font-semibold text-brand-text">
-            <Sparkles className="h-4 w-4 animate-pulse" /> Reading flyer…
+            <Sparkles className="h-4 w-4 animate-pulse" /> {t('scan.readingFlyer')}
           </p>
         ) : (
           <>
             <p className="text-sm font-semibold">{fileName ?? 'Take a photo or upload a flyer'}</p>
-            <p className="mt-1 text-xs text-muted/60">JPG, PNG, WebP, or PDF up to 5 MB</p>
+            <p className="mt-1 text-xs text-muted/60">{t('scan.jpgPngWebpOrPdfUp')}</p>
           </>
         )}
       </div>
@@ -143,7 +145,7 @@ export function ScanModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center gap-2">
             <CalendarPlus className="h-4 w-4 text-brand-text" />
-            <h2 className="font-semibold">Found {events.length} event{events.length === 1 ? '' : 's'}</h2>
+            <h2 className="font-semibold">{t('scan.found')} {events.length} event{events.length === 1 ? '' : 's'}</h2>
             <span className="ml-auto text-xs text-muted">{selected.size} selected</span>
           </div>
           <ul className="space-y-2">
@@ -171,9 +173,9 @@ export function ScanModule() {
             ))}
           </ul>
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setEvents(null); setSelected(new Set()); }}>Discard</Button>
+            <Button variant="ghost" onClick={() => { setEvents(null); setSelected(new Set()); }}>{t('scan.discard')}</Button>
             <Button onClick={addSelected} loading={adding} disabled={selected.size === 0}>
-              Add {selected.size} to calendar
+              Add {selected.size} {t('scan.toCalendar')}
             </Button>
           </div>
         </div>
@@ -183,8 +185,7 @@ export function ScanModule() {
         <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface/30 p-5 text-sm text-muted">
           <ImageIcon className="h-5 w-5 shrink-0" />
           <span>
-            Works great with school newsletters, picture-day notices, team schedules, and birthday invites.
-            Prefer to type? Use the <Link href="/dashboard/inbox" className="text-brand-text hover:underline">Magic Import Inbox</Link>.
+            {t('scan.worksGreatWithSchoolNewslettersPicture')} <Link href="/dashboard/inbox" className="text-brand-text hover:underline">{t('scan.magicImportInbox')}</Link>.
           </span>
         </div>
       )}

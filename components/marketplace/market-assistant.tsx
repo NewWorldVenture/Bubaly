@@ -12,6 +12,7 @@ import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { askMarketAssistantAction } from '@/app/(app)/marketplace/assistant-actions';
 import type { AssistantLink } from '@/lib/marketplace/assistant';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Turn = {
   role: 'user' | 'assistant';
@@ -28,6 +29,7 @@ const SUGGESTIONS = [
 ];
 
 export function MarketAssistant({ firstName }: { firstName: string }) {
+  const tr = useTranslations();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [pending, startTransition] = useTransition();
@@ -54,13 +56,13 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
   return (
     <section className="rounded-2xl border border-brand/25 bg-brand/[0.04] p-4">
       <p className="flex items-center gap-2 text-sm font-semibold">
-        <Sparkles className="h-4 w-4 text-brand-text" /> AI Marketplace Assistant
+        <Sparkles className="h-4 w-4 text-brand-text" /> {tr('marketAssistant.aiMarketplaceAssistant')}
       </p>
 
       {turns.length === 0 ? (
         <>
           <p className="mt-1.5 text-xs text-muted">
-            Hi {firstName}! Ask me prices, demand, your listings — I answer from your family&apos;s live board.
+            Hi {firstName}{tr('marketAssistant.askMePricesDemandYourListings')}
           </p>
           <div className="mt-2 space-y-1.5">
             {SUGGESTIONS.map((s) => (
@@ -103,7 +105,7 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
           ))}
           {pending && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted">
-              <Loader2 className="h-3 w-3 animate-spin" /> Checking the board…
+              <Loader2 className="h-3 w-3 animate-spin" /> {tr('marketAssistant.checkingTheBoard')}
             </div>
           )}
         </div>
@@ -117,14 +119,14 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           maxLength={500}
-          placeholder="Ask anything…"
-          aria-label="Ask the marketplace assistant"
+          placeholder={tr('marketAssistant.askAnything')}
+          aria-label={tr('marketAssistant.askTheMarketplaceAssistant')}
           className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 text-xs outline-none placeholder:text-muted/70 focus:border-brand"
         />
         <button
           type="submit"
           disabled={pending || !input.trim()}
-          aria-label="Send"
+          aria-label={tr('marketAssistant.send')}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}

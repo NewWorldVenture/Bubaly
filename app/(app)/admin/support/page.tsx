@@ -7,6 +7,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { TicketStatusControl } from '@/components/admin/ticket-status-control';
 import { fmtDate } from '@/lib/utils/format';
 import type { TicketStatus } from '@/app/(app)/admin/actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Support Tickets', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 type Params = { searchParams: Promise<{ q?: string; status?: string }> };
 
 export default async function AdminSupportPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const supabase = createServiceClient();
 
@@ -41,20 +43,20 @@ export default async function AdminSupportPage({ searchParams }: Params) {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Support Tickets</h1>
-        <p className="mt-1 text-sm text-muted">Messages from the contact form, with their full lifecycle managed here.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminSupport.supportTickets')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminSupport.messagesFromTheContactFormWith')}</p>
       </div>
 
       <div className="grid-stats">
-        <StatCard icon={Inbox} label="Open" value={counts.open} tone="bg-warning/10 text-warning" />
-        <StatCard icon={Clock} label="Pending" value={counts.pending} tone="bg-accent/10 text-accent" />
-        <StatCard icon={CheckCircle2} label="Resolved" value={counts.resolved} tone="bg-success/10 text-success" />
-        <StatCard icon={Archive} label="Closed" value={counts.closed} tone="bg-brand/10 text-brand-text" />
+        <StatCard icon={Inbox} label={tr('adminSupport.open')} value={counts.open} tone="bg-warning/10 text-warning" />
+        <StatCard icon={Clock} label={tr('adminSupport.pending')} value={counts.pending} tone="bg-accent/10 text-accent" />
+        <StatCard icon={CheckCircle2} label={tr('adminSupport.resolved')} value={counts.resolved} tone="bg-success/10 text-success" />
+        <StatCard icon={Archive} label={tr('adminSupport.closed')} value={counts.closed} tone="bg-brand/10 text-brand-text" />
       </div>
 
       <Card>
         <FilterForm action="/admin/support" hidden={{}}>
-          <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search by name, email, or message..." />
+          <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminSupport.searchByNameEmailOrMessage')} />
           <FilterSelect name="status" defaultValue={statusFilter} options={[
             { value: '', label: 'All Statuses' },
             { value: 'open', label: 'Open' },

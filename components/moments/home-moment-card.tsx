@@ -22,6 +22,7 @@ import { reminderTimeFor } from '@/lib/moments/reminders';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -35,6 +36,7 @@ const DOMAIN_ICON: Record<PrepDomain, typeof Clock> = {
 const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
+  const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
   const nowISO = useMemo(() => new Date().toISOString(), []);
@@ -103,7 +105,7 @@ export function HomeMomentCard() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-text">Get ready</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-text">{t('homeMoment.getReady')}</span>
             <span className="text-xs font-medium text-muted">· {momentWhen(event.starts_at, event.all_day)}</span>
           </div>
           <p className="truncate text-sm font-bold sm:text-base">{event.title}</p>
@@ -111,13 +113,13 @@ export function HomeMomentCard() {
             {clash?.length ? (
               <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-500">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Overlaps {clash[0]}{clash.length > 1 ? ` +${clash.length - 1}` : ''}
+                {t('homeMoment.overlaps')} {clash[0]}{clash.length > 1 ? ` +${clash.length - 1}` : ''}
               </span>
             ) : null}
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
                 <Clock className="h-3.5 w-3.5 text-brand-text" />
-                Leave {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
               </span>
             )}
             {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {
@@ -151,7 +153,7 @@ export function HomeMomentCard() {
           <span className="hidden sm:inline">{remindState === 'done' ? 'Reminder set' : 'Remind me'}</span>
         </button>
       ) : (
-        <Link href="/dashboard/moments" aria-label="Open Moments" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand-text">
+        <Link href="/dashboard/moments" aria-label={t('homeMoment.openMoments')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand-text">
           <ChevronRight className="h-5 w-5" />
         </Link>
       )}

@@ -5,6 +5,7 @@ import { Star, Check, Sparkles, X, Reply, Trash2, Loader2 } from 'lucide-react';
 import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from './actions';
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Review = {
   id: string; rating: number; title: string | null; body: string | null;
@@ -13,6 +14,7 @@ type Review = {
 };
 
 export function ReviewRow({ review }: { review: Review }) {
+  const t = useTranslations();
   const [pending, start] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const moderate = (status: ReviewStatus) => start(async () => { await moderateReviewAction(review.id, status); });
@@ -36,16 +38,16 @@ export function ReviewRow({ review }: { review: Review }) {
 
       {review.reply && (
         <div className="mt-2 rounded-lg border border-border bg-elevated/50 p-2 text-xs">
-          <p className="font-medium text-brand-text">Your reply</p>
+          <p className="font-medium text-brand-text">{t('adminMarketingReviewsReviewRow.yourReply')}</p>
           <p className="mt-0.5 text-muted">{review.reply}</p>
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2 text-xs">
-        {review.status !== 'approved' && <button onClick={() => moderate('approved')} disabled={pending} className="inline-flex items-center gap-1 text-success hover:underline"><Check className="h-3.5 w-3.5" /> Approve</button>}
-        {review.status !== 'featured' && <button onClick={() => moderate('featured')} disabled={pending} className="inline-flex items-center gap-1 text-brand-text hover:underline"><Sparkles className="h-3.5 w-3.5" /> Feature</button>}
-        {review.status !== 'rejected' && <button onClick={() => moderate('rejected')} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> Reject</button>}
-        <button onClick={() => setReplyOpen((o) => !o)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Reply className="h-3.5 w-3.5" /> Reply</button>
+        {review.status !== 'approved' && <button onClick={() => moderate('approved')} disabled={pending} className="inline-flex items-center gap-1 text-success hover:underline"><Check className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.approve')}</button>}
+        {review.status !== 'featured' && <button onClick={() => moderate('featured')} disabled={pending} className="inline-flex items-center gap-1 text-brand-text hover:underline"><Sparkles className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.feature')}</button>}
+        {review.status !== 'rejected' && <button onClick={() => moderate('rejected')} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reject')}</button>}
+        <button onClick={() => setReplyOpen((o) => !o)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Reply className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reply')}</button>
         {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
         <button onClick={() => start(async () => { await deleteReviewAction(review.id); })} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
@@ -53,8 +55,8 @@ export function ReviewRow({ review }: { review: Review }) {
       {replyOpen && (
         <form action={(fd) => start(async () => { await replyToReviewAction(fd); setReplyOpen(false); })} className="mt-2 space-y-2">
           <input type="hidden" name="id" value={review.id} />
-          <textarea name="reply" defaultValue={review.reply ?? ''} rows={2} placeholder="Write a public reply…" className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">Save reply</button>
+          <textarea name="reply" defaultValue={review.reply ?? ''} rows={2} placeholder={t('adminMarketingReviewsReviewRow.writeAPublicReply')} className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <button className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingReviewsReviewRow.saveReply')}</button>
         </form>
       )}
     </div>

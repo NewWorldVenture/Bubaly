@@ -23,6 +23,7 @@ import {
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Homework = Tables<'homework_assignments'>;
 
@@ -45,6 +46,7 @@ function toLocalInput(iso: string | null): string {
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
+  const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   void role;
@@ -135,24 +137,24 @@ export function HomeworkModule() {
   return (
     <div>
       <PageHeader
-        title="Homework"
+        title={t('homework.homework')}
         description="Keep every assignment on track — by student, by due date, with overdue alerts."
-        action={<div className="flex items-center gap-2"><AiInsight kind="homework" /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="homework" /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button></div>}
       />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="rounded-2xl bg-surface/50 border border-border p-4 text-center">
           <div className="text-2xl font-bold text-fg">{stats.open}</div>
-          <div className="text-xs text-muted mt-0.5">Open</div>
+          <div className="text-xs text-muted mt-0.5">{t('homework.open')}</div>
         </div>
         <div className={cn('rounded-2xl border p-4 text-center', stats.overdue > 0 ? 'bg-rose-500/5 border-rose-500/30' : 'bg-surface/50 border-border')}>
           <div className={cn('text-2xl font-bold', stats.overdue > 0 ? 'text-rose-400' : 'text-fg')}>{stats.overdue}</div>
-          <div className="text-xs text-muted mt-0.5">Overdue</div>
+          <div className="text-xs text-muted mt-0.5">{t('homework.overdue')}</div>
         </div>
         <div className="rounded-2xl bg-surface/50 border border-border p-4 text-center">
           <div className="text-2xl font-bold text-emerald-400">{stats.completionRate}%</div>
-          <div className="text-xs text-muted mt-0.5">Completed</div>
+          <div className="text-xs text-muted mt-0.5">{t('homework.completed')}</div>
         </div>
       </div>
 
@@ -166,14 +168,14 @@ export function HomeworkModule() {
         ))}
         <label className="ml-auto flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Show completed
+          {t('homework.showCompleted')}
         </label>
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={BookOpen} title="No homework yet"
+        <EmptyState icon={BookOpen} title={t('homework.noHomeworkYet')}
           description="Add assignments to track due dates and progress for each student."
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button>} />
+          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button>} />
       ) : (
         <div className="space-y-6">
           {buckets.map((bucket) => {
@@ -193,7 +195,7 @@ export function HomeworkModule() {
                     const done = h.status === 'done' || h.status === 'submitted';
                     return (
                       <div key={h.id} className={cn('flex items-start gap-3 rounded-xl border p-3.5', overdue ? 'border-rose-500/30 bg-rose-500/[0.03]' : 'border-border bg-surface/50')}>
-                        <button onClick={() => cycleStatus(h)} aria-label="Cycle status"
+                        <button onClick={() => cycleStatus(h)} aria-label={t('homework.cycleStatus')}
                           className={cn('mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-lg border flex-shrink-0 transition',
                             done ? 'bg-emerald-500 border-emerald-500 text-white'
                               : h.status === 'in_progress' ? 'border-amber-500 text-amber-400'
@@ -213,8 +215,8 @@ export function HomeworkModule() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <button onClick={() => openEdit(h)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => remove(h)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => openEdit(h)} aria-label={t('homework.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => remove(h)} aria-label={t('homework.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
                     );
@@ -229,17 +231,17 @@ export function HomeworkModule() {
       {/* Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit homework' : 'Add homework'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="Assignment" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Chapter 7 problems 1–20" autoFocus />}
+          <Field label={t('homework.assignment')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('homework.eGChapter7Problems1')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Subject">
-              {(id) => <Input id={id} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="Math" />}
+            <Field label={t('homework.subject')}>
+              {(id) => <Input id={id} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder={t('homework.math')} />}
             </Field>
-            <Field label="Student">
+            <Field label={t('homework.student')}>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-                  <option value="">Unassigned</option>
+                  <option value="">{t('homework.unassigned')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
@@ -249,7 +251,7 @@ export function HomeworkModule() {
             <Field label="Due">
               {(id) => <Input id={id} type="datetime-local" value={form.due_at} onChange={(e) => setForm((f) => ({ ...f, due_at: e.target.value }))} />}
             </Field>
-            <Field label="Status">
+            <Field label={t('homework.status')}>
               {(id) => (
                 <Select id={id} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as HomeworkStatus }))}>
                   {(Object.keys(HOMEWORK_STATUS_LABELS) as HomeworkStatus[]).map((s) => <option key={s} value={s}>{HOMEWORK_STATUS_LABELS[s]}</option>)}
@@ -257,11 +259,11 @@ export function HomeworkModule() {
               )}
             </Field>
           </div>
-          <Field label="Details">
-            {(id) => <Textarea id={id} value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} placeholder="Instructions, resources, page numbers…" />}
+          <Field label={t('homework.details')}>
+            {(id) => <Textarea id={id} value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} placeholder={t('homework.instructionsResourcesPageNumbers')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('homework.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add homework'}</Button>
           </div>
         </form>

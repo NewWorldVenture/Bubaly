@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { answerRunAction } from '@/app/(app)/dashboard/concierge/run-actions';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ClarificationCard({
   runId,
@@ -29,6 +30,7 @@ export function ClarificationCard({
   answered: { question: string; answer: string }[];
   canAnswer: boolean;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [current, setCurrent] = useState(question);
@@ -88,19 +90,19 @@ export function ClarificationCard({
               <Input
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                placeholder="Type your answer"
-                aria-label="Your answer"
+                placeholder={t('clarification.typeYourAnswer')}
+                aria-label={t('clarification.yourAnswer')}
                 maxLength={1000}
                 autoFocus
                 disabled={busy}
                 className="flex-1"
               />
               <Button type="submit" size="md" className="coarse:min-h-11 sm:shrink-0" loading={busy} disabled={busy || !reply.trim()}>
-                {!busy && <Send className="h-4 w-4" aria-hidden />} Answer
+                {!busy && <Send className="h-4 w-4" aria-hidden />} {t('clarification.answer')}
               </Button>
             </form>
           ) : (
-            <p className="mt-2 text-xs text-muted">Waiting for the person who asked, or a parent, to answer.</p>
+            <p className="mt-2 text-xs text-muted">{t('clarification.waitingForThePersonWhoAsked')}</p>
           )}
         </div>
       </div>

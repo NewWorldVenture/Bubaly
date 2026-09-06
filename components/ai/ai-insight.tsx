@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Textarea } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
 import { INSIGHT_META, type InsightKind } from '@/lib/ai/insights';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Props = {
   kind: InsightKind;
@@ -28,6 +29,7 @@ type Props = {
  * and renders the answer. All data is fetched server-side from Supabase under RLS.
  */
 export function AiInsight({ kind, params, label, className, variant = 'secondary', size = 'sm', iconOnly }: Props) {
+  const t = useTranslations();
   const meta = INSIGHT_META[kind];
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');
@@ -80,7 +82,7 @@ export function AiInsight({ kind, params, label, className, variant = 'secondary
       <Modal open={open} onClose={() => setOpen(false)} title={meta.title} description={meta.blurb}>
         <div className="space-y-4">
           {meta.allowQuestion && (
-            <Field label="Focus (optional)">
+            <Field label={t('aiInsight.focusOptional')}>
               {(id) => (
                 <Textarea
                   id={id}
@@ -105,7 +107,7 @@ export function AiInsight({ kind, params, label, className, variant = 'secondary
             </div>
           )}
           {!answer && !error && !loading && (
-            <p className="text-center text-xs text-muted">Grounded in your family&rsquo;s own data. Suggestions only — you decide what to act on.</p>
+            <p className="text-center text-xs text-muted">{t('aiInsight.groundedInYourFamilyRsquoS')}</p>
           )}
         </div>
       </Modal>

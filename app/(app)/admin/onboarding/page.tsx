@@ -7,6 +7,7 @@ import {
 } from '@/lib/onboarding/ttv-audit';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Onboarding Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ function ReadFailure() {
 }
 
 export default async function OnboardingAuditPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   let progressResult;
@@ -53,11 +55,9 @@ export default async function OnboardingAuditPage() {
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <header>
-        <h1 className="text-xl font-black sm:text-2xl">Onboarding Audit</h1>
+        <h1 className="text-xl font-black sm:text-2xl">{t('adminOnboarding.onboardingAudit')}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          The first-run funnel and time-to-value across {a.total.toLocaleString()} onboarding runs.
-          The goal is <span className="font-semibold text-fg">first value in under {TTV_GOAL_SEC}s</span> —
-          measure it, find where people stall, and trim the friction.
+          {t('adminOnboarding.theFirstRunFunnelAndTime')} {a.total.toLocaleString()} {t('adminOnboarding.onboardingRunsTheGoalIs')} <span className="font-semibold text-fg">{t('adminOnboarding.firstValueInUnder')} {TTV_GOAL_SEC}s</span> {t('adminOnboarding.measureItFindWherePeopleStall')}
         </p>
       </header>
 
@@ -79,8 +79,8 @@ export default async function OnboardingAuditPage() {
         <Card className={cn('p-4', goalMet ? 'border-emerald-400/30' : 'border-amber-400/30')}>
           <p className="text-sm">
             {goalMet
-              ? <><span className="font-bold text-emerald-400">On target.</span> Most completed runs reach value within {TTV_GOAL_SEC}s (p90 {formatDuration(a.p90TtvSec)}).</>
-              : <><span className="font-bold text-amber-400">Below target.</span> {a.under90Rate == null ? 'No completed runs yet.' : `Only ${a.under90Rate}% of completed runs reach value within ${TTV_GOAL_SEC}s`} — p90 is {formatDuration(a.p90TtvSec)}. Trim the steps with the biggest drop-off below.</>}
+              ? <><span className="font-bold text-emerald-400">{t('adminOnboarding.onTarget')}</span> {t('adminOnboarding.mostCompletedRunsReachValueWithin')} {TTV_GOAL_SEC}{t('adminOnboarding.sP90')} {formatDuration(a.p90TtvSec)}).</>
+              : <><span className="font-bold text-amber-400">{t('adminOnboarding.belowTarget')}</span> {a.under90Rate == null ? 'No completed runs yet.' : `Only ${a.under90Rate}% of completed runs reach value within ${TTV_GOAL_SEC}s`} {t('adminOnboarding.p90Is')} {formatDuration(a.p90TtvSec)}{t('adminOnboarding.trimTheStepsWithTheBiggest')}</>}
           </p>
         </Card>
       )}
@@ -88,7 +88,7 @@ export default async function OnboardingAuditPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Step funnel */}
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Step completion</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('adminOnboarding.stepCompletion')}</h2>
           <div className="mt-4 space-y-2.5">
             {a.stepFunnel.map((s, i) => {
               const prev = i > 0 ? a.stepFunnel[i - 1].count : s.count;
@@ -107,14 +107,14 @@ export default async function OnboardingAuditPage() {
               );
             })}
           </div>
-          <p className="mt-3 text-[10px] text-muted">−% marks the drop-off from the previous step — the biggest ones are where to trim.</p>
+          <p className="mt-3 text-[10px] text-muted">{t('adminOnboarding.marksTheDropOffFromThe')}</p>
         </Card>
 
         {/* Where runs stall */}
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Where incomplete runs stall</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('adminOnboarding.whereIncompleteRunsStall')}</h2>
           {a.stalls.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No incomplete runs — everyone who starts, finishes. 🎉</p>
+            <p className="mt-3 text-sm text-muted">{t('adminOnboarding.noIncompleteRunsEveryoneWhoStarts')}</p>
           ) : (
             <div className="mt-4 space-y-2.5">
               {a.stalls.map((s) => (

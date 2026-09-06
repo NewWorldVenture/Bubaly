@@ -10,6 +10,7 @@ import {
   ASSET_KINDS, assetsByKind, formatBytes, isImageMime, type AssetKind,
 } from '@/lib/marketing/assets';
 import { uploadAssetAction, updateAssetAction, deleteAssetAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Asset Library', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,7 @@ const KIND_LABEL: Record<AssetKind, string> = {
 const BUCKET = 'marketing-assets';
 
 export default async function AssetsPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const { data, error: assetsError } = await supabase
     .from('marketing_assets')
@@ -59,34 +61,34 @@ export default async function AssetsPage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Central library for images, video, documents and brand files — reusable across Email, Social, Content and Landing Pages.
+        {tr('adminMarketingAssets.centralLibraryForImagesVideoDocuments')}
       </p>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><UploadCloud className="h-4 w-4 text-brand-text" /> Upload asset</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><UploadCloud className="h-4 w-4 text-brand-text" /> {tr('adminMarketingAssets.uploadAsset')}</h2>
         <form action={uploadAssetAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input type="file" name="file" required className={`${inputCls} py-1.5 file:mr-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs lg:col-span-2`} />
-          <select name="kind" defaultValue="" className={inputCls} aria-label="Asset kind">
-            <option value="">Auto-detect kind</option>
+          <select name="kind" defaultValue="" className={inputCls} aria-label={tr('adminMarketingAssets.assetKind')}>
+            <option value="">{tr('adminMarketingAssets.autoDetectKind')}</option>
             {ASSET_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
           </select>
-          <input name="name" placeholder="Name (defaults to filename)" className={inputCls} />
-          <input name="alt_text" placeholder="Alt text (for images)" className={`${inputCls} lg:col-span-2`} />
-          <input name="tags" placeholder="Tags, comma-separated" className={inputCls} />
-          <select name="license" defaultValue="original" className={inputCls} aria-label="Asset license">
-            <option value="original">Original / owned</option><option value="cc0">CC0 / public domain</option><option value="cc_by">Creative Commons BY</option><option value="licensed">Licensed with proof</option>
+          <input name="name" placeholder={tr('adminMarketingAssets.nameDefaultsToFilename')} className={inputCls} />
+          <input name="alt_text" placeholder={tr('adminMarketingAssets.altTextForImages')} className={`${inputCls} lg:col-span-2`} />
+          <input name="tags" placeholder={tr('adminMarketingAssets.tagsCommaSeparated')} className={inputCls} />
+          <select name="license" defaultValue="original" className={inputCls} aria-label={tr('adminMarketingAssets.assetLicense')}>
+            <option value="original">{tr('adminMarketingAssets.originalOwned')}</option><option value="cc0">{tr('adminMarketingAssets.cc0PublicDomain')}</option><option value="cc_by">{tr('adminMarketingAssets.creativeCommonsBy')}</option><option value="licensed">{tr('adminMarketingAssets.licensedWithProof')}</option>
           </select>
-          <input name="source_url" placeholder="Source URL (if applicable)" className={inputCls} />
-          <input name="attribution" placeholder="Attribution (if required)" className={inputCls} />
-          <button type="submit" className={btnCls}>Upload</button>
+          <input name="source_url" placeholder={tr('adminMarketingAssets.sourceUrlIfApplicable')} className={inputCls} />
+          <input name="attribution" placeholder={tr('adminMarketingAssets.attributionIfRequired')} className={inputCls} />
+          <button type="submit" className={btnCls}>{tr('adminMarketingAssets.upload')}</button>
         </form>
         <p className="mt-3 text-xs text-muted">
-          {assets.length} asset{assets.length === 1 ? '' : 's'} · {formatBytes(totalBytes)} total · 50 MB per file.
+          {assets.length} asset{assets.length === 1 ? '' : 's'} · {formatBytes(totalBytes)} {tr('adminMarketingAssets.total50MbPerFile')}
         </p>
       </Card>
 
       {assets.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No assets yet — upload your first above.</p>
+        <p className="py-8 text-center text-sm text-muted">{tr('adminMarketingAssets.noAssetsYetUploadYourFirst')}</p>
       ) : (
         ASSET_KINDS.filter((k) => grouped[k].length > 0).map((kind) => {
           const Icon = KIND_ICON[kind];

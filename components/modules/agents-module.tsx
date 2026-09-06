@@ -19,6 +19,7 @@ import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatu
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAgentActivity } from '@/lib/ai/explanation';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Activity = Tables<'agent_activity'>;
 
@@ -35,6 +36,7 @@ const SEV_STYLE = {
 } as const;
 
 export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing[]; activity: Activity[] }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<AgentId>('scheduler');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -68,7 +70,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title="Your family assistant"
+        title={t('agents.yourFamilyAssistant')}
         description="One assistant, a team of specialists behind it — each watching its corner of family life."
       />
 
@@ -81,7 +83,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-brand-text"><Compass className="h-5 w-5" /></span>
             <div>
-              <h2 className="text-sm font-semibold text-fg">Chief of Staff</h2>
+              <h2 className="text-sm font-semibold text-fg">{t('agents.chiefOfStaff')}</h2>
               <p className="text-xs text-muted">{AGENTS_BY_ID.chief_of_staff.role}</p>
             </div>
           </div>

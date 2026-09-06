@@ -26,6 +26,7 @@ import {
   type FactCategory,
 } from '@/lib/memory/facts';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Fact = Tables<'family_facts'>;
 
@@ -35,6 +36,7 @@ const blank = {
 };
 
 export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -110,17 +112,17 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
-        title="Family Knowledge Base"
+        title={t('knowledgeBase.familyKnowledgeBase')}
         description="Everything the family should never have to re-remember — sizes, allergies, key contacts, preferences — in one searchable place."
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
               <Link href="/dashboard/knowledge/seed"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
-                <Database className="h-4 w-4" /> Seed test data
+                <Database className="h-4 w-4" /> {t('knowledgeBase.seedTestData')}
               </Link>
             )}
-            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a fact</Button>
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>
           </div>
         }
       />
@@ -129,11 +131,11 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder="Search facts…" className="pl-9" />
+          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder={t('knowledgeBase.searchFacts')} className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <Chip active={memberFilter === 'all'} onClick={() => setMemberFilter('all')}>Everyone</Chip>
-          <Chip active={memberFilter === 'family'} onClick={() => setMemberFilter('family')}>Whole family</Chip>
+          <Chip active={memberFilter === 'all'} onClick={() => setMemberFilter('all')}>{t('knowledgeBase.everyone')}</Chip>
+          <Chip active={memberFilter === 'family'} onClick={() => setMemberFilter('family')}>{t('knowledgeBase.wholeFamily')}</Chip>
           {members.map((m) => (
             <Chip key={m.id} active={memberFilter === m.id} onClick={() => setMemberFilter(m.id)}>{m.display_name}</Chip>
           ))}
@@ -147,9 +149,9 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={Brain} title="Nothing saved yet"
+        <EmptyState icon={Brain} title={t('knowledgeBase.nothingSavedYet')}
           description="Capture the facts you always have to look up — shoe sizes, the pediatrician's number, who's allergic to what."
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a fact</Button>} />
+          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>} />
       ) : (
         <div className="space-y-6">
           {grouped.map(([cat, items]) => (
@@ -169,14 +171,14 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                       <p className="mt-0.5 text-[11px] text-muted">{memberName(f.member_id)}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5">
-                      <button onClick={() => copyValue(f)} aria-label="Copy value" title="Copy" className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg">
+                      <button onClick={() => copyValue(f)} aria-label={t('knowledgeBase.copyValue')} title={t('knowledgeBase.copy')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {copiedId === f.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
                       <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} title={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
                         {f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                       </button>
-                      <button onClick={() => openEdit(f)} aria-label="Edit" className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => remove(f)} aria-label="Remove" className="rounded p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => openEdit(f)} aria-label={t('knowledgeBase.edit')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => remove(f)} aria-label={t('knowledgeBase.remove')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </li>
                 ))}
@@ -190,15 +192,15 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit fact' : 'Add a fact'}>
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="About">
+            <Field label={t('knowledgeBase.about')}>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-                  <option value="">Whole family</option>
+                  <option value="">{t('knowledgeBase.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Category">
+            <Field label={t('knowledgeBase.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as FactCategory }))}>
                   {FACT_CATEGORY_ORDER.map((c) => <option key={c} value={c}>{FACT_CATEGORY_LABELS[c]}</option>)}
@@ -206,17 +208,17 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
               )}
             </Field>
           </div>
-          <Field label="Label" required>
-            {(id) => <Input id={id} value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="e.g. Shoe size, Allergy, Pediatrician" autoFocus />}
+          <Field label={t('knowledgeBase.label')} required>
+            {(id) => <Input id={id} value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder={t('knowledgeBase.eGShoeSizeAllergyPediatrician')} autoFocus />}
           </Field>
-          <Field label="Value" required>
-            {(id) => <Input id={id} value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder="e.g. US 2, Peanuts, Dr. Lee 555-0100" />}
+          <Field label={t('knowledgeBase.value')} required>
+            {(id) => <Input id={id} value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder={t('knowledgeBase.eGUs2PeanutsDr')} />}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Any extra detail…" />}
+          <Field label={t('knowledgeBase.notes')}>
+            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('knowledgeBase.anyExtraDetail')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('knowledgeBase.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add fact'}</Button>
           </div>
         </form>

@@ -15,10 +15,12 @@ import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, providerHint } from '@/lib/auth/otp';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const RESEND_SECONDS = 30;
 
 export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onBack?: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const [phase, setPhase] = useState<'phone' | 'code'>('phone');
@@ -72,16 +74,16 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
     return (
       <div className="space-y-4 animate-fade-in">
         <div>
-          <h2 className="text-lg font-semibold">What&rsquo;s your phone number?</h2>
-          <p className="mt-0.5 text-sm text-muted">We&rsquo;ll text you a verification code to confirm.</p>
+          <h2 className="text-lg font-semibold">{t('phoneAuth.whatRsquoSYourPhoneNumber')}</h2>
+          <p className="mt-0.5 text-sm text-muted">{t('phoneAuth.weRsquoLlTextYouA')}</p>
         </div>
         <PhoneInput defaultCountryCode="US" onChange={(e164) => setPhone(e164)} />
         <Button className="w-full" loading={sending} disabled={!isLikelyE164(phone)} onClick={() => send(false)}>
-          Continue
+          {t('phoneAuth.continue')}
         </Button>
         {onBack && (
           <button type="button" onClick={onBack} className="flex w-full items-center justify-center gap-1 text-sm text-muted hover:text-fg">
-            <ArrowLeft className="h-4 w-4" /> Back
+            <ArrowLeft className="h-4 w-4" /> {t('phoneAuth.back')}
           </button>
         )}
       </div>
@@ -91,8 +93,8 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
   return (
     <div className="space-y-4 animate-fade-in">
       <div>
-        <h2 className="text-lg font-semibold">Enter the code we sent you</h2>
-        <p className="mt-0.5 text-sm text-muted">We sent a 6-digit code to {phone}.</p>
+        <h2 className="text-lg font-semibold">{t('phoneAuth.enterTheCodeWeSentYou')}</h2>
+        <p className="mt-0.5 text-sm text-muted">{t('phoneAuth.weSentA6DigitCode')} {phone}.</p>
       </div>
       <OtpInput
         value={code}
@@ -101,11 +103,11 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
         onComplete={(full) => void verify(full)}
       />
       <Button className="w-full" loading={verifying} disabled={!isValidOtp(code)} onClick={() => verify()}>
-        Verify &amp; continue
+        {t('phoneAuth.verifyAmpContinue')}
       </Button>
       <div className="text-center text-sm text-muted">
         {resendIn > 0 ? (
-          <span>Resend code in {formatCountdown(resendIn)}</span>
+          <span>{t('phoneAuth.resendCodeIn')} {formatCountdown(resendIn)}</span>
         ) : (
           <button type="button" onClick={() => send(true)} disabled={sending} className="font-medium text-brand-text hover:underline disabled:opacity-60">
             {sending ? <Loader2 className="inline h-4 w-4 animate-spin" /> : 'Resend code'}
@@ -114,7 +116,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
       </div>
       <button type="button" onClick={() => { setPhase('phone'); setCode(''); }}
         className="flex w-full items-center justify-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> Use a different number
+        <ArrowLeft className="h-4 w-4" /> {t('phoneAuth.useADifferentNumber')}
       </button>
     </div>
   );

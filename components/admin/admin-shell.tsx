@@ -12,6 +12,7 @@ import { AdminNotificationBell } from '@/components/admin/admin-notification-bel
 import { ADMIN_NAV } from '@/lib/constants/navigation';
 import type { AdminNotificationRow } from '@/lib/admin/notifications';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function isActive(pathname: string, href: string) {
   if (href === '/admin') return pathname === '/admin';
@@ -19,21 +20,22 @@ function isActive(pathname: string, href: string) {
 }
 
 function AdminProfile({ name, email }: { name: string; email: string | null }) {
+  const t = useTranslations();
   return (
     <div className="sidebar-card">
       <div className="flex items-center gap-3">
         <Avatar name={name} size={36} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{name}</p>
-          <p className="truncate text-xs text-brand-text">Super Administrator</p>
+          <p className="truncate text-xs text-brand-text">{t('adminShell.superAdministrator')}</p>
         </div>
       </div>
       <p className="mt-2 text-xs text-muted">{email}</p>
       <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">
-        Full Access
+        {t('adminShell.fullAccess')}
       </span>
       <Link href="/dashboard/settings" className="mt-3 block w-full rounded-lg border border-border py-2 text-center text-xs font-medium hover:bg-elevated">
-        View Profile
+        {t('adminShell.viewProfile')}
       </Link>
     </div>
   );
@@ -54,6 +56,7 @@ export function AdminShell({
   notifications?: AdminNotificationRow[];
   dataWarnings?: string[];
 }) {
+  const t = useTranslations();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -85,10 +88,10 @@ export function AdminShell({
         <div className="space-y-3 px-3 pb-4">
           <div className="space-y-1.5">
             <Link href="/dashboard/briefing" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
-              <LayoutDashboard className="h-3.5 w-3.5" /> Go to Parent Dashboard
+              <LayoutDashboard className="h-3.5 w-3.5" /> {t('adminShell.goToParentDashboard')}
             </Link>
             <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
-              <Home className="h-3.5 w-3.5" /> Go to Family Dashboard
+              <Home className="h-3.5 w-3.5" /> {t('adminShell.goToFamilyDashboard')}
             </Link>
           </div>
           <AdminProfile name={adminName} email={adminEmail} />
@@ -102,14 +105,14 @@ export function AdminShell({
             <LogoMark className="h-9 w-16" />
           </Link>
           <span className="hidden items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand-text sm:inline-flex">
-            <ShieldCheck className="h-3.5 w-3.5" /> Super Admin
+            <ShieldCheck className="h-3.5 w-3.5" /> {t('adminShell.superAdmin')}
           </span>
           <form action="/admin/users" method="GET" className="hidden flex-1 max-w-md md:flex">
             <label className="flex h-10 w-full items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted">
               <Search className="h-4 w-4 shrink-0" />
               <input
                 name="q"
-                placeholder="Search users, families, settings..."
+                placeholder={t('adminShell.searchUsersFamiliesSettings')}
                 className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted"
               />
             </label>
@@ -131,14 +134,14 @@ export function AdminShell({
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
                   <Link href="/dashboard/briefing" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-                    <LayoutDashboard className="h-4 w-4" /> Go to Parent Dashboard
+                    <LayoutDashboard className="h-4 w-4" /> {t('adminShell.goToParentDashboard')}
                   </Link>
                   <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-                    <Home className="h-4 w-4" /> Go to Family Dashboard
+                    <Home className="h-4 w-4" /> {t('adminShell.goToFamilyDashboard')}
                   </Link>
                   <div className="my-1 h-px bg-border" />
                   <SignOutButton className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
-                    <LogOut className="h-4 w-4" /> Sign out
+                    <LogOut className="h-4 w-4" /> {t('adminShell.signOut')}
                   </SignOutButton>
                 </div>
               </>
@@ -165,10 +168,10 @@ export function AdminShell({
           {dataWarnings.length > 0 && (
             <div
               role="status"
-              aria-label="Admin data health"
+              aria-label={t('adminShell.adminDataHealth')}
               className="mx-auto mt-5 max-w-6xl rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
             >
-              <p className="font-semibold">Some admin data is temporarily unavailable.</p>
+              <p className="font-semibold">{t('adminShell.someAdminDataIsTemporarilyUnavailable')}</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {dataWarnings.map((warning) => <li key={warning}>{warning}</li>)}
               </ul>

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -30,6 +31,7 @@ const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('
 const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
 
 export function WeekendModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -131,8 +133,8 @@ export function WeekendModule() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand-text" /> Weekend Planner</h1>
-        <p className="text-sm text-muted">Type a ZIP code, pick how far you&apos;ll travel, and discover everything happening nearby over the next few days.</p>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand-text" /> {t('weekend.weekendPlanner')}</h1>
+        <p className="text-sm text-muted">{t('weekend.typeAZipCodePickHow')}</p>
       </div>
 
       {/* search bar */}
@@ -140,31 +142,31 @@ export function WeekendModule() {
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
           <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3">
             <MapPin className="h-4 w-4 shrink-0 text-muted" />
-            <Input value={zip} inputMode="numeric" maxLength={5} placeholder="ZIP code (e.g. 90210)"
+            <Input value={zip} inputMode="numeric" maxLength={5} placeholder={t('weekend.zipCodeEG90210')}
               onChange={(e) => { setTouched(true); setZip(e.target.value.replace(/\D/g, '').slice(0, 5)); }}
               onKeyDown={(e) => e.key === 'Enter' && discover()}
               className="h-11 border-0 bg-transparent px-1" />
           </div>
           <Select value={String(radius)} onChange={(e) => { setTouched(true); setRadius(Number(e.target.value)); }} className="h-11 sm:w-36">
-            {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>Within {r} mi</option>)}
+            {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{t('weekend.within')} {r} mi</option>)}
           </Select>
           <Select value={String(days)} onChange={(e) => { setTouched(true); setDays(Number(e.target.value)); }} className="h-11 sm:w-36">
-            {[3, 6, 10, 14].map((d) => <option key={d} value={d}>Next {d} days</option>)}
+            {[3, 6, 10, 14].map((d) => <option key={d} value={d}>{t('weekend.next')} {d} days</option>)}
           </Select>
-          <Button onClick={discover} loading={busy} className="h-11"><Search className="h-4 w-4" /> Find events</Button>
+          <Button onClick={discover} loading={busy} className="h-11"><Search className="h-4 w-4" /> {t('weekend.findEvents')}</Button>
         </div>
         <button onClick={() => setShowSources((s) => !s)} className="mt-3 flex items-center gap-1 text-xs text-muted hover:text-fg">
-          <Rss className="h-3.5 w-3.5" /> Local sources{feeds.length ? ` (${feeds.filter((f) => f.is_active).length} active)` : ''}
+          <Rss className="h-3.5 w-3.5" /> {t('weekend.localSources')}{feeds.length ? ` (${feeds.filter((f) => f.is_active).length} active)` : ''}
           <ChevronDown className={`h-3.5 w-3.5 transition ${showSources ? 'rotate-180' : ''}`} />
         </button>
         {showSources && (
           <div className="mt-3 space-y-3 border-t border-border pt-3">
-            <p className="text-xs text-muted">Add any reliable local calendar — a city events page, library, parks &amp; rec, or school district — as an <strong>.ics</strong> or <strong>RSS</strong> link. We crawl them alongside Ticketmaster &amp; SeatGeek and merge everything by day.</p>
+            <p className="text-xs text-muted">{t('weekend.addAnyReliableLocalCalendarA')} <strong>.ics</strong> or <strong>RSS</strong> {t('weekend.linkWeCrawlThemAlongsideTicketmaster')}</p>
             {feeds.length > 0 && (
               <ul className="space-y-1.5">
                 {feeds.map((f) => (
                   <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">
-                    <input type="checkbox" checked={f.is_active} onChange={() => toggleFeed(f)} className="h-4 w-4 rounded border-border" title="Active" />
+                    <input type="checkbox" checked={f.is_active} onChange={() => toggleFeed(f)} className="h-4 w-4 rounded border-border" title={t('weekend.active')} />
                     <span className="font-medium">{f.label}</span>
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
@@ -175,7 +177,7 @@ export function WeekendModule() {
               </ul>
             )}
             <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
-              <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder="Name (e.g. City Calendar)" className="h-9" />
+              <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder={t('weekend.nameEGCityCalendar')} className="h-9" />
               <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
               <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
               <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
@@ -187,7 +189,7 @@ export function WeekendModule() {
       {/* saved plans */}
       {savedEvents.length > 0 && (
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand-text"><Star className="h-4 w-4" /> Your shortlist ({savedEvents.length})</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand-text"><Star className="h-4 w-4" /> {t('weekend.yourShortlist')}{savedEvents.length})</h2>
           <ul className="space-y-2">
             {savedEvents.map(({ plan, event }) => {
               const st = PLAN_STATUSES.find((s) => s.value === plan.status)!;
@@ -202,7 +204,7 @@ export function WeekendModule() {
                       {PLAN_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${st.tone}`}>{st.label}</span>
-                    <button onClick={() => removePlan(plan.id)} className="text-xs text-muted hover:text-danger">Remove</button>
+                    <button onClick={() => removePlan(plan.id)} className="text-xs text-muted hover:text-danger">{t('weekend.remove')}</button>
                   </div>
                 </li>
               );
@@ -213,7 +215,7 @@ export function WeekendModule() {
 
       {/* discovered events grouped by day */}
       {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load weekend planner data. Refresh and try again." onRetry={refresh} /> : grouped.length === 0 ? (
-        <EmptyState icon={Sparkles} title="No upcoming events yet" description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
+        <EmptyState icon={Sparkles} title={t('weekend.noUpcomingEventsYet')} description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
       ) : (
         <div className="space-y-6">
           {grouped.map(([day, dayEvents]) => (
@@ -233,7 +235,7 @@ export function WeekendModule() {
                       <div className="flex flex-1 flex-col p-3">
                         <div className="mb-1 flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-muted">{cat.emoji} {cat.label}</span>
-                          {e.is_family_friendly && <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-300">Family</span>}
+                          {e.is_family_friendly && <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-300">{t('weekend.family')}</span>}
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] text-muted">{sourceLabel(e.source)}</span>
                         </div>
                         <p className="line-clamp-2 font-semibold">{e.title}</p>
@@ -247,9 +249,9 @@ export function WeekendModule() {
                           {saved ? (
                             <span className="flex items-center gap-1 text-xs font-medium text-brand-text"><Star className="h-3.5 w-3.5 fill-current" /> {PLAN_STATUSES.find((s) => s.value === saved.status)!.label}</span>
                           ) : (
-                            <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'interested')}><Star className="h-3.5 w-3.5" /> Save</Button>
+                            <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'interested')}><Star className="h-3.5 w-3.5" /> {t('weekend.save')}</Button>
                           )}
-                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">Tickets <ExternalLink className="h-3 w-3" /></a>}
+                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">{t('weekend.tickets')} <ExternalLink className="h-3 w-3" /></a>}
                         </div>
                       </div>
                     </div>

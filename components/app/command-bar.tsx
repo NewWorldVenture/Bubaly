@@ -25,6 +25,7 @@ import { routeCommand, type CommandResult } from '@/lib/command-bar/route';
 import { submitAIRequest } from '@/lib/ai/chat-request';
 import { moduleFromPathname } from '@/lib/concierge/suggested-prompts';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -40,6 +41,7 @@ export function toCommandBarResults(results: CommandResult[]): CommandBarResult[
 const TOAST_ANSWER_CHARS = 160;
 
 export function CommandBar() {
+  const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const { familyId, userId, selfMember } = useApp();
@@ -131,7 +133,7 @@ export function CommandBar() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Command bar"
+        aria-label={t('commandBar.commandBar')}
         className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl popover-surface shadow-glass animate-fade-in"
         onKeyDown={onKeyDown}
       >
@@ -141,8 +143,8 @@ export function CommandBar() {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search, add a task, or ask anything…"
-            aria-label="Command input"
+            placeholder={t('commandBar.searchAddATaskOrAsk')}
+            aria-label={t('commandBar.commandInput')}
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted"
           />
           <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted sm:block">esc</kbd>

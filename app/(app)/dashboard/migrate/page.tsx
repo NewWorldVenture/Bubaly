@@ -6,11 +6,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { MigrateWizard } from '@/components/migrate/migrate-wizard';
 import { competitorByKey } from '@/lib/migrate/competitors';
 import { fmtRelative } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Switch to Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MigratePage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { data: imports } = await supabase
@@ -24,7 +26,7 @@ export default async function MigratePage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Switch to Bubaly"
+        title={t('dashboardMigrate.switchToBubaly')}
         description="Bring your calendar, lists and tasks over from your old family app — in minutes."
       />
 
@@ -45,7 +47,7 @@ export default async function MigratePage() {
 
       {imports && imports.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-3 flex items-center gap-2 font-semibold"><History className="h-4 w-4 text-muted" /> Recent imports</h2>
+          <h2 className="mb-3 flex items-center gap-2 font-semibold"><History className="h-4 w-4 text-muted" /> {t('dashboardMigrate.recentImports')}</h2>
           <ul className="divide-y divide-border">
             {imports.map((row) => {
               const meta = (row.metadata ?? {}) as { source?: string; counts?: Record<string, number>; skipped?: number };

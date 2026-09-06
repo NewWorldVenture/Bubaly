@@ -12,6 +12,7 @@ import {
   type ListingSignals, type AttentionTone,
 } from '@/lib/marketplace/selling';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Selling · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ function ReadFailure() {
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
 export default async function SellingPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -126,11 +128,11 @@ export default async function SellingPage() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Selling"
+        title={tr('marketplaceSelling.selling')}
         description="Everything you're selling, ranked by what needs you — answer questions, reply to offers, confirm pickups, chase returns."
         action={
           <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
-            <Plus className="h-4 w-4" /> Post an item
+            <Plus className="h-4 w-4" /> {tr('marketplaceSelling.postAnItem')}
           </Link>
         }
       />
@@ -147,8 +149,8 @@ export default async function SellingPage() {
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <LayoutDashboard className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">You’re not selling anything yet</p>
-          <p className="mt-1 text-sm text-muted">Post your first item and this becomes your command center — watchers, offers, questions, and pickups all in one place.</p>
+          <p className="mt-3 text-sm font-semibold">{tr('marketplaceSelling.youreNotSellingAnythingYet')}</p>
+          <p className="mt-1 text-sm text-muted">{tr('marketplaceSelling.postYourFirstItemAndThis')}</p>
         </div>
       ) : (
         <ul className="space-y-2">
