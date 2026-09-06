@@ -40,7 +40,7 @@ export default async function ReadinessPage() {
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString()),
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr),
     supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
-    supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
+    supabase.from('family_members').select('id', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true).order('id').limit(200),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
@@ -113,10 +113,19 @@ export default async function ReadinessPage() {
   // (`mostLoaded`) rather than a second threshold written here — which could
   // send a person to a page that names nobody. It identifies at most one
   // member, so this is 0 or 1 by construction.
+  // SEEDED FROM THE ROSTER, not from who happens to own an event. Counting
+  // only event owners meant eight things on one parent and nothing on the
+  // other two produced an average over `[8]` — so the one person carrying the
+  // whole week was never "clearly above the family average" and nobody was
+  // named. The people carrying nothing are exactly what makes it an imbalance.
   const perMember = new Map<string, number>();
+  for (const m of activeMembersRes.data ?? []) perMember.set(m.id, 0);
   for (const e of weekEvents) {
     if (e.all_day || !e.assignee_id) continue;
-    perMember.set(e.assignee_id, (perMember.get(e.assignee_id) ?? 0) + 1);
+    // An assignee outside the accessible roster is not another zero-load
+    // member; leaving them out is what keeps the average honest.
+    if (!perMember.has(e.assignee_id)) continue;
+    perMember.set(e.assignee_id, perMember.get(e.assignee_id)! + 1);
   }
   const overloadedMembers = mostLoaded(
     [...perMember.entries()].map(([memberId, upcoming]) => ({ memberId, name: memberId, upcoming, openTasks: 0 })),

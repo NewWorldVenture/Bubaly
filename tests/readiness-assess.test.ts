@@ -142,6 +142,7 @@ describe('overallReadiness', () => {
 // ─── The two signals the page never actually computed ──────────────────────
 
 import { readFileSync } from 'node:fs';
+import { mostLoaded } from '@/lib/operating-index/score';
 
 describe('the readiness page computes what it claims to know', () => {
   const page = readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
@@ -180,6 +181,18 @@ describe('the readiness page computes what it claims to know', () => {
     expect(page).not.toMatch(/averageLoad \* 1\.5/);
   });
 
+  it('measures the load against the whole roster, not just who owns an event', () => {
+    // Counting only event owners meant eight things on one parent and nothing
+    // on the other two averaged over `[8]`, so the person carrying the entire
+    // week was never "clearly above the family average" and nobody was named.
+    // The people carrying nothing are what make it an imbalance.
+    expect(page).toContain('for (const m of activeMembersRes.data ?? []) perMember.set(m.id, 0);');
+    expect(page).toContain("select('id', { count: 'exact' })");
+    // An assignee outside the accessible roster must not be padded in as a
+    // zero-load member — that would drag the average down and invent a person.
+    expect(page).toContain('if (!perMember.has(e.assignee_id)) continue;');
+  });
+
   it('does not pay for a count nothing reads', () => {
     // `groceryActive` was fetched with its own Supabase count query, passed
     // into `computeReadiness`, and never referenced by the formula.
@@ -201,6 +214,22 @@ describe('the readiness page computes what it claims to know', () => {
     // The activity panel no longer calls its own number a readiness score.
     expect(page).not.toContain("What&apos;s driving your score");
     expect(page).not.toMatch(/shapes your readiness/);
+  });
+});
+
+describe('the overload rule the readiness month card leans on', () => {
+  const load = (memberId: string, upcoming: number) => ({ memberId, name: memberId, upcoming, openTasks: 0 });
+
+  it('names the one person carrying the week when the others carry nothing', () => {
+    expect(mostLoaded([load('a', 8), load('b', 0), load('c', 0)])?.memberId).toBe('a');
+  });
+
+  it('names nobody when the week is quiet for everyone', () => {
+    expect(mostLoaded([load('a', 0), load('b', 0), load('c', 0)])).toBeNull();
+  });
+
+  it('names nobody when the work is shared out', () => {
+    expect(mostLoaded([load('a', 4), load('b', 3), load('c', 3)])).toBeNull();
   });
 });
 
