@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
   const def = INSIGHTS[kind];
   try {
-    const text = (await withAiRequest(
+    const text = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: `insights.${kind}`, text: `Insights: ${kind}` },
       async (obs) => {
@@ -104,9 +104,11 @@ export async function POST(req: Request) {
           maxTokens: def.maxTokens,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        return completion.text;
+        const answer = completion.text.trim();
+        if (!answer) obs.failed(new Error('The insight response was empty.'));
+        return answer;
       },
-    )).trim();
+    );
     if (!text) return NextResponse.json({ error: 'No suggestions just now. Please try again.' }, { status: 502 });
     return NextResponse.json({ text });
   } catch (err) {
