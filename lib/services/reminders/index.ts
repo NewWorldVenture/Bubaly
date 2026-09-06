@@ -66,8 +66,16 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
   if (kind === 'location' && !input.locationName?.trim()) {
     return fail('A location reminder needs a place.', { code: SERVICE_CODES.invalidInput });
   }
-  if (kind !== 'location' && !remindAt && recurrence === 'none') {
-    return fail('A reminder needs a time.', { code: SERVICE_CODES.invalidInput });
+  // A RECURRING one needs a time just as much, and used to be exempt from this
+  // check. `listDue` filters `remind_at is not null`, and `nextRemindAt` takes
+  // the current `remind_at` as the point to count forward from — so a repeating
+  // reminder with no first occurrence has neither a time to fire at nor a way
+  // to compute one. "Remind me every day to stretch" reached `reminders.create`
+  // with no `remind_at`, was stored, and never fired. Nothing surfaced it,
+  // because a reminder that is silently never due looks exactly like one whose
+  // time has not come.
+  if (kind !== 'location' && !remindAt) {
+    return fail('A reminder needs a time — even a repeating one needs its first occurrence.', { code: SERVICE_CODES.invalidInput });
   }
 
   return withIdempotency<FamilyReminder>(

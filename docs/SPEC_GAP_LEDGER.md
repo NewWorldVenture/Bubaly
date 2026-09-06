@@ -48,20 +48,6 @@ family is right.
 | **70** | medium / M | CONTINUOUS CLOSED LOOP | When the week changes underneath a run — the plumber can't come Tuesday, or three of five dinners fail because the pantry is empty — Bubaly cannot rethink the rest of the plan. It marks those steps failed, reports "partially completed", and stops. A parent has to open the run page and hand-edit a step (or start the whole request again) to get the remaining work re-planned, which is exactly the seven-modules-by-hand work the product exists to remove. |
 | **14** | low / S | AI MEMORY | A family that is happy for Bubaly to remember meal preferences and clothing sizes but does not want it keeping notes about, say, their finances, their contacts, or one child's routines has exactly one lever: all memory or none. Turning it off to protect the one area they care about also stops Bubaly remembering that Tom doesn't eat mushrooms and that Saturday mornings are off-limits, so in practice they leave it on and Bubaly keeps learning in the area they wanted left alone. The two categories most families would name first (medical, account) are already protected, so what is lost is the family's ability to draw their own line rather than accept ours. |
 
-### Two live bugs found while designing §30, not yet fixed
-
-- **A recurring reminder with no time is stored and can never fire.**
-  `lib/services/reminders/index.ts` refuses a timeless non-location reminder only
-  when `recurrence === 'none'`, so "remind me every day to stretch" through a run
-  or a routine stores `remind_at` NULL — and `listDue` filters
-  `.not('remind_at','is',null)`, so nothing ever returns it. The hand-written
-  chat tool refuses it outright, which is why it has stayed hidden. This must be
-  fixed *before* any delegation of `add_reminder`, not alongside it.
-
-- **`tasks.createChore` has no lower bound on points** (`z.number().int().nullish()`),
-  where the hand-written tool clamped with `Math.max(0, …)`. A negative-points
-  chore reaches the insert through the registry path today.
-
 ### One correction worth carrying
 
 **§30 is about the ledger, not the gate.** It is easy — I did it — to read "the chat
@@ -127,6 +113,40 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **The registry path was looser than the hand-written one it replaces.** Two
+  data-integrity bugs found while designing §30's delegation, both live, both in
+  code the delegation would have leaned on.
+
+  **A recurring reminder with no time was stored and could never fire.**
+  `createReminder` refused a timeless non-location reminder only when
+  `recurrence === 'none'`, so "remind me every day to stretch" — which
+  `reminders.create` turns into `kind: 'recurring'` with no `remind_at` — slipped
+  past and wrote `remind_at` NULL. Every reader excludes it: `listDue` filters
+  `.not('remind_at','is',null)`, the notification cron
+  (`lib/server/notifications.ts`) filters the same, and `nextRemindAt` takes the
+  *current* `remind_at` as the point to count forward from, so the row can never
+  acquire one later. It appeared in the module with no time, never became
+  overdue, and never notified anyone.
+
+  A test had pinned the old behaviour — *"accepts a recurring reminder with no
+  explicit first time"* — asserting acceptance and never that the reminder could
+  fire. That is how it looked deliberate for so long, and is worth remembering:
+  a test that pins the write without pinning the effect makes a dud look like a
+  feature.
+
+  **`createChore` had no floor on points.** The chat tool clamped with
+  `Math.max(0, …)`; the registry's schema was `z.number().int().nullish()`, so a
+  chore that TAKES points away for doing it was writable. Now refused at both the
+  service and the schema, rather than clamped — silently turning -5 into 0
+  answers a request nobody made. Zero still works, because a chore with no reward
+  is a real thing a family wants.
+
+  Scope, stated exactly: `createReminder` has one caller,
+  `lib/ai/tools/reminders.ts`, so this closes the AI path. The reminders module
+  still inserts into `family_reminders` directly and can still store a timeless
+  reminder — that is the §7 row, not this one.
+
 
 - **§21/§57, a gated chat action tells the truth.** Three separate ways the one
   screen a family talks to lied about what had happened, all of them live and

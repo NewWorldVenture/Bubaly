@@ -230,7 +230,7 @@ export const taskTools: ToolDefinition[] = [
       title: z.string().nullish(),
       task: z.string().nullish().describe('Legacy name for title; either one works'),
       description: z.string().nullish(),
-      points: z.number().int().nullish().describe('Defaults to 10'),
+      points: z.number().int().min(0).nullish().describe('Defaults to 10'),
       priority: z.enum(CHORE_PRIORITIES).nullish(),
       recurrence: z.enum(RECURRENCES).nullish(),
       due_at: z.string().nullish().describe('ISO 8601 datetime'),

@@ -178,6 +178,28 @@ describe('createChore', () => {
     });
   });
 
+  it('refuses negative points rather than clamping them', async () => {
+    // The chat tool this service replaced clamped with `Math.max(0, …)`, and the
+    // clamp did not survive the move to the registry — `points` was
+    // `z.number().int().nullish()` with no floor, so a model that said "-5
+    // points" wrote a chore that TAKES points away for doing it. Refused rather
+    // than clamped: silently turning -5 into 0 answers a request nobody made,
+    // and the person asking never learns their number was ignored.
+    const { db, calls } = makeDb(() => ({ data: { id: 'chore-1', title: 'Dishes', due_at: null }, error: null }));
+    const res = await createChore(scopeWith(db), { title: 'Dishes', points: -5 });
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(calls.some((c) => c.table === 'chores' && c.kind === 'insert'), 'nothing should be stored').toBe(false);
+  });
+
+  it('still allows a zero-point chore, which is a real thing a family wants', async () => {
+    // Not everything a household asks for carries a reward, and a floor that
+    // refused 0 would be a different bug from the one above.
+    const { db, calls } = makeDb(() => ({ data: { id: 'chore-1', title: 'Tidy up', due_at: null }, error: null }));
+    const res = await createChore(scopeWith(db), { title: 'Tidy up', points: 0 });
+    expect(res.ok).toBe(true);
+    expect(calls.find((c) => c.table === 'chores' && c.kind === 'insert')?.payload).toMatchObject({ points: 0 });
+  });
+
   it('assigns in the same call and passes the member id', async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'chores' && call.kind === 'insert') return { data: { id: 'chore-1', title: 'Dishes', due_at: null }, error: null };
