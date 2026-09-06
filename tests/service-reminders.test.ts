@@ -107,11 +107,36 @@ describe('createReminder', () => {
     expect(res).toMatchObject({ ok: false, code: 'invalid_input' });
   });
 
-  it('accepts a recurring reminder with no explicit first time', async () => {
+  it('refuses a recurring reminder with no first occurrence', async () => {
+    // This used to assert the opposite — that "Vitamins, daily" with no time was
+    // ACCEPTED — and asserted only that `recurrence` reached the payload, never
+    // that the reminder could fire. It could not, on any path:
+    //   * listDue filters `.not('remind_at','is',null)`
+    //   * the notification cron (lib/server/notifications.ts) filters the same
+    //   * nextRemindAt takes the CURRENT remind_at as its starting point, so the
+    //     row can never acquire one later
+    // so "remind me every day to stretch" was stored, shown with no time, never
+    // became overdue and never notified anyone. A test that pins acceptance
+    // without pinning usefulness is how that looked deliberate for so long.
     const { db, calls } = makeDb(() => ({ data: { id: 'rem-1' }, error: null }));
     const res = await createReminder(scopeWith(db), { title: 'Vitamins', recurrence: 'daily' });
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input' });
+    if (!res.ok) expect(res.error).toMatch(/first occurrence/i);
+    expect(calls.some((c) => c.kind === 'insert'), 'nothing should be stored').toBe(false);
+  });
+
+  it('accepts a recurring reminder that names its first occurrence', async () => {
+    // The recurrence itself was never the problem — the missing time was.
+    const { db, calls } = makeDb(() => ({ data: { id: 'rem-1' }, error: null }));
+    const res = await createReminder(scopeWith(db), {
+      title: 'Vitamins', recurrence: 'daily', remindAt: '2026-09-07T08:00:00Z',
+    });
     expect(res.ok).toBe(true);
-    expect((calls[0].payload as Record<string, unknown>).recurrence).toBe('daily');
+    const payload = calls[0].payload as Record<string, unknown>;
+    expect(payload.recurrence).toBe('daily');
+    // The stored time is what both readers filter on; a recurrence with no time
+    // here would be the same dud under a different name.
+    expect(payload.remind_at).toBe('2026-09-07T08:00:00.000Z');
   });
 
   it('surfaces a database failure as ok:false', async () => {
