@@ -27,6 +27,9 @@ import {
   type AutonomyMode, type AutopilotLevel,
 } from '@/lib/autonomy/loop';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { behaviorForDomain } from '@/lib/ai/family-settings';
+import { getAISettings } from '@/lib/services/ai-settings';
+import { scopeFromUserContext } from '@/lib/services/scope';
 
 type Result = { ok: true; applied: WriteBackKind[] } | { ok: false; error: string };
 
@@ -125,7 +128,19 @@ export async function planAcceptedAction(
     payload: { plan_id: planId, kinds: pendingKinds },
     context: { amountCents: plan.budget_cents ?? undefined },
   });
-  const mode = autonomyMode(decision);
+  // The family's own settings, not just their trust policies (0257). This path
+  // materialises calendar events and reminders on `auto`, and it used to read
+  // neither the master switch nor the scheduling dial — so "Switch Bubaly off"
+  // left accepted plans still writing themselves into the calendar.
+  const settings = await getAISettings(scopeFromUserContext(ctx, sb));
+  const behavior = behaviorForDomain(settings, AUTOPILOT_DOMAIN);
+  const mode = !settings.enabled
+    ? 'off'
+    : behavior === 'recommend'
+      ? 'off'
+      : behavior === 'prepare'
+        ? (autonomyMode(decision) === 'off' ? 'off' : 'ask')
+        : autonomyMode(decision);
 
   if (mode === 'auto') {
     const applied = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);

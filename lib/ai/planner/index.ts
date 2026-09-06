@@ -41,11 +41,12 @@ import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
+import { getAISettings } from '@/lib/services/ai-settings';
 import type { AutonomyBehavior, TrustRole } from '@/lib/trust/engine';
 import { buildPlannerSystemPrompt, buildPlannerUserMessage, buildRepairMessage, PLANNER_PROMPT_VERSION, toolsForIntent } from './prompts';
 import { PLAN_SCHEMA_NAME, PlanSchema, type Plan } from './schema';
 import { instantiateTemplate, templateContextFrom, templateFor, type TemplateContext, type WorkflowTemplate } from './templates/index';
-import { autonomyBehaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
+import { behaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
 
 export { PLANNER_PROMPT_VERSION } from './prompts';
 export { PlanSchema, type Plan, type PlanStep } from './schema';
@@ -223,11 +224,16 @@ export async function planRequest(
   // dropped (`off_catalogue`), so the narrowing in `toolsForIntent` is a
   // boundary, not a suggestion.
   const tools = toolsForIntent(intent, listTools());
+  // The family's own dials (0257) alongside their trust policies: a category
+  // set to "Recommend only" in Settings → Bubaly AI has to shape the plan, not
+  // just the execution of it.
+  const settings = await getAISettings(scope);
   const inputs: ValidationInputs = {
     policies: trust.policies,
     grants: trust.grants,
     delegations: trust.delegations,
     emergencyDomains: trust.emergencyDomains,
+    settings,
     role: plannerTrustRole(scope.role),
     now,
     tz: input.context.header.tz,
@@ -238,7 +244,7 @@ export async function planRequest(
   const ctx = templateContextFor(input, scope, now);
   const skeleton = template ? instantiateTemplate(template, ctx) : null;
   const behaviorHint = dominantBehavior(
-    tools.filter((t) => !t.readOnly).map((t) => autonomyBehaviorFor(inputs.policies, t.domain)),
+    tools.filter((t) => !t.readOnly).map((t) => behaviorFor(inputs, t.domain)),
   );
 
   const system = buildPlannerSystemPrompt({ intent, template, tools, behavior: behaviorHint, viewerRole: scope.role });
@@ -537,6 +543,7 @@ export async function replanRun(
   const tools = toolsForIntent(intent, listTools());
   const inputs: ValidationInputs = {
     policies: trust.policies, grants: trust.grants, delegations: trust.delegations, emergencyDomains: trust.emergencyDomains,
+    settings: await getAISettings(scope),
     role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
@@ -553,7 +560,7 @@ export async function replanRun(
 
   const system = buildPlannerSystemPrompt({
     intent, template: null, tools, viewerRole: scope.role,
-    behavior: dominantBehavior(tools.filter((t) => !t.readOnly).map((t) => autonomyBehaviorFor(inputs.policies, t.domain))),
+    behavior: dominantBehavior(tools.filter((t) => !t.readOnly).map((t) => behaviorFor(inputs, t.domain))),
   });
   const user = [
     buildPlannerUserMessage({ requestText: row.request_text, contextText: context.data.text, skeleton: null, skeletonHints: [] }),

@@ -9,6 +9,7 @@ import 'server-only';
 import { fenceUntrusted } from '@/lib/ai/safety/untrusted';
 import { FACT_CATEGORY_LABELS, type FactCategory } from '@/lib/memory/facts';
 import { isAiFact, isSensitiveMemory, listMemories } from '@/lib/services/memory';
+import { getAISettings } from '@/lib/services/ai-settings';
 import { ok } from '@/lib/services/types';
 import { memberName, type SliceDefinition } from '../policy';
 
@@ -30,6 +31,18 @@ export const memorySlice: SliceDefinition = {
   name: 'memory',
   title: 'What Bubaly remembers',
   async load(scope, env) {
+    // "Allow memory" off means Bubaly does not use what it learned next time —
+    // the other half of the promise the toggle makes. The facts stay in the
+    // family's own module; they just do not reach the model.
+    const settings = await getAISettings(scope);
+    if (!settings.memoryEnabled) {
+      return ok({
+        data: { facts: [], pending: [], withheld: 0 } satisfies MemorySliceData,
+        count: 0,
+        lines: ['- This family has asked Bubaly not to use what it remembers.'],
+      });
+    }
+
     const memories = await listMemories(scope);
     if (!memories.ok) return memories;
     const canManage = env.viewer.canManage;
