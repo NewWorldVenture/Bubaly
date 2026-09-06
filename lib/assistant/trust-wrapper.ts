@@ -45,20 +45,29 @@ export const TOOL_DOMAIN: Record<string, string> = {
  * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
  * no tool called ...".
  *
- * IT IS EMPTY, AND THAT IS THE POINT. It held `add_note`, `add_goal` and
- * `rsvp_to_event` — the three gated tools that were written nowhere but
- * `lib/assistant/tools.ts`. They now resolve to `notes.create`, `goals.create`
- * and `calendar.rsvp`, so every gated tool can be replayed and none needs a
- * caveat. Emptying it was forced rather than remembered:
- * `tests/assistant-approval-replay.test.ts` fails on an entry whose tool has
- * gained a registry equivalent.
+ * `add_note` and `add_goal` have left this list: they now resolve to
+ * `notes.create` and `goals.create`, so their approvals execute.
  *
- * The list stays because the ratchet still needs somewhere to put the next one.
- * That test fails in both directions — a newly gated tool with no registry
- * equivalent has to be named here with a reason, and an entry that gains one
- * has to be removed.
+ * `rsvp_to_event` stays, and the reason is sharper than "no registry tool" —
+ * WRITING ONE WOULD BE WORSE THAN THE REFUSAL. `decideApproval` builds its
+ * scope from the APPROVER (`scopeFromUserContext`), and `openApprovalRequest`
+ * stores `requested_by_member_id: null` for every AI-filed row, so nothing on
+ * the row says who asked. A registry RSVP tool taking `member_id` from
+ * `scope.memberId` would therefore record the approving PARENT as attending —
+ * and because `event_rsvps_once UNIQUE (event_id, member_id)` (0047) makes the
+ * write an upsert, it would silently replace that parent's own earlier answer.
+ * An honest "Bubaly could not finish it" beats destroying a reply nobody
+ * touched.
+ *
+ * What unblocks it is recording the asker: `wrapToolsWithTrust` does not even
+ * receive the acting member id today, so plumbing it through to
+ * `gateAiAction` and on to `requested_by_member_id` is the prerequisite, and it
+ * fixes the milder version of the same problem for notes and goals at the same
+ * time (see the ledger).
  */
-export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {};
+export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
+  rsvp_to_event: 'the replay runs as the approver and the row does not record who asked, so it would answer for the wrong person and overwrite their reply',
+};
 
 export function wrapToolsWithTrust(
   tools: ToolSpec[],

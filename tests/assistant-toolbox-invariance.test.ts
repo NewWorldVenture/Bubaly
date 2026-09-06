@@ -26,7 +26,7 @@ import { buildAssistantTools } from '@/lib/assistant/tools';
 import { buildActionTools, mergeToolSets } from '@/lib/ai/action-tools';
 import { toToolSpecs } from '@/lib/ai/tools/legacy-adapter';
 import { functionName, getTool, toolNames } from '@/lib/ai/tools/registry';
-import { TOOL_DOMAIN } from '@/lib/assistant/trust-wrapper';
+import { APPROVAL_CANNOT_REPLAY, TOOL_DOMAIN } from '@/lib/assistant/trust-wrapper';
 import type { ServiceScope } from '@/lib/services/types';
 
 // Neither the specs' construction nor the merge touches the database — only a
@@ -68,20 +68,20 @@ describe('the model is never offered one capability twice', () => {
     for (const name of offered) {
       const canonical = getTool(name)?.name;
       if (!canonical) continue;
-      const other = name === canonical ? functionName(canonical) : canonical;
       for (const spelling of [canonical, functionName(canonical)]) {
         if (spelling !== name && offered.has(spelling)) doubled.push(`${name} + ${spelling}`);
       }
-      void other;
     }
     expect([...new Set(doubled)], 'one capability offered under two names').toEqual([]);
   });
 
-  it('every gated hand-written write resolves to a registry tool', () => {
-    // This is the alias check stated positively. A gated tool whose alias is
-    // missing is BOTH an approval that cannot replay (see
-    // tests/assistant-approval-replay.test.ts) and a duplicate in the toolbox.
-    const unresolved = Object.keys(TOOL_DOMAIN).filter((name) => !getTool(name));
+  it('every gated hand-written write either resolves or is a named orphan', () => {
+    // The alias check stated positively. A gated tool whose alias is missing is
+    // BOTH an approval that cannot replay and a duplicate in the toolbox — the
+    // one deliberate exception is rsvp_to_event, which has no registry tool ON
+    // PURPOSE (see APPROVAL_CANNOT_REPLAY).
+    const unresolved = Object.keys(TOOL_DOMAIN)
+      .filter((name) => !getTool(name) && !(name in APPROVAL_CANNOT_REPLAY));
     expect(unresolved, `gated but unknown to the registry: ${unresolved.join(', ')}`).toEqual([]);
   });
 
@@ -93,15 +93,14 @@ describe('the model is never offered one capability twice', () => {
     for (const name of ['add_note', 'add_goal', 'rsvp_to_event', 'add_chore', 'create_calendar_event']) {
       expect(offered.has(name), `${name} is no longer what the model is offered`).toBe(true);
     }
-    for (const name of ['notes_create', 'goals_create', 'calendar_rsvp']) {
+    for (const name of ['notes_create', 'goals_create']) {
       expect(offered.has(name), `${name} leaked into the toolbox alongside its flat name`).toBe(false);
     }
   });
 
-  it('the three new tools are registered and reachable by their legacy names', () => {
+  it('the two new tools are registered and reachable by their legacy names', () => {
     expect(getTool('add_note')?.name).toBe('notes.create');
     expect(getTool('add_goal')?.name).toBe('goals.create');
-    expect(getTool('rsvp_to_event')?.name).toBe('calendar.rsvp');
   });
 
   it('declares medium risk, because that is what the chat gate already applied', () => {
@@ -109,7 +108,7 @@ describe('the model is never offered one capability twice', () => {
     // Before these tools existed the three names took the hard-coded fallback,
     // so declaring 'low' here — which every other tasks.* tool declares — would
     // have quietly loosened the gate for children the day this merged.
-    for (const name of ['add_note', 'add_goal', 'rsvp_to_event']) {
+    for (const name of ['add_note', 'add_goal']) {
       expect(getTool(name)?.risk, `${name} would move the chat gate`).toBe('medium');
     }
   });
