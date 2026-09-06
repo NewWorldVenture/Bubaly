@@ -89,6 +89,35 @@ that does.
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
 
+- **§26, the write primitive only.** Not "half of §26" — every §26 bullet is
+  predicated on *"Receipt upload could:"*, and this ships no upload, no parser and
+  no vision. What it ships is the thing all six bullets need and none of them had:
+  `createTransaction`, the first writer `public.transactions` has ever had outside
+  the wallet's own UI action. Before it, `lib/services/finances` exported nine
+  functions — all reads and analytics — so Bubaly could analyse a household's
+  spending six ways and could not record one charge.
+
+  **`fingerprint` stays null, deliberately.** `0256` migrated it with a partial
+  unique index, and every key available today can delete a real charge. Family +
+  merchant + amount + date — the migration header's own suggestion — collides on
+  two coffees at one shop on one day for one price, and a "that's a duplicate"
+  handler then discards the second while reporting success. Deriving it from the
+  receipt only moves the loss: one photo of a split Costco receipt is two charges
+  with one document. A duplicate guard needs the identity of a *charge*, which
+  arrives with the intake that reads a receipt into line items. Until then, no key
+  is the honest answer — re-recording a charge is visible and correctable, losing
+  one is neither.
+
+  Also found on the way, and worth its own row for whoever touches this table:
+  **`transactions.idempotency_key` is typed in `lib/database.types.ts` and no
+  migration ever adds it.** `0256` gave the column only to its six keyed tables.
+  Writing it would be a PGRST204 against real schema that no unit test would catch.
+
+  Still open in §26: the upload route (blocked on `provider.structuredCompletion`
+  dropping `AIMessage.images`, plus a trust-gated confirm — `app/api/ai/flyer/route.ts`
+  inserts `calendar_events` ungated and repeating that shape would ship the bug
+  twice), classification, grocery reconciliation, warranty and inventory linkage.
+
 - **§42, the dead channels.** Ground truth from replaying every migration into
   PGlite and reading `pg_publication_tables`: **51 tables were published** and about
   **170 distinct tables were subscribed** across ~220 sites, so roughly 120 channels
