@@ -63,7 +63,7 @@ export async function POST() {
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
   try {
-    const text = await withAiRequest(
+    const result = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'finances.savings', text: 'Savings suggestions' },
       async (obs) => {
@@ -75,23 +75,27 @@ export async function POST() {
           maxTokens: 600,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        return completion.text;
+        const m = completion.text.match(/\{[\s\S]*\}/);
+        const parsed = m ? JSON.parse(m[0]) : {};
+        const suggestions = Array.isArray(parsed.suggestions)
+          ? parsed.suggestions.filter((s: unknown) =>
+            s !== null && typeof s === 'object'
+            && 'title' in s && typeof s.title === 'string' && s.title.trim().length > 0
+            && 'detail' in s && typeof s.detail === 'string' && s.detail.trim().length > 0,
+          ).slice(0, 4)
+          : [];
+        const hasSummary = typeof parsed.summary === 'string' && parsed.summary.trim().length > 0;
+        if (!hasSummary && suggestions.length === 0) {
+          obs.failed(new Error('The savings response contained no usable summary or suggestions.'));
+        }
+        return {
+          summary: hasSummary ? parsed.summary : 'Here are the biggest opportunities to save.',
+          suggestions: suggestions.length ? suggestions : fallback,
+          wastedMonthlyCents: wasted,
+        };
       },
     );
-    const m = text.match(/\{[\s\S]*\}/);
-    const parsed = m ? JSON.parse(m[0]) : {};
-    const suggestions = Array.isArray(parsed.suggestions)
-      ? parsed.suggestions.filter((s: unknown) =>
-        s !== null && typeof s === 'object'
-        && 'title' in s && typeof s.title === 'string' && s.title.trim().length > 0
-        && 'detail' in s && typeof s.detail === 'string' && s.detail.trim().length > 0,
-      ).slice(0, 4)
-      : [];
-    return NextResponse.json({
-      summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary : 'Here are the biggest opportunities to save.',
-      suggestions: suggestions.length ? suggestions : fallback,
-      wastedMonthlyCents: wasted,
-    });
+    return NextResponse.json(result);
   } catch {
     return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
   }
