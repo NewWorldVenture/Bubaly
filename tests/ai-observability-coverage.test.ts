@@ -105,6 +105,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/wallet/child/[childId]/route.ts', "feature: 'wallet.coach.child'"],
       ['app/api/ai/resolve-conflict/route.ts', "feature: 'calendar.resolve-conflict'"],
       ['lib/social/ai.ts', 'feature: `social.${input.kind}`'],
+      ['app/api/recipes/suggest/route.ts', "feature: 'recipes.suggest'"],
+      ['app/api/recipes/transform/route.ts', 'feature: `recipes.${actionId}`'],
+      ['app/api/ai/trip/route.ts', "feature: 'travel.research'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -200,6 +203,13 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     const src = readFileSync('app/api/ai/resolve-conflict/route.ts', 'utf8');
     expect(src).toContain('if (parsed.length === 0) obs.failed(');
     expect(src, 'the empty answer must still be returned as a 200').toContain('return NextResponse.json({ ideas });');
+
+    // Recipe suggestions are the same shape: `parseSuggestions` keeps only ids
+    // the family owns, so an empty list means the model named nothing real —
+    // and the cook sees "no suggestions" either way.
+    const suggest = readFileSync('app/api/recipes/suggest/route.ts', 'utf8');
+    expect(suggest).toContain('if (parsed.length === 0) obs.failed(');
+    expect(suggest, 'the empty answer must still be returned as a 200').toContain('return NextResponse.json({ picks: results });');
   });
 
   it('an answer the surface could not use is a failure, and the tokens still count', () => {
@@ -220,6 +230,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       'app/api/ai/wallet/route.ts',
       'app/api/ai/wallet/child/[childId]/route.ts',
       'app/api/ai/resolve-conflict/route.ts',
+      'app/api/recipes/suggest/route.ts',
+      'app/api/recipes/transform/route.ts',
+      'app/api/ai/trip/route.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
       const used = src.indexOf('obs.used(');
@@ -288,7 +301,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // room for new silent surfaces to slip in green. Lower it every time a
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
-    // then 22 when the assistant engine adopted it, then 19, then 17.
+    // then 22 when the assistant engine adopted it, then 19, then 17, then 14.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -296,7 +309,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 17;
+    const CEILING = 14;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +

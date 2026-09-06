@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildSuggestPrompt, parseSuggestions, type VaultRecipeLite } from '@/lib/recipes/suggest';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -44,9 +46,22 @@ export async function POST(req: NextRequest) {
   let picks;
   try {
     const prompt = buildSuggestPrompt(lite, constraint);
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system: prompt.system, messages: [{ role: 'user', content: prompt.user }], tools: [], maxTokens: 600 });
-    picks = parseSuggestions(completion.text, recipes.map((r) => r.id));
+    picks = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'recipes.suggest', text: 'Suggest recipes from the vault' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system: prompt.system, messages: [{ role: 'user', content: prompt.user }], tools: [], maxTokens: 600 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseSuggestions(completion.text, recipes.map((r) => r.id));
+        // `parseSuggestions` keeps only ids the family actually owns, so an
+        // empty list means the model named nothing real. The route answers 200
+        // with `picks: []` either way and the cook sees "no suggestions" — the
+        // same thing a working model with nothing to offer would produce.
+        if (parsed.length === 0) obs.failed(new Error('The model suggested no recipes from this vault.'));
+        return parsed;
+      },
+    );
   } catch (err) {
     console.error('Recipe suggest error:', err);
     return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });
