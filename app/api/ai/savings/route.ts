@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -61,14 +63,22 @@ export async function POST() {
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system: 'You are a practical family financial coach. Use ONLY the data given; never invent numbers. Reply ONLY as compact JSON: {"summary": string (1-2 sentences), "suggestions": [{"title": string, "detail": string}] (up to 4, most impactful first)}.',
-      messages: [{ role: 'user', content: `Family finance snapshot:\n${context}\n\nGive prioritised, concrete savings suggestions.` }],
-      tools: [],
-      maxTokens: 600,
-    });
-    const m = completion.text.match(/\{[\s\S]*\}/);
+    const text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'finances.savings', text: 'Savings suggestions' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system: 'You are a practical family financial coach. Use ONLY the data given; never invent numbers. Reply ONLY as compact JSON: {"summary": string (1-2 sentences), "suggestions": [{"title": string, "detail": string}] (up to 4, most impactful first)}.',
+          messages: [{ role: 'user', content: `Family finance snapshot:\n${context}\n\nGive prioritised, concrete savings suggestions.` }],
+          tools: [],
+          maxTokens: 600,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    );
+    const m = text.match(/\{[\s\S]*\}/);
     const parsed = m ? JSON.parse(m[0]) : {};
     const suggestions = Array.isArray(parsed.suggestions) && parsed.suggestions.length ? parsed.suggestions.slice(0, 4) : fallback;
     return NextResponse.json({ summary: typeof parsed.summary === 'string' ? parsed.summary : 'Here are the biggest opportunities to save.', suggestions, wastedMonthlyCents: wasted });

@@ -49,6 +49,8 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/weekly-briefing/route.ts', "feature: 'briefing.weekly'"],
       ['app/api/ai/health/coach/route.ts', "feature: 'health.coach'"],
       ['app/api/ai/habits/route.ts', "feature: 'habits.coach'"],
+      ['app/api/ai/savings/route.ts', "feature: 'finances.savings'"],
+      ['app/api/ai/journal/route.ts', "feature: 'journal.prompt'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -95,6 +97,19 @@ describe('§33 the surfaces a family would ask about are observed', () => {
   });
 });
 
+describe('what is deliberately NOT adopted', () => {
+  it('leaves the public gift assistant alone, with a reason', () => {
+    // /api/ai/gift is UNAUTHENTICATED by design — givers are not signed in, so
+    // there is no user scope to build one from. Attributing a stranger's
+    // request to the family's own `ai_requests` ledger is a product decision
+    // about whose AI budget a gift-link visitor spends, not a mechanical
+    // conversion, so it is left out rather than guessed at.
+    const src = readFileSync('app/api/ai/gift/route.ts', 'utf8');
+    expect(src).not.toContain('withAiRequest(');
+    expect(src).toContain('createServiceClient()');
+  });
+});
+
 describe('the remaining silence is counted, not ignored', () => {
   it('does not grow', () => {
     // A ceiling, not a target. It exists so the next surface that reaches a
@@ -103,8 +118,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 → 42 so far.
-    const CEILING = 42;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 so far.
+    const CEILING = 40;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
