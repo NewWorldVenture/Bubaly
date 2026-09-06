@@ -49,23 +49,25 @@ describe('a gated chat tool can be replayed from its approval', () => {
     expect(unmapped, `not in TOOL_DOMAIN, so it is never gated: ${unmapped.join(', ')}`).toEqual([]);
   });
 
-  it('the replay really does run as the approver, which is why rsvp_to_event stays out', () => {
-    // The reason for the one remaining orphan is a fact about two other files,
-    // so it is pinned here rather than left in a comment that can rot:
+  it('the replay runs as the ASKER now, which is what let the last orphan go', () => {
+    // This used to pin the opposite, and the two facts it named were the reason
+    // rsvp_to_event could not have a registry tool: the approval row recorded no
+    // asker, and the decision action built its scope from whoever approved. So
+    // an approved RSVP would have answered for the parent and — on
+    // event_rsvps_once — upserted over their own reply.
     //
-    //   1. the approval row records no asker for an AI-filed request, and
-    //   2. the decision action builds its scope from the person APPROVING.
-    //
-    // Together those mean a registry RSVP tool taking member_id from
-    // scope.memberId would answer for the parent, and event_rsvps_once makes
-    // that an upsert — so it would overwrite the parent's own reply. If either
-    // line below stops being true, the orphan can go.
+    // Both facts changed. The row carries the asker, and performApproved rebuilds
+    // the scope from it. Pinned here because the orphan's absence is only safe
+    // while they hold.
     expect(readFileSync('lib/trust/server.ts', 'utf8'))
-      .toContain("requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : null");
-    expect(readFileSync('app/(app)/dashboard/approvals-actions.ts', 'utf8'))
-      .toContain('scopeFromUserContext(ctx, await createServer())');
-    expect(readFileSync('lib/services/scope.ts', 'utf8'))
-      .toContain('memberId: ctx.active.member.id');
+      .toContain("req.actor.kind === 'member' ? req.actor.id : (req.onBehalfOfMemberId ?? null)");
+    const approvals = readFileSync('lib/services/approvals/index.ts', 'utf8');
+    expect(approvals).toContain('async function scopeForApprovedWork(');
+    expect(approvals).toContain('const actingScope = await scopeForApprovedWork(scope, row);');
+    // The fail-safe half: an AI row with no recorded asker must not fall back to
+    // the approver's member id, or the wrong person answers again.
+    expect(approvals).toContain('function unattributed(scope: ServiceScope): ServiceScope {');
+    expect(approvals).toContain("return { ...scope, actorKind: 'ai', memberId: null };");
   });
 
   it('every entry carries a reason, not just a name', () => {
@@ -74,18 +76,11 @@ describe('a gated chat tool can be replayed from its approval', () => {
     }
   });
 
-  it('names the one orphan that is left, and it is left on purpose', () => {
-    // add_note and add_goal left the list because notes.create and goals.create
-    // resolve them — forced, not remembered: the stale-entry check above went
-    // red the moment those tools landed.
-    //
-    // rsvp_to_event stays, and NOT because writing the tool is hard. The replay
-    // runs under the APPROVER's scope and the approval row stores
-    // requested_by_member_id: null for every AI-filed row, so a tool taking
-    // member_id from scope.memberId would record the parent as attending — and
-    // event_rsvps_once makes that an upsert, so it would overwrite the parent's
-    // own reply. A refusal beats destroying an answer nobody touched.
-    expect(Object.keys(APPROVAL_CANNOT_REPLAY)).toEqual(['rsvp_to_event']);
+  it('has no orphans left', () => {
+    // add_note and add_goal left when notes.create and goals.create landed.
+    // rsvp_to_event left when the approval row started recording who asked —
+    // a missing FACT, not a missing tool, which is why it outlived the other two.
+    expect(Object.keys(APPROVAL_CANNOT_REPLAY)).toEqual([]);
   });
 
   it('the ratchet still bites', () => {

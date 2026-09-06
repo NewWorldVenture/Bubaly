@@ -299,7 +299,7 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   const registryTools = toToolSpecs(scope, { names: toolNames().filter((name) => !covered.has(name)) });
   const tools = wrapToolsWithTrust(
     mergeToolSets(assistantTools, actionTools, registryTools),
-    supabase, familyId, input.role,
+    supabase, familyId, input.role, acting?.id ?? null,
   );
 
   const provider = await resolveProvider();

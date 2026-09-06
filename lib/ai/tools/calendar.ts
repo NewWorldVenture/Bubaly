@@ -15,7 +15,7 @@
 import 'server-only';
 import { z } from 'zod';
 import {
-  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, searchEvents, updateEvent,
+  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, searchEvents, updateEvent,
 } from '@/lib/services/calendar';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
@@ -389,4 +389,58 @@ export const calendarTools: ToolDefinition[] = [
     },
   }),
 
+  defineTool({
+    name: 'calendar.rsvp',
+    aliases: ['rsvp_to_event'],
+    description: "Record the asking person's own reply to an event: going, maybe, or can't make it.",
+    domain: 'calendar',
+    capability: 'edit',
+    // See lib/ai/tools/notes.ts: before this tool existed, lib/trust/ai-gate.ts
+    // used its hard-coded `medium` fallback for `rsvp_to_event`. Declaring
+    // anything else here would silently move the chat gate for children.
+    risk: 'medium',
+    readOnly: false,
+    activityFrom: 'service',
+    input: z.object({
+      // Preferred, and what every other calendar write takes. A plan step can
+      // get one from `calendar.searchEvents`.
+      event_id: z.string().nullish().describe('The event id, when it is known'),
+      // Kept because stored approval payloads from the chat tool carry a title
+      // and nothing else, and those rows must still execute when a parent
+      // approves them. The service resolves it to the NEXT matching occurrence
+      // and refuses a genuinely ambiguous name rather than guessing.
+      event_title: z.string().nullish().describe('Part of the event name, when the id is not known'),
+      status: z.enum(['accepted', 'maybe', 'declined']),
+    }),
+    output: z.object({
+      id: z.string(),
+      event_id: z.string(),
+      status: z.string(),
+      event_title: z.string(),
+      label: z.string(),
+    }),
+    // The upsert is idempotent by construction: `event_rsvps_once UNIQUE
+    // (event_id, member_id)` (0047) means a repeat writes the same one row.
+    idempotencyFrom: () => null,
+    summarize: (_input, output) => `Replied "${output.label}" to "${output.event_title}"`,
+    resource: (output) => ({ table: 'event_rsvps', id: output.id }),
+    execute: async (scope, input) => {
+      const res = await rsvpToEvent(scope, {
+        eventId: input.event_id ?? null,
+        eventTitle: input.event_title ?? null,
+        status: input.status,
+      });
+      if (!res.ok) return res;
+      return {
+        ok: true,
+        data: {
+          id: res.data.id,
+          event_id: res.data.event_id,
+          status: res.data.status,
+          event_title: res.data.event_title,
+          label: res.data.label,
+        },
+      };
+    },
+  }),
 ];

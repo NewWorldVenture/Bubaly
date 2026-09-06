@@ -111,7 +111,7 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     // wrote `notes`. `notes.create` resolves that alias now, so the approval
     // executes and the caveat would be a lie.
     evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-9' });
-    for (const name of ['add_note', 'add_goal', 'add_chore']) {
+    for (const name of ['add_note', 'add_goal', 'add_chore', 'rsvp_to_event']) {
       const { wrapped } = wrapOne(name, 'child');
       const res = (await wrapped.execute({ body: 'x', title: 'x' })) as { ok: boolean; summary: string };
       expect(res, name).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
@@ -119,17 +119,6 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     }
   });
 
-  it('keeps the caveat on rsvp_to_event, whose approval still cannot execute', async () => {
-    // Deliberately still an orphan: the replay runs under the APPROVER's scope
-    // and the approval row records no asker, so a registry RSVP tool would
-    // answer for the parent and its upsert would overwrite that parent's own
-    // reply. The family is told up front instead.
-    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-9' });
-    const { wrapped } = wrapOne('rsvp_to_event', 'child');
-    const res = (await wrapped.execute({ event_title: 'the game', status: 'accepted' })) as { ok: boolean; summary: string };
-    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
-    expect(res.summary).toMatch(/add it by hand/i);
-  });
 
   it('ALLOW: the underlying write executes with the original args', async () => {
     evaluateTrust.mockResolvedValue({ decision: { effect: 'allow', reason: 'ok' } });

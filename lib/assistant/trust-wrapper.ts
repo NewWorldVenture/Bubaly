@@ -38,42 +38,40 @@ export const TOOL_DOMAIN: Record<string, string> = {
  * Gated tools whose approval a parent can grant and Bubaly then cannot carry
  * out on its own.
  *
- * `gateAiAction` stores `{name, args}` as the approval's payload, and
- * `approveRequest` replays it with `executeTool(scope, name, args)`
- * (lib/services/approvals/index.ts). `executeTool` resolves the name through
- * the tool registry, so a name the registry does not know is DENIED at replay
- * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
- * no tool called ...".
+ * `gateAiAction` stores `{name, args}` as the approval's payload and
+ * `approveRequest` replays it through `executeTool`, which resolves the name in
+ * the tool registry — so a name the registry does not know is denied at replay
+ * and the parent reads "Approved, but Bubaly could not finish it".
  *
- * `add_note` and `add_goal` have left this list: they now resolve to
- * `notes.create` and `goals.create`, so their approvals execute.
+ * IT IS EMPTY. It held `add_note`, `add_goal` and `rsvp_to_event`. The first two
+ * left when `notes.create` and `goals.create` landed. `rsvp_to_event` stayed
+ * longer for a different reason — not a missing tool, but a missing FACT: the
+ * approval row did not record who asked, so an approved RSVP would have been
+ * carried out as the approving parent and upserted over their own reply. Now
+ * that `requested_by_member_id` is recorded and `scopeForApprovedWork` replays
+ * as the asker, `calendar.rsvp` is safe and the entry is gone.
  *
- * `rsvp_to_event` stays, and the reason is sharper than "no registry tool" —
- * WRITING ONE WOULD BE WORSE THAN THE REFUSAL. `decideApproval` builds its
- * scope from the APPROVER (`scopeFromUserContext`), and `openApprovalRequest`
- * stores `requested_by_member_id: null` for every AI-filed row, so nothing on
- * the row says who asked. A registry RSVP tool taking `member_id` from
- * `scope.memberId` would therefore record the approving PARENT as attending —
- * and because `event_rsvps_once UNIQUE (event_id, member_id)` (0047) makes the
- * write an upsert, it would silently replace that parent's own earlier answer.
- * An honest "Bubaly could not finish it" beats destroying a reply nobody
- * touched.
- *
- * What unblocks it is recording the asker: `wrapToolsWithTrust` does not even
- * receive the acting member id today, so plumbing it through to
- * `gateAiAction` and on to `requested_by_member_id` is the prerequisite, and it
- * fixes the milder version of the same problem for notes and goals at the same
- * time (see the ledger).
+ * The list stays because the ratchet needs somewhere to put the next one.
+ * `tests/assistant-approval-replay.test.ts` fails in both directions — a newly
+ * gated tool with no registry equivalent has to be named here with a reason, and
+ * an entry that gains one has to be removed.
  */
-export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
-  rsvp_to_event: 'the replay runs as the approver and the row does not record who asked, so it would answer for the wrong person and overwrite their reply',
-};
+export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {};
 
 export function wrapToolsWithTrust(
   tools: ToolSpec[],
   supabase: DB,
   familyId: string,
   memberRole: string | null | undefined,
+  /**
+   * `family_members.id` of the person talking to Bubaly. It reaches the
+   * approval row as `requested_by_member_id`, which is what lets an approval
+   * granted hours later be carried out AS THEM rather than as the parent who
+   * released it. Optional so the two existing call sites can pass it
+   * independently; null is the honest value when the roster and the session
+   * disagree, and the replay then behaves exactly as it did before.
+   */
+  actingMemberId?: string | null,
 ): ToolSpec[] {
   const actorRole = roleOf(memberRole);
 
@@ -96,6 +94,7 @@ export function wrapToolsWithTrust(
           actorId: 'assistant',
           actorRole,
           agent: 'AI Assistant',
+          onBehalfOfMemberId: actingMemberId ?? null,
           title,
           // Payload stored so an approved request can be auto-executed later.
           payload: { name: tool.name, args },
