@@ -51,6 +51,10 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/habits/route.ts', "feature: 'habits.coach'"],
       ['app/api/ai/savings/route.ts', "feature: 'finances.savings'"],
       ['app/api/ai/journal/route.ts', "feature: 'journal.prompt'"],
+      ['app/api/ai/home/diagnose/route.ts', "feature: 'home.diagnose'"],
+      ['app/api/ai/home/find-pro/route.ts', "feature: 'home.find-pro'"],
+      ['app/api/ai/home/forecast/route.ts', "feature: 'home.forecast'"],
+      ['app/api/ai/home/utility-savings/route.ts', "feature: 'home.utility-savings'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -76,6 +80,26 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     // never fires — `obs.failed` is the only way the evidence survives.
     expect(src).toContain('obs.failed(streamErr');
     expect(src).toContain('obs.failed(fallbackErr)');
+  });
+
+  it('utility savings records the failure it swallows, before it swallows it', () => {
+    // This route answers 200 either way: on a provider failure it drops the
+    // narrative and returns the deterministic findings alone, with `aiUsed:
+    // false`. That flag cannot distinguish "the model errored" from "no API key
+    // is configured", so the swallow has to happen OUTSIDE the wrapper or the
+    // evidence is gone. Ordering is the whole assertion.
+    const src = readFileSync('app/api/ai/home/utility-savings/route.ts', 'utf8');
+    // The wrapper body — everything from the call to the `aiUsed = true` that
+    // follows it — must not swallow: a catch in there settles the row
+    // `completed` for a call that never produced anything. Slicing to
+    // `obs.used(` instead would miss a catch placed after it, which is exactly
+    // where a well-meaning `try { ... } catch { return null }` lands.
+    const wrapped = src.slice(src.indexOf('withAiRequest('), src.indexOf('aiUsed = true'));
+    expect(wrapped, 'the wrapper body must not swallow its own failure').not.toContain('catch');
+    // And the fallback that drops the narrative sits after it, so the wrapper
+    // has already recorded by the time the route decides to answer 200 anyway.
+    expect(src.indexOf('recommendations = null; // fall back'))
+      .toBeGreaterThan(src.indexOf('obs.used('));
   });
 
   it('a partial stream is recorded as partial, not as a clean completion', () => {
@@ -118,8 +142,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 so far.
-    const CEILING = 40;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 so far.
+    const CEILING = 36;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
