@@ -167,9 +167,12 @@ describe('rsvpToEvent', () => {
 
     const res = await rsvpToEvent(
       scopeWith(db, { memberId: 'member-teen' }),
-      // A member_id in the arguments must be ignored: 0047's policy is FOR ALL
-      // on is_family_member alone, so the app is the ONLY thing stopping a teen
-      // recording a reply in a parent's name.
+      // A member_id in the arguments must be ignored. This was once the ONLY
+      // thing stopping a teen recording a reply in a parent's name — 0047's
+      // policy was FOR ALL on is_family_member alone — until 0272 put the same
+      // rule in RLS (tests/rsvp-first-person-rls.test.ts). The service keeps it
+      // because defence at one layer is not defence, and because RLS cannot
+      // reject what the service never sends.
       { eventId: 'evt-1', status: 'accepted', ...({ memberId: 'member-parent' } as object) },
     );
     expect(res.ok).toBe(true);
