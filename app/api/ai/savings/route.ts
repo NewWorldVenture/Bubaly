@@ -80,8 +80,18 @@ export async function POST() {
     );
     const m = text.match(/\{[\s\S]*\}/);
     const parsed = m ? JSON.parse(m[0]) : {};
-    const suggestions = Array.isArray(parsed.suggestions) && parsed.suggestions.length ? parsed.suggestions.slice(0, 4) : fallback;
-    return NextResponse.json({ summary: typeof parsed.summary === 'string' ? parsed.summary : 'Here are the biggest opportunities to save.', suggestions, wastedMonthlyCents: wasted });
+    const suggestions = Array.isArray(parsed.suggestions)
+      ? parsed.suggestions.filter((s: unknown) =>
+        s !== null && typeof s === 'object'
+        && 'title' in s && typeof s.title === 'string' && s.title.trim().length > 0
+        && 'detail' in s && typeof s.detail === 'string' && s.detail.trim().length > 0,
+      ).slice(0, 4)
+      : [];
+    return NextResponse.json({
+      summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary : 'Here are the biggest opportunities to save.',
+      suggestions: suggestions.length ? suggestions : fallback,
+      wastedMonthlyCents: wasted,
+    });
   } catch {
     return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
   }
