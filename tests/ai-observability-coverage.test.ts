@@ -19,14 +19,56 @@ const walk = (dir: string): string[] =>
       : e.isDirectory() ? walk(`${dir}/${e.name}`)
       : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : []);
 
+// The only four exports of `lib/ai/provider` that hand back an AIProvider.
+// Importing anything else from that module — a `ToolSpec` type, `describeAIError`,
+// `isAIConfigured` — does not put a file anywhere near a model.
+const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfig', 'OpenAIProvider'];
+
+/**
+ * Every import statement in `src` that ends at `@/lib/ai/provider`, found by
+ * scanning BACK from the specifier to the `import` that opens the statement.
+ *
+ * A forward regex cannot do this. `import\s+(type\s+)?\{[\s\S]*?\}\s+from '…provider'`
+ * starts matching at the FIRST `import {` in the file and lazily extends to the
+ * provider specifier, swallowing every import in between — so a file whose first
+ * import happens to be `import type {…}` is read as type-only no matter what it
+ * actually imports from the provider. That misread `lib/ai/assistant-engine.ts`,
+ * which imports `resolveProvider` and calls `provider.runTools`, as unable to
+ * reach a model at all.
+ */
+function providerImports(src: string): string[] {
+  // Leading newline so a provider import on line 1 is still found.
+  const text = `\n${src}`;
+  const out: string[] = [];
+  const re = /from '@\/lib\/ai\/provider'/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const start = text.lastIndexOf('\nimport ', m.index);
+    if (start >= 0) out.push(text.slice(start + 1, m.index));
+  }
+  return out;
+}
+
+/** Whether a file can actually obtain a provider, as opposed to naming a type. */
+export function reachesAModel(src: string): boolean {
+  return providerImports(src).some((clause) => {
+    if (/^import\s+type\b/.test(clause)) return false;
+    const inner = clause.slice(clause.indexOf('{') + 1, clause.lastIndexOf('}'));
+    return inner
+      .split(',')
+      .map((n) => n.trim())
+      .filter((n) => n && !/^type\s/.test(n))
+      .some((n) => PROVIDER_PRODUCERS.includes(n.split(/\s/)[0]));
+  });
+}
+
 /** Files that reach a model without opening a request row. */
 function silentSurfaces(): string[] {
   const found: string[] = [];
   for (const file of ['app', 'lib'].flatMap(walk)) {
     if (file.startsWith('lib/ai/observability')) continue;
     const src = readFileSync(file, 'utf8');
-    const callsModel = /from '@\/lib\/ai\/provider'/.test(src);
-    if (!callsModel) continue;
+    if (!reachesAModel(src)) continue;
     const observed = /withAiRequest\(/.test(src) || /requestId/.test(src);
     if (!observed) found.push(file);
   }
@@ -161,6 +203,22 @@ describe('what is deliberately NOT adopted', () => {
     expect(src).not.toContain('withAiRequest(');
     expect(src).toContain('createServiceClient()');
   });
+
+  it('counts the provider factory, which will never adopt, so the floor is 1', () => {
+    // `resolveProviderForTask` builds an OpenAIProvider and hands it back; it
+    // never calls one. There is no request to observe here and no scope to
+    // observe it with — the caller that asked for the provider is the surface.
+    //
+    // It stays in the count anyway. Excluding it would mean teaching the scanner
+    // a judgement call, and a scanner that makes judgement calls is one that can
+    // be argued into excluding a real surface. The floor of the ceiling is 1,
+    // not 0, and that is written down rather than discovered by whoever gets
+    // there.
+    const src = readFileSync('lib/ai/routing.ts', 'utf8');
+    expect(src).toContain('return new OpenAIProvider(');
+    expect(src).not.toContain('.complete(');
+    expect([...SILENT]).toContain('lib/ai/routing.ts');
+  });
 });
 
 describe('the remaining silence is counted, not ignored', () => {
@@ -171,13 +229,67 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32 so far.
-    const CEILING = 32;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
+    // when the scanner stopped counting files that cannot reach a model at all.
+    //
+    // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
+    // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
+    // `AIProviderConfig` type, and three importing only `describeAIError` /
+    // `isAIConfigured`, sat in the count. None of them can obtain a provider.
+    // They were nine units of slack in the very ratchet this comment says must
+    // have none.
+    const CEILING = 23;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
       'Wrap the call in withAiRequest(), or raise CEILING deliberately and say why.',
     ).toBeLessThanOrEqual(CEILING);
+  });
+
+  it('counts what can reach a model, and nothing else', () => {
+    // The scanner has been wrong twice, in both directions, so it gets its own
+    // fixtures. Every line here is a file whose behaviour was checked by hand.
+    //
+    // Counted: obtains a provider and calls it.
+    expect([...SILENT]).toContain('lib/chores/ai.ts');
+    expect([...SILENT]).toContain('app/api/ai/wallet/route.ts');
+    // Counted, and found only after the backward scan was fixed: this one
+    // imports `resolveProvider` and calls `provider.runTools`, but a forward
+    // regex read its earlier `import type` line and called it type-only.
+    expect([...SILENT]).toContain('lib/ai/assistant-engine.ts');
+
+    // Not counted: `import type { ToolSpec }` and nothing else.
+    for (const file of [
+      'lib/assistant/tools.ts',
+      'lib/assistant/trust-wrapper.ts',
+      'lib/ai/action-tools.ts',
+      'lib/ai/tools/legacy-adapter.ts',
+      'lib/ai/settings.ts',
+      'lib/ai/provider-stub.ts',
+    ]) expect([...SILENT], `${file} imports only types`).not.toContain(file);
+
+    // Not counted: imports a value, but one that never yields a provider.
+    for (const file of [
+      'app/api/ai/route.ts',
+      'app/api/social/ai/route.ts',
+      'app/(app)/dashboard/concierge/run-actions.ts',
+    ]) expect([...SILENT], `${file} imports no provider producer`).not.toContain(file);
+  });
+
+  it('reads a provider import the same way whichever line it sits on', () => {
+    // Direct unit checks on the classifier, so a regression shows up here rather
+    // than as a ceiling that silently drifts.
+    expect(reachesAModel("import { resolveProvider } from '@/lib/ai/provider';")).toBe(true);
+    // Line 1 with no preceding newline — the backward scan has to find it.
+    expect(reachesAModel("import { getProvider } from '@/lib/ai/provider';\nconst x = 1;")).toBe(true);
+    expect(reachesAModel("import type { ToolSpec } from '@/lib/ai/provider';")).toBe(false);
+    expect(reachesAModel("import { type AIProvider } from '@/lib/ai/provider';")).toBe(false);
+    expect(reachesAModel("import { describeAIError, isAIConfigured } from '@/lib/ai/provider';")).toBe(false);
+    // The exact shape the old forward regex got wrong: an unrelated `import type`
+    // above a real value import from the provider.
+    expect(reachesAModel(
+      "import type { Foo } from '@/lib/foo';\nimport { resolveProvider, type AIMessage } from '@/lib/ai/provider';",
+    )).toBe(true);
   });
 
   it('is actually scanning something, so the ceiling is not vacuously satisfied', () => {

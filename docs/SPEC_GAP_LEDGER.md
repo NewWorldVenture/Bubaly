@@ -38,7 +38,7 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 32 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts`. The admin view over runs is untouched.) |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 23 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
@@ -216,12 +216,47 @@ the result rather than narrated as a fresh write.
   swallow lands AFTER `obs.used`. The slice now runs to the `aiUsed = true` that
   follows the wrapper, and the mutant fails.
 
-  **The remaining 32 silent surfaces are counted, not ignored.**
-  `tests/ai-observability-coverage.test.ts` caps them at exactly 32 — not a round
+  **The ratchet was carrying the exact slack its own comment forbids.** The
+  scanner counted any file importing from `lib/ai/provider`. Nine of the 32 could
+  not obtain a provider at all: six import only a `ToolSpec` or `AIProviderConfig`
+  type (`lib/assistant/tools.ts`, `lib/assistant/trust-wrapper.ts`,
+  `lib/ai/action-tools.ts`, `lib/ai/tools/legacy-adapter.ts`, `lib/ai/settings.ts`,
+  `lib/ai/provider-stub.ts`), and three import only `describeAIError` /
+  `isAIConfigured` (`app/api/ai/route.ts`, `app/api/social/ai/route.ts`,
+  `app/(app)/dashboard/concierge/run-actions.ts`). Nine files' worth of room for a
+  new silent surface to slip in green.
+
+  It also missed a real one. The obvious forward regex —
+  `import\s+(type\s+)?\{[\s\S]*?\}\s+from '…provider'` — starts matching at the
+  FIRST `import {` in a file and lazily extends to the provider specifier,
+  swallowing every import in between. Any file whose first import happens to be
+  `import type {…}` reads as type-only regardless of what it takes from the
+  provider. That is how `lib/ai/assistant-engine.ts` — which imports
+  `resolveProvider` and calls `provider.runTools` in three places — was classified
+  as unable to reach a model. The scanner now finds each provider import by
+  scanning BACK from the specifier to the `import` that opens the statement, and
+  requires a value import of one of the four exports that actually yield a
+  provider (`resolveProvider`, `getProvider`, `providerFromConfig`,
+  `OpenAIProvider`).
+
+  Having been wrong in both directions, the scanner now has fixtures of its own:
+  nine files asserted absent by name with the reason, three asserted present, and
+  six direct unit checks on the classifier including the exact shape the forward
+  regex got wrong.
+
+  **The remaining 23 silent surfaces are counted, not ignored.**
+  `tests/ai-observability-coverage.test.ts` caps them at exactly 23 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32) — and asserts the scanner finds something, so a broken
-  scanner cannot satisfy the cap vacuously. Verified: adding one new
-  provider-calling route fails it.
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions) — and
+  asserts the scanner finds something, so a broken scanner cannot satisfy the cap
+  vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
+
+  **The floor is 1, not 0.** `lib/ai/routing.ts` builds an `OpenAIProvider` and
+  hands it back without ever calling one — there is no request to observe and no
+  scope to observe it with; the caller that asked for the provider is the surface.
+  It stays in the count regardless, because excluding it means teaching the
+  scanner a judgement call, and a scanner that makes judgement calls can be argued
+  into excluding a real surface.
 
   **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
   by design — a giver following a gift link is not signed in — so
@@ -234,7 +269,7 @@ the result rather than narrated as a fresh write.
 
   It is one of three surfaces so far that do not fit the pattern, alongside the
   chat assistant which never throws and utility savings which answers 200 on
-  failure. The remaining 32 should be expected to contain more of them: "wrap the
+  failure. The remaining 23 should be expected to contain more of them: "wrap the
   provider call" is the common case, not the whole set.
 
   **Adopting the wrapper widens what a route reads from its user context.**
@@ -246,8 +281,9 @@ the result rather than narrated as a fresh write.
   not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
   500. Expect the same in the remaining 32: the stub is thinner than the type.
 
-  Still open in §33: the other 32 surfaces, and the admin view over runs, which
-  this does not touch.
+  Still open in §33: the other 23 surfaces — `lib/ai/assistant-engine.ts` is the
+  largest, and was invisible until the scanner was fixed — and the admin view over
+  runs, which this does not touch.
 
 - **§21, "how Bubaly may reach a child directly" was a setting that did
   nothing.** `0257` documents `family_ai_settings.child_channels` as
