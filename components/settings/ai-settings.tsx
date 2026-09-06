@@ -18,7 +18,7 @@
 // read-only, which is deliberate — knowing what Bubaly may do is not the same
 // as being able to widen it.
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Check, Loader2, ShieldCheck } from 'lucide-react';
+import { Bot, Check, Loader2, Moon, ShieldCheck } from 'lucide-react';
 import { AI_CATEGORIES, type AICategory } from '@/lib/ai/categories';
 import type { AISettings } from '@/lib/ai/family-settings';
 import type { AutonomyBehavior } from '@/lib/trust/engine';
@@ -35,6 +35,10 @@ const LEVELS: { value: AutonomyBehavior; label: string; hint: string }[] = [
   { value: 'prepare', label: 'Prepare', hint: 'Gets it ready for you' },
   { value: 'execute', label: 'Execute', hint: 'Does it, within permissions' },
 ];
+
+/** 0–23, the two columns `family_ai_settings` stores. */
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const hourLabel = (h: number) => (h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`);
 
 function LevelPicker({
   value, onChange, disabled, name, describedBy,
@@ -194,6 +198,63 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
             {settings.memoryEnabled ? <><Check className="mr-1.5 h-4 w-4" aria-hidden /> On</> : 'Off'}
           </Button>
         </div>
+      </Card>
+
+      {/* §32's Communication block. Until this existed the quiet-hours columns
+          had a service writer and no surface, so the setting a family would
+          look for was one nobody could reach. */}
+      <Card className="p-4">
+        <h4 className="flex items-center gap-2 text-sm font-semibold"><Moon className="h-4 w-4 text-brand-text" aria-hidden /> Quiet hours</h4>
+        <p id="quiet-hint" className="mt-1 text-sm text-muted">
+          Bubaly holds notifications raised in this window until it ends. Anything urgent — a safety alert —
+          still comes through, and a reminder you asked for at a specific time still arrives then.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-sm text-muted" htmlFor="quiet-start">From</label>
+          <select
+            id="quiet-start"
+            aria-describedby="quiet-hint"
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+            disabled={!canManage || saving === 'quietHours'}
+            value={settings.quietHours?.start ?? ''}
+            onChange={(e) => {
+              const start = Number(e.target.value);
+              const end = settings.quietHours?.end ?? 7;
+              save('quietHours', { quietHours: { start, end } }, (prev) => ({ ...prev, quietHours: { start, end } }));
+            }}
+          >
+            <option value="" disabled>--</option>
+            {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+          </select>
+          <label className="text-sm text-muted" htmlFor="quiet-end">until</label>
+          <select
+            id="quiet-end"
+            aria-describedby="quiet-hint"
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+            disabled={!canManage || saving === 'quietHours'}
+            value={settings.quietHours?.end ?? ''}
+            onChange={(e) => {
+              const end = Number(e.target.value);
+              const start = settings.quietHours?.start ?? 21;
+              save('quietHours', { quietHours: { start, end } }, (prev) => ({ ...prev, quietHours: { start, end } }));
+            }}
+          >
+            <option value="" disabled>--</option>
+            {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+          </select>
+          {settings.quietHours && (
+            <Button
+              variant="secondary"
+              disabled={!canManage || saving === 'quietHours'}
+              onClick={() => save('quietHours', { quietHours: null }, (prev) => ({ ...prev, quietHours: null }))}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+        {!settings.quietHours && (
+          <p className="mt-2 text-sm text-muted">No quiet hours set — Bubaly may notify you at any time.</p>
+        )}
       </Card>
 
       {/* §32's Review + Clear. The toggle above says what Bubaly MAY keep; this

@@ -10,17 +10,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // regression can't let a tool write without a trust check.
 
 const evaluateTrust = vi.fn();
-const openedApprovals = vi.fn();
+const openedApprovals = vi.fn<(...args: unknown[]) => string | null>(() => 'appr-1');
 vi.mock('@/lib/trust/server', () => ({
   evaluateTrust: (...args: unknown[]) => evaluateTrust(...args),
   // The wrapper files its own approval row when the risk tier tightens an
   // engine `allow`; the test watches for that rather than a database.
-  openApprovalRequest: (...args: unknown[]) => { openedApprovals(...args); return Promise.resolve('appr-1'); },
+  openApprovalRequest: (...args: unknown[]) => Promise.resolve(openedApprovals(...args)),
   // roleOf is pure; a faithful stub keeps the wrapper's actor role meaningful.
   roleOf: (r: string | null | undefined) => (r === 'parent' || r === 'adult' ? 'guardian' : 'member'),
 }));
 
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
+import { approvalIdFromToolResult } from '@/lib/ai/result-cards';
 import type { ToolSpec } from '@/lib/ai/provider';
 
 /**
@@ -59,7 +60,11 @@ function wrapOne(name: string, role: string | null = 'child', supabase = fakeSup
   return { wrapped, inner };
 }
 
-beforeEach(() => { evaluateTrust.mockReset(); openedApprovals.mockReset(); });
+beforeEach(() => {
+  evaluateTrust.mockReset();
+  openedApprovals.mockReset();
+  openedApprovals.mockReturnValue('appr-1');
+});
 
 describe('A-15 wrapToolsWithTrust gates every write tool', () => {
   it('DENY: the underlying write never runs and the child is told it was blocked', async () => {
@@ -71,13 +76,50 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     expect(inner).not.toHaveBeenCalled();
   });
 
-  it('REQUIRE_APPROVAL: no write happens, returns a pending-approval chip', async () => {
+  it('REQUIRE_APPROVAL: no write happens, and the result names the row a parent can act on', async () => {
     evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-1' });
     const { wrapped, inner } = wrapOne('add_chore', 'child');
-    const res = (await wrapped.execute({ title: 'Mow lawn' })) as { ok: boolean; pendingApproval?: boolean };
-    expect(res.ok).toBe(true);
-    expect(res.pendingApproval).toBe(true);
+    const res = await wrapped.execute({ title: 'Mow lawn' });
     expect(inner).not.toHaveBeenCalled();
+    // The SHAPE is the assertion. `approvalIdFromToolResult` reads snake_case
+    // `pending_approval` plus `approval_id`; the wrapper used to return
+    // camelCase `pendingApproval` with the id dropped, so the chip said "sent
+    // for parent approval" and no card was ever built from it. A truthy flag
+    // alone is not enough — that is exactly what shipped broken.
+    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-1' });
+    expect(approvalIdFromToolResult(res)).toBe('appr-1');
+  });
+
+  it('REQUIRE_APPROVAL with no row filed is a failure, not a queue', async () => {
+    // gateAiAction hands back approvalId: null when the insert failed. Nothing
+    // was written and nobody was asked, so "sent for parent approval" would be
+    // a promise with nothing behind it — and the child would wait forever for
+    // a decision no parent can see.
+    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' } });
+    openedApprovals.mockReturnValue(null);
+    const { wrapped, inner } = wrapOne('add_chore', 'child');
+    const res = (await wrapped.execute({ title: 'Mow lawn' })) as { ok: boolean; error?: string };
+    expect(inner).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/could not send that for approval/i);
+    expect(approvalIdFromToolResult(res)).toBeNull();
+  });
+
+  it('a gated tool the approval cannot replay says so in the approval line', async () => {
+    // add_note has no registry tool, so approving it would fail at replay. The
+    // family is told that up front rather than after a parent says yes.
+    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-9' });
+    const { wrapped } = wrapOne('add_note', 'child');
+    const res = (await wrapped.execute({ body: 'Remember the bins' })) as { ok: boolean; summary: string };
+    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
+    expect(res.summary).toMatch(/add it by hand/i);
+  });
+
+  it('a gated tool the approval CAN replay carries no such caveat', async () => {
+    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-2' });
+    const { wrapped } = wrapOne('add_chore', 'child');
+    const res = (await wrapped.execute({ title: 'Mow lawn' })) as { summary: string };
+    expect(res.summary).not.toMatch(/by hand/i);
   });
 
   it('ALLOW: the underlying write executes with the original args', async () => {
@@ -124,8 +166,8 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     evaluateTrust.mockResolvedValue({ decision: { effect: 'allow', reason: 'role default', basis: 'role_default' } });
     const prepare = supabaseWith({ ...AI_ON, behavior: 'prepare' });
     const { wrapped, inner } = wrapOne('add_todo', 'parent', prepare);
-    const res = (await wrapped.execute({ task: 'Bins' })) as { ok: boolean; pendingApproval?: boolean };
-    expect(res).toMatchObject({ ok: true, pendingApproval: true });
+    const res = (await wrapped.execute({ task: 'Bins' })) as { ok: boolean; pending_approval?: boolean };
+    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-1' });
     expect(inner).not.toHaveBeenCalled();
     // "Sent for parent approval" has to name something a parent can find.
     expect(openedApprovals).toHaveBeenCalledOnce();

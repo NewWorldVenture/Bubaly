@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
@@ -92,15 +94,20 @@ export async function POST(req: NextRequest) {
       ? `"${transcriptionText.slice(0, 100)}${transcriptionText.length > 100 ? '…' : ''}"`
       : 'Tap to listen to the voicemail.';
 
-    await supabase.from('notifications').insert({
-      family_id: typedComm.family_id,
-      user_id: null,
-      type: 'system',
-      title: `📩 Voicemail from ${callerDisplay}`,
-      body: bodyText,
-      related_type: 'guardian_communications',
-      related_id: commId,
-    });
+    // A voicemail is a message waiting, not an emergency: it obeys quiet
+    // hours like the text and WhatsApp routes. The caller has already hung up,
+    // so nothing is lost by telling the family when they are awake.
+    const scope = await systemScopeForFamily(supabase, typedComm.family_id);
+    if (scope) {
+      await notify(scope, {
+        recipients: 'family',
+        type: 'system',
+        title: `📩 Voicemail from ${callerDisplay}`,
+        body: bodyText,
+        relatedType: 'guardian_communications',
+        relatedId: commId,
+      });
+    }
   }
 
   await markGuardianCallbackProcessed(supabase, recordingSid);

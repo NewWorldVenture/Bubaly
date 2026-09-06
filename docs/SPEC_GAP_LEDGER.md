@@ -34,7 +34,7 @@ family is right.
 | **42** | high / M | REALTIME | Two parents at the supermarket both have the grocery list open; one ticks off milk and the other's screen never changes, because that list subscribes to a table that was never published — the page behaves as if it is live and silently is not, so the milk gets bought twice. A parent who approves a $400 plumber call on their phone leaves their partner staring at the same pending approval card until they manually reload, on the one screen where knowing 'someone already handled this' matters most. And every dashboard page a family opens spins up websocket channels for tables that will never send anything, draining phone battery and consuming Realtime connection slots that the AI run timeline — the one surface that does work — needs. |
 | **48** | high / M | WORLD-CLASS SIGNATURE FEATURE — "HANDLE IT" | A parent opens the morning brief, sees "Emma's recital overlaps Jack's game on Saturday" and a sentence saying what would fix it — and there is nothing to press. They have to leave the brief, work out which app section owns the clash, and redo by hand the thinking Bubaly just did. The one screen where the button does exist (/dashboard/readiness) is not where anyone lands, so the interaction the spec calls the signature Bubaly moment is one most families never encounter. |
 | **49** | high / M | WORLD-CLASS SIGNATURE FEATURE — DAILY BRIEF | Bubaly reconciled the grocery list, nudged Emma about her uniform and moved the dinner-prep reminder overnight — and the parent who opens the brief at 7am is shown none of it, because the section that says so only appears if they come back in the evening. Worse, the brief only exists for someone who remembers to open /dashboard/briefing. A parent packing lunches never sees today's schedule, the milk, or the permission slip due Friday, so the thing meant to start the family's day is a page they have to go looking for. |
-| **57** | high / M | REUSE BEFORE REBUILD | A parent types "add 'call the dentist' to our to-do list" in chat and Bubaly answers "Could not add the task." every time — the row is rejected by the database because it is stamped with the login id instead of the family-member id, while the identical request routed through a plan/run succeeds. The same shadowing means the chat's calendar, chore and grocery writes silently skip the duplicate guard and the family activity feed that the registry path gives them. |
+| **57** | high / M | REUSE BEFORE REBUILD | A parent's calendar, chore, to-do and grocery writes through chat silently skip the duplicate guard, the `ai_tool_calls` ledger and the family activity feed that the identical request routed through a plan/run gets, because the chat toolbox shadows the registry tools of the same capability. (Half of this row is already fixed and the sweep's wording is stale: "add 'call the dentist'" failing every time was the `created_by` foreign key, closed in `47f32fd` when `AssistantCtx.memberId` landed. What remains is only the shadowing.) |
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
@@ -47,6 +47,20 @@ family is right.
 | **66** | medium / S | AI SYSTEM PROMPT PRINCIPLE | A parent whose client still hits the older chat endpoint gets a Bubaly operating without the rule that stops it inventing household facts or claiming it did something it never did — and with a school email or an event title someone else wrote pasted in unfenced, that text can instruct it while calendar, chores, grocery and to-do write tools are attached. Separately, when a prompt change makes Bubaly noticeably worse, nobody can tell which conversations ran on the old wording, because chats are never stamped with a prompt version. |
 | **70** | medium / M | CONTINUOUS CLOSED LOOP | When the week changes underneath a run — the plumber can't come Tuesday, or three of five dinners fail because the pantry is empty — Bubaly cannot rethink the rest of the plan. It marks those steps failed, reports "partially completed", and stops. A parent has to open the run page and hand-edit a step (or start the whole request again) to get the remaining work re-planned, which is exactly the seven-modules-by-hand work the product exists to remove. |
 | **14** | low / S | AI MEMORY | A family that is happy for Bubaly to remember meal preferences and clothing sizes but does not want it keeping notes about, say, their finances, their contacts, or one child's routines has exactly one lever: all memory or none. Turning it off to protect the one area they care about also stops Bubaly remembering that Tom doesn't eat mushrooms and that Saturday mornings are off-limits, so in practice they leave it on and Bubaly keeps learning in the area they wanted left alone. The two categories most families would name first (medical, account) are already protected, so what is lost is the family's ability to draw their own line rather than accept ours. |
+
+### Two live bugs found while designing §30, not yet fixed
+
+- **A recurring reminder with no time is stored and can never fire.**
+  `lib/services/reminders/index.ts` refuses a timeless non-location reminder only
+  when `recurrence === 'none'`, so "remind me every day to stretch" through a run
+  or a routine stores `remind_at` NULL — and `listDue` filters
+  `.not('remind_at','is',null)`, so nothing ever returns it. The hand-written
+  chat tool refuses it outright, which is why it has stayed hidden. This must be
+  fixed *before* any delegation of `add_reminder`, not alongside it.
+
+- **`tasks.createChore` has no lower bound on points** (`z.number().int().nullish()`),
+  where the hand-written tool clamped with `Math.max(0, …)`. A negative-points
+  chore reaches the insert through the registry path today.
 
 ### One correction worth carrying
 
@@ -71,7 +85,88 @@ three visible behaviours (`createTodo` defaults the assignee to the acting membe
 a backward move). None of that is a reason not to do it; all of it belongs in the PR
 that does.
 
+**And the obvious way to do it loses a family's writes. Do not ship it.** Two
+independent designs — delete the shadowing tools, or delegate them in place —
+were both rejected on review, for the same reason. Both composed the chat key
+from `tool.idempotencyFrom`, and **that key cannot see the assignee**:
+
+| tool | its natural key | what is missing |
+|---|---|---|
+| `tasks.createChore` | `title:due_at` | assignee |
+| `tasks.createTodo` | `title:due_date` | assignee, list, priority |
+| `reminders.create` | `title:remind_at` | member, recurrence |
+| `calendar.createEvent` | `title:starts_at` | assignee, location, end |
+| `messages.createAnnouncement` | `title` | everything else |
+
+So *"give Emma and Jack each a 'take out the bins' chore due Friday"* — one
+sentence, two tool calls, identical key — writes **one** chore and reports two
+successes. Five of the six delegable tools are assignable, and the swallow is
+invisible: `execute.ts`'s duplicate path runs `tool.summarize(input, storedOutput)`
+and every `summarize` ignores its input, so the second call is narrated with the
+first call's result. That is this repo's own already-rejected `transactions`
+fingerprint bug (`lib/services/finances/index.ts`) in five more tables.
+
+Three further findings from the same review, each verified against the code:
+
+- **The dedupe cannot work for a gated call at all.** `executeTool` returns
+  `pending_approval` and `denied` at step 3, *before* the ledger reservation at
+  step 4. Any PR claiming a resent chat message is deduplicated is false for every
+  family that turned approvals on.
+- **A resent submission opens two `approval_requests` rows.** `openApprovalRequest`
+  is an unguarded INSERT and no migration puts a unique index on that table.
+  Approving both writes the resource twice — this, not the tool ledger, is where a
+  gated family's duplicate actually comes from.
+- **`create_calendar_event` and `add_grocery_item` are in both `AI_TOOLS` and
+  `TOOL_DOMAIN`**, and `action-tools.ts` never sets `skipTrust`. Deleting the
+  hand-written set without also deleting the `lib/ai/actions.ts` bridge would
+  un-shadow them under a name the wrapper gates and create a live double gate.
+
+If the key is composed at all it has to be `[familyId, memberId, conversationId,
+submissionId, callIndex, tool, hash(args)]` — the full argument hash and a
+per-call ordinal, never the natural key — and the duplicate has to be visible in
+the result rather than narrated as a fresh write.
+
 ### Closed since the sweep
+
+- **§21/§57, a gated chat action tells the truth.** Three separate ways the one
+  screen a family talks to lied about what had happened, all of them live and
+  all of them found by reviewing a design rather than by running the product.
+
+  **The approval card was never built.** `gateAiAction` hands the wrapper the id
+  of the `approval_requests` row it just filed; `wrapToolsWithTrust` threw it
+  away and returned camelCase `pendingApproval`, while `approvalIdFromToolResult`
+  (`lib/ai/result-cards.ts`) reads snake_case `pending_approval` **plus** an
+  `approval_id`. So it returned null every time, `collectOutcomes` built no card,
+  and every gated chat write showed "⏳ Sent for parent approval" with nothing a
+  parent could act on in the thread. The registry path
+  (`lib/ai/tools/legacy-adapter.ts`) has always returned the right shape — the
+  wrapper was the only producer that did not.
+
+  **A refusal read as a success.** `finalizeAssistantContent` chose its fallback
+  from the action COUNT, so a turn whose every action was denied by the
+  household's own policy signed off "Done — I've updated that for you." The
+  household's existing test pinned it: a fixture with one success and one
+  failure asserted exactly that sentence. The chore was not created and the
+  family was told it was. The fallback now reads the outcomes — and a queued
+  approval is not "done" either, because nothing is written yet.
+
+  **"Sent for parent approval" could name nothing.** `openApprovalRequest`
+  returns null when its insert fails, and the wrapper still reported the action
+  as queued. Nothing written, nobody asked, and a child waiting on a decision no
+  parent can see. That is now a failure.
+
+  `tests/assistant-approval-replay.test.ts` is the ratchet for a fourth problem
+  that is real but not yet fixable: **`add_note`, `add_goal` and `rsvp_to_event`
+  are gated and cannot be replayed from their approval.** The gate stores
+  `{name, args}` and `approveRequest` replays it through `executeTool`, which
+  resolves names against the registry — and nothing outside
+  `lib/assistant/tools.ts` writes `notes`, `goals` or `event_rsvps`. A parent
+  who approves one today reads *"Approved, but Bubaly could not finish it:
+  Bubaly has no tool called \"add_note\""*. Until they have registry tools the
+  approval line says so up front, and the test fails in both directions: a newly
+  gated tool with no registry equivalent has to be named, and one that gains a
+  registry tool has to be removed.
+
 
 - **§21, the delivery half.** Four surfaces read `notifications` and they did not
   agree on whether a scheduled notice is due. `deliverNotificationEmails` filtered
@@ -88,6 +183,104 @@ that does.
   and `tests/notification-due-surfaces.test.ts` — the second asserts all four surfaces
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
+
+- **§48, the button reaches a screen people land on.** `[Let Bubaly handle it]`
+  existed in exactly one place — `readiness-module.tsx`, on `/dashboard/readiness`
+  — so §48's signature moment was one most families never encountered. The
+  Family Operating Index rendered each suggestion as a bare link to the module
+  that owns it, which asks the family to go and redo by hand the thinking Bubaly
+  had just done.
+
+  Every suggestion `buildSuggestions` can emit is now classified. Seven get a
+  request sentence written the way a person would say it, because that sentence
+  is what the planner reads — a domain, an object and a verb, not "get us ready".
+  **Five deliberately get no button**, and that restraint is the point: two are
+  payments (`fix-negative-balances`, `cover-bills`) and Bubaly does not move
+  money on its own; `decide-approvals` IS a decision waiting for a person, so
+  offering to handle it would have Bubaly approve its own requests; `close-votes`
+  and `nudge-goals` are the household making up its mind.
+
+  `tests/handle-it-coverage.test.ts` fails when a new suggestion is neither
+  handled nor named, when one is both, and when an entry no longer matches a
+  real id — plus a guard that the source parser still finds the list at all, so
+  the coverage assertions cannot pass vacuously.
+
+- **§21, the routes that went around it.** Quiet hours landing was only half the
+  job: **fifteen call sites wrote `notifications` rows directly**, so they got
+  neither the window nor the unread-duplicate guard. The three that woke a house
+  most often now go through `notify()` — every screened text, every WhatsApp,
+  every voicemail, each firing on *every* inbound message that is not blocked or
+  spam. None is marked urgent, deliberately: a text from the dentist can wait
+  until morning, and a genuine emergency comes through `/api/guardian/escalate`,
+  which is urgent and still lands immediately.
+
+  `systemScopeForFamily` reads the family's real timezone rather than taking
+  `scopeForSystem`'s `DEFAULT_TZ`. That fallback would be worse than no check at
+  all: a window evaluated against the wrong clock holds a notification at six in
+  the evening and lets one through at two in the morning.
+
+  `tests/notification-write-boundary.test.ts` is the ratchet. Every remaining raw
+  insert is enumerated **with a reason** — four urgent by nature, six named as
+  debt — so what is left is a list someone chose rather than one nobody counted,
+  and the sixteenth has to be added deliberately. It also fails on a *stale*
+  entry, because an allowlist that stops describing the code is how a ratchet
+  quietly becomes decoration.
+
+- **§21, the reader and the control.** Quiet hours were stored in two places and
+  honoured from neither. The one `notify()` read —
+  `user_preferences.notification_prefs.quietHours` — could never have worked:
+  `0004` makes that table own-row-only, so a lookup of the RECIPIENTS' rows returns
+  at most the SENDER's. A parent notifying a teen applied the parent's window to
+  the teen, or far more often read nothing and deferred nobody. The window now
+  comes from `family_ai_settings` (0257), which is family-scoped and readable for
+  every recipient on every path including the service-role cron.
+
+  Three decisions the earlier design got wrong, each now the other way:
+  a caller-supplied `sendAt` is **never** moved (a reminder asked for at 10:30pm
+  is the request, not a courtesy notice to hold till morning); an hour that cannot
+  be computed **fails open** rather than deferring for eight hours on a timezone
+  read that failed; and a window is bounded to 14 hours, because `{0, 23}` passed
+  the old 0–23 check and is a mute switch with no surface that would explain the
+  silence.
+
+  §32's **Communication block** ships with it. Until now the columns had a service
+  writer and no control, so the setting a family would go looking for was one
+  nobody could reach — which made "quiet hours are stored and ignored" true in
+  both directions.
+
+  Still open: `child_channels` is stored and read by nothing, and the guardian
+  inbound SMS/WhatsApp routes insert family-wide `system` rows directly rather
+  than through `notify()`, so they bypass the window entirely. They are the
+  likeliest real 2am waker and want their own tranche.
+
+- **§26, the write primitive only.** Not "half of §26" — every §26 bullet is
+  predicated on *"Receipt upload could:"*, and this ships no upload, no parser and
+  no vision. What it ships is the thing all six bullets need and none of them had:
+  `createTransaction`, the first writer `public.transactions` has ever had outside
+  the wallet's own UI action. Before it, `lib/services/finances` exported nine
+  functions — all reads and analytics — so Bubaly could analyse a household's
+  spending six ways and could not record one charge.
+
+  **`fingerprint` stays null, deliberately.** `0256` migrated it with a partial
+  unique index, and every key available today can delete a real charge. Family +
+  merchant + amount + date — the migration header's own suggestion — collides on
+  two coffees at one shop on one day for one price, and a "that's a duplicate"
+  handler then discards the second while reporting success. Deriving it from the
+  receipt only moves the loss: one photo of a split Costco receipt is two charges
+  with one document. A duplicate guard needs the identity of a *charge*, which
+  arrives with the intake that reads a receipt into line items. Until then, no key
+  is the honest answer — re-recording a charge is visible and correctable, losing
+  one is neither.
+
+  Also found on the way, and worth its own row for whoever touches this table:
+  **`transactions.idempotency_key` is typed in `lib/database.types.ts` and no
+  migration ever adds it.** `0256` gave the column only to its six keyed tables.
+  Writing it would be a PGRST204 against real schema that no unit test would catch.
+
+  Still open in §26: the upload route (blocked on `provider.structuredCompletion`
+  dropping `AIMessage.images`, plus a trust-gated confirm — `app/api/ai/flyer/route.ts`
+  inserts `calendar_events` ungated and repeating that shape would ship the bug
+  twice), classification, grocery reconciliation, warranty and inventory linkage.
 
 - **§42, the dead channels.** Ground truth from replaying every migration into
   PGlite and reading `pg_publication_tables`: **51 tables were published** and about
