@@ -89,6 +89,33 @@ that does.
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
 
+- **§21, the reader and the control.** Quiet hours were stored in two places and
+  honoured from neither. The one `notify()` read —
+  `user_preferences.notification_prefs.quietHours` — could never have worked:
+  `0004` makes that table own-row-only, so a lookup of the RECIPIENTS' rows returns
+  at most the SENDER's. A parent notifying a teen applied the parent's window to
+  the teen, or far more often read nothing and deferred nobody. The window now
+  comes from `family_ai_settings` (0257), which is family-scoped and readable for
+  every recipient on every path including the service-role cron.
+
+  Three decisions the earlier design got wrong, each now the other way:
+  a caller-supplied `sendAt` is **never** moved (a reminder asked for at 10:30pm
+  is the request, not a courtesy notice to hold till morning); an hour that cannot
+  be computed **fails open** rather than deferring for eight hours on a timezone
+  read that failed; and a window is bounded to 14 hours, because `{0, 23}` passed
+  the old 0–23 check and is a mute switch with no surface that would explain the
+  silence.
+
+  §32's **Communication block** ships with it. Until now the columns had a service
+  writer and no control, so the setting a family would go looking for was one
+  nobody could reach — which made "quiet hours are stored and ignored" true in
+  both directions.
+
+  Still open: `child_channels` is stored and read by nothing, and the guardian
+  inbound SMS/WhatsApp routes insert family-wide `system` rows directly rather
+  than through `notify()`, so they bypass the window entirely. They are the
+  likeliest real 2am waker and want their own tranche.
+
 - **§26, the write primitive only.** Not "half of §26" — every §26 bullet is
   predicated on *"Receipt upload could:"*, and this ships no upload, no parser and
   no vision. What it ships is the thing all six bullets need and none of them had:
