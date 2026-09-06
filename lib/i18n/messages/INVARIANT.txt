@@ -1,0 +1,56 @@
+# English strings that are DELIBERATELY identical in every language.
+#
+# Applied with: node scripts/i18n-apply.mjs lib/i18n/messages/INVARIANT.txt --invariant
+#
+# Being listed here is a claim a reviewer can check. Without this file,
+# "identical to English" is ambiguous — a decision someone made, or a
+# translation nobody got to — and there is no way to tell which. Only two kinds
+# of entry are legitimate:
+#
+#   1. Proper nouns, brands, and the placeholder names used in demo data.
+#   2. Unit and separator fragments left behind when the extractor split a
+#      sentence around a JSX expression, e.g. `{hours}h (` or `{n} min ·`.
+#      These contain no translatable word. They are TECHNICAL DEBT, not
+#      translations: the fix is to rewrite the source so the sentence stays
+#      whole around a {placeholder}, then delete the line from here. Tracked in
+#      docs/i18n.md under "Fragment debt".
+#
+# A string with an ordinary word in it does NOT belong here, however awkward the
+# fragment — leaving real copy in English is the failure this whole effort is
+# about.
+
+# --- proper nouns, brands, demo-data placeholder names ----------------------
+Jordan
+Emma
+Bosch
+Rx BIN
+Rx PCN
+Rx Group
+
+# --- loanwords the target languages use unchanged ---------------------------
+Blog
+Demo
+Premium
+
+# --- (fragment) unit and separator artifacts, no translatable word ----------
+h (
+h to
+of 6
+· by
+s at
+min ·
+new ·
+pts ·
+% fit
+% used
+Est. —
+, and
+, get
+Chase
+Rivera
+Toyota
+band =
+× made
+· next
+· seen
+to it.

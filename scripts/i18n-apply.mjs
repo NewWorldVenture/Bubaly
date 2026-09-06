@@ -56,9 +56,37 @@ function parseTsv(text) {
   return out;
 }
 
+// --invariant: the patch file is a plain list of English strings, one per line,
+// that are DELIBERATELY the same in every language.
+//
+// Three kinds land here. Proper nouns ("Bubaly", "Bosch", the placeholder names
+// in demo data). Loanwords a target language actually uses ("Blog", "Demo",
+// "Premium"). And extraction fragments — "min ·", "of 6", "h (" — where the
+// extractor split a sentence around a JSX expression and what is left is a unit
+// or a separator, not a sentence. Those fragments should ultimately be repaired
+// at the source with a placeholder, but until they are, translating "h (" is
+// worse than leaving it: it invents words for punctuation.
+//
+// The point of naming them is that "identical to English" then means one of two
+// distinguishable things — a decision someone made, or a translation someone
+// missed — instead of a single warning nobody can act on.
+const invariant = process.argv.includes('--invariant');
+
 const isTsv = patchPath.endsWith('.tsv');
 const patchText = readFileSync(patchPath, 'utf8');
-const rawPatch = isTsv ? parseTsv(patchText) : JSON.parse(patchText);
+const rawPatch = invariant
+  ? Object.fromEntries(
+      patchText
+        .split('\n')
+        .filter((line) => line.trim() && !line.startsWith('#'))
+        .map((english) => [
+          english,
+          Object.fromEntries(TSV_ORDER.map((lang) => [lang, english])),
+        ]),
+    )
+  : isTsv
+    ? parseTsv(patchText)
+    : JSON.parse(patchText);
 const source = JSON.parse(readFileSync(`${DIR}/en-US.json`, 'utf8'));
 
 // --by-text: the patch is keyed by the ENGLISH STRING rather than by catalogue
@@ -68,7 +96,7 @@ const source = JSON.parse(readFileSync(`${DIR}/en-US.json`, 'utf8'));
 // 125 different keys; authoring it 125 times invites 125 chances to translate it
 // differently, and a product where the same button reads "Cancelar" on one
 // screen and "Anular" on the next looks broken in a way no test catches.
-const byText = isTsv || process.argv.includes('--by-text');
+const byText = isTsv || invariant || process.argv.includes('--by-text');
 
 const patch = {};
 const unmatched = [];
@@ -150,7 +178,7 @@ for (const [lang, file] of Object.entries(LANGS)) {
 }
 
 console.log(`applied ${written} translation(s) across ${Object.keys(LANGS).length} languages`);
-if (identical.length) {
+if (identical.length && !invariant) {
   console.log(`\n${identical.length} value(s) identical to English (check these are deliberate):`);
   for (const i of identical.slice(0, 20)) console.log(`  ${i}`);
 }
