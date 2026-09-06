@@ -41,8 +41,33 @@ describe('A-03 tenant-isolation RLS probe is present and encodes its invariants'
   });
 
   it('is wired to the shared harness runner', () => {
+    // The shim + migrate + seed logic moved into pg-bootstrap.sh so CI and the
+    // by-hand harness bootstrap from one definition; verify-pg.sh now starts a
+    // local server and delegates. The probe still needs a seeded database with
+    // the `authenticated` role, so assert that wherever it is built.
     const harness = readFileSync('docs/audit/verify-pg.sh', 'utf8');
-    expect(harness).toContain('authenticated');
-    expect(harness).toContain('SEED_ALL.sql');
+    const bootstrap = readFileSync('docs/audit/pg-bootstrap.sh', 'utf8');
+    expect(harness).toContain('docs/audit/pg-bootstrap.sh');
+    expect(bootstrap).toContain('authenticated');
+    expect(bootstrap).toContain('SEED_ALL.sql');
+  });
+});
+
+describe('A-03 read probe cannot pass on an empty table', () => {
+  const sql = readFileSync('docs/audit/rls-isolation-check.sql', 'utf8');
+
+  it('requires family A to actually hold rows in every table it names', () => {
+    // Found by asking what else could make the count zero: SEED_ALL leaves
+    // `wallet_transactions` empty for the anchor family, so for the highest-risk
+    // money table on the list — one this file explicitly requires be covered —
+    // the probe reported isolation it had never tested. It read 0 because there
+    // was nothing to read.
+    expect(sql).toContain('so this probe cannot prove B is blocked from reading it');
+    expect(sql).toMatch(/baseline = 0[\s\S]{0,200}raise exception/);
+  });
+
+  it('gives the money table something to fail on', () => {
+    expect(sql).toContain('A-03 isolation fixture');
+    expect(sql).toContain('insert into public.wallet_transactions');
   });
 });

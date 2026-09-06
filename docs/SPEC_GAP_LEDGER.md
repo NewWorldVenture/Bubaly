@@ -40,7 +40,6 @@ family is right.
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
 | **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
-| **45** | medium / S | TESTING REQUIREMENTS | A family's rows are protected by policies nothing in CI ever tries to break. This repo has already lived the failure once (supabase/migrations/0118 exists because production tables had RLS on with their family policies missing, so pages silently returned zero rows). The next migration that adds a table without a policy, or drops one, ships without a red build — and a household either loses access to its own calendar and money or, worse, another family can read it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
 | **60** | medium / M | DEFINITION OF DONE FOR EVERY AI TOOL | A parent who asks twice in one conversation for milk on the list gets two milks, and the calendar event Bubaly just made from chat never appears in the family activity feed — so the other parent has no record that Bubaly, not a person, put it there. |
@@ -113,6 +112,71 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§45, the boundary probes now actually run.** The row said a family's rows are
+  protected by policies nothing in CI ever tries to break, and that was exactly
+  right — but not because the proofs were missing. `docs/audit/` already held
+  eight probes that provision a second tenant, act as a child, and assert under
+  `RAISE EXCEPTION` that cross-family reads and writes are refused. **Nothing ran
+  them.** `tests/rls-isolation-sweep.test.ts` reads the probe FILE and checks it
+  still contains its assertions: a guard on the guard, not a run. They executed
+  only when a person remembered to bring up `verify-pg.sh` by hand.
+
+  The blocker turned out to be one apt package. `0237` does `create extension
+  vector`, so the replay died there and took `0239` with it (`0239` deletes from
+  a table `0237` never created — one failure wearing two hats). With
+  `postgresql-16-pgvector` installed, **all 287 migrations apply, fail=0**, and
+  the whole bootstrap takes **16 seconds**. In CI that is
+  `pgvector/pgvector:pg16` as a service container, not stock `postgres:16`.
+
+  The `database` job replays every migration and then runs every probe. Three
+  properties it needed and did not have:
+
+  1. **A replay that fails, not one that reports.** `verify-pg.sh` counted
+     failures into `migration_fail=N` and exited 0 — a migration that does not
+     apply would have gone green. The bootstrap now exits non-zero and names the
+     files.
+  2. **One bootstrap, not two.** The shim/migrate/seed logic moved to
+     `docs/audit/pg-bootstrap.sh`, which both CI and the by-hand harness call. A
+     copy in the workflow would drift, and the drift is invisible: CI proves
+     something nobody can reproduce.
+  3. **Discovery by glob.** `run-probes.sh` globs `docs/audit/*-check.sql`, so a
+     probe added tomorrow is enforced tomorrow. A hand-kept list in the workflow
+     is a list someone forgets to add to. It also runs every probe before
+     failing, so a red build names all the broken boundaries rather than the
+     first.
+
+  **Two things were wrong with the probes themselves, and wiring them up unchanged
+  would have shipped a rubber stamp.**
+
+  **The read probe could pass on an empty table.** It asserted user B reads 0 rows
+  from ten family-A tables — without ever establishing that family A *has* rows.
+  `SEED_ALL` leaves `wallet_transactions` empty for the anchor family, so for the
+  highest-risk money table on the list — one `tests/rls-isolation-sweep.test.ts`
+  explicitly requires be covered — it read 0 because there was nothing to read.
+  It reported isolation it had never tested. Now it counts as the owner first and
+  fails outright if a named table is empty, and seeds one `wallet_transactions`
+  fixture so the money table has something to fail on.
+
+  **Nothing covered the other half of the 0118 failure.** Every probe looks for a
+  LEAK. A missing SELECT policy passes all of them, because default-deny is
+  precisely what they assert — drop `calendar_events_select` and the isolation
+  probe stays green (verified: exit 0) while the family's calendar goes blank.
+  That is the actual 0118 story: RLS on, family policies missing, pages silently
+  returning zero rows. `family-self-read-check.sql` asserts the opposite
+  direction, swept from the catalog rather than a hand-kept list: for every
+  family-scoped table where the owner can see anchor-family rows, that family's
+  own parent must see them too. **197 populated tables covered, no exceptions
+  needed**, and with `calendar_events_select` dropped it fails and names the
+  table.
+
+  Every claim above was checked against a running Postgres, and the guard test
+  was mutation-tested. Two of its assertions passed against mutants at first —
+  `toContain('pgvector/pgvector:pg16')` and `toContain('docs/audit/*-check.sql')`
+  both matched the explanatory COMMENT rather than the `image:` line and the
+  `probes=(...)` assignment, so the test was satisfied by its own documentation.
+  Now anchored to the code: renaming the job, swapping in stock `postgres:16`, and
+  replacing the glob with a hand-kept list each fail.
 
 - **An RSVP is a statement about a person, and only the app was enforcing that.**
   Found while giving `calendar.rsvp` a home: `0047` shipped `event_rsvps` with
