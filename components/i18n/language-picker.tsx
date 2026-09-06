@@ -6,6 +6,21 @@
 // fixed bottom nav on small screens, so the same offset the toast stack uses
 // (5rem + the home-indicator inset) keeps this reachable on a phone, and it
 // drops to a normal bottom margin once the nav goes away at lg.
+//
+// Two things keep a permanently-floating control from eating the page under it:
+//
+//   Width. The full endonym pair ("United States · English") measures 214px —
+//   54% of a 393px phone — so it reached the horizontal centre of the viewport
+//   and swallowed the click point of every full-width button in its band. On
+//   phones it collapses to the locale code, which is a fifth of the width and
+//   still unambiguous; `region` alone would not be, since en-US and es-US share
+//   "US". The endonyms come back at sm, where there is room for them.
+//
+//   Stacking. This is page furniture, not an overlay, so it belongs *under*
+//   everything transient: the cookie banner (z-50), the PWA prompt (z-60),
+//   dialogs (z-80/90), the command bar (z-95) and toasts (z-100). At z-90 it
+//   drew on top of all of them — including every modal, since it renders after
+//   children in the root layout and so won its own layer on paint order.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -82,7 +97,7 @@ export function LanguagePicker() {
   return (
     <div
       ref={rootRef}
-      className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-4 z-[90] lg:bottom-6"
+      className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-4 z-30 lg:bottom-6"
       data-testid="language-picker"
     >
       {open && (
@@ -138,10 +153,13 @@ export function LanguagePicker() {
         className="glass flex items-center gap-2 rounded-full border border-border px-3.5 py-2 text-xs font-medium text-fg shadow-lg transition hover:bg-elevated coarse:min-h-11 focus-ring"
       >
         <Globe className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
-        <span aria-hidden="true" className="text-[0.68rem] font-bold uppercase tracking-wider text-muted">
+        <span aria-hidden="true" className="text-[0.68rem] font-bold uppercase tracking-wider text-muted sm:hidden">
+          {active.code}
+        </span>
+        <span aria-hidden="true" className="hidden text-[0.68rem] font-bold uppercase tracking-wider text-muted sm:inline">
           {active.region}
         </span>
-        <span className="whitespace-nowrap">
+        <span className="hidden whitespace-nowrap sm:inline">
           {active.nativeRegion} <span className="text-muted">·</span> {active.nativeLanguage}
         </span>
       </button>
