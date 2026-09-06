@@ -434,8 +434,20 @@ describe('a deadline survives the whole memory lifecycle (0268)', () => {
     expect(insert?.payload).toMatchObject({ expires_at: '2026-12-01T00:00:00.000Z' });
   });
 
-  it.each(['next Marchh', '2026-13-45', 'sometime', 'until the season ends'])(
-    'refuses a deadline it cannot read (%s) rather than saving the memory forever',
+  it.each([
+    // Unreadable.
+    'next Marchh', '2026-13-45', 'sometime', 'until the season ends',
+    // Readable by `Date.parse` and WRONG, which is the harder half. Each of
+    // these is silently rolled forward into a date the caller never named:
+    // 2026-02-30 -> Mar 2, 2026-09-31 -> Oct 1, 2026-02-29 -> Mar 1 (2026 is
+    // not a leap year).
+    '2026-02-30', '2026-09-31', '2026-02-29',
+    // Readable and AMBIGUOUS: no zone, so `Date.parse` resolves it against
+    // whatever TZ the process happens to run under. When a fact stops being
+    // true must not depend on which machine wrote it.
+    '2026-09-06T08:00:00', '2026-09-06T08:00',
+  ])(
+    'refuses a deadline it cannot read, or would have to guess at (%s), rather than saving the memory forever',
     async (expiresAt) => {
       // `normalizeExpiry` mapped an unparseable value to null, so a caller who
       // asked for a bound and typed it wrong got permanence — the one outcome
@@ -452,6 +464,23 @@ describe('a deadline survives the whole memory lifecycle (0268)', () => {
       expect(calls.some((c) => c.kind === 'insert' || c.kind === 'update')).toBe(false);
     },
   );
+
+  it.each([
+    ['2026-12-01', '2026-12-01T00:00:00.000Z'],
+    ['2026-02-28', '2026-02-28T00:00:00.000Z'],
+    ['2028-02-29', '2028-02-29T00:00:00.000Z'],          // a real leap day, kept
+    ['2026-09-06T08:00:00Z', '2026-09-06T08:00:00.000Z'],
+    ['2026-09-06T08:00:00+02:00', '2026-09-06T06:00:00.000Z'],
+    ['  2026-12-01  ', '2026-12-01T00:00:00.000Z'],       // trimmed, not refused
+  ])('accepts an unambiguous deadline (%s) and stores exactly that instant', async (expiresAt, stored) => {
+    const { db, calls } = makeDb((call) => (call.kind === 'insert' ? { data: FACT(), error: null } : { data: null, error: null }));
+    const res = await rememberFact(scopeWith(db), {
+      key: 'Swim class', content: 'Thursdays', source: 'user', memberId: 'member-2', expiresAt,
+    });
+    expect(res.ok).toBe(true);
+    const insert = calls.find((c) => c.kind === 'insert' && c.table === 'family_facts');
+    expect(insert?.payload).toMatchObject({ expires_at: stored });
+  });
 
   it.each([null, undefined, '', '   '])('treats an absent deadline (%s) as no shelf life, not an error', async (expiresAt) => {
     const { db } = makeDb((call) => (call.kind === 'insert' ? { data: FACT(), error: null } : { data: null, error: null }));

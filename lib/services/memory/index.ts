@@ -169,7 +169,7 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   // rather than quietly turned into "remember this forever".
   const expiry = readExpiry(input.expiresAt);
   if (!expiry.ok) {
-    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a date like 2026-09-30.', { code: SERVICE_CODES.invalidInput });
+    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a real date as 2026-09-30, or a time with its zone as 2026-09-30T17:00:00Z.', { code: SERVICE_CODES.invalidInput });
   }
 
   if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: expiry.at });
@@ -194,18 +194,55 @@ function clampConfidence(value: number | null | undefined): number {
  *
  * Absent is the honest "no shelf life" — null, undefined and a blank string all
  * mean the caller named no deadline, and the fact is kept until someone forgets
- * it. But a caller who WROTE something and got it wrong ("next Marchh", a
- * half-built ISO string) asked for a bound, and silently returning null hands
- * them permanence instead: the one outcome they did not ask for, with no
- * signal. So an unparseable non-empty value is an input error, not a null.
+ * it. But a caller who WROTE something and got it wrong asked for a bound, and
+ * silently returning null hands them permanence instead: the one outcome they
+ * did not ask for, with no signal.
+ *
+ * `Date.parse` alone is not enough to tell those apart, because it accepts two
+ * kinds of input that are worse than a rejection:
+ *
+ *   '2026-02-30'           -> 2026-03-02T00:00:00Z   a date that does not exist,
+ *                                                    silently rolled forward
+ *   '2026-09-06T08:00:00'  -> depends on process.env.TZ
+ *
+ * The first stores a deadline the caller did not name. The second makes the
+ * stored instant a property of which machine ran the write, which is not
+ * something an expiry may depend on. So only two forms are accepted, and both
+ * mean exactly one instant no matter where they are read:
+ *
+ *   YYYY-MM-DD                    midnight UTC on that day, per the ECMAScript
+ *                                 date-only rule; the calendar date is checked
+ *                                 by round-trip so 2026-02-30 is refused
+ *   YYYY-MM-DDTHH:MM[:SS[.sss]]Z  or the same with an explicit ±HH:MM offset
+ *
+ * A zoneless datetime is refused rather than guessed. The family's own zone
+ * would be the better guess than the server's, but "better guess" is still a
+ * guess about when something stops being true, and the caller can say what they
+ * mean in one more character.
  *
  * Reported as `{ ok: false }` rather than thrown, because every caller here is
  * already a `ServiceResult` path and this is a message a person can act on.
  */
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ZONED_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/** True when y-m-d is a real calendar date — `Date.parse` rolls 2026-02-30 into March instead of refusing it. */
+function isRealCalendarDate(year: number, month: number, day: number): boolean {
+  const at = Date.UTC(year, month - 1, day);
+  if (!Number.isFinite(at)) return false;
+  const back = new Date(at);
+  return back.getUTCFullYear() === year && back.getUTCMonth() === month - 1 && back.getUTCDate() === day;
+}
+
 function readExpiry(value: string | null | undefined): { ok: true; at: string | null } | { ok: false } {
   if (value === null || value === undefined) return { ok: true, at: null };
   const trimmed = value.trim();
   if (!trimmed) return { ok: true, at: null };
+
+  const shape = DATE_ONLY.exec(trimmed) ?? ZONED_DATETIME.exec(trimmed);
+  if (!shape) return { ok: false };
+  if (!isRealCalendarDate(Number(shape[1]), Number(shape[2]), Number(shape[3]))) return { ok: false };
+
   const at = Date.parse(trimmed);
   return Number.isFinite(at) ? { ok: true, at: new Date(at).toISOString() } : { ok: false };
 }
