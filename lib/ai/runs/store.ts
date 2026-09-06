@@ -60,6 +60,12 @@ function nowIso(scope: Pick<ServiceScope, 'now'>): string {
 export type CreateRequestInput = {
   requestText: string;
   kind: string;
+  /**
+   * Dotted surface name (`briefing.daily`, `chat.assistant`). The column existed
+   * from the start and only the concierge path ever wrote a row at all, so it
+   * was always null — which is why "which surface failed?" had no answer.
+   */
+  feature?: string | null;
   conversationId?: string | null;
   interpretedIntent?: string | null;
   contextSnapshot?: unknown;
@@ -108,6 +114,7 @@ export async function createRequest(
       requested_by: scope.userId,
       requested_by_member_id: scope.memberId,
       kind,
+      feature: input.feature ?? null,
       request_text: text,
       interpreted_intent: input.interpretedIntent ?? null,
       status: 'queued',
