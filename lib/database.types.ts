@@ -553,10 +553,13 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string }>
       >;
+      // `source`/`confidence`/`expires_at` are 0265. `source` is intentionally
+      // absent from the Update shape: provenance is set once, at the write
+      // that created the row, and an edit must not be able to change it.
       family_facts: T<
-        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; notes?: string | null; is_pinned?: boolean; created_by?: string | null },
-        Partial<{ member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean }>
+        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean; source: string; confidence: number | null; expires_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; notes?: string | null; is_pinned?: boolean; source?: string; confidence?: number | null; expires_at?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean; confidence: number | null; expires_at: string | null }>
       >;
       family_playbook_suggestions: T<
         { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; signature: string; status: string; fact_id: string | null; created_by: string | null } & Stamps,

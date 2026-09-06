@@ -19,7 +19,7 @@ import 'server-only';
 import { z } from 'zod';
 import { FACT_CATEGORY_LABELS } from '@/lib/memory/facts';
 import {
-  forgetFact, isSensitiveMemory, recallFacts, rememberFact, type FamilyFact,
+  forgetFact, isAiFact, isSensitiveMemory, recallFacts, rememberFact, type FamilyFact,
 } from '@/lib/services/memory';
 import { getAISettings } from '@/lib/services/ai-settings';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
@@ -40,6 +40,8 @@ const factOutput = z.object({
   pinned: z.boolean(),
   /** False for a fact Bubaly learned and a person confirmed; true for one a person entered. */
   from_person: z.boolean(),
+  /** When this stops being true; null for a fact with no shelf life. */
+  expires_at: z.string().nullable(),
 });
 
 function toFactOutput(fact: FamilyFact) {
@@ -50,7 +52,10 @@ function toFactOutput(fact: FamilyFact) {
     value: fact.value,
     member_id: fact.member_id,
     pinned: fact.is_pinned,
-    from_person: !(fact.notes ?? '').startsWith('Learned by Bubaly'),
+    // 0265: provenance is a column. This read a prefix in the notes text,
+    // which an ordinary edit to that note silently rewrote.
+    from_person: !isAiFact(fact),
+    expires_at: fact.expires_at,
   };
 }
 
@@ -73,6 +78,7 @@ export const memoryTools: ToolDefinition[] = [
       asked_for: z.boolean().nullish().describe('True ONLY when the person asked in so many words to remember this ("remember that…", "note that…"). Anything you worked out yourself is not asked for.'),
       confidence: z.number().int().nullish().describe('0–100, how sure you are — used when this is your own inference'),
       note: z.string().nullish().describe('Context or evidence'),
+      expires_at: z.string().nullish().describe('ISO date after which this stops being true. Use it for anything that will go stale on its own — a clothing size, a school year, a policy term. Omit for a fact that simply is.'),
     }),
     output: z.object({
       kind: z.enum(['fact', 'suggestion']),
@@ -121,6 +127,7 @@ export const memoryTools: ToolDefinition[] = [
         confidence: input.confidence ?? null,
         memberId: member.data,
         note: input.note ?? null,
+        expiresAt: input.expires_at ?? null,
       });
       if (!res.ok) return res;
       if (res.data.kind === 'fact') {
