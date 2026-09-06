@@ -84,11 +84,16 @@ export default async function ReadinessPage() {
   // missing or unparseable header as `{ count: null, error: null }` — no error
   // to catch. Coercing that to 0 would turn "we could not count your documents"
   // into "your documents are current", which is precisely the claim §51 must
-  // never invent. `known` therefore requires a real number, not merely the
-  // absence of an error.
+  // never invent.
+  //
+  // So `known` is not "no error" but "a number a count could actually be": a
+  // safe non-negative integer. NaN, ±Infinity, 0.5 and -1 all come from a header
+  // that was parsed wrongly, not from a household that has -1 documents, and
+  // each one would otherwise be believed. Rejecting the shape rather than
+  // enumerating the failures is what makes the next malformed header safe too.
   const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>): Promise<{ value: number; known: boolean }> => {
     const { count: n, error } = await q;
-    if (error || typeof n !== 'number' || !Number.isFinite(n)) return { value: 0, known: false };
+    if (error || typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0) return { value: 0, known: false };
     return { value: n, known: true };
   };
   const [

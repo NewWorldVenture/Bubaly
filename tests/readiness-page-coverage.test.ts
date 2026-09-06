@@ -43,7 +43,11 @@ function from(table: string) {
       if (table === 'family_members') reply = roster;
       else if (table === 'calendar_events' && !record.options?.head) reply = record.limit === 200 ? week : tomorrow;
       else if (table === 'meal_plans' && !record.options?.head) reply = result(Array.from({ length: 7 }, (_, i) => ({ plan_date: `2026-09-${String(6 + i).padStart(2, '0')}` })));
-      else reply = { data: null, count: table in counts ? counts[table] : (table === 'meal_plans' ? 1 : 0), error: null };
+      else reply = {
+        data: null,
+        count: Object.prototype.hasOwnProperty.call(counts, table) ? counts[table] : (table === 'meal_plans' ? 1 : 0),
+        error: null,
+      };
       return Promise.resolve(reply).then(resolve);
     },
   });
@@ -140,21 +144,35 @@ describe('readiness page source coverage', () => {
     expect(html).toContain('On top of it');
   });
 
-  it('does not turn a count-less document read into "Documents are current"', async () => {
-    // A `head: true` count query carries its answer in the Content-Range
-    // header. When that header is missing or unparseable, supabase-js reports
-    // `{ count: null, error: null }` — there is no error to catch, so the old
-    // `n ?? 0` read it as a confirmed zero and the month card printed the ✓.
-    // "We could not count your documents" and "your documents are current" are
-    // opposite claims; only one of them is safe to invent.
-    counts.documents = null;
+  // A `head: true` count query carries its answer in the Content-Range header.
+  // When that header is missing or misparsed, supabase-js reports the count as
+  // null — or as something no count could be — with NO error to catch, so the
+  // old `n ?? 0` read it as a confirmed zero and the month card printed the ✓.
+  // "We could not count your documents" and "your documents are current" are
+  // opposite claims; only one of them is safe to invent.
+  it.each([null, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5])(
+    'does not turn invalid document count metadata into an all-clear (%s)',
+    async (count) => {
+      counts.documents = count;
+      const html = await render();
+      expect(html).not.toContain('Documents are current');
+      expect(html).toContain('Documents could not be read');
+      expect(html).toContain(COVERAGE_BANNER);
+      expect(html).not.toContain('Everything ahead looks handled.');
+      // The other month rules are untouched by a documents failure: workload is
+      // still known from the complete calendar and roster, and still says so.
+      expect(html).toContain('The load is spread evenly');
+    },
+  );
+
+  it('keeps a missing prep-plan count unknown rather than treating it as no active plans', async () => {
+    // The same hole one evidence kind over: "no prep plans in progress" and "we
+    // could not look" are not the same answer to give a family.
+    counts.prep_plans = null;
     const html = await render();
-    expect(html).not.toContain('Documents are current');
-    expect(html).toContain('Documents could not be read; expiries are unknown');
+    expect(html).toContain('Prep plans could not be read');
     expect(html).toContain(COVERAGE_BANNER);
-    // The other month rules are untouched by a documents failure: workload is
-    // still known from the complete calendar and roster, and still says so.
-    expect(html).toContain('The load is spread evenly');
+    expect(html).not.toContain('Everything ahead looks handled.');
   });
 
   it('still claims a genuine zero when the count really is zero', async () => {
