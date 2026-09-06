@@ -30,21 +30,32 @@ and both default to today's behaviour — `0257`'s `behavior` default is
 presence and prior test reports do not establish completed review or production
 application.
 
-The six that landed after `0259`, for the record and in the order they must be
-applied:
+The nine that landed after `0259`, for the record and in the order they must be
+applied. **Read the deploy-coupling column before shipping code:** two of them add
+columns the application writes unconditionally, so deploying that code first breaks
+the feature until the migration lands.
 
-| # | What it changes | Shape |
-|---|---|---|
-| `0260_trust_ledger_lockdown` | Drops the member INSERT policy on the trust audit ledger, narrows its read to `can_manage_family`, and gives `emergency_sessions` an `expires_at` (backfilled to `activated_at + 4h` for sessions still open) | Policies + one added column, both idempotent |
-| `0261_home_briefs_kind_uniqueness` | Widens the saved-brief unique key to include `kind` | Index |
-| `0262_home_briefs_quarantine` | RESTRICTIVE deny-all on `home_briefs`: a saved snapshot mixes sources whose access cannot be revalidated when it is read back later. The store helpers refuse to save, load or claim, so no code path depends on it | One policy |
-| `0263_dead_letter_reconcile` | `create or replace` on `claim_ai_runs` so a dead-lettered run also settles its steps, its legacy status column and its request ledger. Every write bounded to rows the same statement just dead-lettered | One function |
-| `0264_ai_surface_role_privacy` | The role boundary the AI layer already enforced, in the database: `ai_plans`, `ai_plan_steps`, `ai_run_events` to the requester or a manager; `family_automation_rules` writes to managers; `family_facts` per role; `home_briefs` writes to the service role. Deliberately does NOT narrow the finance and document tables — named in its own header | Policies dropped and recreated by name |
-| `0265_family_facts_provenance` | `source`, `confidence` and `expires_at` on `family_facts`, with a backfill classifying existing rows by the `Learned by Bubaly` note prefix they carry today. Additive; changes no existing row's meaning | Three added columns, two check constraints, two indexes |
-| `0266_document_vault_boundary` | Makes the Secure Vault real. `documents` SELECT/INSERT/UPDATE/DELETE and the three `documents` storage-bucket policies now consult `is_sensitive_document(is_secure, category)` and `can_manage_family`. **Closes a live leak**: before this, any member — including a child with a PIN login — could read every vault row (with its `storage_path`), fetch the bytes, move a file out of the vault, or delete it | Four table policies + three storage policies recreated, one new function, one index |
-| `0267_money_write_boundary` | `financial_accounts`, `transactions`, `budgets`, `bills`, `savings_goals`: INSERT/UPDATE/DELETE move to `can_manage_family`; SELECT deliberately unchanged. **Also drops 0006's `"Members can manage <table>"` `FOR ALL` policy**, which 0109 left in place beside the four named ones — permissive policies are OR'd, so that one had been the effective rule all along and 0109's "repair" was decoration | Five policies dropped, twenty recreated, per table via the 0109 loop shape |
+| # | What it changes | Shape | Deploy coupling |
+|---|---|---|---|
+| `0260_trust_ledger_lockdown` | Drops the member INSERT policy on the trust audit ledger, narrows its read to `can_manage_family`, and gives `emergency_sessions` an `expires_at` (backfilled to `activated_at + 4h` for sessions still open) | Policies + one added column, both idempotent | Safe before apply — nothing writes the new column until it exists |
+| `0261_home_briefs_kind_uniqueness` | Widens the saved-brief unique key to include `kind` | Index | Safe before apply |
+| `0262_home_briefs_quarantine` | RESTRICTIVE deny-all on `home_briefs`: a saved snapshot mixes sources whose access cannot be revalidated when it is read back later. The store helpers refuse to save, load or claim, so no code path depends on it | One policy | Safe before apply — the store helpers already refuse |
+| `0263_dead_letter_reconcile` | `create or replace` on `claim_ai_runs` so a dead-lettered run also settles its steps, its legacy status column and its request ledger. Every write bounded to rows the same statement just dead-lettered | One function | Safe before apply |
+| `0264_ai_surface_role_privacy` | The role boundary the AI layer already enforced, in the database: `ai_plans`, `ai_plan_steps`, `ai_run_events` to the requester or a manager; `family_automation_rules` writes to managers; `family_facts` per role; `home_briefs` writes to the service role. Deliberately does NOT narrow the finance and document tables — named in its own header | Policies dropped and recreated by name | Safe before apply — the app layer is already stricter |
+| `0265_family_facts_provenance` | `source`, `confidence` and `expires_at` on `family_facts`, with a backfill classifying existing rows by the `Learned by Bubaly` note prefix they carry today. Additive; changes no existing row's meaning | Three added columns, two check constraints, two indexes | **⚠️ Coupled with app code.** `rememberConfirmed` writes `source`, `confidence` and `expires_at` on `family_facts` unconditionally (`lib/services/memory/index.ts`), so on unmigrated schema PostgREST rejects the payload on the column name and **every memory write fails** — a person's own "remember that…" included. Apply before the deploy that ships it |
+| `0266_document_vault_boundary` | Makes the Secure Vault real. `documents` SELECT/INSERT/UPDATE/DELETE and the three `documents` storage-bucket policies now consult `is_sensitive_document(is_secure, category)` and `can_manage_family`. **Closes a live leak**: before this, any member — including a child with a PIN login — could read every vault row (with its `storage_path`), fetch the bytes, move a file out of the vault, or delete it | Four table policies + three storage policies recreated, one new function, one index | Safe before apply, but the leak stays open until it lands. The client refuses the writes it can see; the database does not |
+| `0267_money_write_boundary` | `financial_accounts`, `transactions`, `budgets`, `bills`, `savings_goals`: INSERT/UPDATE/DELETE move to `can_manage_family`; SELECT deliberately unchanged. **Also drops 0006's `"Members can manage <table>"` `FOR ALL` policy**, which 0109 left in place beside the four named ones — permissive policies are OR'd, so that one had been the effective rule all along and 0109's "repair" was decoration | Five policies dropped, twenty recreated, per table via the 0109 loop shape | Safe before apply, same caveat — a teen can still delete the household bank account until it lands |
+| `0268_suggestion_expiry` | `expires_at` on `family_playbook_suggestions`, so a suggestion offered with a deadline keeps it through acceptance instead of becoming a permanent fact. Additive and nullable | One added column | **⚠️ Coupled with app code.** `rememberUnconfirmed` writes `expires_at` on `family_playbook_suggestions` unconditionally and `confirmFact` reads it back, so on unmigrated schema **every AI-sourced memory write fails** and nothing reaches the review inbox. Apply before the deploy that ships it |
 
-| `0268_suggestion_expiry` | `expires_at` on `family_playbook_suggestions`, so a suggestion offered with a deadline keeps it through acceptance instead of becoming a permanent fact. Additive and nullable | One added column |
+`0265` and `0268` are the two that must land BEFORE their code. Both add a column the
+memory service names in an insert payload, and PostgREST rejects an insert naming a
+column the schema cache does not have — the value being null does not help, because it
+is the name that fails. The failure is loud rather than silent (the write errors, it
+does not quietly drop the field), which is the right direction, but it means the memory
+feature is down for the window between deploy and apply. Neither is written
+conditionally, and deliberately so: the same is already true of every other coupled
+migration in this document, and a one-off tolerance for one column would be a code path
+that is dead the moment the migration lands.
 
 `0266` and `0267` are the first two migrations in this range that **take capability away from a role**. Both are proved behaviourally against a real Postgres as an `authenticated` session — `docs/audit/document-vault-boundary-check.sql` and `docs/audit/money-write-boundary-check.sql` — and both proofs fail without their migration. The money proof also asserts the *whole* policy set rather than only the policies it wrote, which is the check that caught the `FOR ALL` survivor; without it `0267` would have applied cleanly and changed nothing.
 
