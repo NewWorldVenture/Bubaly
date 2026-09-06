@@ -14,6 +14,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
+import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
 import { usd } from '@/lib/finance/splits';
 import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
@@ -51,6 +52,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [candidateDraft, setCandidateDraft] = useState(false);
+  const [priceHistoryDraft, setPriceHistoryDraft] = useState<string | null>(null);
   const all = useMemo(() => subs ?? [], [subs]);
   const stats = useMemo(() => summarizeSubscriptions(all as SubLike[]), [all]);
   const usageNow = new Date();
@@ -91,9 +93,10 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
     const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
     if (error) toastError(describeDbError(error)); else success('Deleted');
   }
-  function edit(s: Sub) {
+  function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);
-    setForm({ id: s.id, name: s.name, cost: (s.cost_cents / 100).toString(), cadence: s.cadence, category: s.category ?? 'Other', status: s.status, next_charge: s.next_charge ?? '', last_used: s.last_used ?? '', note: s.note ?? '' });
+    setPriceHistoryDraft(evidence ?? null);
+    setForm({ id: s.id, name: s.name, cost: ((observedCostCents ?? s.cost_cents) / 100).toString(), cadence: s.cadence, category: s.category ?? 'Other', status: s.status, next_charge: s.next_charge ?? '', last_used: s.last_used ?? '', note: s.note ?? '' });
   }
 
   if (loading) return <SkeletonList />;
@@ -105,7 +108,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
         <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> Subscription Tracking</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="subscriptions" />
-          <Button onClick={() => { setCandidateDraft(false); setForm(blank()); }}><Plus className="h-4 w-4" /> Add subscription</Button>
+          <Button onClick={() => { setCandidateDraft(false); setPriceHistoryDraft(null); setForm(blank()); }}><Plus className="h-4 w-4" /> Add subscription</Button>
         </div>
       </div>
 
@@ -120,6 +123,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
       <SubscriptionCandidateReview key={subscriptionReviewContextKey(context)} context={context} tracked={all} onPrefill={(candidate) => {
         setCandidateDraft(true);
+        setPriceHistoryDraft(null);
         setForm({ ...blank(), ...subscriptionCandidateDraft(candidate) });
       }} />
 
@@ -138,8 +142,8 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
           const stale = isStale(s as SubLike, 60, usageNow);
           const canceled = s.status === 'canceled';
           return (
-            <div key={s.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3">
-              <div className="min-w-0">
+            <div key={s.id} className="flex flex-col items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3 sm:flex-row">
+              <div className="min-w-0 w-full">
                 <p className={`font-medium ${canceled ? 'text-muted line-through' : ''}`}>
                   {s.name} <span className="text-muted">· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
                   {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> review usage</span>}
@@ -153,8 +157,14 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
                       : usage.state === 'future' ? ' · last-use date is in the future; Edit to correct'
                         : ' · last-use date is invalid; Edit to correct'}
                 </p>
+                <SubscriptionPriceHistoryReview
+                  key={JSON.stringify([subscriptionReviewContextKey(context), s.id, s.name, s.cost_cents, s.cadence, s.note, s.status, s.last_used, s.next_charge, s.category])}
+                  context={context}
+                  subscription={{ id: s.id, name: s.name, costCents: s.cost_cents, cadence: s.cadence, note: s.note }}
+                  onPrefill={(charge) => edit(s, charge.amountCents, `Selected recorded charge: USD ${(charge.amountCents / 100).toFixed(2)} on ${charge.date}, source transactions/${charge.recordId}. Review the editable cost and choose Save. This is not a confirmed provider plan-price change; other fields are preserved.`)}
+                />
               </div>
-              <div className="flex shrink-0 items-center gap-2 text-xs">
+              <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
                 {!canceled && <button onClick={() => markUsed(s.id)} className="inline-flex items-center gap-1 text-muted hover:text-success" title="Mark used today"><CheckCircle2 className="h-4 w-4" /></button>}
                 <button onClick={() => setStatus(s.id, canceled ? 'active' : 'canceled')} className="text-muted hover:text-fg hover:underline">{canceled ? 'Reactivate' : 'Cancel'}</button>
                 <button onClick={() => edit(s)} className="text-muted hover:text-fg hover:underline">Edit</button>
@@ -167,7 +177,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit subscription' : 'Add subscription'}
-          description={candidateDraft ? 'This draft comes from recorded expenses. Confirm the name, USD cost, cadence and status, then Save. Usage and the next charge are still unknown.' : undefined}>
+          description={candidateDraft ? 'This draft comes from recorded expenses. Confirm the name, USD cost, cadence and status, then Save. Usage and the next charge are still unknown.' : priceHistoryDraft ?? undefined}>
           <form onSubmit={save} className="space-y-3">
             <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Netflix, Spotify…" />}</Field>
             <div className="grid grid-cols-2 gap-3">
