@@ -12,6 +12,8 @@ import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { DIMENSION_LABELS, type Band, type DimensionId } from '@/lib/operating-index/score';
 import { cn } from '@/lib/utils/cn';
+import { HandleItButton } from '@/components/modules/handle-it-button';
+import { handleItRequest } from '@/lib/operating-index/handle-it';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { loadFamilyGraph } from '@/lib/reasoning/context';
 import { graphReasoningInsights } from '@/lib/reasoning/insights';
@@ -199,23 +201,39 @@ export default async function FamilyOperatingIndexPage() {
           </div>
         ) : (
           <ul className="space-y-2">
-            {index.suggestions.slice(0, 6).map((s) => (
-              <li key={s.id}>
-                <Link
-                  href={s.href}
-                  className="group flex items-center gap-3 rounded-xl border border-border bg-surface/60 p-3 transition hover:border-brand/40 hover:bg-elevated"
-                >
-                  <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', IMPACT_CHIP[s.impact])}>
-                    {s.impact}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{s.title}</span>
-                    <span className="block text-xs text-muted">{s.detail}</span>
-                  </span>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
-                </Link>
-              </li>
-            ))}
+            {index.suggestions.slice(0, 6).map((s) => {
+              // §48: the family should be able to have this dealt with from
+              // here, not have to go and redo the thinking Bubaly just did.
+              // `handleItRequest` returns null for the ones that are a
+              // household's decision or a money move — those keep the link
+              // alone, which is the honest offer for them.
+              const request = handleItRequest(s.id);
+              return (
+                <li key={s.id} className="rounded-xl border border-border bg-surface/60 transition hover:border-brand/40">
+                  <div className="flex items-center gap-3 p-3">
+                    <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', IMPACT_CHIP[s.impact])}>
+                      {s.impact}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{s.title}</span>
+                      <span className="block text-xs text-muted">{s.detail}</span>
+                    </span>
+                    <Link
+                      href={s.href}
+                      aria-label={`Open ${s.title}`}
+                      className="group shrink-0 rounded-lg p-1 hover:bg-elevated"
+                    >
+                      <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
+                    </Link>
+                  </div>
+                  {request && (
+                    <div className="border-t border-border px-3 py-2">
+                      <HandleItButton request={request} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
