@@ -89,6 +89,27 @@ that does.
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
 
+- **§42, the dead channels.** Ground truth from replaying every migration into
+  PGlite and reading `pg_publication_tables`: **51 tables were published** and about
+  **170 distinct tables were subscribed** across ~220 sites, so roughly 120 channels
+  connected, reported SUBSCRIBED, and could never fire. A dead channel and a quiet
+  table are indistinguishable to the client, so those pages looked live and were not.
+  (Two counts stated earlier in review — "23 published" and "215 subscribed" — were
+  both wrong: the first came from a grep that only saw bare `ALTER PUBLICATION` and
+  missed the guarded `DO` blocks in `0112`/`0240`–`0248`/`0250`; the second counted
+  every `table:` string literal in the repo, including non-realtime uses. Grep was
+  the wrong instrument; a database was the right one.)
+
+  `0269` publishes the ten surfaces where two people plausibly act on the same row
+  in the same second, and `lib/realtime/published-tables.ts` stops the client
+  opening a socket for anything else. The load-bearing detail is DELETE: under the
+  default replica identity a DELETE's old tuple carries only the primary key, so the
+  `family_id=eq.` filter every subscription uses can never match — publishing alone
+  would have bought live INSERT/UPDATE and a silently stale list. The five tables
+  with a client delete path get `REPLICA IDENTITY FULL`; the rest are enumerated as
+  knowingly DELETE-blind rather than left unsaid. Proved against a real database:
+  61 published after, none missing, `relreplident = 'f'` on exactly those five.
+
 - **§57, the to-do FK and two misattributions.** `lib/assistant/tools.ts` wrote
   `created_by: ctx.userId` into `todo_lists` and `todo_items`, whose FKs point at
   `public.family_members(id)` (`0015_todos.sql`), not `auth.users`. Every chat "add a

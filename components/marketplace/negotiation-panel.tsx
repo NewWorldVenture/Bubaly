@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Handshake, Loader2, Check, X, ArrowRight, CircleDollarSign } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -40,6 +41,9 @@ export function NegotiationPanel({
 
   // Realtime: any round change on this listing re-runs the server component.
   useEffect(() => {
+    // Neither negotiation table is published yet — see 0269's header. Until
+    // they are, this channel would never fire; do not hold the slot.
+    if (!isRealtimePublished('marketplace_negotiation_rounds')) return;
     const sb = createClient();
     const ch = sb.channel(`negotiation:${listingId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_negotiation_rounds', filter: `listing_id=eq.${listingId}` }, () => router.refresh())
