@@ -44,7 +44,16 @@ export const TERMINAL_RUN_STATES: readonly RunState[] = ['completed', 'partially
 export const TERMINAL_STEP_STATES: readonly StepState[] = ['completed', 'skipped', 'failed', 'cancelled', 'partially_completed'] as const;
 
 /** Dependency satisfaction: a dependent may start only once its dependency reached one of these. */
-export const SATISFYING_STEP_STATES: readonly StepState[] = ['completed', 'skipped'] as const;
+/**
+ * A dependency in one of these has done what its dependents need.
+ *
+ * `partially_completed` is here because the write DID happen — the tool ran and
+ * returned ok; what failed was §13's read-back confirmation. Holding the rest
+ * of the plan hostage to an unconfirmed read would turn one uncertain step into
+ * a stalled workflow, so the plan continues and `terminalRunStateFor` makes
+ * sure the RUN never claims to have completed.
+ */
+export const SATISFYING_STEP_STATES: readonly StepState[] = ['completed', 'skipped', 'partially_completed'] as const;
 
 /** A dependency in one of these can never be satisfied, so its dependents are blocked, not queued. */
 export const UNSATISFIABLE_STEP_STATES: readonly StepState[] = ['failed', 'cancelled', 'blocked'] as const;
@@ -97,7 +106,10 @@ export const STEP_TRANSITIONS: Readonly<Record<StepState, readonly StepState[]>>
     'ready', 'verifying', 'awaiting_approval', 'scheduled_followup',
     'completed', 'partially_completed', 'blocked', 'failed', 'cancelled',
   ],
-  verifying: ['completed', 'partially_completed', 'blocked', 'failed', 'cancelled'],
+  // `ready` is the recovery path, the same one `executing` has: a worker that
+  // died mid-check leaves the step here, and `recoverStrandedSteps` puts it
+  // back in the graph rather than letting the run finish around it.
+  verifying: ['ready', 'completed', 'partially_completed', 'blocked', 'failed', 'cancelled'],
   scheduled_followup: ['queued', 'ready', 'executing', 'failed', 'cancelled'],
   blocked: ['queued', 'ready', 'skipped', 'failed', 'cancelled'],
   completed: [],
@@ -222,11 +234,13 @@ export type StepCounts = {
   awaitingApproval: number;
   /** Steps that are neither terminal nor waiting on a person — work still to do. */
   pending: number;
+  /** Steps whose tool ran but whose §13 read-back could not confirm the result. */
+  unverified: number;
 };
 
 export function summarizeSteps(steps: readonly GraphStep[]): StepCounts {
   const counts: StepCounts = {
-    total: steps.length, completed: 0, skipped: 0, failed: 0, cancelled: 0, blocked: 0, awaitingApproval: 0, pending: 0,
+    total: steps.length, completed: 0, skipped: 0, failed: 0, cancelled: 0, blocked: 0, awaitingApproval: 0, pending: 0, unverified: 0,
   };
   for (const step of steps) {
     switch (step.status) {
@@ -236,6 +250,9 @@ export function summarizeSteps(steps: readonly GraphStep[]): StepCounts {
       case 'cancelled': counts.cancelled += 1; break;
       case 'blocked': counts.blocked += 1; break;
       case 'awaiting_approval': counts.awaitingApproval += 1; break;
+      // Ran, wrote, could not be confirmed (§13). Not a clean success and not
+      // still pending: counted on its own so the run reports it honestly.
+      case 'partially_completed': counts.unverified += 1; break;
       default: counts.pending += 1; break;
     }
   }
@@ -334,15 +351,23 @@ export function findDependencyCycle(steps: readonly GraphStep[]): string[] | nul
 
 /**
  * The state a run ends in, given how its steps came out. The rule that matters:
- * a run only reports `completed` when nothing failed, was cancelled or was left
- * blocked. Anything else with at least one success is `partially_completed`,
- * which is what lets the UI say "6 of 8 actions completed" (§29) instead of
- * flattening a half-finished workflow into either lie.
+ * a run only reports `completed` when every step reached a good end. Anything
+ * else with at least one success is `partially_completed`, which is what lets
+ * the UI say "6 of 8 actions completed" (§29) instead of flattening a
+ * half-finished workflow into either lie.
+ *
+ * `counts.pending` belongs in that judgement and used to be left out. A step
+ * stranded in `executing` by a worker that died is not runnable
+ * (`selectRunnableSteps` takes only queued/ready) and is not blocked (nothing
+ * in `UNSATISFIABLE_STEP_STATES` dooms its dependents), so the executor reached
+ * "nothing left to run" with the step still in flight and finalized the run as
+ * `completed` — Bubaly telling a family it finished work it never did. A step
+ * that never finished is a step that did not succeed.
  */
 export function terminalRunStateFor(counts: StepCounts): Extract<RunState, 'completed' | 'partially_completed' | 'failed'> {
-  const bad = counts.failed + counts.cancelled + counts.blocked;
+  const bad = counts.failed + counts.cancelled + counts.blocked + counts.pending + counts.unverified;
   if (bad === 0) return 'completed';
-  const succeeded = counts.completed + counts.skipped;
+  const succeeded = counts.completed + counts.skipped + counts.unverified;
   return succeeded > 0 ? 'partially_completed' : 'failed';
 }
 
@@ -355,5 +380,9 @@ export function describeProgress(counts: StepCounts): string {
   if (counts.blocked) problems.push(`${counts.blocked} blocked`);
   if (counts.cancelled) problems.push(`${counts.cancelled} cancelled`);
   if (counts.awaitingApproval) problems.push(`${counts.awaitingApproval} waiting for approval`);
+  // Steps that neither finished nor failed: a family reading "6 of 8" is owed
+  // the reason the other two are missing, not silence about them.
+  if (counts.pending) problems.push(`${counts.pending} did not finish`);
+  if (counts.unverified) problems.push(`${counts.unverified} could not be confirmed`);
   return problems.length ? `${head} — ${problems.join(', ')}.` : `${head}.`;
 }

@@ -6,7 +6,6 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
-import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
@@ -62,11 +61,19 @@ export default async function FamilyAutomationPage() {
     return <ReadFailure />;
   }
 
-  const rules = rulesResult.data;
+  // Two different things live in this table. A ROUTINE (0259) is something a
+  // family said in words — "every Sunday, plan our meals" — that the routine
+  // worker fires on a schedule. Everything else is a legacy rule whose trigger
+  // no code evaluates. Rendering them identically is how a routine came to be
+  // described as "When schedule → ai_request", with no next-run time and no
+  // sign of the sentence the family actually typed.
+  const allRules = rulesResult.data ?? [];
+  const routines = allRules.filter((r) => r.schedule_kind);
+  const rules = allRules.filter((r) => !r.schedule_kind);
   const pending = pendingResult.data;
   const recent = recentResult.data;
 
-  const enabled = (rules ?? []).filter((r) => r.is_enabled).length;
+  const enabled = allRules.filter((r) => r.is_enabled).length;
 
   return (
     <div className="space-y-5">
@@ -74,15 +81,12 @@ export default async function FamilyAutomationPage() {
         title="Family Life Automation"
         description="Set rules that watch your real data and act — with parent approval for anything sensitive."
         action={manager ? (
-          <QuickAdd
-            table="family_automation_rules" title="New rule"
-            fields={[
-              { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'Remind me about overdue chores' },
-              { name: 'trigger_type', label: 'When', type: 'select', required: true, options: TRIGGERS },
-              { name: 'action_type', label: 'Do this', type: 'select', required: true, options: ACTIONS },
-              { name: 'requires_approval', label: 'Require my approval first', type: 'checkbox' },
-            ]}
-          />
+          <Link
+            href="/dashboard/concierge"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" aria-hidden /> Ask Bubaly for a routine
+          </Link>
         ) : undefined}
       />
 
@@ -110,7 +114,38 @@ export default async function FamilyAutomationPage() {
         </SectionCard>
       )}
 
-      <SectionCard title="Automation Rules">
+      <SectionCard
+        title="Bubaly routines"
+        description="Things you asked Bubaly to do on a schedule. Each one files a request when it is due — it is planned and gated like anything else you ask for."
+      >
+        {routines.length > 0 ? (
+          <ul className="divide-y divide-border">
+            {routines.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 py-3">
+                {r.is_enabled ? <ToggleRight className="h-5 w-5 shrink-0 text-emerald-400" /> : <ToggleLeft className="h-5 w-5 shrink-0 text-muted" />}
+                <div className="min-w-0 flex-1">
+                  {/* The family's own sentence, not a pair of column values. */}
+                  <p className="truncate text-sm font-medium">{r.said || r.name}</p>
+                  <p className="text-xs text-muted">
+                    {r.is_enabled
+                      ? (r.next_run_at ? `Next: ${fmtRelative(r.next_run_at)}` : 'Waiting for something to count back from')
+                      : 'Paused'}
+                    {r.last_run_at && ` · last ran ${fmtRelative(r.last_run_at)}`}
+                  </p>
+                </div>
+                {manager && <DeleteButton table="family_automation_rules" id={r.id} />}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <MiniEmpty icon={Clock} text={manager ? 'No routines yet — ask Bubaly for one, like "every Sunday, plan our meals".' : 'No routines set up.'} />
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Automation Rules"
+        description="Older rules. Their triggers are not evaluated by anything — a routine above is what actually runs."
+      >
         {rules && rules.length > 0 ? (
           <ul className="divide-y divide-border">
             {rules.map((r) => (
@@ -128,7 +163,7 @@ export default async function FamilyAutomationPage() {
             ))}
           </ul>
         ) : (
-          <MiniEmpty icon={Plus} text={manager ? 'No automation rules yet — create your first above.' : 'No automation rules set up.'} />
+          <MiniEmpty icon={Plus} text="No older rules." />
         )}
       </SectionCard>
 

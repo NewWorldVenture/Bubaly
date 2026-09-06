@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import {
@@ -352,7 +353,26 @@ describe('Daily Brief route schema boundary', () => {
   // rendered as what Bubaly did for the family. So the route replaces it with
   // the runs that really reached a terminal state: the model may describe the
   // day, it does not decide what happened.
-  describe('what Bubaly claims to have done', () => {
+  describe('the caller may not write the system prompt', () => {
+  it('only ever uses one of three words for the brief kind', async () => {
+    // `type` is interpolated into the SYSTEM prompt ("Generate a ${type} family
+    // briefing") and decides which stored brief the request overwrites. It
+    // arrived unchecked.
+    const route = readFileSync('app/api/ai/briefing/route.ts', 'utf8');
+    expect(route).toContain("raw.type === 'evening' ? 'evening' : raw.type === 'weekly' ? 'weekly' : 'morning'");
+    expect(route).not.toMatch(/const \{ type = 'morning' \} =/);
+  });
+
+  it('does not file a weekly request as the day’s brief', () => {
+    // 0258's unique key is (family_id, as_of_date, kind); the client's
+    // "This Week" tab posts `weekly` to this same route, and every visit used
+    // to overwrite the daily row.
+    const route = readFileSync('app/api/ai/briefing/route.ts', 'utf8');
+    expect(route).toMatch(/if \(type !== 'weekly'\) \{\s*\n\s*const saved = await saveBrief/);
+  });
+});
+
+describe('what Bubaly claims to have done', () => {
     const runs = [
       { id: 'run-done', summary: 'Planned the week', state: 'completed', progress: { total: 8, completed: 8 }, completed_at: '2026-09-05T11:00:00.000Z', updated_at: '2026-09-05T11:00:00.000Z' },
       { id: 'run-partial', summary: 'Prepared the trip', state: 'partially_completed', progress: { total: 8, completed: 6 }, completed_at: '2026-09-05T11:30:00.000Z', updated_at: '2026-09-05T11:30:00.000Z' },

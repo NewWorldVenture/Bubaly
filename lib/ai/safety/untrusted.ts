@@ -75,6 +75,28 @@ export function fenceUntrusted(label: string, text: string | null | undefined): 
   return `<<<${UNTRUSTED_MARK}_${tag}_${n}>>>${body}<<<END_${tag}_${n}>>>`;
 }
 
+/**
+ * A long-form fence: a whole pasted document, transcript or OCR dump.
+ *
+ * `fenceUntrusted` collapses whitespace and cuts at 400 characters, which is
+ * right for a row value ("event title: …") and wrong for a forwarded school
+ * letter — the lines ARE the content. This keeps line breaks and takes a
+ * caller-set budget, and neutralises exactly the same things: control
+ * characters, and any sequence that could pass for a marker.
+ */
+export function fenceUntrustedBlock(label: string, text: string | null | undefined, maxChars = 8000): string {
+  const body = (text ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/<<</g, '\u2039\u2039\u2039')
+    .replace(/>>>/g, '\u203a\u203a\u203a')
+    .trim()
+    .slice(0, maxChars);
+  if (!body) return '';
+  const tag = fenceLabel(label);
+  const n = nonce();
+  return `<<<${UNTRUSTED_MARK}_${tag}_${n}>>>\n${body}\n<<<END_${tag}_${n}>>>`;
+}
+
 export type FencedBlock = { label: string; nonce: string; text: string };
 
 /**

@@ -24,7 +24,15 @@ export async function POST(req: NextRequest) {
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
     if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
-    const { type = 'morning' } = (boundedBody.value ?? {}) as { type?: string };
+    // The caller's `type` is interpolated into the SYSTEM prompt and decides
+    // which stored brief this overwrites, so it may only ever be one of these
+    // three words. It arrived unchecked: the client's "This Week" tab posts
+    // `weekly`, which mapped to `kind: 'daily'` and clobbered the day's brief,
+    // and anything else a caller sent went straight into the model's
+    // instructions.
+    const raw = (boundedBody.value ?? {}) as { type?: unknown };
+    const type: 'morning' | 'evening' | 'weekly' =
+      raw.type === 'evening' ? 'evening' : raw.type === 'weekly' ? 'weekly' : 'morning';
 
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
@@ -292,6 +300,9 @@ Rules:
     // `buildBrief` carries them through `mergeCompletedByBubaly`, which keeps
     // only the ones that really reached completed / partially_completed. The
     // model may describe the day; it does not get to decide what happened.
+    // 0258's unique key is (family_id, as_of_date, kind), so a `weekly` request
+    // must not be filed as the day's brief — the "This Week" tab used to
+    // overwrite it on every visit.
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
@@ -314,8 +325,10 @@ Rules:
     // File the brief so the delivery cron and the next page load read the same
     // one (0258 is unique on family + day + kind, so this is idempotent). A
     // failure here must not cost the family their briefing.
-    const saved = await saveBrief(scopeFromUserContext(ctx, supabase), brief);
-    if (!saved.ok) console.error('[briefing] could not persist the brief', saved.error);
+    if (type !== 'weekly') {
+      const saved = await saveBrief(scopeFromUserContext(ctx, supabase), brief);
+      if (!saved.ok) console.error('[briefing] could not persist the brief', saved.error);
+    }
 
     // The envelope is unchanged: `briefing-module.tsx` is the only consumer and
     // the composed brief's home is the `home_briefs` row, not this response.

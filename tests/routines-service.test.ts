@@ -69,11 +69,27 @@ describe('createRoutine', () => {
   });
 
   it('stores an anchor by key, never a table name from the sentence', async () => {
-    const { db, calls } = makeDb(() => ({ data: { ...ROW, schedule_kind: 'relative', anchor_key: 'trip', offset_days: -2, at_hour: 9, schedule_expr: null }, error: null }));
+    const { db, calls } = makeDb((call) => (call.table === 'vacations'
+      ? { data: [{ start_date: '2026-09-20' }], error: null }
+      : { data: { ...ROW, schedule_kind: 'relative', anchor_key: 'trip', offset_days: -2, at_hour: 9, schedule_expr: null }, error: null }));
     await createRoutine(scope(db), { said: 'two days before every trip', prompt: 'Make sure we are ready' });
     const insert = calls.find((c) => c.kind === 'insert');
     expect(insert?.payload).toMatchObject({ schedule_kind: 'relative', anchor_key: 'trip', offset_days: -2, at_hour: 9 });
-    // A relative routine's first fire depends on the trip, so the worker sets it.
+    // Armed here, from the trip already on file. It used to be stored null on
+    // the theory that the worker would fill it in — but the worker only reads
+    // rules whose `next_run_at` is already past, so a relative routine could
+    // never fire at all.
+    expect((insert?.payload as { next_run_at: unknown }).next_run_at).toBe('2026-09-18T13:00:00.000Z');
+  });
+
+  it('leaves a relative routine unarmed when there is nothing to count back from', async () => {
+    // A family with no trip on file: null is honest, and the worker's arming
+    // pass picks the routine up as soon as a trip exists.
+    const { db, calls } = makeDb((call) => (call.table === 'vacations'
+      ? { data: [], error: null }
+      : { data: { ...ROW, schedule_kind: 'relative', anchor_key: 'trip', offset_days: -2, at_hour: 9, schedule_expr: null }, error: null }));
+    await createRoutine(scope(db), { said: 'two days before every trip', prompt: 'Make sure we are ready' });
+    const insert = calls.find((c) => c.kind === 'insert');
     expect((insert?.payload as { next_run_at: unknown }).next_run_at).toBeNull();
   });
 
