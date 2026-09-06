@@ -380,6 +380,7 @@ const CHEF_PROMPTS = [
 ];
 
 function ChefModal({ onClose }: { onClose: () => void }) {
+  const i18nT = useTranslations();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [request, setRequest] = useState('');
@@ -436,7 +437,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-4 border-t border-border pt-4">
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
-                AI isn&apos;t configured — showing a plan from your own recipes & leftovers. Connect a provider for fully tailored weeks.
+                {i18nT('kitchenDashboard.aiIsntConfiguredShowingAPlan')}
               </p>
             )}
             {reply.message && <p className="text-sm font-medium">{reply.message}</p>}

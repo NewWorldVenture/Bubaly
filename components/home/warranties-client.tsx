@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[]; assets: Asset[] }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Warranty | null>(null);
@@ -147,7 +148,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
               </Select>
             </Field>
           </div>
-          <Field label={t('warrantiesClient.coverage')}><Textarea name="coverage" rows={2} defaultValue={editing?.coverage ?? ''} placeholder="What's covered, deductibles…" /></Field>
+          <Field label={t('warrantiesClient.coverage')}><Textarea name="coverage" rows={2} defaultValue={editing?.coverage ?? ''} placeholder={tr('warrantiesClient.whatsCoveredDeductibles')} /></Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label={t('warrantiesClient.claimPhone')}><Input name="claim_phone" defaultValue={editing?.claim_phone ?? ''} /></Field>
             <Field label={t('warrantiesClient.claimUrl')}><Input name="claim_url" defaultValue={editing?.claim_url ?? ''} /></Field>

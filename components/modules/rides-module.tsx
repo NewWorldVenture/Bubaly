@@ -47,6 +47,7 @@ const blankRide = {
 };
 
 export function RidesModule() {
+  const tr = useTranslations();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -268,7 +269,7 @@ export function RidesModule() {
       {/* Ride modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit ride' : 'Add ride'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What's the ride for?" required>
+          <Field label={tr('rides.whatsTheRideFor')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rides.eGSoccerPracticeDropOff')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">

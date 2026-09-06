@@ -18,6 +18,7 @@ type Vehicle = Tables<'vehicles'>;
 type Member = { id: string; display_name: string | null };
 
 export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; members: Member[] }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
@@ -68,7 +69,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
             <Field label={t('vehiclesClient.model')}><Input name="model" defaultValue={editing?.model ?? ''} placeholder="RAV4" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t('vehiclesClient.nickname')}><Input name="nickname" defaultValue={editing?.nickname ?? ''} placeholder="Mom's car" /></Field>
+            <Field label={t('vehiclesClient.nickname')}><Input name="nickname" defaultValue={editing?.nickname ?? ''} placeholder={tr('vehiclesClient.momsCar')} /></Field>
             <Field label={t('vehiclesClient.color')}><Input name="color" defaultValue={editing?.color ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

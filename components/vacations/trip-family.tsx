@@ -4,6 +4,7 @@ import { Users } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { TripCrudSection, type FieldDef } from './shared';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type VMember = Tables<'vacation_members'>;
 
@@ -22,9 +23,10 @@ const fields: FieldDef[] = [
 ];
 
 export function TripFamily({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <TripCrudSection<VMember>
-      table="vacation_members" vacationId={vacationId} title="Who's going" icon={Users}
+      table="vacation_members" vacationId={vacationId} title={t('tripFamily.whosGoing')} icon={Users}
       fields={fields} emptyText="No travelers added" addLabel="Add traveler"
       renderRow={(m, members) => {
         const fm = m.member_id ? members.get(m.member_id) : null;

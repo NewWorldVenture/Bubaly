@@ -333,6 +333,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
   members: Tables<'family_members'>[]; defaultMemberId: string | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -455,7 +456,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
           </div>
         )}
 
-        <Field label="Who's it for?">
+        <Field label={tr('habits.whosItFor')}>
           {(id) => (
             <select id={id} value={memberId ?? ''} onChange={(e) => setMemberId(e.target.value || null)}
               className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">

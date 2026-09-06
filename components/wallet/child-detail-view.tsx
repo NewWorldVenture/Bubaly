@@ -594,6 +594,7 @@ export function ChildDetailView({
   canManage: boolean;
   siblings: Sibling[];
 }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const [adding, setAdding] = useState(false);
   const [requesting, setRequesting] = useState(false);
@@ -770,7 +771,7 @@ export function ChildDetailView({
           </h2>
           <div className="flex items-center gap-3">
             {history.length > 0 && (
-              <button type="button" onClick={downloadStatement} className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg" aria-label="Download this child's statement as CSV">
+              <button type="button" onClick={downloadStatement} className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg" aria-label={tr('childDetail.downloadThisChildsStatementAsCsv')}>
                 <Download className="h-3.5 w-3.5" /> {t('childDetail.statement')}
               </button>
             )}

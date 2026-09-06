@@ -44,6 +44,7 @@ const OPEN_OPP = new Set(['interested', 'registered', 'waitlisted']);
 const PRIORITIES = new Set<ActionPriority>(['low', 'medium', 'high']);
 
 export function NextActionsModule() {
+  const i18nT = useTranslations();
   const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
@@ -136,7 +137,7 @@ export function NextActionsModule() {
       />
 
       {ranked.length === 0 ? (
-        <EmptyState icon={Sparkles} title="You're all caught up"
+        <EmptyState icon={Sparkles} title={i18nT('nextActions.youreAllCaughtUp')}
           description="No overdue tasks, upcoming events, or closing opportunities need attention. Enjoy it." />
       ) : (
         <>

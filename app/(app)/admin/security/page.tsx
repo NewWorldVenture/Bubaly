@@ -22,6 +22,7 @@ const POSTURE = [
 ];
 
 export default async function AdminSecurityPage() {
+  const tr = await getTranslations();
   const t = await getTranslations();
   const supabase = createServiceClient();
 
@@ -225,7 +226,7 @@ export default async function AdminSecurityPage() {
 
       <Card>
         <h2 className="mb-1 text-base font-semibold">{t('adminSecurity.securityPosture')}</h2>
-        <p className="mb-4 text-sm text-muted">What&rsquo;s actually true about this application&rsquo;s architecture — not a live scan, a description of how it&rsquo;s built.</p>
+        <p className="mb-4 text-sm text-muted">{tr('adminSecurity.whatsActuallyTrueAboutThisApplications')}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {POSTURE.map((p) => (
             <div key={p.title} className="flex gap-3 rounded-xl border border-border bg-surface/40 p-3">

@@ -54,6 +54,27 @@ export function keyFor(namespace, text) {
   return `${namespace}.${camel || 'text'}`;
 }
 
+/**
+ * HTML entities JSX resolves for free but a catalogue string does not.
+ *
+ * `<p>In &amp; out</p>` renders "In & out" — JSX decodes entities in text nodes.
+ * Lifted verbatim into JSON and rendered as `{t('key')}`, the SAME characters
+ * render as the literal "In &amp; out", because a JS string is not markup. 141
+ * strings hit this. Decode on the way into the catalogue so what a translator
+ * reads is what a user sees.
+ */
+const ENTITIES = {
+  '&amp;': '&', '&apos;': "'", '&rsquo;': '’', '&lsquo;': '‘', '&quot;': '"',
+  '&nbsp;': ' ', '&mdash;': '—', '&ndash;': '–', '&hellip;': '…',
+  '&lt;': '<', '&gt;': '>', '&middot;': '·',
+};
+
+function decodeEntities(text) {
+  let out = text;
+  for (const [entity, char] of Object.entries(ENTITIES)) out = out.split(entity).join(char);
+  return out.replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(Number(code)));
+}
+
 /** Is this JSX text actual copy? The parser guarantees it is text rather than
  *  code, so this only has to reject whitespace, punctuation and bare symbols. */
 function isCopy(text) {
@@ -63,9 +84,13 @@ function isCopy(text) {
   if (/^[A-Z0-9_]+$/.test(s)) return false;          // SCREAMING enums
   if (/^[a-z0-9-]+$/.test(s)) return false;          // slugs
   if (/^https?:\/\//i.test(s) || s.startsWith('/')) return false;
-  // A quote or backtick would need escaping inside t('…'); skip rather than
-  // risk changing the string's meaning.
-  if (/["'`]/.test(s)) return false;
+  // Quotes and apostrophes are FINE. Only the generated key goes inside
+  // t('…') — and keyFor() strips punctuation from it — while the text itself
+  // goes to JSON, which escapes quotes for us. Rejecting them (as this did at
+  // first) skipped every possessive and contraction in the product, and after
+  // entity decoding turned `&apos;` into a real apostrophe it would have
+  // skipped those too.
+  if (/`/.test(s)) return false;
   const words = s.split(/\s+/).filter(Boolean);
   if (words.length >= 2) return /[a-z]/.test(s);
   return /^[A-Z][a-z]{3,}$/.test(s);
@@ -156,7 +181,7 @@ export function collect(file, namespace) {
   const visit = (node) => {
     if (ts.isJsxText(node)) {
       const raw = node.getText();
-      const text = raw.replace(/\s+/g, ' ').trim();
+      const text = decodeEntities(raw.replace(/\s+/g, ' ').trim());
       const host = hookableComponent(node, sf, server);
       if (isCopy(text) && host) {
         // Preserve the original leading/trailing whitespace so JSX spacing

@@ -14,6 +14,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 export function CardRevealModal({ cardId, childName, onClose }: {
   cardId: string; childName: string; onClose: () => void;
 }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +90,7 @@ export function CardRevealModal({ cardId, childName, onClose }: {
           </div>
           <p className="mt-3 flex items-start gap-2 text-xs text-muted">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
-            Shown via Stripe&apos;s secure display — the number never touches Bubaly&apos;s servers.
-            This reveal is logged for the family.
+            {tr('cardRevealModal.shownViaStripesSecureDisplayThe')}
           </p>
         </div>
       </div>

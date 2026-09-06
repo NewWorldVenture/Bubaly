@@ -187,6 +187,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 }
 
 function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -266,7 +267,7 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () =
         </div>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.anythingElse')}</span>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Don't agree to anything over $150." className={inputCls} />
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={tr('conciergeCalls.dontAgreeToAnythingOver150')} className={inputCls} />
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>{t('conciergeCalls.cancel')}</Button>

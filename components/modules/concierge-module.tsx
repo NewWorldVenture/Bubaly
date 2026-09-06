@@ -58,6 +58,7 @@ function fmtCents(cents: number | null) {
 
 // ─── Main Module ──────────────────────────────────────────────────────────────
 export function ConciergeModule() {
+  const tr = useTranslations();
   const t = useTranslations();
   const { familyId, userId, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
@@ -218,7 +219,7 @@ export function ConciergeModule() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
                   enterKeyHint="send"
-                  placeholder="Tell me what you'd like to plan…"
+                  placeholder={tr('concierge.tellMeWhatYoudLikeTo')}
                   rows={2}
                   className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
                 />

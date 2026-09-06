@@ -13,6 +13,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Asset = Tables<'home_assets'>;
 
 export function DiagnoseClient({ assets }: { assets: Asset[] }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const [assetId, setAssetId] = useState('');
   const [category, setCategory] = useState('');
@@ -71,8 +72,8 @@ export function DiagnoseClient({ assets }: { assets: Asset[] }) {
             </Select>
           </Field>
         </div>
-        <Field label="What's happening?">
-          <Textarea rows={4} value={symptom} onChange={(e) => setSymptom(e.target.value)} placeholder="e.g. The dishwasher won't drain and there's standing water at the bottom after every cycle." />
+        <Field label={tr('diagnoseClient.whatsHappening')}>
+          <Textarea rows={4} value={symptom} onChange={(e) => setSymptom(e.target.value)} placeholder={tr('diagnoseClient.eGTheDishwasherWontDrain')} />
         </Field>
         <Button onClick={run} loading={busy} disabled={!symptom.trim()}><Stethoscope className="h-4 w-4" /> {t('diagnoseClient.diagnose')}</Button>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}

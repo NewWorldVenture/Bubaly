@@ -44,6 +44,7 @@ function Row({ integration }: { integration: Integration }) {
 }
 
 export default async function AdminIntegrationsPage() {
+  const tr = await getTranslations();
   const t = await getTranslations();
   const supabase = createServiceClient();
 
@@ -99,7 +100,7 @@ export default async function AdminIntegrationsPage() {
       <Card>
         <h2 className="mb-4 text-base font-semibold">{t('adminIntegrations.status')}</h2>
         <p className="mb-4 text-xs text-muted">
-          This list is exactly what&rsquo;s wired into the codebase — no placeholder rows for services that aren&rsquo;t actually integrated.
+          {tr('adminIntegrations.thisListIsExactlyWhatsWired')}
         </p>
         <div className="space-y-2">
           {integrations.map((i) => <Row key={i.name} integration={i} />)}

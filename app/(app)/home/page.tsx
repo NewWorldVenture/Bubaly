@@ -130,6 +130,7 @@ const ACTIONS = [
 type Member = { id: string; display_name: string; color: string | null; role: string; birthday: string | null; user_id: string | null };
 
 export default async function HomePage() {
+  const i18nT = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -423,7 +424,7 @@ export default async function HomePage() {
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
         {today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
         {today.schedule.length > 0 && (
-          <ul className="space-y-3" aria-label="Today's schedule">
+          <ul className="space-y-3" aria-label={i18nT('home.todaysSchedule')}>
             {today.schedule.map((item) => {
               const who = item.memberId ? memberById.get(item.memberId) : undefined;
               return (
@@ -560,7 +561,7 @@ export default async function HomePage() {
 
         {/* What's for Dinner */}
         <Card>
-          <CardHead icon={ChefHat} title="What's for Dinner?" href="/dashboard/meals" action="View meal plan" />
+          <CardHead icon={ChefHat} title={i18nT('home.whatsForDinner')} href="/dashboard/meals" action="View meal plan" />
           <div className="flex-1">
             {todayMeal ? (
               <div>

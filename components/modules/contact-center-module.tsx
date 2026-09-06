@@ -38,6 +38,7 @@ function timeAgo(iso: string): string {
 export function ContactCenterModule({ channel, messages, suggestedLocal, twilioReady, canManage }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
 }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -158,7 +159,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
               <span className="mb-1 block text-xs font-semibold text-muted">{t('contactCenter.greeting')}</span>
               <textarea
                 value={greeting} onChange={(e) => setGreeting(e.target.value)} rows={2}
-                placeholder="Hi, you've reached the Smiths. I can take a message…"
+                placeholder={tr('contactCenter.hiYouveReachedTheSmithsI')}
                 className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-brand" />
             </label>
             <label className="block">

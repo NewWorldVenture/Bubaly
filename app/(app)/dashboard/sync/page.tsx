@@ -40,6 +40,7 @@ function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: Sync
 }
 
 export default async function SyncHubPage() {
+  const tr = await getTranslations();
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -109,7 +110,7 @@ export default async function SyncHubPage() {
       <Card>
         <h2 className="mb-1 text-base font-semibold">{t('dashboardSync.whatEachProviderSupports')}</h2>
         <p className="mb-4 text-xs text-muted">
-          Based on each provider&rsquo;s real public API. Where two-way sync isn&rsquo;t possible we say so plainly rather than pretend.
+          {tr('dashboardSync.basedOnEachProvidersRealPublic')}
         </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-sm">

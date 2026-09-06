@@ -25,6 +25,7 @@ function ReadFailure() {
 }
 
 export default async function FamilyStressPage() {
+  const tr = await getTranslations();
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -75,7 +76,7 @@ export default async function FamilyStressPage() {
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <SectionCard title="This Week's Load" className="lg:col-span-1">
+        <SectionCard title={tr('dashboardFamilyStress.thisWeeksLoad')} className="lg:col-span-1">
           <div className="flex flex-col items-center gap-3 py-2">
             <ScoreRing pct={stress.score} label="load" size={160} />
             <LevelBadge level={stress.level} />

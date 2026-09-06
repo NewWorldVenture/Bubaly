@@ -18,7 +18,10 @@ describe('gift/[token] page read boundary', () => {
   it('renders a retryable message (not "no longer active") on a real read error', () => {
     expect(page).toContain('if (linkError) {');
     expect(page).toContain("console.error('[gift/token] gift link read failed', linkError);");
-    expect(page).toContain("We couldn&apos;t load this gift link right now.");
+    // Asserted with a real apostrophe rather than `&apos;`: the string now lives
+    // in the catalogue, where entities are decoded, so this checks the words the
+    // gift-giver actually reads instead of their HTML encoding.
+    expect(page).toContain("We couldn't load this gift link right now.");
   });
 
   it('still treats a missing/expired link as inactive (no error path)', () => {

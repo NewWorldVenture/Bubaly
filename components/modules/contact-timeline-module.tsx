@@ -45,6 +45,7 @@ export function ContactTimelineModule({
   health: ContactHealth;
   interactionIds: string[];
 }) {
+  const i18nT = useTranslations();
   const tr = useTranslations();
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -121,7 +122,7 @@ export function ContactTimelineModule({
             ))}
           </div>
           <input
-            name="title" required placeholder="What happened? e.g. Sunday dinner at Grandma's"
+            name="title" required placeholder={i18nT('contactTimeline.whatHappenedEGSundayDinner')}
             className="mt-3 h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
           />
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
