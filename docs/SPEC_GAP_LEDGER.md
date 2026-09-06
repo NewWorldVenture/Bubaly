@@ -114,6 +114,54 @@ the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
 
+- **§49, the overnight recap was a day stale, not merely evening-only.** The row
+  says a parent who opens the brief at 7am is shown nothing of what Bubaly did
+  overnight, because the recap only renders on the Evening tab while the tab
+  defaults to Morning. Both halves were true, and the second one was worse than
+  recorded.
+
+  `briefing/page.tsx` did not use the shared loader. It read
+  `family_operating_index` itself — `.order('as_of_date', { ascending: false })`
+  with `.limit(2)` — and diffed those two rows, with **no anchor to today at
+  all**. That table is written LAZILY, by `loadOperatingIndex`'s own upsert, and
+  its only other callers are the Command Center, the Operating Index page and the
+  reasoning engine. On a morning when nobody has opened one of those there is no
+  row for today, so the card diffed YESTERDAY against THE DAY BEFORE and titled
+  itself "Since yesterday". A day out of date, silently, on the one screen meant
+  to start the family's day.
+
+  The page now calls `loadOperatingIndex`, which computes today live, anchors the
+  prior read with `.lt('as_of_date', today)`, and persists today's row — so
+  opening the brief is what makes today's snapshot exist for every other surface,
+  instead of the brief being the one reading a stale pair. The page's own
+  `toView`/`summarizeChange` block is deleted: it was a second, worse copy of a
+  shared function.
+
+  **The two reads now run together.** The page awaited the index read and THEN
+  the reasoning context, so it paid both latencies in series. `Promise.allSettled`
+  — not `all` — keeps them parallel while keeping the two failures
+  distinguishable, because a family told the wrong thing about what broke is a
+  different bug.
+
+  **A test had made the staleness look deliberate**, the same way the recurring
+  reminder's did: `tests/briefing-read-boundary.test.ts` pinned the page by
+  SOURCE STRING, including the literal `const { data: foiSnaps, error: foiError }`
+  the fix deletes. The assertions described the shape of the code rather than what
+  a family gets, so the code and its test agreed with each other and both were
+  wrong. It now asserts delegation, and names the exact discarded shape so
+  reintroducing it fails.
+
+  `tests/operating-index-today-anchor.test.ts` is the behavioural half, and it did
+  not exist before: **nothing in the suite asserted the `.lt('as_of_date', today)`
+  anchor**, though every surface's recap rests on it. I checked it fires by
+  removing the anchor.
+
+  Still open in §49: the brief is reachable only from nav, the manifest shortcut
+  and a dashboard tile. Nothing surfaces it where a parent packing lunches
+  actually lands — that half is a product decision, not a bug, and is left for
+  someone to choose deliberately.
+
+
 - **§30, two of the three writes that had nowhere to land.** `add_note`,
   `add_goal` and `rsvp_to_event` were gated in chat with no registry tool, so a
   parent could grant the approval and read back *"Bubaly has no tool called
