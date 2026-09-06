@@ -158,10 +158,17 @@ reading, not a request from this family.`;
           args: c.args,
           summary: summarize(c.name, c.args),
         }));
-        // Nothing extracted is a real outcome the person sees as "we found
-        // nothing in your email", and is indistinguishable from a model that
-        // read it fine and there genuinely was nothing.
-        if (out.length === 0) obs.failed(new Error('The import found nothing to extract.'));
+        // Zero items is NOT a failure. The system prompt says "If nothing is
+        // actionable, make no tool calls", so an empty extraction is the model
+        // doing exactly as it was told about a message that had nothing in it.
+        // Recording it as failed would inflate the count on /admin/ai-activity
+        // that support reads as "how much AI is broken right now" — the same
+        // argument that keeps the chore validator's guard paths off the ledger.
+        //
+        // An earlier version of this comment said the two were indistinguishable
+        // and then marked it failed anyway, which had the reasoning exactly
+        // backwards: when a success and a failure are indistinguishable, the
+        // instructed success is the one to assume.
         return { items: out, note: completion.text || null };
       },
     );

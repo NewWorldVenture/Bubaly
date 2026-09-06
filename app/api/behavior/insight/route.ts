@@ -10,6 +10,9 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/serve
 
 export const runtime = 'nodejs';
 
+/** Shown whenever the coach's reply cannot be used. Named so both paths return the same words. */
+const CANNED_INSIGHT = 'Keep logging — patterns will sharpen over time.';
+
 /**
  * AI parenting insight for a child's recent behavior log. Reads the last ~60
  * days of behavior_logs (family-scoped via the cookie client + RLS), summarises
@@ -74,13 +77,30 @@ export async function POST(req: NextRequest) {
         });
         obs.used(provider.model, completion.usage);
         const match = completion.text.match(/\{[\s\S]*\}/);
-        const parsed = match ? JSON.parse(match[0]) : {};
+        // The parse is caught HERE rather than left to the wrapper. V8 puts a
+        // snippet of the input into its message —
+        //   Unexpected token 'A', "Ava had 3 "... is not valid JSON
+        // — and the input is the coach's reply about a child's behaviour logs.
+        // Letting that reach the wrapper would copy it into `ai_requests.error`
+        // and onto /admin/ai-activity, which shows the error column. Before this
+        // route was observed the same throw landed in a bare `catch {}` and was
+        // discarded, so wrapping it without this would have made privacy worse
+        // in the name of visibility.
+        let parsed: Record<string, unknown> = {};
+        if (match) {
+          try {
+            parsed = JSON.parse(match[0]) as Record<string, unknown>;
+          } catch {
+            obs.failed(new Error('The coach reply was not valid JSON.'));
+            return { insight: CANNED_INSIGHT, tips: [] };
+          }
+        }
         const insight = typeof parsed.insight === 'string' ? parsed.insight : null;
         if (insight === null) {
           obs.failed(new Error('The coach replied without a usable insight; the canned line was shown instead.'));
         }
         const tips = Array.isArray(parsed.tips) ? parsed.tips.slice(0, 3).map(String) : [];
-        return { insight: insight ?? 'Keep logging — patterns will sharpen over time.', tips };
+        return { insight: insight ?? CANNED_INSIGHT, tips };
       },
     );
     return NextResponse.json(result);

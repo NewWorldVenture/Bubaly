@@ -202,6 +202,34 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     expect(src).not.toContain('obs.failed(fallbackErr, { partial: true })');
   });
 
+  it('does not record an instructed no-op as a failure', () => {
+    // `/api/ai/import`'s system prompt says "If nothing is actionable, make no
+    // tool calls", so zero extracted items is the model obeying, not failing.
+    // Recording it would inflate the count support reads as "how much AI is
+    // broken right now" — the same argument that keeps the chore validator's
+    // guard paths off the ledger. An earlier version of this route had the
+    // reasoning backwards: it noted that a valid no-op and an unusable reply
+    // are indistinguishable, and then marked both failed.
+    const src = readFileSync('app/api/ai/import/route.ts', 'utf8');
+    expect(src, 'the prompt must still license the no-op').toContain('If nothing is actionable, make no tool calls.');
+    expect(src, 'an empty extraction is not a failure').not.toContain('obs.failed(');
+  });
+
+  it('never lets a JSON.parse message carry the model reply onto the row', () => {
+    // V8 embeds a snippet of the input in its message —
+    //   Unexpected token 'A', "Ava had 3 "... is not valid JSON
+    // — and in `/api/behavior/insight` the input is the coach's reply about a
+    // child's behaviour logs. Reaching the wrapper's catch would copy that into
+    // `ai_requests.error`, which /admin/ai-activity renders. The parse is caught
+    // at the call site and reported generically instead.
+    const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
+    const wrapped = src.slice(src.indexOf('withAiRequest('));
+    expect(wrapped, 'the parse must be caught where it happens').toMatch(/try \{[\s\S]{0,200}JSON\.parse\([\s\S]{0,120}\} catch \{/);
+    expect(src).toContain("obs.failed(new Error('The coach reply was not valid JSON.'))");
+    // The recorded message must be a constant, never derived from the error.
+    expect(wrapped, 'the caught error must not be passed through').not.toMatch(/catch \(\w+\)[\s\S]{0,200}obs\.failed\(\w+\)/);
+  });
+
   it('a canned sentence that reads like coaching is recorded as a failure', () => {
     // The subtlest shape of all. When the parenting coach replies without JSON,
     // `/api/behavior/insight` answers 200 with "Keep logging — patterns will
@@ -210,9 +238,10 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
     // The canned line is chosen after the failure is recorded, not instead of it.
     const failedAt = src.indexOf('obs.failed(');
-    const cannedAt = src.indexOf("insight ?? 'Keep logging");
+    const cannedAt = src.indexOf('insight ?? CANNED_INSIGHT');
     expect(failedAt, 'the unusable reply must be recorded').toBeGreaterThan(-1);
     expect(cannedAt, 'the canned line must still be what the parent sees').toBeGreaterThan(failedAt);
+    expect(src, 'and it is still that sentence').toContain("const CANNED_INSIGHT = 'Keep logging — patterns will sharpen over time.'");
   });
 
   it('a 200 carrying an empty answer is recorded as a failure too', () => {
