@@ -26,6 +26,19 @@ from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
 
+**⚠️ `0256` is now coupled to app code on a path every family uses.** It always
+was on the assistant's side: `lib/services/calendar`, `.../reminders` and
+`.../tasks` name `idempotency_key` in their inserts, so on unmigrated schema
+PostgREST rejects the payload on the column name and Bubaly cannot add an event,
+a reminder or a to-do. §7's calendar tranche routes the **module's own** Add
+Event, Find a time and Edit through that same service
+(`app/(app)/dashboard/calendar/actions.ts`), which is the point — one write path,
+one duplicate guard — but it also means the blast radius of not applying `0256`
+grows from "the AI's calendar tool" to "the family's Save button". Apply `0256`
+before the deploy that ships that tranche. As with `0265` and `0268`, the column
+is written unconditionally and deliberately so: a one-off tolerance for it would
+be a code path that is dead the moment the migration lands.
+
 `0255` through `0268` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
 application.
