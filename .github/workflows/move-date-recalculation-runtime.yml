@@ -6,9 +6,10 @@ on:
     paths:
       - '.github/workflows/move-date-recalculation-runtime.yml'
       - 'supabase/migrations/0245_move_planner.sql'
-      - 'supabase/migrations/0269_move_date_recalculation.sql'
-      - 'tests/fixtures/0269-move-date-recalculation-bootstrap.sql'
-      - 'tests/fixtures/0269-move-date-recalculation-runtime.sql'
+      - 'supabase/migrations/0271_move_date_recalculation.sql'
+      - 'tests/fixtures/0271-move-date-recalculation-bootstrap.sql'
+      - 'tests/fixtures/0271-move-date-recalculation-runtime.sql'
+      - 'tests/fixtures/0271-move-date-recalculation-concurrency.sql'
 
 permissions:
   contents: read
@@ -58,9 +59,17 @@ jobs:
           fi
           # No host ports, database URLs, repository secrets or production connections.
           # psql runs inside this job's new container and uses its local Unix socket.
-          cat tests/fixtures/0269-move-date-recalculation-bootstrap.sql \
-              supabase/migrations/0245_move_planner.sql \
-              supabase/migrations/0269_move_date_recalculation.sql \
-              tests/fixtures/0269-move-date-recalculation-runtime.sql \
-            | docker exec -i "$PG_CONTAINER" psql -X --set=ON_ERROR_STOP=1 \
-                --host=/var/run/postgresql --username=postgres --dbname=bubaly_move_recalc_ci
+          # First stream rolls everything back. The second has fresh bootstrap
+          # guards again, then commits synthetic setup for real dblink sessions.
+          # Both run only in this newly created, job-owned disposable service.
+          for fixture in \
+            tests/fixtures/0271-move-date-recalculation-runtime.sql \
+            tests/fixtures/0271-move-date-recalculation-concurrency.sql
+          do
+            cat tests/fixtures/0271-move-date-recalculation-bootstrap.sql \
+                supabase/migrations/0245_move_planner.sql \
+                supabase/migrations/0271_move_date_recalculation.sql \
+                "$fixture" \
+              | docker exec -i "$PG_CONTAINER" psql -X --set=ON_ERROR_STOP=1 \
+                  --host=/var/run/postgresql --username=postgres --dbname=bubaly_move_recalc_ci
+          done

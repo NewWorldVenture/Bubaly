@@ -1,6 +1,6 @@
--- 0269 isolated CI bootstrap, consumed before the actual 0245 and 0269 files.
+-- 0271 isolated CI bootstrap, consumed before the actual 0245 and 0271 files.
 -- The combined stdin stream is ONE transaction: BEGIN here, ROLLBACK at the
--- end of 0269-move-date-recalculation-runtime.sql. No imports or service startup.
+-- end of 0271-move-date-recalculation-runtime.sql. No imports or service startup.
 -- Only the parent's fresh PostgreSQL 17 GitHub Actions service may run this.
 BEGIN;
 SET LOCAL statement_timeout = '30s';
@@ -129,4 +129,6 @@ CREATE POLICY fixture_members_read ON public.family_members
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
 
--- The parent now concatenates the exact checked-out 0245 and 0269 migrations.
+-- The parent now concatenates the exact checked-out 0245 and 0271 migrations.
+-- The separate concurrency fixture commits synthetic setup for other sessions;
+-- only that disposable CI service is allowed to retain it until job teardown.

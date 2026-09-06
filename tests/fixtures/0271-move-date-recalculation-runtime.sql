@@ -1,9 +1,8 @@
--- Single-session executable proof for actual migrations 0245 and 0269.
+-- Single-session executable proof for actual migrations 0245 and 0271.
 -- BEGIN is in the bootstrap; every fixture object and row is rolled back below.
 -- No migration/function copies, imports, credentials, network calls, or services.
--- HELD/UNPROVEN: a later relative INSERT can retain an old app-computed due_date
--- after waiting on the parent's FK lock. This suite neither fixes nor proves
--- that concurrent-insert requirement, or multi-session lock/race behavior.
+-- Multi-session insert/date-write proof is in the separate 0271 concurrency
+-- fixture. Historical test_0269 helpers/labels remain for CI comparability.
 
 DO $guard$
 BEGIN
@@ -24,6 +23,20 @@ CREATE TABLE public.test_0269_writes (
   row_id uuid NOT NULL
 );
 GRANT INSERT ON TABLE public.test_0269_proofs TO anon;
+
+-- Prior CI run 34017042127 failed history_update_trigger_immutable_no_writes
+-- AFTER the expected 42501. Role/RLS visibility (8->9 moves, 14->15 tasks)
+-- is a hypothesis, not an established cause. Keep STABLE unchanged and record
+-- both helper observations while independent top-level admin queries prove
+-- actual row/write-log equality around every owner mutation attempt.
+CREATE TABLE public.test_0271_admin_diagnostics (
+  label text PRIMARY KEY,
+  actor text NOT NULL,
+  session_actor text NOT NULL,
+  configured_role text NOT NULL,
+  before_snapshot jsonb NOT NULL,
+  after_snapshot jsonb NOT NULL
+);
 
 CREATE FUNCTION public.test_0269_assert(p_condition boolean, p_label text)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER
@@ -55,7 +68,8 @@ $function$;
 
 CREATE FUNCTION public.test_0269_expect_error(
   p_sql text, p_sqlstate text, p_label text,
-  p_message text DEFAULT NULL, p_snapshot boolean DEFAULT true
+  p_message text DEFAULT NULL, p_snapshot boolean DEFAULT true,
+  p_admin_diagnostic boolean DEFAULT false
 )
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER
 SET search_path = pg_catalog, pg_temp
@@ -64,8 +78,12 @@ DECLARE
   v_state text;
   v_message text;
   v_before jsonb;
+  v_after jsonb;
 BEGIN
-  IF p_snapshot THEN
+  IF p_admin_diagnostic AND CURRENT_USER <> 'postgres' THEN
+    RAISE EXCEPTION '0271 diagnostics require the controlled fixture administrator';
+  END IF;
+  IF p_snapshot OR p_admin_diagnostic THEN
     v_before := public.test_0269_snapshot();
   END IF;
   -- Only the submitted operation is inside the exception-catching block.
@@ -80,6 +98,12 @@ BEGIN
       AND (p_message IS NULL OR v_message IS NOT DISTINCT FROM p_message),
     p_label || '_sqlstate'
   );
+  IF p_admin_diagnostic THEN
+    v_after := public.test_0269_snapshot();
+    INSERT INTO public.test_0271_admin_diagnostics
+      (label, actor, session_actor, configured_role, before_snapshot, after_snapshot)
+    VALUES (p_label, CURRENT_USER, SESSION_USER, pg_catalog.current_setting('role'), v_before, v_after);
+  END IF;
   IF p_snapshot THEN
     PERFORM public.test_0269_assert(
       public.test_0269_snapshot() IS NOT DISTINCT FROM v_before,
@@ -161,6 +185,15 @@ INSERT INTO public.moves(id, family_id, title, move_date, status) VALUES
 
 -- Fixed rows intentionally omit date_mode, even with nonzero offsets/template
 -- keys. This exercises the legacy/default policy without inferring intent.
+-- Establish an existing out-of-sync relative task through an actual earlier
+-- parent-date change. Do not disable the new creation guard to seed corruption.
+UPDATE public.moves SET move_date = DATE '2026-09-04' WHERE id = '40000000-0000-4000-8000-000000000001';
+INSERT INTO public.move_tasks
+  (id, family_id, move_id, title, status, offset_days, due_date, completed_at,
+   assignee_id, notes, template_key, created_by, date_mode)
+VALUES
+  ('50000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Manually rescheduled relative', 'todo', -3, DATE '2026-09-01', NULL::timestamptz, '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative');
+UPDATE public.moves SET move_date = DATE '2026-09-06' WHERE id = '40000000-0000-4000-8000-000000000001';
 INSERT INTO public.move_tasks
   (id, family_id, move_id, title, status, offset_days, due_date, completed_at,
    assignee_id, notes, template_key, created_by)
@@ -180,7 +213,6 @@ VALUES
   ('50000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Skipped relative', 'skipped', 0, DATE '2026-09-06', NULL::timestamptz, '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative'),
   ('50000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Todo with completion timestamp', 'todo', 1, DATE '2026-09-07', TIMESTAMPTZ '2026-09-01 12:00:00+00', '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative'),
   ('50000000-0000-4000-8000-000000000007', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Relative without date', 'doing', 0, NULL::date, NULL::timestamptz, '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative'),
-  ('50000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Manually rescheduled relative', 'todo', -3, DATE '2026-09-01', NULL::timestamptz, '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative'),
   ('50000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'Skipped with completion timestamp', 'skipped', 0, DATE '2026-09-06', TIMESTAMPTZ '2026-09-01 12:00:00+00', '30000000-0000-4000-8000-000000000002', 'KEEP task notes', 'synthetic-template', '20000000-0000-4000-8000-000000000001', 'relative');
 
 INSERT INTO public.move_tasks
@@ -278,6 +310,11 @@ SELECT public.test_0269_expect_error('SELECT public.move_recalculate_date(''1000
 -- A real intervening task edit invalidates the old review. Keep that manual edit
 -- as the new baseline; the recalculation must preserve the edited title.
 UPDATE public.move_tasks SET title = 'Legacy fixed after manual edit' WHERE id = '50000000-0000-4000-8000-000000000001';
+SELECT public.test_0269_expect_error('INSERT INTO public.move_tasks(id, family_id, move_id, title, date_mode, offset_days, due_date) VALUES (''50000000-0000-4000-8000-000000000030'', ''10000000-0000-4000-8000-000000000001'', ''40000000-0000-4000-8000-000000000009'', ''Stale relative creation'', ''relative'', 0, DATE ''2026-09-01'')', '40001', 'relative_creation_stale_date_rejected', 'stale_review', true);
+SELECT public.test_0269_expect_error('UPDATE public.move_tasks SET due_date = DATE ''2026-09-01'' WHERE id = ''50000000-0000-4000-8000-000000000002''', '40001', 'relative_date_edit_stale_rejected', 'stale_review', true);
+INSERT INTO public.test_0269_state(name, payload) SELECT 'out_of_sync_before_metadata_edit', pg_catalog.to_jsonb(task) FROM public.move_tasks AS task WHERE id = '50000000-0000-4000-8000-000000000008';
+UPDATE public.move_tasks SET title = 'Out-of-sync title edited without rescheduling' WHERE id = '50000000-0000-4000-8000-000000000008';
+SELECT public.test_0269_assert((SELECT pg_catalog.to_jsonb(task) - ARRAY['title', 'updated_at'] FROM public.move_tasks AS task WHERE id = '50000000-0000-4000-8000-000000000008') = ((SELECT payload FROM public.test_0269_state WHERE name = 'out_of_sync_before_metadata_edit') - ARRAY['title', 'updated_at']), 'out_of_sync_metadata_edit_preserves_scheduling');
 SELECT public.test_0269_expect_error('SELECT public.move_recalculate_date(''10000000-0000-4000-8000-000000000001''::uuid, ''40000000-0000-4000-8000-000000000001''::uuid, ''30000000-0000-4000-8000-000000000001''::uuid, DATE ''2026-09-20'', (SELECT payload FROM public.test_0269_state WHERE name = ''review''), ''60000000-0000-4000-8000-000000000002''::uuid)', '40001', 'intervening_task_edit_stale', 'stale_review', true);
 UPDATE public.test_0269_state
 SET payload = public.move_recalculate_date('10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', DATE '2026-09-20')->'preview'
@@ -375,7 +412,11 @@ SELECT public.test_0269_assert(
 
 -- Legitimate intervening move changes must not invalidate an already committed
 -- receipt. This is an explicit fixture mutation, not another recalculation.
+SELECT public.test_0269_expect_error('UPDATE public.moves SET move_date = DATE ''2026-10-01'' WHERE id = ''40000000-0000-4000-8000-000000000001''', '42501', 'direct_move_date_write_denied', 'move_date_requires_review', true);
+-- Only the fixture administrator simulates this subsequent privileged change.
+RESET ROLE;
 UPDATE public.moves SET status = 'done', move_date = DATE '2026-10-01' WHERE id = '40000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
 INSERT INTO public.test_0269_state(name, payload) VALUES ('before_closed_replay', public.test_0269_snapshot());
 SELECT public.test_0269_assert(
   public.move_recalculate_date('10000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', DATE '2026-09-20', (SELECT payload FROM public.test_0269_state WHERE name = 'review'), '60000000-0000-4000-8000-000000000001')
@@ -500,9 +541,66 @@ SELECT public.test_0269_assert(public.test_0269_snapshot() = (SELECT payload FRO
 
 -- Fixture-admin calls reach the actual immutable-history triggers, proving
 -- protection beyond the authenticated privilege checks above.
-SELECT public.test_0269_expect_error('UPDATE public.move_date_recalculations SET result = result WHERE request_id = ''60000000-0000-4000-8000-000000000001''', '42501', 'history_update_trigger_immutable', 'immutable_move_date_recalculation', true);
-SELECT public.test_0269_expect_error('DELETE FROM public.move_date_recalculations WHERE request_id = ''60000000-0000-4000-8000-000000000001''', '42501', 'history_delete_trigger_immutable', 'immutable_move_date_recalculation', true);
-SELECT public.test_0269_expect_error('TRUNCATE TABLE public.move_date_recalculations', '42501', 'history_truncate_trigger_immutable', 'immutable_move_date_recalculation', true);
+INSERT INTO public.test_0269_state(name, payload)
+VALUES ('history_update_trigger_immutable_admin_before', (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)));
+SELECT public.test_0269_expect_error('UPDATE public.move_date_recalculations SET result = result WHERE request_id = ''60000000-0000-4000-8000-000000000001''', '42501', 'history_update_trigger_immutable', 'immutable_move_date_recalculation', false, true);
+SELECT public.test_0269_assert(
+  CURRENT_USER = 'postgres'
+    AND (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)) IS NOT DISTINCT FROM (SELECT payload FROM public.test_0269_state WHERE name = 'history_update_trigger_immutable_admin_before'),
+  'history_update_trigger_immutable_no_writes'
+);
+INSERT INTO public.test_0269_state(name, payload)
+VALUES ('history_delete_trigger_immutable_admin_before', (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)));
+SELECT public.test_0269_expect_error('DELETE FROM public.move_date_recalculations WHERE request_id = ''60000000-0000-4000-8000-000000000001''', '42501', 'history_delete_trigger_immutable', 'immutable_move_date_recalculation', false, true);
+SELECT public.test_0269_assert(
+  CURRENT_USER = 'postgres'
+    AND (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)) IS NOT DISTINCT FROM (SELECT payload FROM public.test_0269_state WHERE name = 'history_delete_trigger_immutable_admin_before'),
+  'history_delete_trigger_immutable_no_writes'
+);
+INSERT INTO public.test_0269_state(name, payload)
+VALUES ('history_truncate_trigger_immutable_admin_before', (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)));
+SELECT public.test_0269_expect_error('TRUNCATE TABLE public.move_date_recalculations', '42501', 'history_truncate_trigger_immutable', 'immutable_move_date_recalculation', false, true);
+SELECT public.test_0269_assert(
+  CURRENT_USER = 'postgres'
+    AND (SELECT pg_catalog.jsonb_build_object(
+  'moves', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.moves AS item),
+  'tasks', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_tasks AS item),
+  'boxes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.id), '[]'::jsonb) FROM public.move_boxes AS item),
+  'history', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.request_id), '[]'::jsonb) FROM public.move_date_recalculations AS item),
+  'writes', (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(item) ORDER BY item.table_name, item.operation, item.row_id), '[]'::jsonb) FROM public.test_0269_writes AS item)
+)) IS NOT DISTINCT FROM (SELECT payload FROM public.test_0269_state WHERE name = 'history_truncate_trigger_immutable_admin_before'),
+  'history_truncate_trigger_immutable_no_writes'
+);
 
 SET ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '20000000-0000-4000-8000-000000000001', true);
@@ -533,7 +631,15 @@ VALUES ('70000000-0000-4000-8000-000000001001', '10000000-0000-4000-8000-0000000
 SELECT public.test_0269_expect_error('SELECT public.move_recalculate_date(''10000000-0000-4000-8000-000000000001''::uuid, ''40000000-0000-4000-8000-000000000008''::uuid, ''30000000-0000-4000-8000-000000000001''::uuid, DATE ''2026-09-20'')', '54000', 'over_1000_tasks_refused', 'too_many_move_tasks', true);
 
 RESET ROLE;
+SELECT '0271_ADMIN_DIAGNOSTIC ' || pg_catalog.jsonb_build_object(
+  'label', label, 'actor', actor, 'sessionActor', session_actor, 'configuredRole', configured_role,
+  'beforeMoves', pg_catalog.jsonb_array_length(before_snapshot->'moves'),
+  'afterMoves', pg_catalog.jsonb_array_length(after_snapshot->'moves'),
+  'beforeTasks', pg_catalog.jsonb_array_length(before_snapshot->'tasks'),
+  'afterTasks', pg_catalog.jsonb_array_length(after_snapshot->'tasks'),
+  'helperEqual', before_snapshot = after_snapshot
+)::text FROM public.test_0271_admin_diagnostics ORDER BY label;
 SELECT '0269_OK ' || name FROM public.test_0269_proofs ORDER BY name;
 SELECT '0269_PROOF_COUNT ' || pg_catalog.count(*)::text FROM public.test_0269_proofs;
-SELECT '0269_UNPROVEN concurrent_relative_insert_consistency_and_multi_session_lock_races';
+SELECT '0271_SCOPE single_session; separate concurrency fixture supplies multi_session_write_proof';
 ROLLBACK;

@@ -1,4 +1,4 @@
--- 0269: reviewed, atomic move-date recalculation.
+-- 0271: reviewed, atomic move-date recalculation.
 -- Legacy tasks are deliberately fixed; neither intent nor new tasks are inferred.
 -- UNPUBLISHED: schema rollout and parent integration remain separate work.
 
@@ -391,3 +391,115 @@ REVOKE ALL ON FUNCTION public.move_recalculate_date(uuid, uuid, uuid, date, json
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.move_recalculate_date(uuid, uuid, uuid, date, jsonb, uuid)
   TO authenticated;
+
+-- Relative scheduling writes must inspect the current parent while holding a
+-- lock that conflicts with both FOR UPDATE and ordinary move-date updates.
+-- Reject a stale client date; never silently change its reviewed/user-entered
+-- value, infer legacy intent, or rewrite an existing out-of-sync task.
+CREATE FUNCTION public.move_task_relative_date_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_move_date date;
+  v_expected_date date;
+BEGIN
+  IF NEW.date_mode IS DISTINCT FROM 'relative'
+    OR NEW.status IS NULL
+    OR NEW.status NOT IN ('todo', 'doing')
+    OR NEW.completed_at IS NOT NULL
+    OR NEW.due_date IS NULL
+  THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    IF ROW(NEW.move_id, NEW.family_id, NEW.date_mode, NEW.offset_days, NEW.due_date)
+      IS NOT DISTINCT FROM
+      ROW(OLD.move_id, OLD.family_id, OLD.date_mode, OLD.offset_days, OLD.due_date)
+    THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+  -- Leave the existing NOT NULL/CHECK constraints responsible for bad offsets.
+  IF NEW.offset_days IS NULL OR NEW.offset_days NOT BETWEEN -365 AND 365 THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    SELECT move.move_date INTO v_move_date
+    FROM public.moves AS move
+    WHERE move.id = NEW.move_id AND move.family_id = NEW.family_id
+    FOR SHARE OF move;
+  ELSE
+    -- A row UPDATE already owns its child lock. Waiting on the parent here
+    -- would invert the RPC's parent-then-children order and permit a deadlock.
+    -- Reject a busy scheduling edit instead; the RPC itself owns this parent.
+    BEGIN
+      SELECT move.move_date INTO v_move_date
+      FROM public.moves AS move
+      WHERE move.id = NEW.move_id AND move.family_id = NEW.family_id
+      FOR SHARE OF move NOWAIT;
+    EXCEPTION WHEN lock_not_available THEN
+      RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'stale_review';
+    END;
+  END IF;
+
+  IF v_move_date IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'unavailable_move';
+  END IF;
+  IF v_move_date NOT BETWEEN DATE '0001-01-01' AND DATE '9999-12-31'
+    OR NEW.due_date NOT BETWEEN DATE '0001-01-01' AND DATE '9999-12-31'
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22008', MESSAGE = 'invalid_date';
+  END IF;
+  v_expected_date := v_move_date + NEW.offset_days;
+  IF v_expected_date NOT BETWEEN DATE '0001-01-01' AND DATE '9999-12-31' THEN
+    RAISE EXCEPTION USING ERRCODE = '22008', MESSAGE = 'result_date_out_of_range';
+  END IF;
+  IF NEW.due_date IS DISTINCT FROM v_expected_date THEN
+    RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'stale_review';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.move_task_relative_date_guard()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER move_tasks_relative_date_guard
+  BEFORE INSERT OR UPDATE OF move_id, family_id, date_mode, offset_days, due_date
+  ON public.move_tasks
+  FOR EACH ROW EXECUTE FUNCTION public.move_task_relative_date_guard();
+
+-- Ordinary authenticated metadata edits cannot bypass reviewed recalculation.
+-- The invoker is the RPC owner while its SECURITY DEFINER body updates moves.
+-- Do not use a caller-settable GUC as an authorization capability.
+CREATE FUNCTION public.move_date_reviewed_write_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF NEW.move_date IS DISTINCT FROM OLD.move_date
+    AND CURRENT_USER IS DISTINCT FROM pg_catalog.pg_get_userbyid((
+      SELECT procedure.proowner
+      FROM pg_catalog.pg_proc AS procedure
+      WHERE procedure.oid =
+        'public.move_recalculate_date(uuid,uuid,uuid,date,jsonb,uuid)'::regprocedure
+    ))
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'move_date_requires_review';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.move_date_reviewed_write_guard()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER moves_reviewed_date_write_guard
+  BEFORE UPDATE OF move_date ON public.moves
+  FOR EACH ROW EXECUTE FUNCTION public.move_date_reviewed_write_guard();
