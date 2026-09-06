@@ -47,11 +47,13 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/insights/route.ts', 'feature: `insights.${kind}`'],
       ['app/api/ai/assist/route.ts', "feature: 'assist'"],
       ['app/api/ai/weekly-briefing/route.ts', "feature: 'briefing.weekly'"],
+      ['app/api/ai/health/coach/route.ts', "feature: 'health.coach'"],
+      ['app/api/ai/habits/route.ts', "feature: 'habits.coach'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
       expect(src, `${file} must name its surface`).toContain(feature);
-      expect(src, `${file} must record the model that answered`).toContain('completion.model');
+      expect(src, `${file} must record the model that answered`).toMatch(/obs\.used\((?:completion|done)\.model/);
     }
   });
 
@@ -101,8 +103,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 so far.
-    const CEILING = 44;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 so far.
+    const CEILING = 42;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
