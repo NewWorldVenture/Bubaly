@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { makeKey } from '@/lib/services/idempotency';
 
 const mocks = vi.hoisted(() => ({ requireUserContext: vi.fn(), createServer: vi.fn(), revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
@@ -42,6 +43,10 @@ beforeEach(() => {
       chores: { description: null, points: 10, priority: 'medium', recurrence: 'none', due_at: null, requires_approval: true, icon: null, is_active: true },
       chore_assignments: { status: 'todo', due_at: null, submitted_at: null, approved_at: null, approved_by: null, points_awarded: null, ai_score: null, cash_awarded_cents: null, idempotency_key: null, disputed: false },
     },
+    // 0256's PARTIAL unique index. The helper skips a unique set when any of its
+    // columns is null, which is what "partial" means here: unkeyed rows are free
+    // to repeat, keyed ones are not.
+    uniques: { chore_assignments: [['family_id', 'idempotency_key']] },
   });
   mocks.requireUserContext.mockResolvedValue({
     user: { id: 'user-1' },
@@ -170,5 +175,77 @@ describe('a caller who is not signed in', () => {
       Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/login;307;' }),
     );
     await expect(call()).rejects.toThrow('NEXT_REDIRECT');
+  });
+});
+
+// ── The double-tapped Add ───────────────────────────────────────────────────
+// `chores` is not one of 0256's keyed tables and `chore_assignments` is, which
+// is why this had to key the two-row create as a UNIT. Keying the assignment
+// alone would write a second CHORE, then hand back the first ASSIGNMENT, and
+// leave a chore nobody is assigned to.
+describe('adding the same chore twice', () => {
+  const SUBMISSION = '11111111-2222-4333-8444-555555555555';
+  const add = () => createChoreAction({
+    title: 'Feed the dog', points: 15, assigneeId: 'member-2',
+    dueAt: '2026-09-10T09:00:00.000Z', submissionId: SUBMISSION,
+  });
+
+  it('adds one chore, and gives the second tap the first one back', async () => {
+    const first = await add();
+    const second = await add();
+
+    expect(first.ok, first.ok ? '' : first.error).toBe(true);
+    expect(second.ok, second.ok ? '' : second.error).toBe(true);
+    expect(chores()).toHaveLength(1);
+    expect(assignments()).toHaveLength(1);
+    // The same rows, not a silent no-op: the surface needs an id to navigate to.
+    expect(first.ok && second.ok && first.id === second.id).toBe(true);
+  });
+
+  it('leaves no orphan chore when the assignment loses the race', async () => {
+    // The race the unit-keying exists for: both attempts probe empty and both
+    // insert a chore, then 0256's index refuses the second assignment. Staged by
+    // writing the winner's assignment AFTER the loser has already probed.
+    const key = makeKey(['tasks.createChore', FAMILY, SUBMISSION]);
+    const real = db.from.bind(db);
+    let staged = false;
+    const from = vi.spyOn(db, 'from').mockImplementation((table: string) => {
+      // The first `chores` access is our own insert, so the winner commits
+      // between our probe (which saw nothing) and our assignment insert.
+      if (table === 'chores' && !staged) {
+        staged = true;
+        db.seed('chores', [{ id: 'winner-c', family_id: FAMILY, title: 'Feed the dog', points: 15 }]);
+        db.seed('chore_assignments', [{ id: 'winner-a', family_id: FAMILY, chore_id: 'winner-c', member_id: 'member-2', idempotency_key: key }]);
+      }
+      return real(table);
+    });
+
+    const result = await add();
+    from.mockRestore();
+
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    // One chore — the winner's. The loser's was rolled back when its assignment
+    // was refused, which is the whole point of wrapping the pair.
+    expect(chores()).toHaveLength(1);
+    expect(chores()[0]!.id).toBe('winner-c');
+    expect(assignments()).toHaveLength(1);
+  });
+
+  it('still adds two when the family means two', async () => {
+    // A different composition is a different id, so "add it again on purpose"
+    // is not mistaken for a retry.
+    await add();
+    await createChoreAction({
+      title: 'Feed the dog', points: 15, assigneeId: 'member-2',
+      dueAt: '2026-09-10T09:00:00.000Z', submissionId: '99999999-8888-4777-8666-555555555555',
+    });
+    expect(chores()).toHaveLength(2);
+    expect(assignments()).toHaveLength(2);
+  });
+
+  it('does not deduplicate without a submission id', async () => {
+    await createChoreAction({ title: 'Feed the dog', assigneeId: 'member-2' });
+    await createChoreAction({ title: 'Feed the dog', assigneeId: 'member-2' });
+    expect(chores()).toHaveLength(2);
   });
 });

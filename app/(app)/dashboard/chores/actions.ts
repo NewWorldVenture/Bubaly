@@ -32,7 +32,9 @@ import { createServer } from '@/lib/supabase/server';
 import {
   completeChoreAssignment, createChore, deleteChoreAssignment, setChoreProgress,
 } from '@/lib/services/tasks';
+import { makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
 import type { Priority, RecurrenceFreq } from '@/lib/database.types';
 
@@ -60,13 +62,20 @@ export type ChoreStatusResult =
  * signed-out caller by throwing, and catching that would answer `{ ok: false }`
  * and show them a toast instead.
  *
- * No idempotency key is threaded here — see `createChoreAction` for why chore
- * creation is not deduplicated yet.
+ * `submissionId` is only meaningful for the create; every other action here
+ * addresses a row that already exists, where a repeat is idempotent already.
  */
-async function choreScope() {
+async function choreScope(submissionId?: unknown) {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  return { ctx, scope: scopeFromUserContext(ctx, supabase) };
+  return {
+    ctx,
+    scope: scopeFromUserContext(ctx, supabase, {
+      idempotencyKey: isSubmissionId(submissionId)
+        ? makeKey(['tasks.createChore', ctx.active.familyId, submissionId])
+        : null,
+    }),
+  };
 }
 
 /**
@@ -124,23 +133,23 @@ export type CreateChoreActionInput = {
   dueAt?: string | null;
   /** `family_members.id`. The board always assigns on creation. */
   assigneeId?: string | null;
+  /** Minted per composition in the browser; see `lib/utils/submission-id.ts`. */
+  submissionId?: string;
 };
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
 const RECURRENCES: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
 
 export async function createChoreAction(input: CreateChoreActionInput): Promise<ChoreActionResult> {
-  // NO submission id here, deliberately. `chore_assignments` is one of 0256's six
-  // keyed tables, but neither `createChore` nor `assignChore` calls
-  // `withIdempotency`, so a key on the scope would be silently ignored — and
-  // wiring it into `assignChore` alone would be worse than nothing: a
-  // double-tapped Add creates a second CHORE row (chores is not a keyed table),
-  // then the assignment probe returns the first assignment, leaving an orphan
-  // chore nobody is assigned to. Deduplicating chore creation means keying the
-  // whole two-row create, which is a service change and its own piece of work.
-  // Until then this create is not deduplicated, and says so rather than shipping
-  // a parameter that does nothing.
-  const { scope } = await choreScope();
+  // The submission id now reaches something. `createChore` keys the chore and its
+  // assignment as ONE unit — the piece of work this comment used to say was still
+  // outstanding — so a double-tapped Add adds one chore, and the second tap gets
+  // the first one's rows back instead of a duplicate with an orphan behind it.
+  //
+  // A chore created with NO assignee still cannot be deduplicated: the key lives
+  // on the assignment row, and there isn't one. The board refuses to submit
+  // without a member, so that gap is the assistant's path, not this one.
+  const { scope } = await choreScope(input.submissionId);
 
   try {
     const result = await createChore(scope, {

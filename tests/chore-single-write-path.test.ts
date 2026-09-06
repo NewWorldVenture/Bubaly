@@ -63,20 +63,31 @@ describe('the chores board writes through the service', () => {
 });
 
 describe('what the service does and does not claim', () => {
-  it('does not pretend chore creation is deduplicated', () => {
-    // `chore_assignments` is one of 0256's six keyed tables, but neither
-    // `createChore` nor `assignChore` calls `withIdempotency` — so a submission
-    // id on the scope would be silently ignored. Wiring it into `assignChore`
-    // alone would be WORSE than nothing: a double-tapped Add creates a second
-    // chore row (chores is not keyed), then the assignment probe returns the
-    // first assignment, leaving an orphan chore nobody is assigned to.
+  it('keys the WHOLE chore create, not just its assignment', () => {
+    // This case used to assert the opposite — that the action made no
+    // idempotency claim — and it failed the day the claim became real, which is
+    // what it was for. What it pins now is the shape that makes the claim true.
+    //
+    // `chores` is not one of 0256's six keyed tables and `chore_assignments` is.
+    // Keying the ASSIGNMENT alone would be worse than nothing: a double-tapped
+    // Add writes a second chore row, the probe returns the FIRST assignment, and
+    // a chore nobody is assigned to is left behind. So `withIdempotency` must
+    // wrap `createChore` — where the rollback can undo the losing chore — and
+    // never `assignChore`, which cannot see the pair.
     const actions = code('app/(app)/dashboard/chores/actions.ts');
-    expect(actions).not.toMatch(/submissionId/);
-    expect(actions).not.toMatch(/idempotencyKey/);
+    expect(actions).toMatch(/submissionId/);
+    expect(actions).toMatch(/makeKey\(\['tasks\.createChore'/);
 
     const service = code('lib/services/tasks/index.ts');
+    const create = service.slice(service.indexOf('export async function createChore'));
+    expect(create.slice(0, create.indexOf('\n}\n'))).toMatch(/withIdempotency/);
+
     const assign = service.slice(service.indexOf('export async function assignChore'));
-    expect(assign.slice(0, assign.indexOf('\n}'))).not.toMatch(/withIdempotency/);
+    const assignBody = assign.slice(0, assign.indexOf('\n}\n'));
+    expect(assignBody).not.toMatch(/withIdempotency/);
+    // It still WRITES the key — that is what lets 0256's index refuse the
+    // second insert and hand the race back to the caller that owns the pair.
+    expect(assignBody).toMatch(/idempotency_key/);
   });
 
   it('keeps the member-status vocabulary the 0223 trigger calls member-allowed', () => {
