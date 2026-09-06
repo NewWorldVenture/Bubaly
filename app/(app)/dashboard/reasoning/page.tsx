@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/states';
 import { loadAndSnapshotReasoning } from '@/lib/reasoning/engine-server';
 import type { ReasoningQuestionId } from '@/lib/reasoning/engine';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Reasoning' };
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,7 @@ const Q_ICON: Record<ReasoningQuestionId, React.ComponentType<{ className?: stri
 // the graph reasoning insights (R2), and the hard signals (R10). One report,
 // persisted once a day so the family can watch the trend.
 export default async function ReasoningPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id);
@@ -38,7 +40,7 @@ export default async function ReasoningPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <PageHeader
-        title="Family Reasoning"
+        title={t('dashboardReasoning.familyReasoning')}
         description="One engine, six questions. Bubaly reasons across your calendar, decisions, signals and graph to answer what matters, what’s slipping, and what to do next."
       />
 
@@ -47,20 +49,20 @@ export default async function ReasoningPage() {
           <Compass className="h-5 w-5 text-brand-text" />
           {report.allClear ? (
             <p className="text-sm text-fg">
-              <span className="font-medium">All clear.</span> Nothing needs the family right now — you’re in good shape.
+              <span className="font-medium">{t('dashboardReasoning.allClear')}</span> {t('dashboardReasoning.nothingNeedsTheFamilyRightNow')}
             </p>
           ) : hasReadErrors ? (
             <p className="text-sm text-fg">
-              <span className="font-medium">Some reasoning data is unavailable.</span> Review the available areas and refresh before treating this report as complete.
+              <span className="font-medium">{t('dashboardReasoning.someReasoningDataIsUnavailable')}</span> {t('dashboardReasoning.reviewTheAvailableAreasAndRefresh')}
             </p>
           ) : (
             <p className="text-sm text-fg">
-              <span className="font-medium">{attention} of 6</span> areas need your attention this week.
+              <span className="font-medium">{attention} {t('dashboardReasoning.of6')}</span> {t('dashboardReasoning.areasNeedYourAttentionThisWeek')}
             </p>
           )}
           {report.allClear && !hasReadErrors && (
             <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              <Check className="h-3 w-3" /> All clear
+              <Check className="h-3 w-3" /> {t('dashboardReasoning.allClear')}
             </span>
           )}
         </div>

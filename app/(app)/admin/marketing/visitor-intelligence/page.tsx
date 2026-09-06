@@ -6,6 +6,7 @@ import { buildFunnel, pct, type FunnelCounts } from '@/lib/marketing/visitor-fun
 import { CONTACT_BAND_META, type ContactBand } from '@/lib/marketing/contact-score';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Visitor Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,7 @@ async function count(
 }
 
 export default async function VisitorIntelligencePage() {
+  const t = await getTranslations();
   const admin = createServiceClient();
 
   const [
@@ -54,9 +56,9 @@ export default async function VisitorIntelligencePage() {
     console.error('[visitor-intelligence] analytics read failed', failedMetric.error);
     return (
       <div className="space-y-5 p-4 sm:p-6">
-        <h1 className="text-xl font-black sm:text-2xl">Visitor Intelligence</h1>
+        <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h1>
         <ErrorState message="Could not load visitor intelligence from Supabase. Refresh and try again." />
-        <a href="/admin/marketing/visitor-intelligence" className="text-sm font-medium text-brand-text underline">Refresh visitor intelligence</a>
+        <a href="/admin/marketing/visitor-intelligence" className="text-sm font-medium text-brand-text underline">{t('adminMarketingVisitorIntelligence.refreshVisitorIntelligence')}</a>
       </div>
     );
   }
@@ -93,7 +95,7 @@ export default async function VisitorIntelligencePage() {
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <header>
-        <h1 className="text-xl font-black sm:text-2xl">Visitor Intelligence</h1>
+        <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
           The privacy-first acquisition funnel end-to-end — anonymous visitors becoming identified,
           profiled, scored, and engaged. All first-party and consent-gated; no fingerprinting.
@@ -102,7 +104,7 @@ export default async function VisitorIntelligencePage() {
 
       {/* Funnel */}
       <Card className="p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Acquisition funnel</h2>
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('adminMarketingVisitorIntelligence.acquisitionFunnel')}</h2>
         <div className="mt-4 space-y-2.5">
           {funnel.map((s) => {
             const Icon = stageIcon[s.key] ?? Users;
@@ -130,9 +132,9 @@ export default async function VisitorIntelligencePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Lead-band distribution */}
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Lead score bands</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('adminMarketingVisitorIntelligence.leadScoreBands')}</h2>
           {bandTotal === 0 ? (
-            <p className="mt-3 text-sm text-muted">No scored contacts yet — run Recompute on Lead Scores.</p>
+            <p className="mt-3 text-sm text-muted">{t('adminMarketingVisitorIntelligence.noScoredContactsYetRunRecompute')}</p>
           ) : (
             <div className="mt-4 space-y-2.5">
               {bands.map(({ band, n }) => (
@@ -153,16 +155,16 @@ export default async function VisitorIntelligencePage() {
         {/* Consent posture */}
         <Card className="p-5">
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-muted">
-            <ShieldCheck className="h-3.5 w-3.5" /> Consent posture
+            <ShieldCheck className="h-3.5 w-3.5" /> {t('adminMarketingVisitorIntelligence.consentPosture')}
           </h2>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-border bg-bg/40 p-3">
               <p className="text-2xl font-black tabular-nums">{analyticsGrantCount.toLocaleString()}</p>
-              <p className="text-xs text-muted">Analytics grants</p>
+              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.analyticsGrants')}</p>
             </div>
             <div className="rounded-xl border border-border bg-bg/40 p-3">
               <p className="text-2xl font-black tabular-nums">{marketingGrantCount.toLocaleString()}</p>
-              <p className="text-xs text-muted">Marketing opt-ins</p>
+              <p className="text-xs text-muted">{t('adminMarketingVisitorIntelligence.marketingOptIns')}</p>
             </div>
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-muted">

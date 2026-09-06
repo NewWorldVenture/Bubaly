@@ -13,10 +13,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, ExternalLink, X } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const BLOG_URL = '/blog';
 
 export function BlogLauncher() {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -44,7 +46,7 @@ export function BlogLauncher() {
       className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6 lg:left-[var(--sidebar-width)]"
       role="dialog"
       aria-modal="true"
-      aria-label="Bubaly Blog"
+      aria-label={t('blogLauncher.bubalyBlog')}
     >
       {/* Scrim — blurs the main content behind it. Because the overlay's left
           edge is the sidebar width on desktop, the left nav is NOT blurred. */}
@@ -66,8 +68,8 @@ export function BlogLauncher() {
               <BookOpen className="h-4 w-4" />
             </span>
             <div className="leading-tight">
-              <p className="text-sm font-semibold text-fg">Bubaly Blog</p>
-              <p className="text-xs text-muted">Tips, stories &amp; insights for modern families</p>
+              <p className="text-sm font-semibold text-fg">{t('blogLauncher.bubalyBlog')}</p>
+              <p className="text-xs text-muted">{t('blogLauncher.tipsStoriesAmpInsightsForModern')}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -79,20 +81,20 @@ export function BlogLauncher() {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted transition coarse:min-h-11 coarse:min-w-11 hover:bg-elevated hover:text-fg"
-              title="Open the blog in a new tab"
+              title={t('blogLauncher.openTheBlogInANew')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Open in new tab</span>
+              <span className="hidden sm:inline">{t('blogLauncher.openInNewTab')}</span>
             </a>
             {/* Close button — always visible top-right of the pop-up. */}
             <button
               type="button"
               onClick={close}
-              aria-label="Close blog"
+              aria-label={t('blogLauncher.closeBlog')}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-elevated/60 px-2.5 py-1.5 text-xs font-semibold text-fg transition coarse:min-h-11 coarse:min-w-11 hover:bg-elevated"
             >
               <X className="h-4 w-4" />
-              <span className="hidden sm:inline">Close</span>
+              <span className="hidden sm:inline">{t('blogLauncher.close')}</span>
             </button>
           </div>
         </div>
@@ -101,12 +103,12 @@ export function BlogLauncher() {
         <div className="relative flex-1 bg-bg">
           {!loaded && (
             <div className="absolute inset-0 grid place-items-center text-sm text-muted">
-              Loading the blog…
+              {t('blogLauncher.loadingTheBlog')}
             </div>
           )}
           <iframe
             src={BLOG_URL}
-            title="Bubaly Blog"
+            title={t('blogLauncher.bubalyBlog')}
             onLoad={() => setLoaded(true)}
             className="h-full w-full border-0"
             loading="eager"
@@ -122,8 +124,8 @@ export function BlogLauncher() {
         type="button"
         onClick={openModal}
         aria-haspopup="dialog"
-        aria-label="Read the Bubaly blog"
-        title="Bubaly Blog"
+        aria-label={t('blogLauncher.readTheBubalyBlog')}
+        title={t('blogLauncher.bubalyBlog')}
         className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted transition hover:bg-elevated hover:text-fg"
       >
         <BookOpen className="h-5 w-5" />

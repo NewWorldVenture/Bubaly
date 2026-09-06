@@ -7,11 +7,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family School' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilySchoolPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -49,17 +51,17 @@ export default async function FamilySchoolPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Family School Hub" description="Classes, grades, projects and parent-teacher dates across every kid." />
+      <PageHeader title={t('dashboardFamilySchool.familySchoolHub')} description="Classes, grades, projects and parent-teacher dates across every kid." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile href="/dashboard/school" label="Classes" value={classes?.length ?? 0} icon={BookOpen} accent="bg-blue-600" sublabel="Schedule" />
-        <StatTile href="/dashboard/school" label="School events" value={events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Upcoming" />
-        <StatTile href="/dashboard/school" label="Recent grades" value={grades?.length ?? 0} icon={Award} accent="bg-emerald-600" sublabel="Gradebook" />
-        <StatTile label="Avg score" value={avgScore != null ? `${avgScore}%` : '—'} icon={GraduationCap} accent="bg-amber-500" />
+        <StatTile href="/dashboard/school" label={t('dashboardFamilySchool.classes')} value={classes?.length ?? 0} icon={BookOpen} accent="bg-blue-600" sublabel="Schedule" />
+        <StatTile href="/dashboard/school" label={t('dashboardFamilySchool.schoolEvents')} value={events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Upcoming" />
+        <StatTile href="/dashboard/school" label={t('dashboardFamilySchool.recentGrades')} value={grades?.length ?? 0} icon={Award} accent="bg-emerald-600" sublabel="Gradebook" />
+        <StatTile label={t('dashboardFamilySchool.avgScore')} value={avgScore != null ? `${avgScore}%` : '—'} icon={GraduationCap} accent="bg-amber-500" />
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="Upcoming School Events" viewAllHref="/dashboard/school">
+        <SectionCard title={t('dashboardFamilySchool.upcomingSchoolEvents')} viewAllHref="/dashboard/school">
           {events && events.length > 0 ? (
             <ul className="divide-y divide-border">
               {events.map((e) => (
@@ -76,7 +78,7 @@ export default async function FamilySchoolPage() {
           ) : <MiniEmpty icon={CalendarClock} text="No school events coming up." />}
         </SectionCard>
 
-        <SectionCard title="Recent Grades" viewAllHref="/dashboard/school">
+        <SectionCard title={t('dashboardFamilySchool.recentGrades')} viewAllHref="/dashboard/school">
           {grades && grades.length > 0 ? (
             <ul className="divide-y divide-border">
               {grades.map((g) => (
@@ -94,7 +96,7 @@ export default async function FamilySchoolPage() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Class Schedule" viewAllHref="/dashboard/school">
+      <SectionCard title={t('dashboardFamilySchool.classSchedule')} viewAllHref="/dashboard/school">
         {classes && classes.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {classes.map((c) => (

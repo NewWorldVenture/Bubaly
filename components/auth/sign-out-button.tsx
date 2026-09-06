@@ -9,6 +9,7 @@ import { LogOut } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { clearAllCache } from '@/lib/offline/cache';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SignOutButton({
   className,
@@ -17,19 +18,20 @@ export function SignOutButton({
   className?: string;
   children?: React.ReactNode;
 }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={className}>
-        {children ?? (<><LogOut className="h-4 w-4" /> Sign out</>)}
+        {children ?? (<><LogOut className="h-4 w-4" /> {t('signOutButton.signOut')}</>)}
       </button>
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Sign out?"
+        title={t('signOutButton.signOut')}
         description="You’ll need to sign in again to get back to your family."
       >
         <form
@@ -39,10 +41,10 @@ export function SignOutButton({
           className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
         >
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={signingOut}>
-            Cancel
+            {t('signOutButton.cancel')}
           </Button>
           <Button type="submit" variant="danger" loading={signingOut}>
-            <LogOut className="h-4 w-4" /> Sign out
+            <LogOut className="h-4 w-4" /> {t('signOutButton.signOut')}
           </Button>
         </form>
       </Modal>

@@ -10,8 +10,10 @@ import { Input, Select, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { KIND_LABELS, KIND_ORDER, CATEGORY_LABELS, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
 import { createSavedSearchAction } from '@/app/(app)/marketplace/alerts/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function AlertComposer() {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [query, setQuery] = useState('');
@@ -34,23 +36,23 @@ export function AlertComposer() {
   return (
     <form onSubmit={submit} className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Keyword">{(id) => <Input id={id} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="balance bike" />}</Field>
-        <Field label="Type">{(id) => (
+        <Field label={t('alertComposer.keyword')}>{(id) => <Input id={id} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="balance bike" />}</Field>
+        <Field label={t('alertComposer.type')}>{(id) => (
           <Select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="">Any type</option>
             {KIND_ORDER.map((k) => <option key={k} value={k}>{KIND_LABELS[k as ListingKind]}</option>)}
           </Select>
         )}</Field>
-        <Field label="Category">{(id) => (
+        <Field label={t('alertComposer.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">Any category</option>
             {(Object.keys(CATEGORY_LABELS) as ListingCategory[]).map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
           </Select>
         )}</Field>
-        <Field label="Max price ($)">{(id) => <Input id={id} type="number" min="0" step="1" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="any" />}</Field>
+        <Field label={t('alertComposer.maxPrice')}>{(id) => <Input id={id} type="number" min="0" step="1" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="any" />}</Field>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button type="submit" disabled={pending} loading={pending}><BellPlus className="h-4 w-4" /> Create alert</Button>
+        <Button type="submit" disabled={pending} loading={pending}><BellPlus className="h-4 w-4" /> {t('alertComposer.createAlert')}</Button>
       </div>
     </form>
   );

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const layout = readFileSync('app/(app)/admin/layout.tsx', 'utf8');
-const shell = readFileSync('components/admin/admin-shell.tsx', 'utf8');
+const layout = readUiSource('app/(app)/admin/layout.tsx');
+const shell = readUiSource('components/admin/admin-shell.tsx');
 
 describe('admin shell read boundary', () => {
   it('surfaces independent service-role read failures instead of silently rendering defaults', () => {

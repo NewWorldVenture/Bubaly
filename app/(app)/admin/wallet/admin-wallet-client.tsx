@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { adminToggleFeatureFlagAction } from '@/app/(app)/admin/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type FlagRow = { key: string; enabled: boolean; description: string | null };
 export type AuditRow = {
@@ -27,6 +28,7 @@ const STRIPE_FLAGS = new Set([
 ]);
 
 export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags: FlagRow[]; audit: AuditRow[] }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -64,15 +66,15 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
       {/* Ledger volume */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted"><TrendingUp className="h-4 w-4 text-green-400" /> Total Credits</div>
+          <div className="flex items-center gap-2 text-xs text-muted"><TrendingUp className="h-4 w-4 text-green-400" /> {t('adminWalletAdminWalletClient.totalCredits')}</div>
           <div className="mt-1 text-xl font-bold text-green-400">{formatCents(stats.creditVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted"><TrendingDown className="h-4 w-4 text-rose-400" /> Total Debits</div>
+          <div className="flex items-center gap-2 text-xs text-muted"><TrendingDown className="h-4 w-4 text-rose-400" /> {t('adminWalletAdminWalletClient.totalDebits')}</div>
           <div className="mt-1 text-xl font-bold text-rose-400">{formatCents(stats.debitVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand-text" /> Net Outstanding</div>
+          <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand-text" /> {t('adminWalletAdminWalletClient.netOutstanding')}</div>
           <div className="mt-1 text-xl font-bold">{formatCents(stats.netCents)}</div>
         </div>
       </div>
@@ -83,7 +85,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
 
       {/* Feature flags */}
       <div>
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Flag className="h-4 w-4" /> Feature Flags</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Flag className="h-4 w-4" /> {t('adminWalletAdminWalletClient.featureFlags')}</h2>
         <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">
           {flags.map((flag) => {
             const isStripe = STRIPE_FLAGS.has(flag.key);
@@ -113,9 +115,9 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
 
       {/* Recent audit */}
       <div>
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ScrollText className="h-4 w-4" /> Recent Wallet Activity</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ScrollText className="h-4 w-4" /> {t('adminWalletAdminWalletClient.recentWalletActivity')}</h2>
         {audit.length === 0 ? (
-          <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">No wallet audit activity yet.</p>
+          <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('adminWalletAdminWalletClient.noWalletAuditActivityYet')}</p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">
             {audit.map((a) => (

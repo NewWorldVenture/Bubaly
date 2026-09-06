@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
  * Registers the service worker (PWA install + offline shell) AND surfaces a
@@ -10,6 +11,7 @@ import { useEffect, useState } from 'react';
  * bottom tab bar, clears the home indicator via safe-bottom). No-op in dev.
  */
 export function RegisterSW() {
+  const t = useTranslations();
   const [updateReady, setUpdateReady] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
@@ -70,21 +72,21 @@ export function RegisterSW() {
     >
       <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-elevated px-4 py-3 shadow-glass">
         <span className="min-w-0 flex-1 text-sm font-medium text-fg">
-          A new version of Bubaly is available.
+          {t('registerSw.aNewVersionOfBubalyIs')}
         </span>
         <button
           type="button"
           onClick={() => setDismissed(true)}
           className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition hover:bg-surface hover:text-fg"
         >
-          Later
+          {t('registerSw.later')}
         </button>
         <button
           type="button"
           onClick={() => window.location.reload()}
           className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90"
         >
-          Reload
+          {t('registerSw.reload')}
         </button>
       </div>
     </div>

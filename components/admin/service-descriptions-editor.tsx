@@ -12,6 +12,7 @@ import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
 import { saveServiceDescriptionAction } from '@/app/(app)/admin/services/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EditorGroup = { title: string; items: { key: string; label: string }[] };
 
@@ -19,6 +20,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
   groups: EditorGroup[];
   overrides: Record<string, string>;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [query, setQuery] = useState('');
   // Working values start from override-or-default; saved snapshot tracks "clean".
@@ -64,7 +66,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search services…"
+            placeholder={t('serviceDescriptionsEditor.searchServices')}
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm outline-none focus:border-brand"
           />
         </div>

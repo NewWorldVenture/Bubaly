@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // A-14 §3e slice (agent-05, PLA-0799): two more marketplace surfaces conflated a
@@ -7,8 +8,8 @@ import fs from 'node:fs';
 // (offer) inbox rendered "No offers going yet" — a user with live money
 // negotiations would think they have none. Both now distinguish error from absence.
 
-const store = fs.readFileSync('app/(app)/marketplace/creators/[id]/page.tsx', 'utf8');
-const neg = fs.readFileSync('app/(app)/marketplace/negotiations/page.tsx', 'utf8');
+const store = readUiSource('app/(app)/marketplace/creators/[id]/page.tsx');
+const neg = readUiSource('app/(app)/marketplace/negotiations/page.tsx');
 
 describe('marketplace storefront + negotiations surface a failed read (A-14 §3e)', () => {
   it('storefront throws on a real store read error and reserves notFound() for a missing store', () => {

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Billing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 const PLAN_COLORS = ['#7c5dff', '#22c55e', '#60a5fa', '#fbbf24', '#f87171', '#64748b'];
 
 export default async function AdminBillingPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const [subscriptionsResult, billingCustomersResult, familiesResult] = await Promise.all([
     supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
@@ -71,8 +73,8 @@ export default async function AdminBillingPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Billing &amp; Payments</h1>
-        <p className="mt-1 text-sm text-muted">Live subscription revenue across every family. Per-charge history lives in your Stripe dashboard.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminBilling.billingAmpPayments')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminBilling.liveSubscriptionRevenueAcrossEveryFamily')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -89,14 +91,14 @@ export default async function AdminBillingPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-3 text-base font-semibold">New MRR added</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminBilling.newMrrAdded')}</h2>
           <Bars data={trend} max={maxTrend} money />
-          <p className="mt-2 text-xs text-muted">Monthly-equivalent revenue from subscriptions started each month · last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminBilling.monthlyEquivalentRevenueFromSubscriptionsStarted')}</p>
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Active by Plan</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminBilling.activeByPlan')}</h2>
           {planSegments.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No active subscriptions" />
+            <EmptyState icon={CreditCard} title={tr('adminBilling.noActiveSubscriptions')} />
           ) : (
             <div className="flex items-center gap-4">
               <Donut segments={planSegments} total={active.length} />
@@ -115,20 +117,20 @@ export default async function AdminBillingPage() {
       </div>
 
       <Card className="p-0">
-        <h2 className="px-4 pt-4 text-base font-semibold">Recent Subscriptions</h2>
+        <h2 className="px-4 pt-4 text-base font-semibold">{tr('adminBilling.recentSubscriptions')}</h2>
         {recent.length === 0 ? (
-          <div className="p-4"><EmptyState icon={RefreshCw} title="No subscriptions yet" description="Subscriptions appear here as families subscribe." /></div>
+          <div className="p-4"><EmptyState icon={RefreshCw} title={tr('adminBilling.noSubscriptionsYet')} description="Subscriptions appear here as families subscribe." /></div>
         ) : (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-y border-border text-left text-xs text-muted">
-                  <th className="px-4 py-2.5 font-medium">Family</th>
-                  <th className="px-4 py-2.5 font-medium">Plan</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 font-medium">Est. Monthly</th>
-                  <th className="px-4 py-2.5 font-medium">Started</th>
-                  <th className="px-4 py-2.5 font-medium">Renews</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.family')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.plan')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.status')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.estMonthly')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.started')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('adminBilling.renews')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -149,8 +151,7 @@ export default async function AdminBillingPage() {
       </Card>
 
       <p className="text-center text-xs text-muted">
-        Manage plans &amp; processor settings in <Link href="/admin/subscriptions" className="text-brand-text hover:underline">Subscriptions</Link>.
-        Refunds, disputes, and individual charges are handled in the Stripe dashboard.
+        {tr('adminBilling.managePlansAmpProcessorSettingsIn')} <Link href="/admin/subscriptions" className="text-brand-text hover:underline">{tr('adminBilling.subscriptions')}</Link>{tr('adminBilling.refundsDisputesAndIndividualChargesAre')}
       </p>
     </div>
   );

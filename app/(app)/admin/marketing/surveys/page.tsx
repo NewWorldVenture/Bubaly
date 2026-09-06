@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { SURVEY_TYPES, summarize, isSurveyType, type SurveyType } from '@/lib/marketing/surveys';
 import { createSurveyAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Surveys', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 const STATUS_TONE = { draft: 'neutral', active: 'success', closed: 'warning' } as const;
 
 export default async function SurveysPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const [surveysResult, responsesResult] = await Promise.all([
     supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
@@ -41,17 +43,17 @@ export default async function SurveysPage() {
       <div className="flex items-center gap-2">
         <Gauge className="h-5 w-5 text-brand-text" />
         <div>
-          <h2 className="text-base font-bold">Surveys — NPS · CSAT · CES</h2>
-          <p className="text-xs text-muted">Measure loyalty, satisfaction, and effort. Share a link and watch scores roll in.</p>
+          <h2 className="text-base font-bold">{tr('adminMarketingSurveys.surveysNpsCsatCes')}</h2>
+          <p className="text-xs text-muted">{tr('adminMarketingSurveys.measureLoyaltySatisfactionAndEffortShare')}</p>
         </div>
       </div>
 
       {/* Create */}
       <Card>
-        <h3 className="mb-3 text-sm font-semibold">New survey</h3>
+        <h3 className="mb-3 text-sm font-semibold">{tr('adminMarketingSurveys.newSurvey')}</h3>
         <form action={createSurveyAction} className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1">
-            <span className="block text-xs font-medium text-muted">Type</span>
+            <span className="block text-xs font-medium text-muted">{tr('adminMarketingSurveys.type')}</span>
             <select name="type" className={inputCls} defaultValue="nps">
               {(Object.keys(SURVEY_TYPES) as SurveyType[]).map((t) => (
                 <option key={t} value={t}>{SURVEY_TYPES[t].label} — {SURVEY_TYPES[t].metric}</option>
@@ -59,23 +61,23 @@ export default async function SurveysPage() {
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-medium text-muted">Name (internal)</span>
-            <input name="name" required className={inputCls} placeholder="Q3 onboarding NPS" />
+            <span className="block text-xs font-medium text-muted">{tr('adminMarketingSurveys.nameInternal')}</span>
+            <input name="name" required className={inputCls} placeholder={tr('adminMarketingSurveys.q3OnboardingNps')} />
           </label>
           <label className="space-y-1 sm:col-span-2">
-            <span className="block text-xs font-medium text-muted">Question (leave blank for the type default)</span>
-            <input name="question" className={inputCls} placeholder="How likely are you to recommend Bubaly?" />
+            <span className="block text-xs font-medium text-muted">{tr('adminMarketingSurveys.questionLeaveBlankForTheType')}</span>
+            <input name="question" className={inputCls} placeholder={tr('adminMarketingSurveys.howLikelyAreYouToRecommend')} />
           </label>
           <div className="sm:col-span-2">
-            <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> Create survey</button>
-            <p className="mt-1 text-[11px] text-muted">Scale &amp; labels default to the chosen type (NPS 0–10, CSAT 1–5, CES 1–7) and are editable after creating.</p>
+            <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> {tr('adminMarketingSurveys.createSurvey')}</button>
+            <p className="mt-1 text-[11px] text-muted">{tr('adminMarketingSurveys.scaleAmpLabelsDefaultToThe')}</p>
           </div>
         </form>
       </Card>
 
       {/* List */}
       {(surveys ?? []).length === 0 ? (
-        <EmptyState icon={MessagesSquare} title="No surveys yet" description="Create your first NPS, CSAT, or CES survey above." />
+        <EmptyState icon={MessagesSquare} title={tr('adminMarketingSurveys.noSurveysYet')} description="Create your first NPS, CSAT, or CES survey above." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {(surveys ?? []).map((sv) => {

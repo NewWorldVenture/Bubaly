@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 import { normalizeHandle } from '@/lib/wallet/pay-handle';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Send a gift · Bubaly', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 // Reads via the service role (the visitor isn't signed in). No money here — it
 // just forwards to the existing /gift/<token> flow.
 export default async function PayHandlePage({ params }: { params: Promise<{ handle: string }> }) {
+  const t = await getTranslations();
   const { handle: raw } = await params;
   const handle = normalizeHandle(raw);
   const supabase = createServiceClient();
@@ -40,11 +42,11 @@ export default async function PayHandlePage({ params }: { params: Promise<{ hand
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 px-4 py-10 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
-      <h1 className="text-2xl font-bold">No active gift link</h1>
+      <h1 className="text-2xl font-bold">{t('pay.noActiveGiftLink')}</h1>
       <p className="text-sm text-muted">
-        This Pay-ID doesn’t have an active gift link right now. Please ask the family for a current link.
+        {t('pay.thisPayIdDoesntHaveAn')}
       </p>
-      <Link href="/" className="text-sm font-medium text-brand-text hover:underline">Go to Bubaly</Link>
+      <Link href="/" className="text-sm font-medium text-brand-text hover:underline">{t('pay.goToBubaly')}</Link>
     </div>
   );
 }

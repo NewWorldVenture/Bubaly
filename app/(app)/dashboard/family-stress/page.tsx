@@ -9,6 +9,7 @@ import { SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/components/fami
 import { QuickAdd } from '@/components/family/quick-add';
 import { fmtDate } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Stress Prediction' };
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,8 @@ function ReadFailure() {
 }
 
 export default async function FamilyStressPage() {
+  const tr = await getTranslations();
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -48,12 +51,12 @@ export default async function FamilyStressPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Stress Prediction"
+        title={t('dashboardFamilyStress.familyStressPrediction')}
         description="A planning signal built from your real schedule — not a medical assessment."
         action={
           <QuickAdd
             table="family_stress_signals"
-            title="Log a signal"
+            title={t('dashboardFamilyStress.logASignal')}
             members={members ?? []}
             fields={[
               { name: 'signal_type', label: 'Signal', type: 'select', required: true, options: [
@@ -73,14 +76,14 @@ export default async function FamilyStressPage() {
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <SectionCard title="This Week's Load" className="lg:col-span-1">
+        <SectionCard title={tr('dashboardFamilyStress.thisWeeksLoad')} className="lg:col-span-1">
           <div className="flex flex-col items-center gap-3 py-2">
             <ScoreRing pct={stress.score} label="load" size={160} />
             <LevelBadge level={stress.level} />
           </div>
         </SectionCard>
 
-        <SectionCard title="Risk Factors" description="What's driving the score" className="lg:col-span-2">
+        <SectionCard title={t('dashboardFamilyStress.riskFactors')} description="What's driving the score" className="lg:col-span-2">
           {stress.factors.length > 0 ? (
             <ul className="space-y-2.5">
               {stress.factors.map((f) => (
@@ -102,7 +105,7 @@ export default async function FamilyStressPage() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Suggested Fixes" description="Lighten the week with these reschedules">
+      <SectionCard title={t('dashboardFamilyStress.suggestedFixes')} description="Lighten the week with these reschedules">
         <ul className="space-y-2.5">
           {stress.suggestions.map((s, i) => (
             <li key={i} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
@@ -113,7 +116,7 @@ export default async function FamilyStressPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Logged Signals" description="Self-reported inputs that refine the forecast">
+      <SectionCard title={t('dashboardFamilyStress.loggedSignals')} description="Self-reported inputs that refine the forecast">
         {signals && signals.length > 0 ? (
           <ul className="divide-y divide-border">
             {signals.map((s) => {

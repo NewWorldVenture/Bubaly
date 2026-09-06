@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Email', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function EmailPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [emailsResult, segmentsResult] = await Promise.all([
     supabase.from('marketing_email_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
@@ -35,14 +37,14 @@ export default async function EmailPage() {
       <div className={`flex items-center gap-3 rounded-2xl border p-4 text-sm ${providerReady ? 'border-success/30 bg-success/10' : 'border-warning/30 bg-warning/10'}`}>
         {providerReady ? <CheckCircle2 className="h-5 w-5 text-success" /> : <AlertTriangle className="h-5 w-5 text-warning" />}
         {providerReady
-          ? <span>Email provider connected (Resend). Drafts can be reviewed and sent.</span>
-          : <span><strong>No email provider configured.</strong> Set <code>RESEND_API_KEY</code> to enable sending. You can still draft campaigns now — sends will never be faked.</span>}
+          ? <span>{t('adminMarketingEmail.emailProviderConnectedResendDraftsCan')}</span>
+          : <span><strong>{t('adminMarketingEmail.noEmailProviderConfigured')}</strong> Set <code>RESEND_API_KEY</code> {t('adminMarketingEmail.toEnableSendingYouCanStill')}</span>}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-3">
           {(emails ?? []).length === 0 ? (
-            <EmptyState icon={Mail} title="No email campaigns yet" description="Draft your first email on the right." />
+            <EmptyState icon={Mail} title={t('adminMarketingEmail.noEmailCampaignsYet')} description="Draft your first email on the right." />
           ) : (
             (emails ?? []).map((e) => (
               <Card key={e.id} className="flex items-start justify-between gap-4">
@@ -68,17 +70,17 @@ export default async function EmailPage() {
         </div>
 
         <Card className="h-fit">
-          <h2 className="mb-3 font-semibold">New email draft</h2>
+          <h2 className="mb-3 font-semibold">{t('adminMarketingEmail.newEmailDraft')}</h2>
           <form action={createEmailDraft} className="space-y-3 text-sm">
-            <input name="subject" required placeholder="Subject line" className={inputCls} />
-            <input name="preview_text" placeholder="Preview text" className={inputCls} />
-            <input name="from_name" placeholder="From name (optional)" className={inputCls} />
+            <input name="subject" required placeholder={t('adminMarketingEmail.subjectLine')} className={inputCls} />
+            <input name="preview_text" placeholder={t('adminMarketingEmail.previewText')} className={inputCls} />
+            <input name="from_name" placeholder={t('adminMarketingEmail.fromNameOptional')} className={inputCls} />
             <select name="segment_id" className={inputCls}>
-              <option value="">All customers</option>
+              <option value="">{t('adminMarketingEmail.allCustomers')}</option>
               {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <textarea name="body_html" rows={5} placeholder="Email body (HTML or text)…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Save draft</button>
+            <textarea name="body_html" rows={5} placeholder={t('adminMarketingEmail.emailBodyHtmlOrText')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingEmail.saveDraft')}</button>
           </form>
         </Card>
       </div>

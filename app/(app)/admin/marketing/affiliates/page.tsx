@@ -8,6 +8,7 @@ import { formatCents } from '@/lib/marketing/crm';
 import { summarizeReferrals, payoutByAffiliate, type ReferralLike } from '@/lib/marketing/affiliates';
 import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Affiliates', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm'
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 export default async function AffiliatesPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [affiliatesResult, referralsResult] = await Promise.all([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
@@ -56,27 +58,27 @@ export default async function AffiliatesPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Add an affiliate</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('adminMarketingAffiliates.addAnAffiliate')}</h2>
         <form action={saveAffiliateAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <input name="name" required placeholder="Partner name" className={inputCls} />
-          <input name="email" type="email" placeholder="Email" className={inputCls} />
-          <input name="code" placeholder="Code (e.g. COOLBLOG)" className={inputCls} />
-          <input name="commission_rate" type="number" min="0" max="100" step="1" placeholder="Commission %" className={inputCls} />
-          <button type="submit" className={btnCls}>Add affiliate</button>
+          <input name="name" required placeholder={t('adminMarketingAffiliates.partnerName')} className={inputCls} />
+          <input name="email" type="email" placeholder={t('adminMarketingAffiliates.email')} className={inputCls} />
+          <input name="code" placeholder={t('adminMarketingAffiliates.codeEGCoolblog')} className={inputCls} />
+          <input name="commission_rate" type="number" min="0" max="100" step="1" placeholder={t('adminMarketingAffiliates.commission')} className={inputCls} />
+          <button type="submit" className={btnCls}>{t('adminMarketingAffiliates.addAffiliate')}</button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Affiliates</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminMarketingAffiliates.affiliates')}</h2>
         {list.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No affiliates yet.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('adminMarketingAffiliates.noAffiliatesYet')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
-                  <th className="pb-2">Partner</th><th className="pb-2">Code</th><th className="pb-2">Rate</th>
-                  <th className="pb-2">Conversions</th><th className="pb-2">Owed</th><th className="pb-2">Status</th><th className="pb-2 text-right">Actions</th>
+                  <th className="pb-2">{t('adminMarketingAffiliates.partner')}</th><th className="pb-2">{t('adminMarketingAffiliates.code')}</th><th className="pb-2">{t('adminMarketingAffiliates.rate')}</th>
+                  <th className="pb-2">{t('adminMarketingAffiliates.conversions')}</th><th className="pb-2">{t('adminMarketingAffiliates.owed')}</th><th className="pb-2">{t('adminMarketingAffiliates.status')}</th><th className="pb-2 text-right">{t('adminMarketingAffiliates.actions')}</th>
                 </tr>
               </thead>
               <tbody>

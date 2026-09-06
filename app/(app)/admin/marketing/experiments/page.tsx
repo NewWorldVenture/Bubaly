@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'A/B Testing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default async function ABTestingPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const { data: experiments, error: experimentsError } = await supabase
     .from('ab_experiments')
@@ -47,12 +49,12 @@ export default async function ABTestingPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">Run experiments with deterministic variant assignment and two-proportion significance testing.</p>
+        <p className="text-sm text-muted">{tr('adminMarketingExperiments.runExperimentsWithDeterministicVariantAssignment')}</p>
         <NewExperimentForm />
       </div>
 
       {(experiments ?? []).length === 0 ? (
-        <Card><p className="py-8 text-center text-sm text-muted">No experiments yet — create your first test.</p></Card>
+        <Card><p className="py-8 text-center text-sm text-muted">{tr('adminMarketingExperiments.noExperimentsYetCreateYourFirst')}</p></Card>
       ) : (
         <div className="space-y-4">
           {(experiments ?? []).map((exp) => {

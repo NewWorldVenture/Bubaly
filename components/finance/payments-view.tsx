@@ -9,11 +9,13 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, fmtDueDate } from '@/lib/finance/hub';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Txn = Tables<'transactions'>;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
+  const tr = useTranslations();
   const { familyId } = useApp();
 
   const { data: rows, loading } = useRealtimeQuery<Txn>({
@@ -61,7 +63,7 @@ export function PaymentsView() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Payment History" description="Every transaction across your family's accounts." />
+      <PageHeader title={tr('payments.paymentHistory')} description="Every transaction across your family's accounts." />
 
       {/* This month at a glance */}
       <div className="grid-stats">
@@ -90,13 +92,13 @@ export function PaymentsView() {
         </div>
         <div className="relative sm:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payments"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('payments.searchPayments')}
             className="h-10 w-full rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none focus:border-brand" />
         </div>
       </div>
 
       {loading ? <SkeletonList /> : filtered.length === 0 ? (
-        <EmptyState icon={History} title="No payments" description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
+        <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">
           {byMonth.map(([month, items]) => (

@@ -10,11 +10,13 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Auto · Overview' };
 export const dynamic = 'force-dynamic';
 
 export default async function AutoOverviewPage() {
+  const t = await getTranslations();
   const ctx = await requirePlanLevel(1);
   const { vehicles, policies, rentals, renewals } = await getAutoOverview(ctx.active.familyId);
 
@@ -26,9 +28,9 @@ export default async function AutoOverviewPage() {
     return (
       <EmptyState
         icon={Car}
-        title="Set up your garage"
+        title={t('dashboardAuto.setUpYourGarage')}
         description="Add a vehicle, your driver's license, registration, inspection, and insurance — all with renewal reminders and one-tap emergency access."
-        action={<Link href="/dashboard/auto/vehicles" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> Add a vehicle</Link>}
+        action={<Link href="/dashboard/auto/vehicles" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> {t('dashboardAuto.addAVehicle')}</Link>}
       />
     );
   }
@@ -36,21 +38,21 @@ export default async function AutoOverviewPage() {
   return (
     <div className="space-y-4">
       <div className="grid-stats">
-        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Car className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{vehicles.length}</p><p className="mt-1 text-xs text-muted">Vehicles</p></div></div>
-        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><ShieldCheck className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activePolicies.length}</p><p className="mt-1 text-xs text-muted">Active policies</p></div></div>
-        <div className="stat-card"><div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${dueSoon ? 'bg-warning/10 text-warning' : 'bg-elevated text-muted'}`}><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{dueSoon}</p><p className="mt-1 text-xs text-muted">Renewals due ≤30d</p></div></div>
-        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent"><KeyRound className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activeRental ? 1 : 0}</p><p className="mt-1 text-xs text-muted">Active rental</p></div></div>
+        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Car className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{vehicles.length}</p><p className="mt-1 text-xs text-muted">{t('dashboardAuto.vehicles')}</p></div></div>
+        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><ShieldCheck className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activePolicies.length}</p><p className="mt-1 text-xs text-muted">{t('dashboardAuto.activePolicies')}</p></div></div>
+        <div className="stat-card"><div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${dueSoon ? 'bg-warning/10 text-warning' : 'bg-elevated text-muted'}`}><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{dueSoon}</p><p className="mt-1 text-xs text-muted">{t('dashboardAuto.renewalsDue30d')}</p></div></div>
+        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent"><KeyRound className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activeRental ? 1 : 0}</p><p className="mt-1 text-xs text-muted">{t('dashboardAuto.activeRental')}</p></div></div>
       </div>
 
       {/* Emergency quick-glance: insurance + accident help */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-success" /> Insurance — quick access</h2>
-            <Link href="/dashboard/auto/insurance" className="text-xs font-medium text-brand-text underline">All policies</Link>
+            <h2 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-success" /> {t('dashboardAuto.insuranceQuickAccess')}</h2>
+            <Link href="/dashboard/auto/insurance" className="text-xs font-medium text-brand-text underline">{t('dashboardAuto.allPolicies')}</Link>
           </div>
           {activePolicies.length === 0 ? (
-            <p className="text-sm text-muted">No active policy yet. <Link href="/dashboard/auto/insurance" className="text-brand-text underline">Add one</Link> for instant emergency access.</p>
+            <p className="text-sm text-muted">{t('dashboardAuto.noActivePolicyYet')} <Link href="/dashboard/auto/insurance" className="text-brand-text underline">{t('dashboardAuto.addOne')}</Link> {t('dashboardAuto.forInstantEmergencyAccess')}</p>
           ) : (
             <div className="space-y-2">
               {activePolicies.slice(0, 3).map((p) => (
@@ -72,14 +74,14 @@ export default async function AutoOverviewPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-danger" /> In an accident?</h2>
-          <p className="mb-3 text-sm text-muted">Stay calm. Get an AI step-by-step for safety, what to document, who to call, and how to start your claim.</p>
-          <Link href="/dashboard/auto/accident" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg"><Stethoscope className="h-4 w-4" /> Open Accident Help</Link>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-danger" /> {t('dashboardAuto.inAnAccident')}</h2>
+          <p className="mb-3 text-sm text-muted">{t('dashboardAuto.stayCalmGetAnAiStep')}</p>
+          <Link href="/dashboard/auto/accident" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg"><Stethoscope className="h-4 w-4" /> {t('dashboardAuto.openAccidentHelp')}</Link>
           {activeRental && (
             <div className="mt-3 rounded-xl border border-border p-3">
-              <p className="text-xs font-medium text-accent">Active rental</p>
+              <p className="text-xs font-medium text-accent">{t('dashboardAuto.activeRental')}</p>
               <p className="text-sm">{activeRental.company ?? 'Rental'} · {activeRental.vehicle_desc ?? '—'}</p>
-              {activeRental.confirmation_number && <p className="text-xs text-muted">Conf #{activeRental.confirmation_number}</p>}
+              {activeRental.confirmation_number && <p className="text-xs text-muted">{t('dashboardAuto.conf')}{activeRental.confirmation_number}</p>}
             </div>
           )}
         </Card>
@@ -88,7 +90,7 @@ export default async function AutoOverviewPage() {
       {/* Upcoming renewals */}
       <Card>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> Upcoming renewals</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> {t('dashboardAuto.upcomingRenewals')}</h2>
         </div>
         {renewals.length === 0 ? (
           <p className="text-sm text-muted">No renewal dates on file yet. Add expiry dates to your license, registration, inspection, and insurance to get reminders here.</p>

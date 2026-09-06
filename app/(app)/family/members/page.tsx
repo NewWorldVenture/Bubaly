@@ -8,11 +8,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Members' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyMembersPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
@@ -27,16 +29,16 @@ export default async function FamilyMembersPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Members"
+        title={t('familyMembers.familyMembers')}
         description={`Everyone in ${ctx.active.family.name}.`}
         action={manager ? (
           <Link href="/dashboard/settings#members" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white">
-            <Settings className="h-4 w-4" /> Manage & invite
+            <Settings className="h-4 w-4" /> {t('familyMembers.manageInvite')}
           </Link>
         ) : undefined}
       />
 
-      <SectionCard title="Members">
+      <SectionCard title={t('familyMembers.members')}>
         {members && members.length > 0 ? (
           <ul className="grid max-h-[40rem] gap-3 overflow-y-auto sm:grid-cols-2">
             {members.map((m) => (

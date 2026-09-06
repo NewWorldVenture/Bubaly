@@ -8,6 +8,7 @@ import { GrowthChart } from '@/components/admin/growth-chart';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail, type HealthCheck } from '@/lib/server/health';
 import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'System Overview', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ function HealthRow({ check }: { check: HealthCheck }) {
 }
 
 export default async function AdminSystemPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   const [
@@ -87,24 +89,24 @@ export default async function AdminSystemPage() {
     <div className="module-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">System Overview</h1>
-          <p className="mt-1 text-sm text-muted">Live connectivity checks and real usage — measured just now, not simulated.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('adminSystem.liveConnectivityChecksAndRealUsage')}</p>
         </div>
-        <span className="text-xs text-muted">Checked {new Date().toLocaleString()}</span>
+        <span className="text-xs text-muted">{t('adminSystem.checked')} {new Date().toLocaleString()}</span>
       </div>
 
       <div className="grid-stats">
-        <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label="Overall status" value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
-        <StatCard icon={Users} label="Total users" value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
-        <StatCard icon={Home} label="Active families" value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
-        <StatCard icon={DollarSign} label="Monthly revenue" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
+        <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label={t('adminSystem.overallStatus')} value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
+        <StatCard icon={Users} label={t('adminSystem.totalUsers')} value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
+        <StatCard icon={Home} label={t('adminSystem.activeFamilies')} value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
+        <StatCard icon={DollarSign} label={t('adminSystem.monthlyRevenue')} value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <div className="mb-2 flex items-center gap-2">
             <Database className="h-4 w-4 text-muted" />
-            <h2 className="text-base font-semibold">System health</h2>
+            <h2 className="text-base font-semibold">{t('adminSystem.systemHealth')}</h2>
           </div>
           <p className="mb-1 text-xs text-muted">Each row is a real request made when this page loaded — Database, Storage, and Auth via Supabase; Billing via a live Stripe balance check.</p>
           <div className="divide-y divide-border">
@@ -114,40 +116,40 @@ export default async function AdminSystemPage() {
 
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Usage overview</h2>
+            <h2 className="text-base font-semibold">{t('adminSystem.usageOverview')}</h2>
             <RefreshCw className="h-4 w-4 text-muted" />
           </div>
           <div className="flex items-center gap-3">
             <FolderLock className="h-5 w-5 text-brand-text" />
             <div>
               <p className="text-xl font-bold leading-none">{fmtBytes(storageBytes)}</p>
-              <p className="text-xs text-muted">Document storage used, across every family</p>
+              <p className="text-xs text-muted">{t('adminSystem.documentStorageUsedAcrossEveryFamily')}</p>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-3">
             <Users className="h-5 w-5 text-accent" />
             <div>
               <p className="text-xl font-bold leading-none">{newUsers30d.toLocaleString()}</p>
-              <p className="text-xs text-muted">New users in the last 30 days</p>
+              <p className="text-xs text-muted">{t('adminSystem.newUsersInTheLast30')}</p>
             </div>
           </div>
         </Card>
       </div>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">User growth <span className="text-muted">(last 30 days, cumulative)</span></h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminSystem.userGrowth')} <span className="text-muted">{t('adminSystem.last30DaysCumulative')}</span></h2>
         <GrowthChart timestamps={(profiles ?? []).map((p) => p.created_at)} />
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Deployment information</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminSystem.deploymentInformation')}</h2>
         <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
           <div>
-            <dt className="text-xs text-muted">Environment</dt>
+            <dt className="text-xs text-muted">{t('adminSystem.environment')}</dt>
             <dd className="mt-0.5"><Badge tone="brand">{environment}</Badge></dd>
           </div>
           <div>
-            <dt className="text-xs text-muted">Region</dt>
+            <dt className="text-xs text-muted">{t('adminSystem.region')}</dt>
             <dd className="mt-0.5 font-medium">{region}</dd>
           </div>
           <div>
@@ -155,8 +157,8 @@ export default async function AdminSystemPage() {
             <dd className="mt-0.5 font-medium">{process.version}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted">Database</dt>
-            <dd className="mt-0.5 font-medium">Supabase Postgres</dd>
+            <dt className="text-xs text-muted">{t('adminSystem.database')}</dt>
+            <dd className="mt-0.5 font-medium">{t('adminSystem.supabasePostgres')}</dd>
           </div>
         </dl>
       </Card>

@@ -6,10 +6,12 @@ import { isManager } from '@/lib/constants/roles';
 import { weeksToGoal } from '@/lib/wallet/ledger';
 import { GoalsView, type GoalView, type ChildOption } from '@/components/wallet/goals-view';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Wallet Goals' };
 
 export default async function WalletGoalsPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -67,9 +69,9 @@ export default async function WalletGoalsPage() {
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Wallet goals data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={tr('walletGoals.walletGoalsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some goal details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{tr('walletGoals.someGoalDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <GoalsView goals={goalViews} childOptions={childOptions} canManage={isManager(ctx.active.role)} />

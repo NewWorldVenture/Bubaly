@@ -6,6 +6,7 @@ import {
   attributeConversions, conversionCount, channelOf, ATTRIBUTION_MODEL_LABELS, type Touchpoint,
 } from '@/lib/marketing/attribution';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Customer Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ function ReadFailure() {
 }
 
 export default async function IntelligencePage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   let results;
   try {
@@ -68,8 +70,8 @@ export default async function IntelligencePage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Customer Intelligence — visitor tracking, a CDP profile spine, and multi-touch attribution. Feed it from any surface via
-        <code className="mx-1 rounded bg-elevated px-1 py-0.5 text-xs">POST /api/mkt/track</code>.
+        {t('adminMarketingIntelligence.customerIntelligenceVisitorTrackingACdp')}
+        <code className="mx-1 rounded bg-elevated px-1 py-0.5 text-xs">{t('adminMarketingIntelligence.postApiMktTrack')}</code>.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -82,9 +84,9 @@ export default async function IntelligencePage() {
       </div>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Top acquisition channels</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminMarketingIntelligence.topAcquisitionChannels')}</h2>
         {topSources.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No sessions tracked yet. Send events to <code>/api/mkt/track</code>.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('adminMarketingIntelligence.noSessionsTrackedYetSendEvents')} <code>/api/mkt/track</code>.</p>
         ) : (
           <div className="space-y-2">
             {topSources.map((s) => (
@@ -101,8 +103,8 @@ export default async function IntelligencePage() {
       </Card>
 
       <Card>
-        <h2 className="mb-1 text-base font-semibold">Attribution by model</h2>
-        <p className="mb-4 text-xs text-muted">Conversion credit distributed across channels — compare how each model values your touches.</p>
+        <h2 className="mb-1 text-base font-semibold">{t('adminMarketingIntelligence.attributionByModel')}</h2>
+        <p className="mb-4 text-xs text-muted">{t('adminMarketingIntelligence.conversionCreditDistributedAcrossChannelsCompare')}</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {attribution.map(({ model, rows }) => (
             <div key={model} className="rounded-xl border border-border bg-surface/30 p-3">

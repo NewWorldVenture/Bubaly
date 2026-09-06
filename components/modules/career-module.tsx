@@ -18,6 +18,7 @@ import type { Database, Tables, CareerEmploymentType, CareerStatus, CareerWorkMo
 import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
 } from '@/lib/career/hub';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
@@ -33,6 +34,7 @@ const STAGE_STYLE: Record<JobStage, string> = {
 };
 
 export function CareerModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -129,6 +131,7 @@ export function CareerModule() {
   if (error) return <ErrorState message="Could not load the career hub. Refresh and try again." onRetry={refresh} />;
 
   const AppRow = ({ a }: { a: Application }) => {
+  const tr = useTranslations();
     const nudge = nudges.find((n) => n.application.id === a.id);
     const next = JOB_STAGES.filter((s) => s.open && JOB_STAGES.findIndex((x) => x.value === s.value) === JOB_STAGES.findIndex((x) => x.value === a.stage) + 1)[0];
     return (
@@ -146,7 +149,7 @@ export function CareerModule() {
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
-            {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label="Open posting" className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+            {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
             <button onClick={() => setAppForm({ open: true, application: a })} aria-label={`Edit ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
             <button onClick={() => deleteApplication(a)} aria-label={`Delete ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>
@@ -158,37 +161,37 @@ export function CareerModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Career Hub"
+        title={tr('career.careerHub')}
         description="The household’s income depends on its careers: a parent’s next role, a teen’s first job. One place for the target, the pipeline with follow-up nudges, resume versions scored against the role’s keywords, and a map from the skills you have to the roles you want."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="career" iconOnly />
-            {profile && <Button variant="secondary" onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> Resume</Button>}
-            {profile && <Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> Application</Button>}
+            {profile && <Button variant="secondary" onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.resume')}</Button>}
+            {profile && <Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.application')}</Button>}
             <Button variant={profile ? 'ghost' : 'primary'} onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {profile ? 'New search' : 'Start a search'}</Button>
           </div>
         }
       />
 
       {profiles.data.length === 0 || !profile || !stats || !salary ? (
-        <EmptyState icon={Briefcase} title="No career profiles yet" description="Start with who is looking and what for. Applications, resume scoring and the skills map hang off that." action={<Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> Start a profile</Button>} />
+        <EmptyState icon={Briefcase} title={tr('career.noCareerProfilesYet')} description="Start with who is looking and what for. Applications, resume scoring and the skills map hang off that." action={<Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {tr('career.startAProfile')}</Button>} />
       ) : (
         <>
           {(profiles.data.length > 1) && (
-            <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Job search">
+            <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('career.jobSearch')}>
               {visibleProfiles.map((p) => (
                 <button key={p.id} role="tab" aria-selected={p.id === profileId} onClick={() => setProfileId(p.id)} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', p.id === profileId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !p.is_active && 'opacity-60')}>
                   {nameOf(p.member_id)} <span className="text-xs opacity-70">· {p.title}</span>
                 </button>
               ))}
-              {profiles.data.some((p) => !p.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} past searches</button>}
+              {profiles.data.some((p) => !p.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} {tr('career.pastSearches')}</button>}
             </div>
           )}
 
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold">{nameOf(profile.member_id)} · {profile.title}{!profile.is_active ? <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted">past search</span> : null}</h2>
+                <h2 className="text-lg font-semibold">{nameOf(profile.member_id)} · {profile.title}{!profile.is_active ? <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted">{tr('career.pastSearch')}</span> : null}</h2>
                 {profile.headline && <p className="text-sm text-muted">{profile.headline}</p>}
                 <p className="mt-1 text-sm text-muted">{CAREER_STATUSES.find((s) => s.value === profile.status)?.label} · {EMPLOYMENT_TYPES.find((e) => e.value === profile.employment_type)?.label} · {WORK_MODES.find((w) => w.value === profile.work_mode)?.label}{profile.location ? ` · ${profile.location}` : ''}{profile.salary_target_cents ? ` · target ${money(profile.salary_target_cents)}` : ''}</p>
                 {profile.target_roles.length > 0 && <p className="mt-1 text-xs text-muted"><Target className="mr-1 inline h-3 w-3" />{profile.target_roles.join(' · ')}</p>}
@@ -196,30 +199,30 @@ export function CareerModule() {
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => archiveProfile(profile, !profile.is_active)} className="rounded-lg px-2 py-1 text-xs text-muted hover:text-fg">{profile.is_active ? 'Archive search' : 'Reopen'}</button>
-                <button onClick={() => setProfileForm({ open: true, profile })} aria-label="Edit profile" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => deleteProfile(profile)} aria-label="Delete profile" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => setProfileForm({ open: true, profile })} aria-label={tr('career.editProfile')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => deleteProfile(profile)} aria-label={tr('career.deleteProfile')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className={cn('rounded-2xl border p-5', summary.overdue ? 'border-rose-500/30 bg-rose-500/10' : stats.byStage.offer ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
-              <div className="flex items-center gap-2 text-sm font-semibold"><Briefcase className="h-4 w-4 text-brand-text" /> Pipeline</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Briefcase className="h-4 w-4 text-brand-text" /> {tr('career.pipeline')}</div>
               <p className="mt-2 text-2xl font-bold">{stats.open}<span className="text-sm font-normal text-muted"> open</span></p>
-              <p className="mt-1 text-xs text-muted">{stats.byStage.interview} interviewing · {stats.byStage.offer} offer{stats.byStage.offer === 1 ? '' : 's'} · {nudges.length} nudge{nudges.length === 1 ? '' : 's'}</p>
+              <p className="mt-1 text-xs text-muted">{stats.byStage.interview} {tr('career.interviewing')} {stats.byStage.offer} offer{stats.byStage.offer === 1 ? '' : 's'} · {nudges.length} nudge{nudges.length === 1 ? '' : 's'}</p>
             </div>
             <div className={cn('rounded-2xl border p-5', stats.goalPct >= 100 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
-              <div className="flex items-center gap-2 text-sm font-semibold"><Target className="h-4 w-4 text-brand-text" /> This week</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Target className="h-4 w-4 text-brand-text" /> {tr('career.thisWeek')}</div>
               <p className="mt-2 text-2xl font-bold">{stats.appliedThisWeek}<span className="text-sm font-normal text-muted"> / {stats.weeklyGoal} applications</span></p>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-brand" style={{ width: `${stats.goalPct}%` }} /></div>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> Conversion</div>
-              <p className="mt-2 text-2xl font-bold">{stats.responseRate !== null ? `${stats.responseRate}%` : '—'}<span className="text-sm font-normal text-muted"> get a reply</span></p>
+              <div className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> {tr('career.conversion')}</div>
+              <p className="mt-2 text-2xl font-bold">{stats.responseRate !== null ? `${stats.responseRate}%` : '—'}<span className="text-sm font-normal text-muted"> {tr('career.getAReply')}</span></p>
               <p className="mt-1 text-xs text-muted">{stats.interviewRate !== null ? `${stats.interviewRate}% reach interview` : 'Apply to see rates'}{stats.avgDaysToResponse !== null ? ` · ~${stats.avgDaysToResponse}d to hear back` : ''}</p>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> Money</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('career.money')}</div>
               <p className="mt-2 text-2xl font-bold">{salary.medianMidCents !== null ? money(salary.medianMidCents) : '—'}</p>
               <p className="mt-1 text-xs text-muted">{salary.withRange ? `median of ${salary.withRange} open role${salary.withRange === 1 ? '' : 's'} with a range${profile.salary_target_cents ? ` · ${salary.atOrAbove} at or above target` : ''}` : 'No salary ranges logged yet'}</p>
             </div>
@@ -229,17 +232,17 @@ export function CareerModule() {
             {([['pipeline', `Pipeline (${stats.total})`], ['resumes', `Resumes (${myResumes.length})`], ['map', 'Career map']] as const).map(([key, label]) => (
               <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === key ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>{label}</button>
             ))}
-            {tab === 'pipeline' && <label className="ml-auto flex items-center gap-1.5 pb-1 text-xs text-muted"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} className="accent-brand" /> Show closed</label>}
+            {tab === 'pipeline' && <label className="ml-auto flex items-center gap-1.5 pb-1 text-xs text-muted"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} className="accent-brand" /> {tr('career.showClosed')}</label>}
           </div>
 
           {tab === 'pipeline' && (
             myApps.length === 0 ? (
-              <EmptyState icon={Briefcase} title="Nothing in the pipeline" description="Save the roles worth applying to, then move each one along: applied → screening → interview → offer. The hub nudges you when something goes quiet." action={<Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> First application</Button>} />
+              <EmptyState icon={Briefcase} title={tr('career.nothingInThePipeline')} description="Save the roles worth applying to, then move each one along: applied → screening → interview → offer. The hub nudges you when something goes quiet." action={<Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.firstApplication')}</Button>} />
             ) : (
               <div className="space-y-5">
                 {nudges.length > 0 && (
                   <section>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Needs you</h3>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{tr('career.needsYou')}</h3>
                     <ul className="space-y-2">{nudges.map((n) => <AppRow key={n.application.id} a={n.application} />)}</ul>
                   </section>
                 )}
@@ -253,14 +256,14 @@ export function CareerModule() {
                     </section>
                   );
                 })}
-                {showClosed && (() => { const closed = myApps.filter((a) => !OPEN_STAGES.includes(a.stage)); return closed.length ? <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Closed · {closed.length}</h3><ul className="space-y-2">{closed.map((a) => <AppRow key={a.id} a={a} />)}</ul></section> : null; })()}
+                {showClosed && (() => { const closed = myApps.filter((a) => !OPEN_STAGES.includes(a.stage)); return closed.length ? <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{tr('career.closed')} {closed.length}</h3><ul className="space-y-2">{closed.map((a) => <AppRow key={a.id} a={a} />)}</ul></section> : null; })()}
               </div>
             )
           )}
 
           {tab === 'resumes' && (
             myResumes.length === 0 ? (
-              <EmptyState icon={FileText} title="No resume versions" description="Paste the resume text and the target role’s keywords. You get an ATS-style score, what is missing, and a version per role." action={<Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> Add a resume</Button>} />
+              <EmptyState icon={FileText} title={tr('career.noResumeVersions')} description="Paste the resume text and the target role’s keywords. You get an ATS-style score, what is missing, and a version per role." action={<Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.addAResume')}</Button>} />
             ) : (
               <ul className="grid gap-3 md:grid-cols-2">
                 {myResumes.map((r) => {
@@ -271,11 +274,11 @@ export function CareerModule() {
                         <div className={cn('grid h-12 w-12 shrink-0 place-items-center rounded-xl text-sm font-bold', ats.score >= 75 ? 'bg-emerald-500/15 text-emerald-200' : ats.score >= 50 ? 'bg-amber-500/15 text-amber-200' : 'bg-rose-500/15 text-rose-200')}>{ats.score}</div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium">{r.title}{r.is_primary ? <Star className="ml-1 inline h-3.5 w-3.5 text-brand-text" /> : null}</p>
-                          <p className="text-xs text-muted">{r.target_role ?? 'General'} · {ats.wordCount} words · {ats.matched.length}/{r.keywords.length} keywords</p>
+                          <p className="text-xs text-muted">{r.target_role ?? 'General'} · {ats.wordCount} {tr('career.words')} {ats.matched.length}/{r.keywords.length} keywords</p>
                           {ats.hints.length > 0 && <ul className="mt-2 space-y-0.5 text-xs text-muted">{ats.hints.slice(0, 3).map((h) => <li key={h}>· {h}</li>)}</ul>}
                         </div>
                         <div className="flex shrink-0 items-center gap-0.5">
-                          {!r.is_primary && <button onClick={() => setPrimary(r)} aria-label="Make primary" title="Make primary" className="rounded-lg p-1.5 text-muted hover:text-fg"><Star className="h-4 w-4" /></button>}
+                          {!r.is_primary && <button onClick={() => setPrimary(r)} aria-label={tr('career.makePrimary')} title={tr('career.makePrimary')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Star className="h-4 w-4" /></button>}
                           <button onClick={() => setResumeForm({ open: true, resume: r })} aria-label={`Edit ${r.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => deleteResume(r)} aria-label={`Delete ${r.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -290,11 +293,11 @@ export function CareerModule() {
           {tab === 'map' && (
             <div className="space-y-3">
               <p className="text-sm text-muted"><Map className="mr-1 inline h-4 w-4" />How {nameOf(profile.member_id)}’s skills cover each target role. Add target roles and skills on the profile to sharpen it; the AI coach turns the gaps into a plan.</p>
-              {map.length === 0 ? <p className="text-sm text-muted">Add target roles to the profile.</p> : (
+              {map.length === 0 ? <p className="text-sm text-muted">{tr('career.addTargetRolesToTheProfile')}</p> : (
                 <ul className="grid gap-3 md:grid-cols-2">
                   {map.map((r) => (
                     <li key={r.role} className="rounded-2xl border border-border bg-surface/40 p-4">
-                      <div className="flex items-center justify-between"><p className="font-medium capitalize">{r.role}</p><span className={cn('text-sm font-bold', r.fitPct >= 70 ? 'text-emerald-300' : r.fitPct >= 40 ? 'text-amber-300' : 'text-rose-300')}>{r.fitPct}% fit</span></div>
+                      <div className="flex items-center justify-between"><p className="font-medium capitalize">{r.role}</p><span className={cn('text-sm font-bold', r.fitPct >= 70 ? 'text-emerald-300' : r.fitPct >= 40 ? 'text-amber-300' : 'text-rose-300')}>{r.fitPct}{tr('career.fit')}</span></div>
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-brand" style={{ width: `${r.fitPct}%` }} /></div>
                       {r.have.length > 0 && <p className="mt-2 text-xs text-muted">Have: {r.have.join(', ')}</p>}
                       {r.gap.length > 0 && <p className="mt-1 text-xs text-amber-200">Gap: {r.gap.join(', ')}</p>}
@@ -321,6 +324,7 @@ export function CareerModule() {
 }
 
 function ProfileForm({ familyId, userId, members, profile, defaultMember, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; profile: Profile | null; defaultMember: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -352,28 +356,28 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Who" required>{(id) => <Select id={id} name="member_id" defaultValue={profile?.member_id ?? defaultMember ?? ''} disabled={!!profile}>{!profile && <option value="">Choose…</option>}{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Search name" required>{(id) => <Input id={id} name="title" defaultValue={profile?.title ?? ''} placeholder="Next ops role · Summer job 2026" />}</Field>
+          <Field label={tr('career.searchName')} required>{(id) => <Input id={id} name="title" defaultValue={profile?.title ?? ''} placeholder={tr('career.nextOpsRoleSummerJob2026')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={profile?.status ?? 'exploring'}>{CAREER_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Headline">{(id) => <Input id={id} name="headline" defaultValue={profile?.headline ?? ''} placeholder="Operations manager · 8 yrs logistics" />}</Field>
+          <Field label={tr('career.status')}>{(id) => <Select id={id} name="status" defaultValue={profile?.status ?? 'exploring'}>{CAREER_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('career.headline')}>{(id) => <Input id={id} name="headline" defaultValue={profile?.headline ?? ''} placeholder={tr('career.operationsManager8YrsLogistics')} />}</Field>
         </div>
-        <Field label="Target roles (comma separated)" hint="e.g. Data Analyst, Project Manager — or Lifeguard, Barista for a first job">{(id) => <Input id={id} name="target_roles" defaultValue={profile?.target_roles.join(', ') ?? ''} />}</Field>
-        <Field label="Skills you have (comma separated)">{(id) => <Textarea id={id} name="skills" rows={2} defaultValue={profile?.skills.join(', ') ?? ''} placeholder="SQL, Excel, team leadership, CPR…" />}</Field>
-        <Field label="Keywords the target roles ask for" hint="Copy from real postings; resumes are scored against these">{(id) => <Textarea id={id} name="target_keywords" rows={2} defaultValue={profile?.target_keywords.join(', ') ?? ''} />}</Field>
+        <Field label={tr('career.targetRolesCommaSeparated')} hint="e.g. Data Analyst, Project Manager — or Lifeguard, Barista for a first job">{(id) => <Input id={id} name="target_roles" defaultValue={profile?.target_roles.join(', ') ?? ''} />}</Field>
+        <Field label={tr('career.skillsYouHaveCommaSeparated')}>{(id) => <Textarea id={id} name="skills" rows={2} defaultValue={profile?.skills.join(', ') ?? ''} placeholder={tr('career.sqlExcelTeamLeadershipCpr')} />}</Field>
+        <Field label={tr('career.keywordsTheTargetRolesAskFor')} hint="Copy from real postings; resumes are scored against these">{(id) => <Textarea id={id} name="target_keywords" rows={2} defaultValue={profile?.target_keywords.join(', ') ?? ''} />}</Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Type">{(id) => <Select id={id} name="employment_type" defaultValue={profile?.employment_type ?? 'full_time'}>{EMPLOYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
-          <Field label="Work mode">{(id) => <Select id={id} name="work_mode" defaultValue={profile?.work_mode ?? 'any'}>{WORK_MODES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}</Select>}</Field>
-          <Field label="Target pay ($/yr or /hr)">{(id) => <Input id={id} name="salary_target" type="number" min={0} step={100} defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
+          <Field label={tr('career.type')}>{(id) => <Select id={id} name="employment_type" defaultValue={profile?.employment_type ?? 'full_time'}>{EMPLOYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
+          <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={profile?.work_mode ?? 'any'}>{WORK_MODES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}</Select>}</Field>
+          <Field label={tr('career.targetPayYrOrHr')}>{(id) => <Input id={id} name="salary_target" type="number" min={0} step={100} defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Location">{(id) => <Input id={id} name="location" defaultValue={profile?.location ?? ''} placeholder="Austin, TX" />}</Field>
-          <Field label="Applications per week goal">{(id) => <Input id={id} name="weekly_goal" type="number" min={0} max={100} defaultValue={profile?.weekly_goal ?? 5} />}</Field>
+          <Field label={tr('career.location')}>{(id) => <Input id={id} name="location" defaultValue={profile?.location ?? ''} placeholder={tr('career.austinTx')} />}</Field>
+          <Field label={tr('career.applicationsPerWeekGoal')}>{(id) => <Input id={id} name="weekly_goal" type="number" min={0} max={100} defaultValue={profile?.weekly_goal ?? 5} />}</Field>
         </div>
-        <Field label="Summary / notes">{(id) => <Textarea id={id} name="summary" rows={2} defaultValue={profile?.summary ?? ''} />}</Field>
+        <Field label={tr('career.summaryNotes')}>{(id) => <Textarea id={id} name="summary" rows={2} defaultValue={profile?.summary ?? ''} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save profile</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('career.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('career.saveProfile')}</Button>
         </div>
       </form>
     </Modal>
@@ -381,6 +385,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
 }
 
 function ApplicationForm({ familyId, userId, profile, resumes, application, onClose, onSaved }: { familyId: string; userId: string; profile: Profile; resumes: Resume[]; application: Application | null; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [excitement, setExcitement] = useState(application?.excitement ?? 0);
@@ -415,42 +420,42 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
     <Modal open title={application ? 'Edit application' : 'Add an application'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Company" required>{(id) => <Input id={id} name="company" defaultValue={application?.company ?? ''} autoFocus />}</Field>
-          <Field label="Role" required>{(id) => <Input id={id} name="role_title" defaultValue={application?.role_title ?? profile.target_roles[0] ?? ''} />}</Field>
+          <Field label={tr('career.company')} required>{(id) => <Input id={id} name="company" defaultValue={application?.company ?? ''} autoFocus />}</Field>
+          <Field label={tr('career.role')} required>{(id) => <Input id={id} name="role_title" defaultValue={application?.role_title ?? profile.target_roles[0] ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Stage">{(id) => <Select id={id} name="stage" defaultValue={application?.stage ?? 'saved'}>{JOB_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Applied on">{(id) => <Input id={id} name="applied_on" type="date" defaultValue={application?.applied_on ?? ''} />}</Field>
-          <Field label="Source">{(id) => <Input id={id} name="source" defaultValue={application?.source ?? ''} placeholder="LinkedIn, referral…" />}</Field>
+          <Field label={tr('career.stage')}>{(id) => <Select id={id} name="stage" defaultValue={application?.stage ?? 'saved'}>{JOB_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('career.appliedOn')}>{(id) => <Input id={id} name="applied_on" type="date" defaultValue={application?.applied_on ?? ''} />}</Field>
+          <Field label={tr('career.source')}>{(id) => <Input id={id} name="source" defaultValue={application?.source ?? ''} placeholder={tr('career.linkedinReferral')} />}</Field>
         </div>
-        <Field label="Posting link">{(id) => <Input id={id} name="url" type="url" defaultValue={application?.url ?? ''} placeholder="https://" />}</Field>
+        <Field label={tr('career.postingLink')}>{(id) => <Input id={id} name="url" type="url" defaultValue={application?.url ?? ''} placeholder="https://" />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Location">{(id) => <Input id={id} name="location" defaultValue={application?.location ?? ''} />}</Field>
-          <Field label="Work mode">{(id) => <Select id={id} name="work_mode" defaultValue={application?.work_mode ?? ''}><option value="">Unknown</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option></Select>}</Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Salary from ($)">{(id) => <Input id={id} name="salary_min" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
-          <Field label="Salary to ($)">{(id) => <Input id={id} name="salary_max" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
+          <Field label={tr('career.location')}>{(id) => <Input id={id} name="location" defaultValue={application?.location ?? ''} />}</Field>
+          <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={application?.work_mode ?? ''}><option value="">{tr('career.unknown')}</option><option value="remote">{tr('career.remote')}</option><option value="hybrid">{tr('career.hybrid')}</option><option value="onsite">On-site</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Next step">{(id) => <Input id={id} name="next_step" defaultValue={application?.next_step ?? ''} placeholder="Follow up, phone screen, send portfolio…" />}</Field>
+          <Field label={tr('career.salaryFrom')}>{(id) => <Input id={id} name="salary_min" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
+          <Field label={tr('career.salaryTo')}>{(id) => <Input id={id} name="salary_max" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={tr('career.nextStep')}>{(id) => <Input id={id} name="next_step" defaultValue={application?.next_step ?? ''} placeholder={tr('career.followUpPhoneScreenSendPortfolio')} />}</Field>
           <Field label="Due">{(id) => <Input id={id} name="next_step_on" type="date" defaultValue={application?.next_step_on ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Contact">{(id) => <Input id={id} name="contact_name" defaultValue={application?.contact_name ?? ''} />}</Field>
-          <Field label="Contact email">{(id) => <Input id={id} name="contact_email" type="email" defaultValue={application?.contact_email ?? ''} />}</Field>
+          <Field label={tr('career.contact')}>{(id) => <Input id={id} name="contact_name" defaultValue={application?.contact_name ?? ''} />}</Field>
+          <Field label={tr('career.contactEmail')}>{(id) => <Input id={id} name="contact_email" type="email" defaultValue={application?.contact_email ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Resume used">{(id) => <Select id={id} name="resume_id" defaultValue={application?.resume_id ?? resumes.find((r) => r.is_primary)?.id ?? ''}><option value="">—</option>{resumes.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}</Select>}</Field>
+          <Field label={tr('career.resumeUsed')}>{(id) => <Select id={id} name="resume_id" defaultValue={application?.resume_id ?? resumes.find((r) => r.is_primary)?.id ?? ''}><option value="">—</option>{resumes.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}</Select>}</Field>
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted">Excitement</p>
-            <div className="flex gap-1" role="radiogroup" aria-label="Excitement">{[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={excitement === n} onClick={() => setExcitement(excitement === n ? 0 : n)} className={cn('h-10 w-10 rounded-xl border text-sm coarse:min-h-11', excitement >= n ? 'border-amber-400 bg-amber-500/15 text-amber-200' : 'border-border text-muted')}>★</button>)}</div>
+            <p className="mb-1.5 text-xs font-medium text-muted">{tr('career.excitement')}</p>
+            <div className="flex gap-1" role="radiogroup" aria-label={tr('career.excitement')}>{[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={excitement === n} onClick={() => setExcitement(excitement === n ? 0 : n)} className={cn('h-10 w-10 rounded-xl border text-sm coarse:min-h-11', excitement >= n ? 'border-amber-400 bg-amber-500/15 text-amber-200' : 'border-border text-muted')}>★</button>)}</div>
           </div>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={application?.notes ?? ''} />}</Field>
+        <Field label={tr('career.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={application?.notes ?? ''} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save application</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('career.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('career.saveApplication')}</Button>
         </div>
       </form>
     </Modal>
@@ -458,6 +463,7 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
 }
 
 function ResumeForm({ familyId, userId, profile, resume, isFirst, onClose, onSaved }: { familyId: string; userId: string; profile: Profile; resume: Resume | null; isFirst: boolean; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [body, setBody] = useState(resume?.body ?? '');
@@ -490,19 +496,19 @@ function ResumeForm({ familyId, userId, profile, resume, isFirst, onClose, onSav
     <Modal open title={resume ? 'Edit resume version' : 'New resume version'} description="One version per target role. The score updates as you type." onClose={onClose} className="max-w-3xl">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Version name" required>{(id) => <Input id={id} name="title" defaultValue={resume?.title ?? ''} placeholder="Ops manager — logistics" autoFocus />}</Field>
-          <Field label="Target role">{(id) => <Input id={id} name="target_role" defaultValue={resume?.target_role ?? profile.target_roles[0] ?? ''} />}</Field>
+          <Field label={tr('career.versionName')} required>{(id) => <Input id={id} name="title" defaultValue={resume?.title ?? ''} placeholder={tr('career.opsManagerLogistics')} autoFocus />}</Field>
+          <Field label={tr('career.targetRole')}>{(id) => <Input id={id} name="target_role" defaultValue={resume?.target_role ?? profile.target_roles[0] ?? ''} />}</Field>
         </div>
-        <Field label="Keywords from the posting (comma separated)">{(id) => <Textarea id={id} name="keywords" rows={2} value={keywordsText} onChange={(e) => setKeywordsText(e.target.value)} />}</Field>
-        <Field label="Resume text" required>{(id) => <Textarea id={id} name="body" rows={12} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Paste the whole resume as plain text…" className="font-mono text-xs" />}</Field>
+        <Field label={tr('career.keywordsFromThePostingCommaSeparated')}>{(id) => <Textarea id={id} name="keywords" rows={2} value={keywordsText} onChange={(e) => setKeywordsText(e.target.value)} />}</Field>
+        <Field label={tr('career.resumeText')} required>{(id) => <Textarea id={id} name="body" rows={12} value={body} onChange={(e) => setBody(e.target.value)} placeholder={tr('career.pasteTheWholeResumeAsPlain')} className="font-mono text-xs" />}</Field>
         <div className={cn('rounded-xl border p-3 text-sm', live.score >= 75 ? 'border-emerald-500/30 bg-emerald-500/10' : live.score >= 50 ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/60')}>
-          <p className="font-semibold">ATS score {live.score}/100 <span className="font-normal text-muted">· {live.matched.length}/{parseKeywords(keywordsText).length} keywords · {live.wordCount} words</span></p>
+          <p className="font-semibold">{tr('career.atsScore')} {live.score}/100 <span className="font-normal text-muted">· {live.matched.length}/{parseKeywords(keywordsText).length} {tr('career.keywords')} {live.wordCount} words</span></p>
           {live.hints.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-muted">{live.hints.map((h) => <li key={h}>· {h}</li>)}</ul>}
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={resume?.notes ?? ''} />}</Field>
+        <Field label={tr('career.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={resume?.notes ?? ''} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save resume</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('career.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('career.saveResume')}</Button>
         </div>
       </form>
     </Modal>

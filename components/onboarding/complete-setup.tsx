@@ -15,6 +15,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { FAMILY_GOALS, REFERRAL_SOURCES, householdSummary } from '@/lib/onboarding/family';
 import { saveFamilyDetailsAction, resetOnboardingAction } from '@/app/onboarding/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
   return (
@@ -42,6 +43,7 @@ export function CompleteSetupForm({
   familyId: string;
   initial: { adults: number; children: number; childAges: number[]; goals: string[]; referralSource: string };
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const [adults, setAdults] = useState(Math.max(1, initial.adults || 1));
@@ -88,14 +90,14 @@ export function CompleteSetupForm({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3">
-        <Stepper label="Adults" value={adults} onChange={setAdults} min={1} />
-        <Stepper label="Kids" value={children} onChange={setKids} />
+        <Stepper label={t('completeSetup.adults')} value={adults} onChange={setAdults} min={1} />
+        <Stepper label={t('completeSetup.kids')} value={children} onChange={setKids} />
       </div>
       <p className="-mt-3 text-center text-xs text-muted">{householdSummary(adults, children)}</p>
 
       {children > 0 && (
         <div>
-          <span className="mb-2 block text-sm font-medium">Kids’ ages <span className="font-normal text-muted">(optional)</span></span>
+          <span className="mb-2 block text-sm font-medium">{t('completeSetup.kidsAges')} <span className="font-normal text-muted">(optional)</span></span>
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: children }, (_, i) => (
               <input key={i} inputMode="numeric" placeholder="Age" aria-label={`Child ${i + 1} age`}
@@ -111,7 +113,7 @@ export function CompleteSetupForm({
       )}
 
       <div>
-        <span className="mb-2 block text-sm font-medium">What do you want help with? <span className="font-normal text-muted">(pick any)</span></span>
+        <span className="mb-2 block text-sm font-medium">{t('completeSetup.whatDoYouWantHelpWith')} <span className="font-normal text-muted">{t('completeSetup.pickAny')}</span></span>
         <div className="grid grid-cols-2 gap-2">
           {FAMILY_GOALS.map((g) => {
             const on = goals.includes(g.value);
@@ -129,10 +131,10 @@ export function CompleteSetupForm({
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium">How did you hear about us? <span className="font-normal text-muted">(optional)</span></span>
+        <span className="mb-1 block text-sm font-medium">{t('completeSetup.howDidYouHearAboutUs')} <span className="font-normal text-muted">(optional)</span></span>
         <select value={referral} onChange={(e) => setReferral(e.target.value)}
           className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring">
-          <option value="">Select one…</option>
+          <option value="">{t('completeSetup.selectOne')}</option>
           {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
       </label>
@@ -140,11 +142,11 @@ export function CompleteSetupForm({
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button className="flex-1" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          Save my setup
+          {t('completeSetup.saveMySetup')}
         </Button>
         <Button variant="secondary" onClick={reset} disabled={resetting}>
           {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Reset onboarding
+          {t('completeSetup.resetOnboarding')}
         </Button>
       </div>
     </div>

@@ -21,6 +21,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Note = Tables<'notes'>;
 
@@ -81,6 +82,7 @@ function renderChecklist(body: string) {
 }
 
 export function NotesModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
@@ -148,14 +150,14 @@ export function NotesModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Notes"
+        title={t('notes.notes')}
         description="Shared family notes, checklists, ideas, and reminders."
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search notes…"
+                placeholder={t('notes.searchNotes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
@@ -164,7 +166,7 @@ export function NotesModule() {
               {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
             </button>
             <AiInsight kind="notes" iconOnly />
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('notes.newNote')}</Button>
           </div>
         }
       />
@@ -184,22 +186,22 @@ export function NotesModule() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={StickyNote} title="No notes yet"
+        <EmptyState icon={StickyNote} title={t('notes.noNotesYet')}
           description="Create notes, checklists, meeting minutes, or family announcements."
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>} />
+          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('notes.newNote')}</Button>} />
       ) : (
         <div className="space-y-5">
           {pinned.length > 0 && (
             <div>
               <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted">
-                <Pin className="h-3 w-3" /> Pinned
+                <Pin className="h-3 w-3" /> {t('notes.pinned')}
               </h2>
               <NoteGroup notes={pinned} view={view} onOpen={setViewing} onTogglePin={togglePin} onDelete={remove} onDuplicate={duplicate} />
             </div>
           )}
           {rest.length > 0 && (
             <div>
-              {pinned.length > 0 && <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">Notes</h2>}
+              {pinned.length > 0 && <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{t('notes.notes')}</h2>}
               <NoteGroup notes={rest} view={view} onOpen={setViewing} onTogglePin={togglePin} onDelete={remove} onDuplicate={duplicate} />
             </div>
           )}
@@ -220,7 +222,7 @@ export function NotesModule() {
                 </button>
                 <button onClick={() => { setEditing(viewing); setViewing(null); }}
                   className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
-                  Edit
+                  {t('notes.edit')}
                 </button>
               </div>
               <button onClick={() => { if (confirm('Delete this note?')) remove(viewing.id); }}
@@ -232,7 +234,7 @@ export function NotesModule() {
             {viewing.body && isChecklist(viewing.body)
               ? <div className="space-y-0.5">{renderChecklist(viewing.body)}</div>
               : <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{viewing.body}</p>}
-            <p className="mt-6 text-xs text-muted">Updated {fmtRelative(viewing.updated_at)}</p>
+            <p className="mt-6 text-xs text-muted">{t('notes.updated')} {fmtRelative(viewing.updated_at)}</p>
           </div>
         </Modal>
       )}
@@ -355,6 +357,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
   note: Note | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
@@ -431,20 +434,20 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
           </div>
         </div>
 
-        <Field label="Title (optional)">
+        <Field label={t('notes.titleOptional')}>
           {(id) => (
             <Input id={id} name="title" defaultValue={note?.title ?? ''}
-              placeholder="Note title…" autoFocus={!note} />
+              placeholder={t('notes.noteTitle')} autoFocus={!note} />
           )}
         </Field>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium">Content</label>
+            <label className="text-sm font-medium">{t('notes.content')}</label>
             <div className="flex items-center gap-1">
               <button type="button" onClick={insertChecklistItem}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">
-                <CheckSquare className="h-3 w-3" /> Add checklist item
+                <CheckSquare className="h-3 w-3" /> {t('notes.addChecklistItem')}
               </button>
               <button type="button" onClick={runAiAssist} disabled={aiLoading}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition disabled:opacity-50">
@@ -464,7 +467,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
             <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
-                  <Sparkles className="h-3.5 w-3.5" /> AI summary
+                  <Sparkles className="h-3.5 w-3.5" /> {t('notes.aiSummary')}
                 </span>
                 <button type="button" onClick={() => setInsights(null)} className="text-muted hover:text-fg">
                   <X className="h-3.5 w-3.5" />
@@ -490,7 +493,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
               <div className="mt-3 flex justify-end">
                 <button type="button" onClick={applyInsights}
                   className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                  Add to note
+                  {t('notes.addToNote')}
                 </button>
               </div>
             </div>
@@ -498,7 +501,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('notes.cancel')}</Button>
           <Button type="submit" loading={loading}>{note ? 'Save' : 'Create Note'}</Button>
         </div>
       </form>

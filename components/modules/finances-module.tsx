@@ -22,6 +22,7 @@ import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -69,6 +70,7 @@ function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); retu
 const MANAGE = '/dashboard/billing?view=manage';
 
 export function FinancesModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -177,21 +179,21 @@ export function FinancesModule() {
     <div className="module-with-sidebar">
       <div className="module-main overflow-y-auto">
         <PageHeader
-          title="Finances"
+          title={tr('finances.finances')}
           description="Stay on top of your family's money, budgets, and goals."
           action={
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Transaction</Button>
-              <Button variant="outline" size="sm" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" /> Link Account</Button>
+              <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('finances.addTransaction')}</Button>
+              <Button variant="outline" size="sm" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" /> {tr('finances.linkAccount')}</Button>
               <div className="relative">
-                <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label="More"><MoreHorizontal className="h-4 w-4" /> More</Button>
+                <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label={tr('finances.more')}><MoreHorizontal className="h-4 w-4" /> {tr('finances.more')}</Button>
                 {moreOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                     <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-border bg-elevated p-1 shadow-lg">
-                      <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">Manage budgets, bills &amp; reports</Link>
-                      <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">Plan &amp; subscription</Link>
-                      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"><AiInsight kind="billing" /> AI insight</div>
+                      <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.manageBudgetsBillsAmpReports')}</Link>
+                      <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.planAmpSubscription')}</Link>
+                      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"><AiInsight kind="billing" /> {tr('finances.aiInsight')}</div>
                     </div>
                   </>
                 )}
@@ -209,8 +211,8 @@ export function FinancesModule() {
             <Sparkles className="h-5 w-5 text-brand-text" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold">Financial Copilot</span>
-            <span className="block text-xs text-muted">See bills, goals &amp; your calendar on one money timeline — get ahead of heavy weeks.</span>
+            <span className="block text-sm font-bold">{tr('finances.financialCopilot')}</span>
+            <span className="block text-xs text-muted">{tr('finances.seeBillsGoalsAmpYourCalendar')}</span>
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-brand-text" />
         </Link>
@@ -218,8 +220,8 @@ export function FinancesModule() {
         {/* Overview stat tiles */}
         <div className="rounded-2xl border border-border bg-surface/30 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Overview</h2>
-            <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View full report ›</Link>
+            <h2 className="text-base font-semibold">{tr('finances.overview')}</h2>
+            <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">{tr('finances.viewFullReport')}</Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {STATS.map((s) => (
@@ -243,17 +245,17 @@ export function FinancesModule() {
         <div className="mt-4 grid gap-4 lg:grid-cols-5">
           {/* Budget & Spending */}
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-3">
-            <h2 className="mb-3 text-base font-semibold">Budget &amp; Spending</h2>
+            <h2 className="mb-3 text-base font-semibold">{tr('finances.budgetAmpSpending')}</h2>
             <div className="flex flex-col items-center gap-4 sm:flex-row">
               <div className="relative h-44 w-44 shrink-0">
                 <div className="h-44 w-44 rounded-full" style={{ background: spendByCat.length ? `conic-gradient(${donutStops})` : 'var(--elevated,#2a2a33)' }} />
                 <div className="absolute inset-[26px] grid place-items-center rounded-full bg-surface text-center">
                   <span className="text-lg font-bold">{usd(expenses)}</span>
-                  <span className="text-[10px] text-muted">Total Spent</span>
+                  <span className="text-[10px] text-muted">{tr('finances.totalSpent')}</span>
                 </div>
               </div>
               <div className="w-full space-y-1.5">
-                {spendByCat.length === 0 ? <p className="text-xs text-muted">No spending yet this month.</p> : spendByCat.map((r) => {
+                {spendByCat.length === 0 ? <p className="text-xs text-muted">{tr('finances.noSpendingYetThisMonth')}</p> : spendByCat.map((r) => {
                   const total = spendByCat.reduce((s, x) => s + x.total, 0) || 1;
                   const meta = r.category === 'Other' ? { color: OTHER_COLOR, icon: MoreHorizontal } : catMeta(r.category);
                   const Icon = meta.icon;
@@ -270,7 +272,7 @@ export function FinancesModule() {
             </div>
             <div className="mt-4 border-t border-border pt-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">Budget Progress</span>
+                <span className="font-medium">{tr('finances.budgetProgress')}</span>
                 <span className="text-muted">{budgetPct}%</span>
               </div>
               <p className="text-xs text-muted">{usd(expenses)} of {usd(budgetTotal)}</p>
@@ -286,10 +288,10 @@ export function FinancesModule() {
           {/* Recent Transactions */}
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Recent Transactions</h2>
-              <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View all ›</Link>
+              <h2 className="text-base font-semibold">{tr('finances.recentTransactions')}</h2>
+              <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">{tr('finances.viewAll')}</Link>
             </div>
-            {recent.length === 0 ? <p className="text-xs text-muted">No transactions yet.</p> : (
+            {recent.length === 0 ? <p className="text-xs text-muted">{tr('finances.noTransactionsYet')}</p> : (
               <div className="space-y-1">
                 {recent.map((t) => {
                   const meta = catMeta(t.category);
@@ -320,14 +322,14 @@ export function FinancesModule() {
           {/* Bills & Reminders */}
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-3">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Bills &amp; Reminders</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand-text hover:underline">View calendar ›</Link>
+              <h2 className="text-base font-semibold">{tr('finances.billsAmpReminders')}</h2>
+              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand-text hover:underline">{tr('finances.viewCalendar')}</Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <BillsCalendar month={calMonth} bills={bills} onPrev={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))} onNext={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))} />
               <div>
-                <p className="mb-2 text-sm font-semibold">Upcoming Bills</p>
-                {upcomingBills.length === 0 ? <p className="text-xs text-muted">No upcoming bills.</p> : (
+                <p className="mb-2 text-sm font-semibold">{tr('finances.upcomingBills')}</p>
+                {upcomingBills.length === 0 ? <p className="text-xs text-muted">{tr('finances.noUpcomingBills')}</p> : (
                   <div className="space-y-2">
                     {upcomingBills.map((b) => {
                       const meta = catMeta(b.category);
@@ -346,9 +348,9 @@ export function FinancesModule() {
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-muted">
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-brand" /> Bill Due</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> Paid</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Upcoming</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-brand" /> {tr('finances.billDue')}</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> {tr('finances.paid')}</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> {tr('finances.upcoming')}</span>
                 </div>
               </div>
             </div>
@@ -357,10 +359,10 @@ export function FinancesModule() {
           {/* Spending by Person */}
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Spending by Person</h2>
-              <span className="rounded-lg bg-elevated px-2 py-0.5 text-[11px] text-muted">This Month</span>
+              <h2 className="text-base font-semibold">{tr('finances.spendingByPerson')}</h2>
+              <span className="rounded-lg bg-elevated px-2 py-0.5 text-[11px] text-muted">{tr('finances.thisMonth')}</span>
             </div>
-            {byPerson.length === 0 ? <p className="text-xs text-muted">No attributed spending this month.</p> : (
+            {byPerson.length === 0 ? <p className="text-xs text-muted">{tr('finances.noAttributedSpendingThisMonth')}</p> : (
               <div className="space-y-3">
                 {byPerson.map(({ member, amount, pct, bar }) => member && (
                   <div key={member.id} className="flex items-center gap-2.5">
@@ -381,7 +383,7 @@ export function FinancesModule() {
                 ))}
               </div>
             )}
-            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand-text hover:underline">View full breakdown ›</Link>
+            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand-text hover:underline">{tr('finances.viewFullBreakdown')}</Link>
           </div>
         </div>
 
@@ -389,10 +391,10 @@ export function FinancesModule() {
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-brand/5 p-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-500/20 text-amber-400"><Lightbulb className="h-4 w-4" /></span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Money Tip</p>
+            <p className="text-sm font-semibold">{tr('finances.moneyTip')}</p>
             <p className="text-xs text-muted">{tip}</p>
           </div>
-          <Link href={MANAGE} className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-elevated">View Insights</Link>
+          <Link href={MANAGE} className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-elevated">{tr('finances.viewInsights')}</Link>
         </div>
       </div>
 
@@ -401,13 +403,13 @@ export function FinancesModule() {
         {/* Accounts */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold">Accounts</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
+            <h3 className="text-sm font-bold">{tr('finances.accounts')}</h3>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">{tr('finances.viewAll')}</Link>
           </div>
           {accounts.length === 0 ? (
             <div className="text-center">
-              <p className="text-xs text-muted">No accounts linked yet.</p>
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" /> Link Account</Button>
+              <p className="text-xs text-muted">{tr('finances.noAccountsLinkedYet')}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => setLinkOpen(true)}><Link2 className="h-4 w-4" /> {tr('finances.linkAccount')}</Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -432,10 +434,10 @@ export function FinancesModule() {
         {/* Savings Goals */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold">Savings Goals</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
+            <h3 className="text-sm font-bold">{tr('finances.savingsGoals')}</h3>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">{tr('finances.viewAll')}</Link>
           </div>
-          {goals.length === 0 ? <p className="text-xs text-muted">No savings goals yet.</p> : (
+          {goals.length === 0 ? <p className="text-xs text-muted">{tr('finances.noSavingsGoalsYet')}</p> : (
             <div className="space-y-3">
               {goals.map((g) => {
                 const cur = num(g.current_amount), tgt = num(g.target_amount) || 1;
@@ -476,6 +478,7 @@ export function FinancesModule() {
 }
 
 function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: Bill[]; onPrev: () => void; onNext: () => void }) {
+  const tr = useTranslations();
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const startOffset = (new Date(y, m, 1).getDay());
@@ -498,9 +501,9 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <button onClick={onPrev} aria-label="Previous month" className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
+        <button onClick={onPrev} aria-label={tr('finances.previousMonth')} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
         <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
-        <button onClick={onNext} aria-label="Next month" className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
+        <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>)}
@@ -524,6 +527,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
   familyId: string; userId: string; selfId: string | null; accounts: Account[];
   members: ReturnType<typeof useApp>['members']; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
+  const tr = useTranslations();
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -549,24 +553,24 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
   }
 
   return (
-    <Modal open title="Add Transaction" onClose={onClose}>
+    <Modal open title={tr('finances.addTransaction')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Description" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Whole Foods Market" />}</Field>
+        <Field label={tr('finances.description')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('finances.wholeFoodsMarket')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Amount" required>{(id) => <Input id={id} name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" />}</Field>
-          <Field label="Type">{(id) => <Select id={id} name="type" defaultValue="expense"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></Select>}</Field>
+          <Field label={tr('finances.amount')} required>{(id) => <Input id={id} name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" />}</Field>
+          <Field label={tr('finances.type')}>{(id) => <Select id={id} name="type" defaultValue="expense"><option value="expense">{tr('finances.expense')}</option><option value="income">{tr('finances.income')}</option><option value="transfer">{tr('finances.transfer')}</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-          <Field label="Date">{(id) => <Input id={id} name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
+          <Field label={tr('finances.category')}>{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+          <Field label={tr('finances.date')}>{(id) => <Input id={id} name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Account">{(id) => <Select id={id} name="account_id"><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>
-          <Field label="Person">{(id) => <Select id={id} name="member_id" defaultValue={selfId ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('finances.account')}>{(id) => <Select id={id} name="account_id"><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>
+          <Field label={tr('finances.person')}>{(id) => <Select id={id} name="member_id" defaultValue={selfId ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Add Transaction</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('finances.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('finances.addTransaction')}</Button>
         </div>
       </form>
     </Modal>
@@ -576,6 +580,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
 function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
+  const tr = useTranslations();
   const [loading, setLoading] = useState(false);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -596,20 +601,20 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
     onSaved();
   }
   return (
-    <Modal open title="Link Account" description="Add an account to track balances and spending." onClose={onClose}>
+    <Modal open title={tr('finances.linkAccount')} description="Add an account to track balances and spending." onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Account name" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Joint Checking" />}</Field>
+        <Field label={tr('finances.accountName')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('finances.jointChecking')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Type">{(id) => <Select id={id} name="type" defaultValue="checking"><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit">Credit</option><option value="investment">Investment</option><option value="retirement">Retirement</option></Select>}</Field>
-          <Field label="Balance">{(id) => <Input id={id} name="balance" type="number" inputMode="decimal" step="0.01" placeholder="0.00" />}</Field>
+          <Field label={tr('finances.type')}>{(id) => <Select id={id} name="type" defaultValue="checking"><option value="checking">{tr('finances.checking')}</option><option value="savings">{tr('finances.savings')}</option><option value="credit">{tr('finances.credit')}</option><option value="investment">{tr('finances.investment')}</option><option value="retirement">{tr('finances.retirement')}</option></Select>}</Field>
+          <Field label={tr('finances.balance')}>{(id) => <Input id={id} name="balance" type="number" inputMode="decimal" step="0.01" placeholder="0.00" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Institution" hint="Optional">{(id) => <Input id={id} name="institution" placeholder="Chase" />}</Field>
-          <Field label="Last 4" hint="Optional">{(id) => <Input id={id} name="last_four" maxLength={4} placeholder="4567" />}</Field>
+          <Field label={tr('finances.institution')} hint="Optional">{(id) => <Input id={id} name="institution" placeholder={tr('finances.chase')} />}</Field>
+          <Field label={tr('finances.last4')} hint="Optional">{(id) => <Input id={id} name="last_four" maxLength={4} placeholder="4567" />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Link Account</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('finances.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('finances.linkAccount')}</Button>
         </div>
       </form>
     </Modal>

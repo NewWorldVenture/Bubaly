@@ -26,6 +26,7 @@ import {
 } from '@/lib/graph/reason';
 import { projectTwinAction } from '@/app/(app)/dashboard/graph/twin-actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type EntityRow = Tables<'graph_entities'>;
 type EdgeRow = Tables<'graph_edges'>;
@@ -44,6 +45,7 @@ const KIND_STYLE: Record<string, string> = {
 };
 
 export function GraphModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -100,16 +102,16 @@ export function GraphModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Knowledge Graph"
+        title={t('graph.knowledgeGraph')}
         description="The household modelled as linked, typed relationships — so the AI can reason, not just retrieve."
         action={
           <>
             <Button onClick={rebuildFromData} disabled={projecting}>
               <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Rebuild from data'}
             </Button>
-            <Button variant="secondary" onClick={() => setAddEntity(true)}><Plus className="size-4" /> Entity</Button>
+            <Button variant="secondary" onClick={() => setAddEntity(true)}><Plus className="size-4" /> {t('graph.entity')}</Button>
             <Button variant="secondary" onClick={() => setAddEdge(true)} disabled={graph.entities.length < 2}>
-              <GitBranch className="size-4" /> Link
+              <GitBranch className="size-4" /> {t('graph.link')}
             </Button>
           </>
         }
@@ -127,7 +129,7 @@ export function GraphModule() {
           <div className="space-y-4 lg:col-span-1">
             <div className="rounded-xl border border-border bg-card p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
-                <Users className="size-4" /> Entities ({graph.entities.length})
+                <Users className="size-4" /> {t('graph.entities')}{graph.entities.length})
               </h3>
               <div className="max-h-80 space-y-1 overflow-y-auto">
                 {graph.entities.map((e) => (
@@ -151,9 +153,9 @@ export function GraphModule() {
             {topHubs.length > 0 && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
-                  <Sparkles className="size-4" /> Household hubs
+                  <Sparkles className="size-4" /> {t('graph.householdHubs')}
                 </h3>
-                <p className="mb-2 text-xs text-muted">The most connected things — where coordination concentrates.</p>
+                <p className="mb-2 text-xs text-muted">{t('graph.theMostConnectedThingsWhereCoordination')}</p>
                 <ul className="space-y-1.5">
                   {topHubs.map((h) => (
                     <li key={h.entity.id} className="flex items-center justify-between text-sm">
@@ -171,15 +173,15 @@ export function GraphModule() {
             {/* Path finder */}
             <div className="rounded-xl border border-border bg-card p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
-                <Route className="size-4" /> How are these related?
+                <Route className="size-4" /> {t('graph.howAreTheseRelated')}
               </h3>
               <div className="flex flex-wrap items-center gap-2">
-                <Select aria-label="Relationship from entity" value={fromId} onChange={(e) => setFromId(e.target.value)} className="min-w-40 flex-1">
+                <Select aria-label={t('graph.relationshipFromEntity')} value={fromId} onChange={(e) => setFromId(e.target.value)} className="min-w-40 flex-1">
                   <option value="">From…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
                 <ArrowRight className="size-4 text-muted" />
-                <Select aria-label="Relationship to entity" value={toId} onChange={(e) => setToId(e.target.value)} className="min-w-40 flex-1">
+                <Select aria-label={t('graph.relationshipToEntity')} value={toId} onChange={(e) => setToId(e.target.value)} className="min-w-40 flex-1">
                   <option value="">To…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
@@ -189,7 +191,7 @@ export function GraphModule() {
                   {path ? (
                     <span className="font-mono text-xs leading-relaxed">{describePath(index, path)}</span>
                   ) : (
-                    <span className="text-muted">No relationship path found — try linking them.</span>
+                    <span className="text-muted">{t('graph.noRelationshipPathFoundTryLinking')}</span>
                   )}
                 </div>
               )}
@@ -203,9 +205,9 @@ export function GraphModule() {
                   <h3 className="text-base font-semibold">{selected.name}</h3>
                 </div>
 
-                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Directly connected</h4>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('graph.directlyConnected')}</h4>
                 {selectedNeighbours.length === 0 ? (
-                  <p className="text-sm text-muted">Not linked to anything yet.</p>
+                  <p className="text-sm text-muted">{t('graph.notLinkedToAnythingYet')}</p>
                 ) : (
                   <div className="mb-4 flex flex-wrap gap-2">
                     {selectedNeighbours.map((n, i) => (
@@ -222,10 +224,10 @@ export function GraphModule() {
                 )}
 
                 <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                  <Zap className="size-3.5" /> If this changes, it ripples to…
+                  <Zap className="size-3.5" /> {t('graph.ifThisChangesItRipplesTo')}
                 </h4>
                 {selectedImpact.length === 0 ? (
-                  <p className="text-sm text-muted">Nothing downstream — this is a leaf.</p>
+                  <p className="text-sm text-muted">{t('graph.nothingDownstreamThisIsALeaf')}</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {selectedImpact.map((imp) => (
@@ -242,7 +244,7 @@ export function GraphModule() {
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
-                Select an entity to see its connections and impact.
+                {t('graph.selectAnEntityToSeeIts')}
               </div>
             )}
           </div>
@@ -270,10 +272,11 @@ export function GraphModule() {
 }
 
 function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onRebuild: () => void; projecting: boolean }) {
+  const t = useTranslations();
   return (
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Network className="mx-auto mb-3 size-8 text-muted" />
-      <h3 className="mb-1 text-base font-semibold">Build your family&apos;s graph</h3>
+      <h3 className="mb-1 text-base font-semibold">{t('graph.buildYourFamilyAposSGraph')}</h3>
       <p className="mx-auto mb-4 max-w-md text-sm text-muted">
         Pull in the people, activities, schools, teams, vehicles and places you already track —
         or add them by hand. Once relationships are explicit, the AI can trace dependencies and
@@ -283,7 +286,7 @@ function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onReb
         <Button onClick={onRebuild} disabled={projecting}>
           <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Build from my family data'}
         </Button>
-        <Button variant="secondary" onClick={onAdd}><Plus className="size-4" /> Add manually</Button>
+        <Button variant="secondary" onClick={onAdd}><Plus className="size-4" /> {t('graph.addManually')}</Button>
       </div>
     </div>
   );
@@ -293,6 +296,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; onClose: () => void;
   onSaved: (name: string) => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [name, setName] = useState('');
   const [kind, setKind] = useState<EntityKind>('person');
   const [saving, setSaving] = useState(false);
@@ -308,16 +312,16 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
     onSaved(n);
   }
   return (
-    <Modal open onClose={onClose} title="Add entity">
+    <Modal open onClose={onClose} title={t('graph.addEntity')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's house…" autoFocus />}</Field>
-        <Field label="Kind">{(id) => (
+        <Field label={t('graph.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's house…" autoFocus />}</Field>
+        <Field label={t('graph.kind')}>{(id) => (
           <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as EntityKind)}>
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
           </Select>
         )}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('graph.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Adding…' : 'Add'}</Button>
         </div>
       </form>
@@ -329,6 +333,7 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
   familyId: string; userId: string | null; entities: GraphEntity[];
   onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [sourceId, setSourceId] = useState('');
   const [targetId, setTargetId] = useState('');
   const [relation, setRelation] = useState('');
@@ -351,26 +356,26 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
     onSaved();
   }
   return (
-    <Modal open onClose={onClose} title="Link two entities">
+    <Modal open onClose={onClose} title={t('graph.linkTwoEntities')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="From">{(id) => (
+        <Field label={t('graph.from')}>{(id) => (
           <Select id={id} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
             <option value="">Choose…</option>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </Select>
         )}</Field>
-        <Field label="Relationship">{(id) => <Input id={id} value={relation} onChange={(e) => setRelation(e.target.value)} placeholder="plays, at, coached_by, needs, affects…" />}</Field>
+        <Field label={t('graph.relationship')}>{(id) => <Input id={id} value={relation} onChange={(e) => setRelation(e.target.value)} placeholder={t('graph.playsAtCoachedByNeedsAffects')} />}</Field>
         <Field label="To">{(id) => (
           <Select id={id} value={targetId} onChange={(e) => setTargetId(e.target.value)}>
             <option value="">Choose…</option>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </Select>
         )}</Field>
-        <Field label="Strength (0–1) — how strongly a change propagates">{(id) => (
+        <Field label={t('graph.strength01HowStronglyA')}>{(id) => (
           <Input id={id} type="number" inputMode="decimal" min="0" max="1" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} />
         )}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('graph.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Linking…' : 'Link'}</Button>
         </div>
       </form>

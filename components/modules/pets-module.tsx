@@ -23,6 +23,7 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Pet = Tables<'pets'>;
 type CareRecord = Tables<'pet_care_records'>;
@@ -44,6 +45,7 @@ function fmtDate(d: string): string {
 }
 
 export function PetsModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -94,9 +96,9 @@ export function PetsModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Pets"
+        title={t('pets.pets')}
         description="Profiles and complete care operations for every family pet."
-        action={<div className="flex items-center gap-2"><AiInsight kind="pets" iconOnly /><Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> Add pet</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="pets" iconOnly /><Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> {t('pets.addPet')}</Button></div>}
       />
 
       {/* Care summary + AI recommendations */}
@@ -104,20 +106,20 @@ export function PetsModule() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarClock className="h-4 w-4 text-brand-text" /> Care status
+              <CalendarClock className="h-4 w-4 text-brand-text" /> {t('pets.careStatus')}
             </div>
             <p className={cn('mt-2 text-2xl font-bold', summary.overdue > 0 ? 'text-rose-300' : summary.dueSoon > 0 ? 'text-amber-300' : 'text-emerald-300')}>
               {summary.text}
             </p>
-            <p className="mt-1 text-xs text-muted">{pets.data.length} pet{pets.data.length === 1 ? '' : 's'} in your household</p>
+            <p className="mt-1 text-xs text-muted">{pets.data.length} pet{pets.data.length === 1 ? '' : 's'} {t('pets.inYourHousehold')}</p>
           </div>
 
           <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
             <div className="flex items-center gap-2 text-sm font-semibold text-brand-text">
-              <Sparkles className="h-4 w-4" /> Care needs
+              <Sparkles className="h-4 w-4" /> {t('pets.careNeeds')}
             </div>
             {recommendations.length === 0 ? (
-              <p className="mt-2 text-sm text-muted">Everything looks on track. New recommendations appear here as due dates approach.</p>
+              <p className="mt-2 text-sm text-muted">{t('pets.everythingLooksOnTrackNewRecommendations')}</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {recommendations.slice(0, 5).map((r, i) => {
@@ -142,7 +144,7 @@ export function PetsModule() {
 
       {/* Pet grid */}
       {pets.data.length === 0 ? (
-        <EmptyState icon={PawPrint} title="No pets yet" description="Add your first pet to track vaccinations, vet visits, medications, and grooming." />
+        <EmptyState icon={PawPrint} title={t('pets.noPetsYet')} description="Add your first pet to track vaccinations, vet visits, medications, and grooming." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.data.map((pet) => {
@@ -179,7 +181,7 @@ export function PetsModule() {
       {upcoming.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <CalendarClock className="h-4 w-4 text-brand-text" /> Upcoming care
+            <CalendarClock className="h-4 w-4 text-brand-text" /> {t('pets.upcomingCare')}
           </div>
           <ul className="space-y-2">
             {upcoming.map((u) => {
@@ -227,6 +229,7 @@ export function PetsModule() {
 }
 
 function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; userId: string; onClose: () => void; onSaved: () => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -256,29 +259,29 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
   }
 
   return (
-    <Modal open title="Add a pet" onClose={onClose}>
+    <Modal open title={t('pets.addAPet')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Buddy" />}</Field>
-          <Field label="Species">{(id) => <Select id={id} name="species" defaultValue="dog">{PET_SPECIES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}</Select>}</Field>
+          <Field label={t('pets.name')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={t('pets.buddy')} />}</Field>
+          <Field label={t('pets.species')}>{(id) => <Select id={id} name="species" defaultValue="dog">{PET_SPECIES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Breed">{(id) => <Input id={id} name="breed" placeholder="Labrador" />}</Field>
-          <Field label="Birthday">{(id) => <Input id={id} name="birthday" type="date" />}</Field>
+          <Field label={t('pets.breed')}>{(id) => <Input id={id} name="breed" placeholder={t('pets.labrador')} />}</Field>
+          <Field label={t('pets.birthday')}>{(id) => <Input id={id} name="birthday" type="date" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Weight (kg)">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" placeholder="12.5" />}</Field>
-          <Field label="Color">{(id) => <Input id={id} name="color" placeholder="Golden" />}</Field>
+          <Field label={t('pets.weightKg')}>{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" placeholder="12.5" />}</Field>
+          <Field label={t('pets.color')}>{(id) => <Input id={id} name="color" placeholder={t('pets.golden')} />}</Field>
         </div>
-        <Field label="Microchip ID">{(id) => <Input id={id} name="microchip_id" placeholder="Optional" />}</Field>
+        <Field label={t('pets.microchipId')}>{(id) => <Input id={id} name="microchip_id" placeholder={t('pets.optional')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Vet name">{(id) => <Input id={id} name="vet_name" placeholder="Dr. Smith" />}</Field>
-          <Field label="Vet phone">{(id) => <Input id={id} name="vet_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
+          <Field label={t('pets.vetName')}>{(id) => <Input id={id} name="vet_name" placeholder={t('pets.drSmith')} />}</Field>
+          <Field label={t('pets.vetPhone')}>{(id) => <Input id={id} name="vet_phone" type="tel" placeholder="(555) 000-0000" />}</Field>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Allergies, behavior, diet…" />}</Field>
+        <Field label={t('pets.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={t('pets.allergiesBehaviorDiet')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Add pet</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('pets.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('pets.addPet')}</Button>
         </div>
       </form>
     </Modal>
@@ -286,6 +289,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
 }
 
 function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: string; userId: string; pet: Pet; onClose: () => void; onSaved: () => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -316,19 +320,19 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
     <Modal open title={`Add care · ${pet.name}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Type">{(id) => <Select id={id} name="kind" defaultValue="vet_visit">{CARE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-          <Field label="Date">{(id) => <Input id={id} name="record_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
+          <Field label={t('pets.type')}>{(id) => <Select id={id} name="kind" defaultValue="vet_visit">{CARE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+          <Field label={t('pets.date')}>{(id) => <Input id={id} name="record_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
         </div>
-        <Field label="Title" required>{(id) => <Input id={id} name="title" autoFocus placeholder="Rabies booster" />}</Field>
+        <Field label={t('pets.title')} required>{(id) => <Input id={id} name="title" autoFocus placeholder={t('pets.rabiesBooster')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Next due" hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
-          <Field label="Dose / amount">{(id) => <Input id={id} name="dose" placeholder="1 tablet" />}</Field>
+          <Field label={t('pets.nextDue')} hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
+          <Field label={t('pets.doseAmount')}>{(id) => <Input id={id} name="dose" placeholder={t('pets.1Tablet')} />}</Field>
         </div>
-        <Field label="Weight (kg)" hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Vet remarks, reactions…" />}</Field>
+        <Field label={t('pets.weightKg')} hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
+        <Field label={t('pets.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={t('pets.vetRemarksReactions')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Save record</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('pets.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('pets.saveRecord')}</Button>
         </div>
       </form>
     </Modal>
@@ -338,6 +342,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday);
@@ -359,7 +364,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
               {age && <span>{age} old</span>}
               {pet.color && <span>{pet.color}</span>}
               {pet.weight_kg && <span>{pet.weight_kg} kg</span>}
-              {pet.microchip_id && <span>Chip {pet.microchip_id}</span>}
+              {pet.microchip_id && <span>{t('pets.chip')} {pet.microchip_id}</span>}
             </div>
           </div>
         </div>
@@ -376,11 +381,11 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Care history</h3>
-            <Button size="sm" variant="secondary" onClick={onAddCare}><Plus className="h-3.5 w-3.5" /> Add care</Button>
+            <h3 className="text-sm font-semibold">{t('pets.careHistory')}</h3>
+            <Button size="sm" variant="secondary" onClick={onAddCare}><Plus className="h-3.5 w-3.5" /> {t('pets.addCare')}</Button>
           </div>
           {sorted.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">No care records yet.</p>
+            <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{t('pets.noCareRecordsYet')}</p>
           ) : (
             <ul className="space-y-1.5">
               {sorted.map((r) => {
@@ -393,10 +398,10 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                       <p className="truncate text-sm font-medium">{r.title}</p>
                       <p className="text-xs text-muted">
                         {fmtDate(r.record_date)}{r.dose ? ` · ${r.dose}` : ''}
-                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>· next {fmtDate(r.next_due)}</span>}
+                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>{t('pets.next')} {fmtDate(r.next_due)}</span>}
                       </p>
                     </div>
-                    <button onClick={() => deleteRecord(r.id)} aria-label="Delete record" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
+                    <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>
@@ -407,8 +412,8 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
         </div>
 
         <div className="flex justify-between border-t border-border pt-3">
-          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> Remove pet</Button>
-          <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Close</Button>
+          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {t('pets.removePet')}</Button>
+          <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('pets.close')}</Button>
         </div>
       </div>
     </Modal>

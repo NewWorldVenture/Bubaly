@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/admin/users/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/admin/users/page.tsx');
 
 describe('admin users read boundary', () => {
   it('surfaces super-admin allowlist read failures instead of rendering a silent empty list', () => {

@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewCard, type ReviewItem } from './review-card';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Missions' };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const REVIEW_STATUSES = ['pending', 'ai_reviewed', 'needs_improvement', 'parent_review', 'disputed'];
 
 export default async function MissionsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -37,8 +39,8 @@ export default async function MissionsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Trophy className="h-5 w-5 text-brand-text" />
           <div>
-            <h1 className="text-lg font-bold">Family Missions</h1>
-            <p className="text-xs text-muted">Review proof, approve rewards, and keep chores fair.</p>
+            <h1 className="text-lg font-bold">{t('missions.familyMissions')}</h1>
+            <p className="text-xs text-muted">{t('missions.reviewProofApproveRewardsAndKeep')}</p>
           </div>
         </div>
         <ErrorState message="Couldn’t load the approval queue. Refresh and try again." />
@@ -105,33 +107,33 @@ export default async function MissionsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Trophy className="h-5 w-5 text-brand-text" />
         <div>
-          <h1 className="text-lg font-bold">Family Missions</h1>
-          <p className="text-xs text-muted">Review proof, approve rewards, and keep chores fair.</p>
+          <h1 className="text-lg font-bold">{t('missions.familyMissions')}</h1>
+          <p className="text-xs text-muted">{t('missions.reviewProofApproveRewardsAndKeep')}</p>
         </div>
         <Link href="/missions/new" className="ml-auto inline-flex h-9 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-medium text-brand-fg">
-          <Plus className="h-4 w-4" /> New mission
+          <Plus className="h-4 w-4" /> {t('missions.newMission')}
         </Link>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><p className="text-xs font-medium text-muted">Awaiting review</p><p className="mt-1 text-3xl font-bold leading-none">{items.length}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">Disputes</p><p className="mt-1 text-3xl font-bold leading-none">{disputeCount}</p></Card>
-        <Card><p className="text-xs font-medium text-muted">Safety flags</p><p className="mt-1 text-3xl font-bold leading-none">{safetyCount}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('missions.awaitingReview')}</p><p className="mt-1 text-3xl font-bold leading-none">{items.length}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('missions.disputes')}</p><p className="mt-1 text-3xl font-bold leading-none">{disputeCount}</p></Card>
+        <Card><p className="text-xs font-medium text-muted">{t('missions.safetyFlags')}</p><p className="mt-1 text-3xl font-bold leading-none">{safetyCount}</p></Card>
       </div>
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <ClipboardCheck className="h-4 w-4 text-brand-text" /> Approval queue
+          <ClipboardCheck className="h-4 w-4 text-brand-text" /> {t('missions.approvalQueue')}
         </h2>
         {items.length === 0 ? (
-          <EmptyState icon={Sparkles} title="All caught up! 🎉" description="No submissions are waiting for your review." />
+          <EmptyState icon={Sparkles} title={t('missions.allCaughtUp')} description="No submissions are waiting for your review." />
         ) : (
           <div className="space-y-3">{items.map((i) => <ReviewCard key={i.submissionId} item={i} />)}</div>
         )}
       </section>
 
       {safetyCount > 0 && (
-        <p className="flex items-center gap-2 text-xs text-warning"><AlertTriangle className="h-4 w-4" /> Some submissions have AI safety flags — please review those first.</p>
+        <p className="flex items-center gap-2 text-xs text-warning"><AlertTriangle className="h-4 w-4" /> {t('missions.someSubmissionsHaveAiSafetyFlags')}</p>
       )}
     </div>
   );

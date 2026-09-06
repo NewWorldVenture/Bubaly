@@ -19,6 +19,7 @@ import {
 } from '@/app/(app)/dashboard/concierge/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Run = {
   id: string; status: string; trigger_type: string | null; summary: string | null;
@@ -32,6 +33,7 @@ const LEVELS: { key: AutopilotLevel; label: string; hint: string; icon: typeof Z
 ];
 
 export function AutopilotPanel({ className }: { className?: string }) {
+  const t = useTranslations();
   const { familyId, role } = useApp();
   const { success, error: toastError } = useToast();
   const manager = isManager(role);
@@ -109,7 +111,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2 text-sm font-bold">
-            Autopilot
+            {t('autopilot.autopilot')}
             <span className={cn(
               'rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide',
               level === 'auto' ? 'bg-emerald-500/15 text-emerald-300'
@@ -138,7 +140,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
           {/* The dial */}
           <div>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-              When you accept a plan{manager ? '' : ' (parents/guardians can change this)'}
+              {t('autopilot.whenYouAcceptAPlan')}{manager ? '' : ' (parents/guardians can change this)'}
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {LEVELS.map((l) => (
@@ -164,7 +166,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
           {/* Waiting for approval */}
           {queued.length > 0 && (
             <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">Waiting for your OK</p>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">{t('autopilot.waitingForYourOk')}</p>
               <div className="space-y-1.5">
                 {queued.map((r) => (
                   <div key={r.id} className="flex items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] px-3 py-2">
@@ -195,7 +197,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
           {/* Done for you */}
           {executed.length > 0 && (
             <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Done for you</p>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{t('autopilot.doneForYou')}</p>
               <div className="space-y-1">
                 {executed.map((r) => (
                   <div key={r.id} className="flex items-start gap-2 rounded-lg px-1 py-1">

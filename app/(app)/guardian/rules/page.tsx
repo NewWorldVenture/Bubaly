@@ -4,11 +4,13 @@ import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RulesEditor } from '@/components/guardian/rules-editor';
 import { Zap, ArrowLeft } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Routing Rules · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function RulesPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -29,8 +31,8 @@ export default async function RulesPage() {
           <Zap className="h-5 w-5 text-amber-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">Routing Rules</h1>
-          <p className="text-sm text-muted">Deterministic rules that override AI decisions</p>
+          <h1 className="text-xl font-bold leading-tight">{t('guardianRules.routingRules')}</h1>
+          <p className="text-sm text-muted">{t('guardianRules.deterministicRulesThatOverrideAiDecisions')}</p>
         </div>
       </div>
 

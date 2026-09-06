@@ -15,6 +15,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Sparkline, Gauge, Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin Dashboard', robots: { index: false } };
 // Live, cross-family data via the service-role client — always render fresh.
@@ -34,6 +35,7 @@ function fmtBytes(bytes: number): string {
 }
 
 export default async function AdminDashboardPage() {
+  const tr = await getTranslations();
   // Service-role client: the one place that intentionally bypasses RLS, gated
   // entirely by the super-admin check in admin/layout.tsx.
   const supabase = createServiceClient();
@@ -94,11 +96,11 @@ export default async function AdminDashboardPage() {
     return (
       <div className="module-page space-y-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
         </div>
         <ErrorState message="Could not load the admin dashboard from Supabase. Refresh and try again." />
-        <a href="/admin" className="text-sm font-medium text-brand-text underline">Refresh admin dashboard</a>
+        <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
       </div>
     );
   }
@@ -215,11 +217,11 @@ export default async function AdminDashboardPage() {
     return (
       <div className="module-page space-y-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
         </div>
         <ErrorState message="Could not load recent activity details from Supabase. Refresh and try again." />
-        <a href="/admin" className="text-sm font-medium text-brand-text underline">Refresh admin dashboard</a>
+        <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
       </div>
     );
   }
@@ -229,39 +231,39 @@ export default async function AdminDashboardPage() {
   return (
     <div className="module-page space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
-        <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Main column */}
         <div className="space-y-4 lg:col-span-2">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label="Total Families" value={familyCount?.toLocaleString() ?? '0'} sub={`${newFamiliesThisMonth} new this month`} />
-            <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label="Active Users" value={userCount?.toLocaleString() ?? '0'} sub={`${newUsersThisMonth} new this month`} />
-            <StatCard icon={CreditCard} tint="text-emerald-400 bg-emerald-500/15" label="Subscriptions" value={activeSubCount?.toLocaleString() ?? '0'} sub={`${activeMemberCount?.toLocaleString() ?? 0} active members`} />
-            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label="Monthly Revenue" value={fmtMoney(monthlyRevenueCents)} sub={`from ${activeSubs.length} active plans`} />
+            <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label={tr('admin.totalFamilies')} value={familyCount?.toLocaleString() ?? '0'} sub={`${newFamiliesThisMonth} new this month`} />
+            <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label={tr('admin.activeUsers')} value={userCount?.toLocaleString() ?? '0'} sub={`${newUsersThisMonth} new this month`} />
+            <StatCard icon={CreditCard} tint="text-emerald-400 bg-emerald-500/15" label={tr('admin.subscriptions')} value={activeSubCount?.toLocaleString() ?? '0'} sub={`${activeMemberCount?.toLocaleString() ?? 0} active members`} />
+            <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={fmtMoney(monthlyRevenueCents)} sub={`from ${activeSubs.length} active plans`} />
           </div>
 
           {/* System overview */}
           <div className="grid gap-4 sm:grid-cols-3">
             <Card>
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold">User Growth</p>
+                <p className="text-sm font-semibold">{tr('admin.userGrowth')}</p>
                 <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"><TrendingUp className="h-3.5 w-3.5" />+{newUsers30}</span>
               </div>
               <Sparkline data={growthByDay} />
-              <p className="mt-2 text-xs text-muted">New users · last 30 days</p>
+              <p className="mt-2 text-xs text-muted">{tr('admin.newUsersLast30Days')}</p>
             </Card>
             <Card>
-              <p className="mb-2 text-sm font-semibold">System Health</p>
+              <p className="mb-2 text-sm font-semibold">{tr('admin.systemHealth')}</p>
               <div className="flex items-center justify-center py-1">
                 <Gauge pct={healthPct} color={healthPct >= 99 ? '#22c55e' : healthPct >= 80 ? '#f59e0b' : '#ef4444'} />
               </div>
-              <p className="mt-1 text-center text-xs text-muted">{operational}/{statuses.length} services operational</p>
+              <p className="mt-1 text-center text-xs text-muted">{operational}/{statuses.length} {tr('admin.servicesOperational')}</p>
             </Card>
             <Card>
-              <p className="mb-2 text-sm font-semibold">Storage Usage</p>
+              <p className="mb-2 text-sm font-semibold">{tr('admin.storageUsage')}</p>
               <div className="flex items-center justify-center py-1">
                 <Gauge pct={storagePct} color="#7c5dff" centerLabel={fmtBytes(usedBytes)} />
               </div>
@@ -272,11 +274,11 @@ export default async function AdminDashboardPage() {
           {/* Recent activities */}
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-base font-semibold"><Activity className="h-4 w-4 text-muted" /> Recent Activities</h2>
-              <Link href="/admin/audit" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
+              <h2 className="flex items-center gap-2 text-base font-semibold"><Activity className="h-4 w-4 text-muted" /> {tr('admin.recentActivities')}</h2>
+              <Link href="/admin/audit" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.viewAll')}</Link>
             </div>
             {!recentLogs || recentLogs.length === 0 ? (
-              <EmptyState icon={Activity} title="No activity recorded yet" />
+              <EmptyState icon={Activity} title={tr('admin.noActivityRecordedYet')} />
             ) : (
               <ul className="space-y-1.5">
                 {recentLogs.map((log) => {
@@ -303,7 +305,7 @@ export default async function AdminDashboardPage() {
         <div className="space-y-4">
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">System Status</h2>
+              <h2 className="text-base font-semibold">{tr('admin.systemStatus')}</h2>
               <Badge tone={operational === statuses.length ? 'success' : 'danger'}>{operational === statuses.length ? 'All systems go' : 'Degraded'}</Badge>
             </div>
             <ul className="space-y-2.5">
@@ -323,17 +325,17 @@ export default async function AdminDashboardPage() {
           <Card>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <Bell className="h-4 w-4 text-muted" /> Notifications
+                <Bell className="h-4 w-4 text-muted" /> {tr('admin.notifications')}
                 {unreadNotes > 0 && (
                   <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
                     {unreadNotes > 99 ? '99+' : unreadNotes}
                   </span>
                 )}
               </h2>
-              <Link href="/admin/notifications" className="text-xs font-medium text-brand-text hover:underline">See all</Link>
+              <Link href="/admin/notifications" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.seeAll')}</Link>
             </div>
             {notifications.length === 0 ? (
-              <EmptyState icon={Bell} title="You’re all caught up" />
+              <EmptyState icon={Bell} title={tr('admin.youreAllCaughtUp')} />
             ) : (
               <ul className="space-y-1.5">
                 {notifications.map((n) => {
@@ -361,11 +363,11 @@ export default async function AdminDashboardPage() {
 
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Top Families</h2>
-              <Link href="/admin/users" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
+              <h2 className="text-base font-semibold">{tr('admin.topFamilies')}</h2>
+              <Link href="/admin/users" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.viewAll')}</Link>
             </div>
             {topFamilies.length === 0 ? (
-              <EmptyState icon={Home} title="No families yet" />
+              <EmptyState icon={Home} title={tr('admin.noFamiliesYet')} />
             ) : (
               <ul className="space-y-2.5">
                 {topFamilies.map((f, i) => (
@@ -385,9 +387,9 @@ export default async function AdminDashboardPage() {
       {/* Bottom row: overviews + quick actions */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Plan Distribution</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('admin.planDistribution')}</h2>
           {subSegments.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No families yet" />
+            <EmptyState icon={CreditCard} title={tr('admin.noFamiliesYet')} />
           ) : (
             <div className="flex items-center gap-4">
               <Donut segments={subSegments} total={totalFamiliesForDonut} />
@@ -405,15 +407,15 @@ export default async function AdminDashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Revenue Overview</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('admin.revenueOverview')}</h2>
           <Bars data={months.map((m) => ({ label: m.label, value: m.cents }))} max={maxRevenue} money />
-          <p className="mt-2 text-xs text-muted">New MRR · last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('admin.newMrrLast6Months')}</p>
         </Card>
 
         <Card>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-semibold"><LifeBuoy className="h-4 w-4 text-muted" /> Support Overview</h2>
-            <Link href="/admin/support" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
+            <h2 className="flex items-center gap-2 text-base font-semibold"><LifeBuoy className="h-4 w-4 text-muted" /> {tr('admin.supportOverview')}</h2>
+            <Link href="/admin/support" className="text-xs font-medium text-brand-text hover:underline">{tr('admin.viewAll')}</Link>
           </div>
           <ul className="space-y-2.5">
             {[
@@ -430,7 +432,7 @@ export default async function AdminDashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Quick Actions</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('admin.quickActions')}</h2>
           <div className="grid grid-cols-2 gap-2">
             {[
               { href: '/admin/users', label: 'Users', icon: UsersRound },

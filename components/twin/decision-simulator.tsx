@@ -7,6 +7,7 @@ import {
 import { simulateDecisionAction, type SimFormInput } from '@/app/(app)/dashboard/family-digital-twin/actions';
 import type { SimResult, Verdict } from '@/lib/twin/simulate';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = { id: string; display_name: string };
 
@@ -25,6 +26,7 @@ const SEV_ICON = {
 // The Household Digital Twin's decision simulator — "if we do X, what moves?"
 // Safe what-if: runs against real family data, writes nothing.
 export function DecisionSimulator({ members, budgetCategories }: { members: Member[]; budgetCategories: string[] }) {
+  const t = useTranslations();
   const [tab, setTab] = useState<'commitment' | 'spend'>('commitment');
   const [result, setResult] = useState<SimResult | null>(null);
   const [pending, start] = useTransition();
@@ -67,8 +69,8 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
       <div className="mb-3 flex items-center gap-2">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand/15 text-brand-text"><FlaskConical className="h-4 w-4" /></span>
         <div>
-          <h2 className="text-sm font-semibold">Decision simulator</h2>
-          <p className="text-xs text-muted">Try a decision before you make it — nothing is saved.</p>
+          <h2 className="text-sm font-semibold">{t('decisionSimulator.decisionSimulator')}</h2>
+          <p className="text-xs text-muted">{t('decisionSimulator.tryADecisionBeforeYouMake')}</p>
         </div>
       </div>
 
@@ -77,13 +79,13 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
           onClick={() => { setTab('commitment'); setResult(null); }}
           className={cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition', tab === 'commitment' ? 'bg-brand text-white' : 'text-muted hover:text-fg')}
         >
-          <CalendarPlus className="h-3.5 w-3.5" /> Add a commitment
+          <CalendarPlus className="h-3.5 w-3.5" /> {t('decisionSimulator.addACommitment')}
         </button>
         <button
           onClick={() => { setTab('spend'); setResult(null); }}
           className={cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition', tab === 'spend' ? 'bg-brand text-white' : 'text-muted hover:text-fg')}
         >
-          <Wallet className="h-3.5 w-3.5" /> A big spend
+          <Wallet className="h-3.5 w-3.5" /> {t('decisionSimulator.aBigSpend')}
         </button>
       </div>
 
@@ -94,40 +96,40 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           </label>
-          <label className="text-xs font-medium text-muted">What
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Soccer tournament" className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
+          <label className="text-xs font-medium text-muted">{t('decisionSimulator.what')}
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('decisionSimulator.soccerTournament')} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
           </label>
           <label className="text-xs font-medium text-muted">Day
             <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs font-medium text-muted">Start
+            <label className="text-xs font-medium text-muted">{t('decisionSimulator.start')}
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
             </label>
-            <label className="text-xs font-medium text-muted">Minutes
+            <label className="text-xs font-medium text-muted">{t('decisionSimulator.minutes')}
               <input type="number" min={15} step={15} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
             </label>
           </div>
-          <label className="text-xs font-medium text-muted">Repeat for (weeks)
+          <label className="text-xs font-medium text-muted">{t('decisionSimulator.repeatForWeeks')}
             <input type="number" min={1} max={52} value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
           </label>
         </div>
       ) : (
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <label className="text-xs font-medium text-muted">Budget
+          <label className="text-xs font-medium text-muted">{t('decisionSimulator.budget')}
             {budgetCategories.length > 0 ? (
               <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg">
                 {budgetCategories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             ) : (
-              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Vacation" className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
+              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('decisionSimulator.vacation')} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
             )}
           </label>
-          <label className="text-xs font-medium text-muted">Amount ($)
+          <label className="text-xs font-medium text-muted">{t('decisionSimulator.amount')}
             <input type="number" min={0} step={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="400" className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
           </label>
-          <label className="text-xs font-medium text-muted sm:col-span-2">What for (optional)
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Two extra nights" className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
+          <label className="text-xs font-medium text-muted sm:col-span-2">{t('decisionSimulator.whatForOptional')}
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('decisionSimulator.twoExtraNights')} className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-fg" />
           </label>
         </div>
       )}
@@ -138,7 +140,7 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
         className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60"
       >
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-        Simulate
+        {t('decisionSimulator.simulate')}
       </button>
 
       {result && v && (
@@ -161,7 +163,7 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
           )}
           {result.verdict === 'conflict' && (
             <a href="/dashboard/calendar" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-              Open the calendar to rearrange <ArrowRight className="h-3 w-3" />
+              {t('decisionSimulator.openTheCalendarToRearrange')} <ArrowRight className="h-3 w-3" />
             </a>
           )}
         </div>

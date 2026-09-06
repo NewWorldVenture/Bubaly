@@ -11,6 +11,7 @@ import {
 } from '@/lib/marketing/crm';
 import type { Tables } from '@/lib/database.types';
 import { saveDealAction, setDealStageAction, deleteDealAction } from '../crm/actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sales Pipeline', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,7 @@ const STAGE_TINT: Record<DealStage, string> = {
 };
 
 export default async function PipelinePage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [dealsResult, contactsResult] = await Promise.all([
     supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).limit(500),
@@ -54,7 +56,7 @@ export default async function PipelinePage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Track every opportunity from lead to close — forecast revenue with weighted pipeline value.</p>
+      <p className="text-sm text-muted">{t('adminMarketingPipeline.trackEveryOpportunityFromLeadTo')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -67,19 +69,19 @@ export default async function PipelinePage() {
 
       {/* Add deal */}
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Add a deal</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('adminMarketingPipeline.addADeal')}</h2>
         <form action={saveDealAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="name" required placeholder="Deal name" className={`${inputCls} lg:col-span-2`} />
-          <input name="amount" type="number" min="0" step="0.01" placeholder="Amount ($)" className={inputCls} />
+          <input name="name" required placeholder={t('adminMarketingPipeline.dealName')} className={`${inputCls} lg:col-span-2`} />
+          <input name="amount" type="number" min="0" step="0.01" placeholder={t('adminMarketingPipeline.amount')} className={inputCls} />
           <select name="stage" defaultValue="lead" className={inputCls}>
             {DEAL_STAGES.map((s) => <option key={s} value={s}>{DEAL_STAGE_LABELS[s]}</option>)}
           </select>
           <select name="contact_id" defaultValue="" className={`${inputCls} lg:col-span-2`}>
-            <option value="">No contact</option>
+            <option value="">{t('adminMarketingPipeline.noContact')}</option>
             {contactList.map((c) => <option key={c.id} value={c.id}>{contactDisplayName(c)}</option>)}
           </select>
           <input name="close_date" type="date" className={inputCls} />
-          <button type="submit" className={btnCls}>Add deal</button>
+          <button type="submit" className={btnCls}>{t('adminMarketingPipeline.addDeal')}</button>
         </form>
       </Card>
 

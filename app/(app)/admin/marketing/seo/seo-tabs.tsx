@@ -6,16 +6,18 @@
 // is instant with no refetch.
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type SeoTab = { id: string; label: string; count?: number; panel: ReactNode };
 
 export function SeoTabs({ tabs }: { tabs: SeoTab[] }) {
+  const tr = useTranslations();
   const [active, setActive] = useState(tabs[0]?.id ?? '');
   const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
   return (
     <div>
-      <div role="tablist" aria-label="SEO sections" className="flex flex-wrap gap-1 border-b border-border">
+      <div role="tablist" aria-label={tr('adminMarketingSeoSeoTabs.seoSections')} className="flex flex-wrap gap-1 border-b border-border">
         {tabs.map((t) => {
           const selected = t.id === current?.id;
           return (

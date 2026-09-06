@@ -11,6 +11,7 @@ import { ROLE_LABELS, isManager } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
 import { SidebarAccount } from './sidebar-account';
@@ -34,6 +35,7 @@ import { setActiveFamilyAction } from '@/app/(app)/actions';
  *  its existing `?q=` deep-link (the assistant auto-sends and strips the param),
  *  so "Ask anything…" is a real entry point, not decoration. */
 function HeaderSearch() {
+  const t = useTranslations();
   const router = useRouter();
   const [q, setQ] = useState('');
 
@@ -56,15 +58,16 @@ function HeaderSearch() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         enterKeyHint="search"
-        aria-label="Ask the AI assistant"
+        aria-label={t('shell.askAssistant')}
         className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted"
-        placeholder="Ask anything..."
+        placeholder={t('shell.askPlaceholder')}
       />
     </form>
   );
 }
 
 function FamilySwitcher() {
+  const t = useTranslations();
   const { family, families, role, planLevel } = useApp();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -112,7 +115,7 @@ function FamilySwitcher() {
               onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-muted hover:bg-elevated"
             >
-              <Plus className="h-4 w-4" /> New family
+              <Plus className="h-4 w-4" /> {t('shell.newFamily')}
             </Link>
           </div>
         </>
@@ -122,6 +125,7 @@ function FamilySwitcher() {
 }
 
 function UserMenu() {
+  const t = useTranslations();
   const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard, family, families } = useApp();
   const [open, setOpen] = useState(false);
   const [switching, startSwitch] = useTransition();
@@ -148,7 +152,7 @@ function UserMenu() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center rounded-full focus-ring"
-        aria-label="Account menu"
+        aria-label={t('nav.accountMenu')}
       >
         <Avatar name={name} color={selfMember?.color} size={36} className="sm:h-10 sm:w-10" />
       </button>
@@ -161,7 +165,7 @@ function UserMenu() {
               <p className="truncate text-xs text-muted">{userEmail}</p>
             </div>
             <div className="my-1 h-px bg-border" />
-            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Dashboard</p>
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('nav.dashboard')}</p>
             {/* Home is the default post-login landing. */}
             <Link
               href="/home"
@@ -169,8 +173,8 @@ function UserMenu() {
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated"
             >
               <Home className="h-4 w-4 text-muted" />
-              <span className="flex-1 truncate">Home</span>
-              <span className="text-[10px] font-semibold uppercase text-muted">Default</span>
+              <span className="flex-1 truncate">{t('nav.home')}</span>
+              <span className="text-[10px] font-semibold uppercase text-muted">{t('shell.default')}</span>
               {pathname === '/home' && <Check className="h-4 w-4 text-brand-text" />}
             </Link>
             {DASHBOARD_VIEWS.map((view) => {
@@ -192,7 +196,7 @@ function UserMenu() {
             <div className="my-1 h-px bg-border" />
             {families.length > 1 && (
               <>
-                <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Family</p>
+                <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('nav.family')}</p>
                 {families.map((f) => (
                   <button
                     key={f.familyId}
@@ -206,30 +210,30 @@ function UserMenu() {
                   </button>
                 ))}
                 <Link href="/dashboard/settings#families" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-elevated">
-                  <Plus className="h-4 w-4" /> New family
+                  <Plus className="h-4 w-4" /> {t('shell.newFamily')}
                 </Link>
                 <div className="my-1 h-px bg-border" />
               </>
             )}
             {isSuperAdmin && (
               <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand-text hover:bg-elevated">
-                <ShieldCheck className="h-4 w-4" /> Site Admin
+                <ShieldCheck className="h-4 w-4" /> {t('shell.siteAdmin')}
               </Link>
             )}
             <Link href="/dashboard/profile" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-              <UserCog className="h-4 w-4" /> Profile
+              <UserCog className="h-4 w-4" /> {t('shell.profile')}
             </Link>
             <Link href="/dashboard/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-              <SettingsIcon className="h-4 w-4" /> Settings
+              <SettingsIcon className="h-4 w-4" /> {t('shell.settings')}
             </Link>
             <div className="my-1 h-px bg-border" />
-            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Theme</p>
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('shell.theme')}</p>
             <div className="px-2 pb-1">
               <ThemeSwitch />
             </div>
             <div className="my-1 h-px bg-border" />
             <SignOutButton className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut className="h-4 w-4" /> {t('shell.signOut')}
             </SignOutButton>
           </div>
         </>
@@ -320,6 +324,7 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useTranslations();
   const pathname = usePathname();
   const { planLevel, isSuperAdmin, featureTiers, role, demo } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
@@ -362,7 +367,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            aria-label="Open menu"
+            aria-label={t('nav.openMenu')}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-fg transition hover:bg-elevated lg:hidden"
           >
             <Menu className="h-6 w-6" />
@@ -377,7 +382,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Nudge the search bar left of the action cluster for breathing room. */}
           <div className="hidden md:block md:w-4 lg:w-10" aria-hidden />
           <BlogLauncher />
-          <Link href="/feedback" aria-label="Share an idea" title="Share an idea" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
+          <Link href="/feedback" aria-label={t('shell.shareIdea')} title={t('shell.shareIdea')} className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
           <NotificationBell />
@@ -405,14 +410,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             style={{ paddingTop: 'var(--safe-top)', paddingLeft: 'var(--safe-left)', paddingBottom: 'var(--safe-bottom)' }}
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation menu"
+            aria-label={t('nav.navigationMenu')}
           >
             <div className="flex items-center justify-between px-4 py-4">
               <Logo href="/home" markVariant="home" />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
-                aria-label="Close menu"
+                aria-label={t('nav.closeMenu')}
                 className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg"
               >
                 <X className="h-5 w-5" />
@@ -439,7 +444,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  aria-label="Capture"
+                  aria-label={t('shell.capture')}
                   className="relative -mt-5 flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/30 text-white transition hover:scale-105 active:scale-95"
                 >
                   <item.icon className="h-6 w-6" />

@@ -11,8 +11,10 @@ import { Check, ShieldCheck, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { ApprovalCard, type ApprovalCardResult } from '@/components/approvals/approval-card';
 import { runHref, type ApprovalResultCard } from '@/lib/ai/result-cards';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ApprovalResultCardView({ card, compact = false, canDecide, className }: { card: ApprovalResultCard; compact?: boolean; canDecide: boolean; className?: string }) {
+  const t = useTranslations();
   const [result, setResult] = useState<ApprovalCardResult | null>(null);
 
   if (result && result.decision !== 'pending') {
@@ -27,7 +29,7 @@ export function ApprovalResultCardView({ card, compact = false, canDecide, class
           <p className="text-xs text-muted">{result.summary}</p>
           {result.resumedRunId && (
             <Link href={runHref(result.resumedRunId)} className="focus-ring coarse:min-h-11 mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-text">
-              <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Follow along
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {t('approval.followAlong')}
             </Link>
           )}
         </div>

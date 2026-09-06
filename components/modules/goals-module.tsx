@@ -19,10 +19,12 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Goal = Tables<'goals'>;
 
 export function GoalsModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -70,14 +72,14 @@ export function GoalsModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Goals"
+        title={t('goals.familyGoals')}
         description="Set goals, track progress, and celebrate achievements together."
-        action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button></div>}
       />
 
       {data.length === 0 ? (
-        <EmptyState icon={Target} title="No goals yet" description="Set a family goal — save for a trip, read more books, exercise together."
-          action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button>} />
+        <EmptyState icon={Target} title={t('goals.noGoalsYet')} description="Set a family goal — save for a trip, read more books, exercise together."
+          action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button>} />
       ) : (
         <>
           {active.length > 0 && (
@@ -90,7 +92,7 @@ export function GoalsModule() {
 
           {completed.length > 0 && (
             <div>
-              <h2 className="mb-3 text-sm font-semibold text-muted">Completed</h2>
+              <h2 className="mb-3 text-sm font-semibold text-muted">{t('goals.completed')}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {completed.map((g) => (
                   <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
@@ -121,6 +123,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   onDelete: (id: string) => void;
   onProgress: (g: Goal, progress: number) => void;
 }) {
+  const t = useTranslations();
   return (
     <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
       <div className="flex items-start justify-between gap-2">
@@ -136,7 +139,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
             <p className="mt-1 text-xs text-muted">Target: {fmtDate(goal.target_date)}</p>
           )}
         </div>
-        <button onClick={() => onDelete(goal.id)} disabled={pending} className="rounded-lg p-1.5 text-muted transition hover:text-danger disabled:opacity-50" aria-label="Delete">
+        <button onClick={() => onDelete(goal.id)} disabled={pending} className="rounded-lg p-1.5 text-muted transition hover:text-danger disabled:opacity-50" aria-label={t('goals.delete')}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
         </button>
       </div>
@@ -144,7 +147,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
       {/* Progress bar */}
       <div>
         <div className="mb-1 flex items-center justify-between text-xs text-muted">
-          <span>Progress</span>
+          <span>{t('goals.progress')}</span>
           <span>{goal.progress}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-elevated">
@@ -179,6 +182,7 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
   goal: Goal | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -217,17 +221,17 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
   return (
     <Modal open onClose={onClose} title={goal ? 'Edit goal' : 'New family goal'}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Goal" required>
-          {(id) => <Input id={id} name="title" defaultValue={goal?.title ?? ''} placeholder="Save for a family vacation" autoFocus />}
+        <Field label={t('goals.goal')} required>
+          {(id) => <Input id={id} name="title" defaultValue={goal?.title ?? ''} placeholder={t('goals.saveForAFamilyVacation')} autoFocus />}
         </Field>
-        <Field label="Description">
-          {(id) => <Textarea id={id} name="description" defaultValue={goal?.description ?? ''} placeholder="Details about this goal…" />}
+        <Field label={t('goals.description')}>
+          {(id) => <Textarea id={id} name="description" defaultValue={goal?.description ?? ''} placeholder={t('goals.detailsAboutThisGoal')} />}
         </Field>
-        <Field label="Target date">
+        <Field label={t('goals.targetDate')}>
           {(id) => <Input id={id} name="target_date" type="date" defaultValue={goal?.target_date ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('goals.cancel')}</Button>
           <Button type="submit" loading={loading}>{goal ? 'Save' : 'Create goal'}</Button>
         </div>
       </form>

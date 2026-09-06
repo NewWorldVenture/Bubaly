@@ -14,6 +14,7 @@ import { createPortal, useFormStatus } from 'react-dom';
 import { demoSecondsLeft, formatCountdown, DEMO_TTL_MINUTES } from '@/lib/demo/config';
 import { endDemoAction, startDemoClockAction, choosePlanAfterDemoAction } from '@/app/(marketing)/demo/actions';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ── Shared blur backdrop ─────────────────────────────────────────────────────
 // Portaled to <body> so it escapes the header's stacking context and sits above
@@ -36,6 +37,7 @@ function BlurOverlay({ children }: { children: React.ReactNode }) {
 
 // ── 1. Email capture ─────────────────────────────────────────────────────────
 function GateButton() {
+  const tr = useTranslations();
   const { pending } = useFormStatus();
   return (
     <button
@@ -44,27 +46,28 @@ function GateButton() {
       className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-white shadow-glow transition hover:opacity-90 disabled:opacity-70"
     >
       {pending
-        ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting your demo…</>
-        : <>Start my {DEMO_TTL_MINUTES}-minute demo <ArrowRight className="h-4 w-4" /></>}
+        ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('demoExperience.startingYourDemo')}</>
+        : <>{tr('demoExperience.startMy')} {DEMO_TTL_MINUTES}{tr('demoExperience.minuteDemo')} <ArrowRight className="h-4 w-4" /></>}
     </button>
   );
 }
 
 /** The email-capture pop-up shown before the demo clock starts. */
 export function DemoEmailGate() {
+  const tr = useTranslations();
   return (
     <BlurOverlay>
       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-400/30">
         <Mail className="h-6 w-6 text-emerald-400" />
       </div>
-      <h2 className="mt-4 text-2xl font-black">You&apos;re in — one last thing</h2>
+      <h2 className="mt-4 text-2xl font-black">{tr('demoExperience.youAposReInOneLast')}</h2>
       <p className="mt-2 text-sm text-white/65">
-        Drop your email and we&apos;ll unlock your live Family+ demo. You&apos;ll have{' '}
-        {DEMO_TTL_MINUTES} minutes to add, edit and delete real data — everything resets when you leave.
+        {tr('demoExperience.dropYourEmailAndWeApos')}{' '}
+        {DEMO_TTL_MINUTES} {tr('demoExperience.minutesToAddEditAndDelete')}
       </p>
 
       <form action={startDemoClockAction} className="mt-5">
-        <label htmlFor="demo-email" className="sr-only">Email address</label>
+        <label htmlFor="demo-email" className="sr-only">{tr('demoExperience.emailAddress')}</label>
         <input
           id="demo-email"
           name="email"
@@ -87,7 +90,7 @@ export function DemoEmailGate() {
       <OAuthButtons next="/dashboard" />
 
       <p className="mt-3 text-center text-xs text-white/45">
-        No spam, no card. Your {DEMO_TTL_MINUTES}-minute clock starts the moment you continue.
+        {tr('demoExperience.noSpamNoCardYour')} {DEMO_TTL_MINUTES}{tr('demoExperience.minuteClockStartsTheMomentYou')}
       </p>
     </BlurOverlay>
   );
@@ -101,6 +104,7 @@ export function DemoEmailGate() {
  * positioning) so it sits naturally in the header's empty left slot.
  */
 export function DemoClockPill({ expiresAt }: { expiresAt: string }) {
+  const tr = useTranslations();
   const [left, setLeft] = useState(() => demoSecondsLeft(expiresAt));
   const [pending, startTransition] = useTransition();
   const [exiting, setExiting] = useState(false);
@@ -138,7 +142,7 @@ export function DemoClockPill({ expiresAt }: { expiresAt: string }) {
           (urgent ? 'bg-danger' : 'bg-gradient-to-r from-brand to-violet-600')
         }
       >
-        <Sparkles className="h-3 w-3" /> Demo
+        <Sparkles className="h-3 w-3" /> {tr('demoExperience.demo')}
       </span>
 
       {/* Countdown */}
@@ -153,7 +157,7 @@ export function DemoClockPill({ expiresAt }: { expiresAt: string }) {
         type="button"
         onClick={exit}
         disabled={pending || exiting}
-        aria-label="Exit demo"
+        aria-label={tr('demoExperience.exitDemo')}
         className="ml-0.5 inline-flex items-center gap-1 rounded-full bg-fg/10 px-2 py-0.5 text-[11px] font-semibold text-fg/80 transition hover:bg-fg/20 disabled:opacity-60"
       >
         <LogOut className="h-3 w-3" /> <span className="hidden sm:inline">{exiting ? 'Exiting…' : 'Exit'}</span>
@@ -196,12 +200,13 @@ function PlanRow({ plan, title, blurb, icon, featured }: (typeof END_PLANS)[numb
 }
 
 function DemoEnded() {
+  const tr = useTranslations();
   return (
     <BlurOverlay>
       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
         <Clock className="h-6 w-6 text-brand-text" />
       </div>
-      <h2 className="mt-4 text-2xl font-black">Your {DEMO_TTL_MINUTES} minutes are up ⏱️</h2>
+      <h2 className="mt-4 text-2xl font-black">{tr('demoExperience.your')} {DEMO_TTL_MINUTES} {tr('demoExperience.minutesAreUp')}</h2>
       <p className="mt-2 text-sm text-white/65">
         Hope you loved it. Make it your family&apos;s — pick a plan to keep going. Your demo data resets, but a real account starts fresh and stays.
       </p>

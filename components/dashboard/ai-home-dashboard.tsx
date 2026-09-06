@@ -40,6 +40,7 @@ import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { CircleCheck, Circle, Utensils } from 'lucide-react';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
 import { InsightHero } from '@/components/dashboard/insight-hero';
+import { getTranslations } from '@/lib/i18n/server';
 
 function greeting() {
   const h = new Date().getHours();
@@ -53,6 +54,7 @@ function todayLabel() {
 }
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
+  const t = await getTranslations();
   const familyId = ctx.active.familyId;
   const me = ctx.active.member;
   const myMemberId = me.id;
@@ -405,7 +407,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{greeting()}, {name.split(' ')[0]}.</h1>
         </div>
         <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
-          <Sparkles className="h-3.5 w-3.5" /> Ask AI
+          <Sparkles className="h-3.5 w-3.5" /> {t('aiHomeDashboard.askAi')}
         </Link>
       </div>
 
@@ -422,7 +424,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-500/15 text-rose-300"><Heart className="h-5 w-5" /></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{relReminder.title} {formatCountdown(relReminder.days).toLowerCase()}</p>
-            <p className="truncate text-xs text-muted">{milestoneLabel(relReminder) ?? 'Plan something special'} · tap for gift ideas</p>
+            <p className="truncate text-xs text-muted">{milestoneLabel(relReminder) ?? 'Plan something special'} {t('aiHomeDashboard.tapForGiftIdeas')}</p>
           </div>
           <Sparkles className="h-4 w-4 shrink-0 text-rose-300" />
         </Link>
@@ -450,8 +452,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                 <Rocket className="h-5 w-5 text-brand-text" />
               </div>
               <div>
-                <p className="text-sm font-bold">Family Autopilot</p>
-                <p className="text-xs text-muted">Bubaly is watching over today</p>
+                <p className="text-sm font-bold">{t('aiHomeDashboard.familyAutopilot')}</p>
+                <p className="text-xs text-muted">{t('aiHomeDashboard.bubalyIsWatchingOverToday')}</p>
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-brand-text" />
@@ -461,7 +463,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <div className="flex items-center gap-2">
               <Gauge className={cn('h-4 w-4', autopilotProbability >= 85 ? 'text-emerald-400' : autopilotProbability >= 60 ? 'text-amber-400' : 'text-rose-400')} />
               <span className="text-lg font-black">{autopilotProbability}%</span>
-              <span className="text-[11px] text-muted">on track</span>
+              <span className="text-[11px] text-muted">{t('aiHomeDashboard.onTrack')}</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
@@ -472,7 +474,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-amber-400" />
                 <span className="text-lg font-black">{openSuggestions.length}</span>
-                <span className="text-[11px] text-muted">to review</span>
+                <span className="text-[11px] text-muted">{t('aiHomeDashboard.toReview')}</span>
               </div>
             )}
           </div>
@@ -498,7 +500,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <PhoneCall className="h-5 w-5 text-green-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold">Front Desk</p>
+            <p className="text-sm font-semibold">{t('aiHomeDashboard.frontDesk')}</p>
             <p className="truncate text-xs text-muted">
               {(unreadCallsCount ?? 0) > 0 ? `${unreadCallsCount} new call${unreadCallsCount === 1 ? '' : 's'}` : 'All calls handled'}
             </p>
@@ -515,7 +517,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <MessageSquare className="h-5 w-5 text-blue-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold">Inbox</p>
+            <p className="text-sm font-semibold">{t('aiHomeDashboard.inbox')}</p>
             <p className="text-xs text-muted">
               {(unreadCommsCount ?? 0) > 0 ? `${unreadCommsCount} unread` : 'No new messages'}
             </p>
@@ -532,7 +534,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <Plane className="h-5 w-5 text-violet-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold">Concierge</p>
+            <p className="text-sm font-semibold">{t('aiHomeDashboard.concierge')}</p>
             <p className="truncate text-xs text-muted">
               {concierge.length > 0 ? concierge[0].title : 'Plan something fun'}
             </p>
@@ -559,15 +561,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sun className="h-4 w-4 text-amber-400" aria-hidden />
-            <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Today</h2>
+            <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">{t('aiHomeDashboard.today')}</h2>
           </div>
-          <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
+          <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.viewAll')}</Link>
         </div>
         {!hasEvents && (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">A clear day — nothing scheduled and nothing due.</p>
+          <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">{t('aiHomeDashboard.aClearDayNothingScheduledAnd')}</p>
         )}
         {today.schedule.length > 0 && (
-          <ul className="space-y-2" aria-label="Today's schedule">
+          <ul className="space-y-2" aria-label={t('aiHomeDashboard.todaysSchedule')}>
             {today.schedule.map((item) => (
               <li key={item.key}>
                 <Link href={item.href} className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 transition hover:bg-elevated focus-ring">
@@ -584,7 +586,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           </ul>
         )}
         {today.tasks.length > 0 && (
-          <ul className="space-y-1.5" aria-label="Due today">
+          <ul className="space-y-1.5" aria-label={t('aiHomeDashboard.dueToday')}>
             {today.tasks.map((item) => {
               const overdue = item.bucket === 'overdue';
               return (
@@ -607,9 +609,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Coming Up</h2>
+              <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">{t('aiHomeDashboard.comingUp')}</h2>
             </div>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">Calendar</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.calendar')}</Link>
           </div>
           <div className="space-y-1.5">
             {upcomingItems.map((item) => (
@@ -663,7 +665,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${homeBrief.readinessPct}%` }} />
             </div>
             {homeBrief.timeSavedMinutes > 0 && (
-              <p className="mt-2 text-xs text-muted">Bubaly’s already saved you ~{homeBrief.timeSavedMinutes} min of planning this week.</p>
+              <p className="mt-2 text-xs text-muted">{t('aiHomeDashboard.bubalysAlreadySavedYou')}{homeBrief.timeSavedMinutes} {t('aiHomeDashboard.minOfPlanningThisWeek')}</p>
             )}
           </div>
 
@@ -689,8 +691,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           {homeBrief.dinnerIdeas.length > 0 && (
             <div className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className="mb-2 flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> Dinner ideas for this week</p>
-                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text hover:underline">Plan meals</Link>
+                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> {t('aiHomeDashboard.dinnerIdeasForThisWeek')}</p>
+                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.planMeals')}</Link>
               </div>
               <ul className="space-y-1.5 text-sm">
                 {homeBrief.dinnerIdeas.map((d) => (
@@ -712,8 +714,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <Sparkles className="h-6 w-6 text-brand-text" />
         </div>
         <div className="flex-1">
-          <p className="font-semibold">Ask your AI Chief of Staff</p>
-          <p className="mt-0.5 text-xs text-muted">Plan meals, resolve schedule conflicts, draft messages…</p>
+          <p className="font-semibold">{t('aiHomeDashboard.askYourAiChiefOfStaff')}</p>
+          <p className="mt-0.5 text-xs text-muted">{t('aiHomeDashboard.planMealsResolveScheduleConflictsDraft')}</p>
         </div>
         <ArrowRight className="h-5 w-5 shrink-0 text-brand-text" />
       </Link>

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/personalization';
 import { createRuleAction, toggleRuleStatusAction, deleteRuleAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Personalization', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,7 @@ function matchSummary(m: AudienceMatch): string {
 }
 
 export default async function PersonalizationPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('marketing_personalization_rules')
@@ -65,48 +67,48 @@ export default async function PersonalizationPage() {
       </p>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> New rule</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('adminMarketingPersonalization.newRule')}</h2>
         <form action={createRuleAction} className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <input name="name" required placeholder="Rule name" className={`${inputCls} lg:col-span-2`} />
-            <input name="slot" required placeholder="Slot (e.g. home_hero)" className={inputCls} />
-            <input name="priority" type="number" defaultValue={0} placeholder="Priority" className={inputCls} />
+            <input name="name" required placeholder={t('adminMarketingPersonalization.ruleName')} className={`${inputCls} lg:col-span-2`} />
+            <input name="slot" required placeholder={t('adminMarketingPersonalization.slotEGHomeHero')} className={inputCls} />
+            <input name="priority" type="number" defaultValue={0} placeholder={t('adminMarketingPersonalization.priority')} className={inputCls} />
           </div>
-          <p className="text-xs font-medium text-muted">Audience match (leave blank for everyone; all set conditions must hold)</p>
+          <p className="text-xs font-medium text-muted">{t('adminMarketingPersonalization.audienceMatchLeaveBlankForEveryone')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <input name="source" placeholder="UTM source(s), comma-sep" className={inputCls} />
-            <input name="medium" placeholder="UTM medium(s)" className={inputCls} />
-            <input name="campaign" placeholder="UTM campaign(s)" className={inputCls} />
+            <input name="source" placeholder={t('adminMarketingPersonalization.utmSourceSCommaSep')} className={inputCls} />
+            <input name="medium" placeholder={t('adminMarketingPersonalization.utmMediumS')} className={inputCls} />
+            <input name="campaign" placeholder={t('adminMarketingPersonalization.utmCampaignS')} className={inputCls} />
             <input name="segments" placeholder="Segment(s)" className={inputCls} />
-            <input name="paths" placeholder="Path prefix(es)" className={inputCls} />
-            <input name="countries" placeholder="Country code(s)" className={inputCls} />
-            <select name="returning" defaultValue="" className={inputCls} aria-label="Returning">
-              <option value="">New or returning</option>
-              <option value="true">Returning only</option>
-              <option value="false">New visitors only</option>
+            <input name="paths" placeholder={t('adminMarketingPersonalization.pathPrefixEs')} className={inputCls} />
+            <input name="countries" placeholder={t('adminMarketingPersonalization.countryCodeS')} className={inputCls} />
+            <select name="returning" defaultValue="" className={inputCls} aria-label={t('adminMarketingPersonalization.returning')}>
+              <option value="">{t('adminMarketingPersonalization.newOrReturning')}</option>
+              <option value="true">{t('adminMarketingPersonalization.returningOnly')}</option>
+              <option value="false">{t('adminMarketingPersonalization.newVisitorsOnly')}</option>
             </select>
-            <input name="minSessions" type="number" min="0" placeholder="Min sessions" className={inputCls} />
+            <input name="minSessions" type="number" min="0" placeholder={t('adminMarketingPersonalization.minSessions')} className={inputCls} />
           </div>
-          <p className="text-xs font-medium text-muted">Variant content (only the fields the slot uses)</p>
+          <p className="text-xs font-medium text-muted">{t('adminMarketingPersonalization.variantContentOnlyTheFieldsThe')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <input name="headline" placeholder="Headline" className={inputCls} />
-            <input name="subhead" placeholder="Subhead" className={inputCls} />
-            <input name="cta_label" placeholder="CTA label" className={inputCls} />
-            <input name="cta_href" placeholder="CTA href" className={inputCls} />
-            <textarea name="body" rows={2} placeholder="Body (optional)" className={`${inputCls} h-auto py-2 sm:col-span-2`} />
+            <input name="headline" placeholder={t('adminMarketingPersonalization.headline')} className={inputCls} />
+            <input name="subhead" placeholder={t('adminMarketingPersonalization.subhead')} className={inputCls} />
+            <input name="cta_label" placeholder={t('adminMarketingPersonalization.ctaLabel')} className={inputCls} />
+            <input name="cta_href" placeholder={t('adminMarketingPersonalization.ctaHref')} className={inputCls} />
+            <textarea name="body" rows={2} placeholder={t('adminMarketingPersonalization.bodyOptional')} className={`${inputCls} h-auto py-2 sm:col-span-2`} />
           </div>
           <div className="flex items-center gap-3">
             <select name="status" defaultValue="active" className={`${inputCls} w-40`}>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
+              <option value="active">{t('adminMarketingPersonalization.active')}</option>
+              <option value="paused">{t('adminMarketingPersonalization.paused')}</option>
             </select>
-            <button type="submit" className={btnCls}>Create rule</button>
+            <button type="submit" className={btnCls}>{t('adminMarketingPersonalization.createRule')}</button>
           </div>
         </form>
       </Card>
 
       {rules.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No personalization rules yet.</p>
+        <p className="py-8 text-center text-sm text-muted">{t('adminMarketingPersonalization.noPersonalizationRulesYet')}</p>
       ) : (
         [...bySlot.entries()].map(([slot, slotRules]) => (
           <Card key={slot}>

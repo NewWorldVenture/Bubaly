@@ -15,6 +15,7 @@ import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/sh
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -39,6 +40,7 @@ const TYPES: { key: CaptureType; label: string; icon: typeof Plus; placeholder: 
 ];
 
 export function QuickCapture() {
+  const tr = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -133,8 +135,8 @@ export function QuickCapture() {
     <>
       <button
         onClick={() => setOpen(true)}
-        aria-label="Quick capture"
-        title="Quick capture (press C)"
+        aria-label={tr('quickCapture.quickCapture')}
+        title={tr('quickCapture.quickCapturePressC')}
         className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-[calc(1rem+var(--safe-right))] z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6"
       >
         <Plus className="h-7 w-7" />
@@ -143,7 +145,7 @@ export function QuickCapture() {
       <Modal
         open={open}
         onClose={() => { setOpen(false); setCustomizing(false); }}
-        title="Quick capture"
+        title={tr('quickCapture.quickCapture')}
         headerAction={
           <button
             type="button"
@@ -151,7 +153,7 @@ export function QuickCapture() {
             aria-pressed={customizing}
             className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-text transition hover:bg-brand/10"
           >
-            {customizing ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
+            {customizing ? <><Check className="h-3.5 w-3.5" /> {tr('quickCapture.done')}</> : <><Settings2 className="h-3.5 w-3.5" /> {tr('quickCapture.customize')}</>}
           </button>
         }
       >
@@ -193,7 +195,7 @@ export function QuickCapture() {
               className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand-text transition hover:bg-brand/10"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span>Looks like a <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> — tap to switch.</span>
+              <span>{tr('quickCapture.looksLikeA')} <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> {tr('quickCapture.tapToSwitch')}</span>
             </button>
           )}
 
@@ -206,7 +208,7 @@ export function QuickCapture() {
           {type === 'shopping' && shoppingItems && (
             <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand-text">
               <ShoppingCart className="h-3.5 w-3.5" />
-              Adds {shoppingItems.length} items:
+              {tr('quickCapture.adds')} {shoppingItems.length} items:
               <span className="text-muted">{shoppingItems.join(', ')}</span>
             </p>
           )}
@@ -231,13 +233,13 @@ export function QuickCapture() {
                 )}
               </p>
             ) : (
-              <p className="text-xs text-muted">Tip: add a time like “tomorrow at 3pm” and we’ll schedule it.</p>
+              <p className="text-xs text-muted">{tr('quickCapture.tipAddATimeLikeTomorrow')}</p>
             )
           )}
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}><X className="h-4 w-4" /> Cancel</Button>
-            <Button type="submit" loading={saving}><Plus className="h-4 w-4" /> Save</Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}><X className="h-4 w-4" /> {tr('quickCapture.cancel')}</Button>
+            <Button type="submit" loading={saving}><Plus className="h-4 w-4" /> {tr('quickCapture.save')}</Button>
           </div>
         </form>
       </Modal>

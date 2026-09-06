@@ -11,10 +11,12 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { Tables } from '@/lib/database.types';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Photo = Tables<'family_photos'>;
 
 export function OnThisDayCard() {
+  const t = useTranslations();
   const { familyId } = useApp();
 
   const { data: rows } = useRealtimeQuery<Photo>({
@@ -42,7 +44,7 @@ export function OnThisDayCard() {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-accent">On this day</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-accent">{t('onThisDay.onThisDay')}</span>
           <span className="text-xs font-medium text-muted">· {spanLabel}</span>
         </div>
         {lead.caption && <p className="mt-0.5 truncate text-sm font-medium">{lead.caption}</p>}

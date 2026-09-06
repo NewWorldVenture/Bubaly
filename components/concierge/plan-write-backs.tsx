@@ -12,12 +12,14 @@ import { useToast } from '@/components/ui/toast';
 import { planWriteBacks, type WriteBackKind, type PlanForApply } from '@/lib/concierge/apply';
 import { applyConciergePlanAction } from '@/app/(app)/dashboard/concierge/actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ICON: Record<WriteBackKind, React.ComponentType<{ className?: string }>> = {
   calendar: CalendarPlus, reminder: BellPlus, task: ListPlus,
 };
 
 export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanForApply }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [applied, setApplied] = useState<Set<WriteBackKind>>(new Set());
   const [busy, setBusy] = useState<WriteBackKind | null>(null);
@@ -55,7 +57,7 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
 
   return (
     <div>
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Make it happen</p>
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{t('planWriteBacks.makeItHappen')}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((o) => {
           const Icon = ICON[o.kind];

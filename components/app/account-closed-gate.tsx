@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { reopenAccountAction } from '@/app/(app)/account/actions';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function AccountClosedGate() {
+  const t = useTranslations();
   const [busy, setBusy] = useState(false);
   const { error: toastError, success } = useToast();
 
@@ -32,14 +34,14 @@ export function AccountClosedGate() {
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-elevated text-muted ring-1 ring-border">
           <Archive className="h-6 w-6" />
         </div>
-        <h1 id="closed-title" className="mt-4 text-2xl font-black text-fg">Your account is closed</h1>
+        <h1 id="closed-title" className="mt-4 text-2xl font-black text-fg">{t('accountClosedGate.yourAccountIsClosed')}</h1>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-          Everything is safe — we haven’t deleted a thing. Reopen anytime to pick up right where you left off.
+          {t('accountClosedGate.everythingIsSafeWeHaventDeleted')}
         </p>
         <Button onClick={reopen} disabled={busy} aria-busy={busy} className="mt-6 w-full gap-1.5">
           <RotateCcw className="h-4 w-4" /> {busy ? 'Reopening…' : 'Reopen my account'}
         </Button>
-        <a href="/auth/signout" className="mt-4 inline-block text-sm text-muted hover:text-fg">Log out</a>
+        <a href="/auth/signout" className="mt-4 inline-block text-sm text-muted hover:text-fg">{t('accountClosedGate.logOut')}</a>
       </div>
     </div>
   );

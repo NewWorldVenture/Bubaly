@@ -5,6 +5,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { DOC_KINDS, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Doc = Tables<'vacation_documents'>;
 
@@ -27,9 +28,10 @@ function expiryWarning(expires: string | null): boolean {
 }
 
 export function TripDocuments({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <TripCrudSection<Doc>
-      table="vacation_documents" vacationId={vacationId} title="Travel documents" icon={FolderLock}
+      table="vacation_documents" vacationId={vacationId} title={t('tripDocuments.travelDocuments')} icon={FolderLock}
       fields={fields} emptyText="No documents yet" addLabel="Add document"
       orderBy={(a, b) => a.title.localeCompare(b.title)}
       renderRow={(d, members) => {

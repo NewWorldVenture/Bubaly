@@ -6,6 +6,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Reports & Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ function monthBuckets<T extends { created_at: string }>(rows: T[], valueOf: (r: 
 }
 
 export default async function AdminReportsPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const fourteenDaysAgo = new Date(Date.now() - 14 * MS_DAY).toISOString();
 
@@ -108,8 +110,8 @@ export default async function AdminReportsPage() {
   return (
     <div className="module-page space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reports &amp; Analytics</h1>
-        <p className="mt-1 text-sm text-muted">Growth, revenue, and engagement across every family on Bubaly.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminReports.growthRevenueAndEngagementAcrossEvery')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
@@ -126,27 +128,27 @@ export default async function AdminReportsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <h2 className="mb-3 text-base font-semibold">New Families</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newFamilies')}</h2>
           <Bars data={familyGrowth} max={maxFamily} />
-          <p className="mt-2 text-xs text-muted">Last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold">New Users</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newUsers')}</h2>
           <Bars data={userGrowth} max={maxUser} />
-          <p className="mt-2 text-xs text-muted">Last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminReports.last6Months')}</p>
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold">New MRR</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminReports.newMrr')}</h2>
           <Bars data={revenueTrend} max={maxRevenue} money />
-          <p className="mt-2 text-xs text-muted">Revenue added · last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminReports.revenueAddedLast6Months')}</p>
         </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Subscriptions by Plan</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminReports.subscriptionsByPlan')}</h2>
           {subSegments.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No active subscriptions" />
+            <EmptyState icon={CreditCard} title={tr('adminReports.noActiveSubscriptions')} />
           ) : (
             <div className="flex items-center gap-4">
               <Donut segments={subSegments} total={activeSubs.length} />
@@ -163,9 +165,9 @@ export default async function AdminReportsPage() {
           )}
         </Card>
         <Card className="lg:col-span-2">
-          <h2 className="mb-3 text-base font-semibold">Activity Volume</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminReports.activityVolume')}</h2>
           <Bars data={activityByDay} max={maxActivity} />
-          <p className="mt-2 text-xs text-muted">Audited actions per day · last 14 days</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminReports.auditedActionsPerDayLast14')}</p>
         </Card>
       </div>
     </div>

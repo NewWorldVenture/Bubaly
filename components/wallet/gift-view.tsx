@@ -17,6 +17,7 @@ import { formatCents } from '@/lib/wallet/ledger';
 import { occasionLabel, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '@/lib/wallet/gift';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGiftLinkAction, approveGiftAction, dismissGiftAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type GiftLinkRow = { id: string; token: string; occasion: string | null; isActive: boolean; childName: string | null };
 export type PendingGift = { id: string; giverName: string | null; amountCents: number; message: string | null; occasion: string | null; childName: string | null };
@@ -25,6 +26,7 @@ export type ChildOpt = { id: string; name: string };
 export function GiftView({ links, pending, childOptions, canManage }: {
   links: GiftLinkRow[]; pending: PendingGift[]; childOptions: ChildOpt[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [creating, setCreating] = useState(false);
@@ -44,14 +46,14 @@ export function GiftView({ links, pending, childOptions, canManage }: {
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Let grandparents and relatives gift with a simple link."
-        action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New Gift Link</Button> : undefined} />
+      <PageHeader title={t('gift.familyWallet')} description="Let grandparents and relatives gift with a simple link."
+        action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       <WalletSubnav />
 
       {/* Pending gifts to approve */}
       {pending.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-brand-text">Gifts to approve</h2>
+          <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-brand-text">{t('gift.giftsToApprove')}</h2>
           <div className="space-y-2">
             {pending.map((g) => (
               <div key={g.id} className="flex items-center gap-3 rounded-2xl border border-brand/20 bg-brand/5 p-4">
@@ -73,11 +75,11 @@ export function GiftView({ links, pending, childOptions, canManage }: {
       )}
 
       {/* Gift links */}
-      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">Gift links</h2>
+      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{t('gift.giftLinks')}</h2>
       {links.length === 0 ? (
-        <EmptyState icon={Gift} title="No gift links yet"
+        <EmptyState icon={Gift} title={t('gift.noGiftLinksYet')}
           description="Create a link and share it with grandparents — they can gift in seconds."
-          action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New Gift Link</Button> : undefined} />
+          action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       ) : (
         <div className="space-y-2">
           {links.map((l) => <GiftLinkCard key={l.id} link={l} />)}
@@ -90,6 +92,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
 }
 
 function GiftLinkCard({ link }: { link: GiftLinkRow }) {
+  const t = useTranslations();
   const { success } = useToast();
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
@@ -111,7 +114,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
           <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
           <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
         </div>
-        <button onClick={() => setShowQr(true)} aria-label="Show QR code"
+        <button onClick={() => setShowQr(true)} aria-label={t('gift.showQrCode')}
           className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
           <QrIcon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">QR</span>
         </button>
@@ -120,11 +123,10 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
         </button>
       </div>
       {showQr && (
-        <Modal open title="Scan to gift" onClose={() => setShowQr(false)}>
+        <Modal open title={t('gift.scanToGift')} onClose={() => setShowQr(false)}>
           <div className="flex flex-col items-center gap-4">
             <p className="text-center text-sm text-muted">
-              {link.childName ?? 'Child'} · {occasionLabel(link.occasion)}. Point a phone camera at this code
-              to open the gift page.
+              {link.childName ?? 'Child'} · {occasionLabel(link.occasion)}{t('gift.pointAPhoneCameraAtThis')}
             </p>
             <div className="rounded-2xl bg-white p-4">
               <QrCode value={url} size={220} />
@@ -141,6 +143,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
 }
 
 function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -165,30 +168,30 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
   }
 
   return (
-    <Modal open onClose={onClose} title="New Gift Link">
+    <Modal open onClose={onClose} title={t('gift.newGiftLink')}>
       <form onSubmit={submit} className="space-y-4">
         {childOptions.length === 0 ? (
-          <p className="text-sm text-muted">Activate the Family Wallet and add children first.</p>
+          <p className="text-sm text-muted">{t('gift.activateTheFamilyWalletAndAdd')}</p>
         ) : (
           <>
-            <Field label="For which child?">{(id) => (
+            <Field label={t('gift.forWhichChild')}>{(id) => (
               <select id={id} value={childId} onChange={(e) => setChildId(e.target.value)} className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
                 {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}</Field>
-            <Field label="Occasion">{(id) => (
+            <Field label={t('gift.occasion')}>{(id) => (
               <select id={id} name="occasion" className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
                 <option value="">None</option>
                 {GIFT_OCCASIONS.map((o) => <option key={o} value={o}>{occasionLabel(o)}</option>)}
               </select>
             )}</Field>
-            <Field label="Suggested amounts (USD, comma-separated)">{(id) => <Input id={id} name="suggested" placeholder="25, 50, 100" defaultValue="25, 50, 100" />}</Field>
-            <Field label="Message to share (optional)">{(id) => <Input id={id} name="message" placeholder="Help Mia reach her bike goal!" />}</Field>
+            <Field label={t('gift.suggestedAmountsUsdCommaSeparated')}>{(id) => <Input id={id} name="suggested" placeholder="25, 50, 100" defaultValue="25, 50, 100" />}</Field>
+            <Field label={t('gift.messageToShareOptional')}>{(id) => <Input id={id} name="message" placeholder="Help Mia reach her bike goal!" />}</Field>
           </>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading} disabled={childOptions.length === 0}>Create Link</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('gift.cancel')}</Button>
+          <Button type="submit" loading={loading} disabled={childOptions.length === 0}>{t('gift.createLink')}</Button>
         </div>
       </form>
     </Modal>

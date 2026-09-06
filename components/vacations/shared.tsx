@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ---- small presentational helpers reused across trip pages ----
 
@@ -101,6 +102,7 @@ export function TripCrudSection<T extends Row>({
   addLabel?: string;
   orderBy?: (a: T, b: T) => number;
 }) {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -198,7 +200,7 @@ export function TripCrudSection<T extends Row>({
               })}
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('shared.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>

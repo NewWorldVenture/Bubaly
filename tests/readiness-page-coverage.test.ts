@@ -7,6 +7,13 @@ const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(), createServer: vi.fn(), effectivePlanLevel: vi.fn(), resolveFamilyPlanLevel: vi.fn(),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext, effectivePlanLevel: mocks.effectivePlanLevel }));
+vi.mock('@/lib/i18n/server', async () => {
+  // This test invokes the server component directly, outside a request scope,
+  // so cookies() is unavailable. Resolve through the real catalogue so the
+  // assertions keep checking the words a user sees.
+  const { SOURCE_MESSAGES } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string) => SOURCE_MESSAGES[key] ?? key };
+});
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: mocks.resolveFamilyPlanLevel }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: ReactNode }) => createElement('a', { ...props, href }, children) }));

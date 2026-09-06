@@ -10,6 +10,7 @@ import { COMPETITORS, competitorByKey, CSV_NAME_COLUMNS, type Competitor, type I
 import { parseICS, parseCSV, csvToItems, type ImportedEvent, type CsvTable } from '@/lib/migrate/parse';
 import { commitImport, type ImportResult } from '@/app/(app)/dashboard/migrate/actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type ParsedFile = {
   id: string; name: string; kind: 'ics' | 'csv';
@@ -20,6 +21,7 @@ const CSV_TARGETS: ImportTarget[] = ['tasks', 'grocery', 'notes'];
 const uid = () => Math.random().toString(36).slice(2);
 
 export function MigrateWizard() {
+  const tr = useTranslations();
   const router = useRouter();
   const [step, setStep] = useState<'pick' | 'upload' | 'done'>('pick');
   const [source, setSource] = useState<Competitor | null>(null);
@@ -96,8 +98,8 @@ export function MigrateWizard() {
           <button type="button" onClick={() => { setSource(competitorByKey('cozi')!); setStep('upload'); }}
             className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border p-5 text-center text-muted transition hover:border-brand/40 hover:text-fg">
             <FileUp className="h-7 w-7" />
-            <p className="mt-2 text-sm font-medium">Another app?</p>
-            <p className="text-xs">Upload any .ics or .csv export</p>
+            <p className="mt-2 text-sm font-medium">{tr('migrateWizard.anotherApp')}</p>
+            <p className="text-xs">{tr('migrateWizard.uploadAnyIcsOrCsvExport')}</p>
           </button>
         </div>
       </div>
@@ -110,8 +112,8 @@ export function MigrateWizard() {
     return (
       <div className="rounded-3xl border border-emerald-400/30 bg-emerald-500/5 p-8 text-center">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-500/15 text-emerald-400"><PartyPopper className="h-8 w-8" /></div>
-        <h2 className="mt-4 text-xl font-bold">You’re all moved in! 🎉</h2>
-        <p className="mt-1 text-sm text-muted">Imported from {source?.name} into your family.</p>
+        <h2 className="mt-4 text-xl font-bold">{tr('migrateWizard.youreAllMovedIn')}</h2>
+        <p className="mt-1 text-sm text-muted">{tr('migrateWizard.importedFrom')} {source?.name} {tr('migrateWizard.intoYourFamily')}</p>
         <div className="mx-auto mt-5 grid max-w-md grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: 'Events', value: counts.events, href: '/dashboard/calendar', icon: CalendarDays },
@@ -126,10 +128,10 @@ export function MigrateWizard() {
             </Link>
           ))}
         </div>
-        {result.skipped > 0 && <p className="mt-3 text-xs text-muted">{result.skipped} duplicate event{result.skipped === 1 ? '' : 's'} skipped.</p>}
+        {result.skipped > 0 && <p className="mt-3 text-xs text-muted">{result.skipped} {tr('migrateWizard.duplicateEvent')}{result.skipped === 1 ? '' : 's'} skipped.</p>}
         <div className="mt-6 flex justify-center gap-2">
-          <button type="button" onClick={() => { setStep('pick'); setSource(null); setFiles([]); setResult(null); }} className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-medium hover:bg-elevated">Import more</button>
-          <Link href="/dashboard" className="btn-cta">Go to dashboard</Link>
+          <button type="button" onClick={() => { setStep('pick'); setSource(null); setFiles([]); setResult(null); }} className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-medium hover:bg-elevated">{tr('migrateWizard.importMore')}</button>
+          <Link href="/dashboard" className="btn-cta">{tr('migrateWizard.goToDashboard')}</Link>
         </div>
       </div>
     );
@@ -138,14 +140,14 @@ export function MigrateWizard() {
   // ── Step: upload + preview ──
   return (
     <div className="space-y-4">
-      <button type="button" onClick={() => { setStep('pick'); setFiles([]); setError(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> Choose a different app</button>
+      <button type="button" onClick={() => { setStep('pick'); setFiles([]); setError(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> {tr('migrateWizard.chooseADifferentApp')}</button>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
         {/* Instructions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-3">
             <span className={cn('grid h-10 w-10 place-items-center rounded-xl text-lg font-black text-white', source?.accent)}>{source?.name[0]}</span>
-            <div><p className="font-semibold">Export from {source?.name}</p><p className="text-xs text-muted">Follow these steps, then upload the file.</p></div>
+            <div><p className="font-semibold">{tr('migrateWizard.exportFrom')} {source?.name}</p><p className="text-xs text-muted">{tr('migrateWizard.followTheseStepsThenUploadThe')}</p></div>
           </div>
           <ol className="mt-4 space-y-2.5">
             {source?.steps.map((s, i) => (
@@ -155,7 +157,7 @@ export function MigrateWizard() {
               </li>
             ))}
           </ol>
-          <p className="mt-4 flex items-center gap-1.5 rounded-xl bg-white/5 p-3 text-xs text-muted"><Sparkles className="h-4 w-4 shrink-0 text-brand-text" /> Accepts .ics calendars and .csv lists. Naive (timezone-less) times are imported as UTC.</p>
+          <p className="mt-4 flex items-center gap-1.5 rounded-xl bg-white/5 p-3 text-xs text-muted"><Sparkles className="h-4 w-4 shrink-0 text-brand-text" /> {tr('migrateWizard.acceptsIcsCalendarsAndCsvLists')}</p>
         </div>
 
         {/* Upload + preview */}
@@ -167,8 +169,8 @@ export function MigrateWizard() {
             className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/30 p-8 text-center transition hover:border-brand/40 hover:bg-elevated"
           >
             <Upload className="h-8 w-8 text-muted" />
-            <p className="mt-2 text-sm font-medium">Drop files here or click to browse</p>
-            <p className="text-xs text-muted">.ics or .csv</p>
+            <p className="mt-2 text-sm font-medium">{tr('migrateWizard.dropFilesHereOrClickTo')}</p>
+            <p className="text-xs text-muted">{tr('migrateWizard.icsOrCsv')}</p>
             <input ref={inputRef} type="file" accept=".ics,.csv,text/calendar,text/csv" multiple className="hidden"
               onChange={(e) => addFiles(e.target.files)} />
           </div>
@@ -198,7 +200,7 @@ export function MigrateWizard() {
 
           {total > 0 && (
             <div className="rounded-2xl border border-border bg-surface/40 p-4">
-              <p className="mb-2 text-sm font-semibold">Ready to import</p>
+              <p className="mb-2 text-sm font-semibold">{tr('migrateWizard.readyToImport')}</p>
               <ul className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                 {[
                   { label: 'Events', value: preview.events.length, icon: CalendarDays },
@@ -211,7 +213,7 @@ export function MigrateWizard() {
               </ul>
               {preview.events.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-xs font-medium text-muted">Sample events</p>
+                  <p className="text-xs font-medium text-muted">{tr('migrateWizard.sampleEvents')}</p>
                   <ul className="mt-1 space-y-1">
                     {preview.events.slice(0, 3).map((e, i) => (
                       <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /><span className="truncate">{e.title}</span><span className="ml-auto shrink-0 text-muted">{new Date(e.startsAt).toLocaleDateString()}</span></li>
@@ -220,7 +222,7 @@ export function MigrateWizard() {
                 </div>
               )}
               <button type="button" disabled={pending} onClick={runImport} className="btn-cta mt-4 w-full justify-center">
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import {total} item{total === 1 ? '' : 's'}
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} {tr('migrateWizard.import')} {total} item{total === 1 ? '' : 's'}
               </button>
             </div>
           )}

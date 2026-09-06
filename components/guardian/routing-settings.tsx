@@ -7,6 +7,7 @@ import { ROUTING_MODE_LABELS, ROUTING_MODE_DESCRIPTIONS, type RoutingMode } from
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
 import { upsertMemberProfileAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Profile = {
   id: string;
@@ -70,6 +71,7 @@ const CONTEXT_OPTIONS = [
 ];
 
 export function RoutingSettings({ profile, member }: { profile: Profile | null; member: Member }) {
+  const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'routing' | 'persona' | 'context'>('routing');
@@ -147,7 +149,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
       {/* Routing tab */}
       {activeTab === 'routing' && (
         <div className="space-y-3">
-          <p className="text-sm text-muted">Choose how Bubaly handles calls from each trust level.</p>
+          <p className="text-sm text-muted">{tr('routingSettings.chooseHowBubalyHandlesCallsFrom')}</p>
           {(TRUST_LEVELS.filter(t => t !== 'blocked') as TrustLevel[]).map((trust) => {
             const field = TRUST_TO_FIELD[trust];
             const currentMode = form[field] as RoutingMode;
@@ -186,17 +188,17 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
         <div className="space-y-4">
           <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium">AI Assistant Name</label>
+              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.aiAssistantName')}</label>
               <input
                 value={form.ai_persona_name}
                 onChange={e => setForm(p => ({ ...p, ai_persona_name: e.target.value }))}
-                placeholder="Bubaly"
+                placeholder={tr('routingSettings.bubaly')}
                 className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm"
               />
-              <p className="mt-1 text-xs text-muted">How the AI introduces itself to callers</p>
+              <p className="mt-1 text-xs text-muted">{tr('routingSettings.howTheAiIntroducesItselfTo')}</p>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Custom Greeting</label>
+              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.customGreeting')}</label>
               <textarea
                 value={form.ai_greeting_template ?? ''}
                 onChange={e => setForm(p => ({ ...p, ai_greeting_template: e.target.value }))}
@@ -205,7 +207,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Voicemail Greeting</label>
+              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.voicemailGreeting')}</label>
               <textarea
                 value={form.voicemail_greeting ?? ''}
                 onChange={e => setForm(p => ({ ...p, voicemail_greeting: e.target.value }))}
@@ -216,7 +218,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
           </div>
           <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-3">
             <p className="text-xs text-blue-300">
-              <strong>Privacy note:</strong> The AI never shares family addresses, children&apos;s names, schedules, or any personal information with callers.
+              <strong>{tr('routingSettings.privacyNote')}</strong> {tr('routingSettings.theAiNeverSharesFamilyAddresses')}
             </p>
           </div>
         </div>
@@ -226,7 +228,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
       {activeTab === 'context' && (
         <div className="space-y-3">
           <p className="text-sm text-muted">
-            Override routing when you&apos;re in a specific context. These take priority over trust-level defaults.
+            {tr('routingSettings.overrideRoutingWhenYouAposRe')}
           </p>
           {CONTEXT_OPTIONS.map((opt) => {
             const currentMode = (form.context_overrides[opt.value] ?? 'ai_handle_first') as RoutingMode;

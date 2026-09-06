@@ -10,6 +10,7 @@ import { Activity, CheckCircle2, CircleAlert, Loader2, PauseCircle, XCircle } fr
 import { cn } from '@/lib/utils/cn';
 import { runStatusCard, type RunStatusCard } from '@/lib/ai/result-cards';
 import { CardFrame, type CardTone } from './index';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const TERMINAL = new Set(['completed', 'partially_completed', 'failed', 'cancelled']);
 const POLL_MS = 5_000;
@@ -47,6 +48,7 @@ export function cardFromRunDetail(runId: string, detail: unknown, fallback: RunS
 }
 
 export function RunStatusCardView({ card, compact = false, className }: { card: RunStatusCard; compact?: boolean; className?: string }) {
+  const t = useTranslations();
   const [live, setLive] = useState<RunStatusCard>(card);
   const [failed, setFailed] = useState(false);
 
@@ -103,7 +105,7 @@ export function RunStatusCardView({ card, compact = false, className }: { card: 
     >
       {live.summary && <p className="text-sm text-fg/90">{live.summary}</p>}
       {live.steps_total ? (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-valuemin={0} aria-valuemax={live.steps_total} aria-valuenow={live.steps_done ?? 0} aria-label="Steps completed">
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-valuemin={0} aria-valuemax={live.steps_total} aria-valuenow={live.steps_done ?? 0} aria-label={t('runStatus.stepsCompleted')}>
           <div className={cn('h-full rounded-full', live.status === 'failed' ? 'bg-danger' : 'bg-brand')} style={{ width: `${Math.round(((live.steps_done ?? 0) / live.steps_total) * 100)}%` }} />
         </div>
       ) : null}

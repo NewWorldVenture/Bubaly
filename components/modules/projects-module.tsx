@@ -20,6 +20,7 @@ import {
   PROJECT_KINDS, PROJECT_STATUSES, PRIORITIES, QUOTE_STATUSES, BOARD, kindMeta, statusLabel, columnFor, suggestScope, materialsTotals, materialLineCents,
   compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
@@ -32,6 +33,7 @@ const centsToDollars = (c: number | null | undefined) => (c === null || c === un
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -86,6 +88,7 @@ export function ProjectsModule() {
   if (error) return <ErrorState message="Could not load your projects. Refresh and try again." onRetry={refresh} />;
 
   const Card = ({ p }: { p: Project }) => {
+  const tr = useTranslations();
     const bh = budgetHealth(p, materials.data, quotes.data, today);
     const sc = schedule(p, today);
     const mt = materialsTotals(materials.data, p.id);
@@ -110,7 +113,7 @@ export function ProjectsModule() {
           <p className="mt-2 flex items-center gap-1 text-xs text-brand-text"><ArrowRight className="h-3 w-3" /> {nextAction(p, materials.data, quotes.data, today)}</p>
           <p className="mt-1 text-[11px] text-muted">
             {mt.count ? `${mt.purchased}/${mt.count} materials` : 'no materials'}{qc.received || qc.awaiting ? ` · ${qc.received} quote${qc.received === 1 ? '' : 's'}${qc.awaiting ? ` (+${qc.awaiting} waiting)` : ''}` : ''}
-            {sc.state === 'overdue' ? <span className="text-rose-300"> · {-(sc.days ?? 0)}d overdue</span> : sc.state === 'due_soon' ? <span className="text-amber-300"> · due in {sc.days}d</span> : p.target_start ? ` · ${fmtDate(p.target_start)}` : ''}
+            {sc.state === 'overdue' ? <span className="text-rose-300"> · {-(sc.days ?? 0)}{tr('projects.dOverdue')}</span> : sc.state === 'due_soon' ? <span className="text-amber-300"> {tr('projects.dueIn')} {sc.days}d</span> : p.target_start ? ` · ${fmtDate(p.target_start)}` : ''}
           </p>
         </button>
       </li>
@@ -120,42 +123,42 @@ export function ProjectsModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Home Projects"
+        title={tr('projects.homeProjects')}
         description="Every project as scope → materials → budget → quotes → done. The board says what to do next on each one; budget health counts what is already committed, not just what you hoped."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="projects" iconOnly />
-            <Link href="/dashboard/home" className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:text-fg coarse:min-h-11"><Users className="h-4 w-4" /> Contractors</Link>
-            <Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> New project</Button>
+            <Link href="/dashboard/home" className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:text-fg coarse:min-h-11"><Users className="h-4 w-4" /> {tr('projects.contractors')}</Link>
+            <Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.newProject')}</Button>
           </div>
         }
       />
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className={cn('rounded-2xl border p-5', summary.overdue ? 'border-rose-500/30 bg-rose-500/10' : summary.over ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
-          <div className="flex items-center gap-2 text-sm font-semibold"><Hammer className="h-4 w-4 text-brand-text" /> Right now</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><Hammer className="h-4 w-4 text-brand-text" /> {tr('projects.rightNow')}</div>
           <p className="mt-2 text-lg font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.active} active · {summary.ideas} idea{summary.ideas === 1 ? '' : 's'}</p>
+          <p className="mt-1 text-xs text-muted">{summary.active} {tr('projects.active')} {summary.ideas} idea{summary.ideas === 1 ? '' : 's'}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> Planned spend</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> {tr('projects.plannedSpend')}</div>
           <p className="mt-2 text-2xl font-bold">{money(summary.forecastCents)}</p>
-          <p className="mt-1 text-xs text-muted">forecast across active projects · {money(summary.budgetCents)} budgeted{summary.over ? ` · ${summary.over} over` : ''}</p>
+          <p className="mt-1 text-xs text-muted">{tr('projects.forecastAcrossActiveProjects')} {money(summary.budgetCents)} budgeted{summary.over ? ` · ${summary.over} over` : ''}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> Deadlines</div>
-          <p className="mt-2 text-2xl font-bold">{summary.dueSoon}<span className="text-sm font-normal text-muted"> due this week</span></p>
+          <div className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> {tr('projects.deadlines')}</div>
+          <p className="mt-2 text-2xl font-bold">{summary.dueSoon}<span className="text-sm font-normal text-muted"> {tr('projects.dueThisWeek')}</span></p>
           <p className="mt-1 text-xs text-muted">{summary.overdue} overdue</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-text" /> Quotes</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-text" /> {tr('projects.quotes')}</div>
           <p className="mt-2 text-2xl font-bold">{summary.quotesWaiting}<span className="text-sm font-normal text-muted"> waiting</span></p>
-          <p className="mt-1 text-xs text-muted">{contractors.data.length} contractor{contractors.data.length === 1 ? '' : 's'} in your book</p>
+          <p className="mt-1 text-xs text-muted">{contractors.data.length} contractor{contractors.data.length === 1 ? '' : 's'} {tr('projects.inYourBook')}</p>
         </div>
       </div>
 
       {projects.data.length === 0 ? (
-        <EmptyState icon={Hammer} title="No projects yet" description="Start with the thing you keep meaning to do. Type it and the planner suggests a materials list and whether to DIY or hire." action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> First project</Button>} />
+        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description="Start with the thing you keep meaning to do. Type it and the planner suggests a materials list and whether to DIY or hire." action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-4">
           {BOARD.map((col) => {
@@ -171,7 +174,7 @@ export function ProjectsModule() {
                 </div>
                 <ul className="space-y-2">{list.map((p) => <Card key={p.id} p={p} />)}</ul>
                 {col.key === 'done' && total > 3 && <button onClick={() => setShowDone((v) => !v)} className="mt-2 text-xs text-muted hover:text-fg">{showDone ? 'Show fewer' : `Show all ${total}`}</button>}
-                {list.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted">Nothing here</p>}
+                {list.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted">{tr('projects.nothingHere')}</p>}
               </section>
             );
           })}
@@ -191,6 +194,7 @@ export function ProjectsModule() {
 }
 
 function ProjectForm({ familyId, userId, members, contractors, project, defaultOwner, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; project: Project | null; defaultOwner: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState(project?.title ?? '');
@@ -233,15 +237,15 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   return (
     <Modal open title={project ? 'Edit project' : 'New project'} description="Describe it in a sentence. Matching starter scopes appear below." onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Project" required>{(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Paint the kids’ room" autoFocus />}</Field>
-        <Field label="Scope / description">{(id) => <Textarea id={id} name="description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Two walls light blue, ceiling white, fix the nail holes first…" />}</Field>
+        <Field label={tr('projects.project')} required>{(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('projects.paintTheKidsRoom')} autoFocus />}</Field>
+        <Field label={tr('projects.scopeDescription')}>{(id) => <Textarea id={id} name="description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr('projects.twoWallsLightBlueCeilingWhite')} />}</Field>
         {suggestions.length > 0 && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
-            <p className="text-xs font-semibold text-brand-text"><Wand2 className="mr-1 inline h-3.5 w-3.5" />Starter scopes</p>
+            <p className="text-xs font-semibold text-brand-text"><Wand2 className="mr-1 inline h-3.5 w-3.5" />{tr('projects.starterScopes')}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {suggestions.map((t) => (
                 <button type="button" key={t.key} onClick={() => applyTemplate(t)} aria-pressed={applied?.key === t.key} className={cn('rounded-full border px-3 py-1 text-xs coarse:min-h-9', applied?.key === t.key ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted hover:text-fg')}>
-                  {kindMeta(t.kind).emoji} {t.key.replace('-', ' ')} · {t.materials.length} materials · {t.diy ? 'DIY' : 'hire'}
+                  {kindMeta(t.kind).emoji} {t.key.replace('-', ' ')} · {t.materials.length} {tr('projects.materials')} {t.diy ? 'DIY' : 'hire'}
                 </button>
               ))}
             </div>
@@ -249,31 +253,31 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Kind">{(id) => <Select id={id} name="kind" value={kind} onChange={(e) => setKind(e.target.value as HomeProjectKind)}>{PROJECT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-          <Field label="Room">{(id) => <Input id={id} name="room" defaultValue={project?.room ?? ''} placeholder="Kids’ room" />}</Field>
+          <Field label={tr('projects.kind')}>{(id) => <Select id={id} name="kind" value={kind} onChange={(e) => setKind(e.target.value as HomeProjectKind)}>{PROJECT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+          <Field label={tr('projects.room')}>{(id) => <Input id={id} name="room" defaultValue={project?.room ?? ''} placeholder={tr('projects.kidsRoom')} />}</Field>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" aria-pressed={diy} onClick={() => setDiy(true)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', diy ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>🧰 We’ll do it</button>
-          <button type="button" aria-pressed={!diy} onClick={() => setDiy(false)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', !diy ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>👷 Hire a pro</button>
+          <button type="button" aria-pressed={diy} onClick={() => setDiy(true)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', diy ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{tr('projects.wellDoIt')}</button>
+          <button type="button" aria-pressed={!diy} onClick={() => setDiy(false)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', !diy ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{tr('projects.hireAPro')}</button>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Priority">{(id) => <Select id={id} name="priority" defaultValue={project?.priority ?? 'medium'}>{PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={project?.status ?? 'idea'}>{PROJECT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Owner">{(id) => <Select id={id} name="owner_id" defaultValue={project?.owner_id ?? defaultOwner ?? ''}><option value="">Anyone</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('projects.priority')}>{(id) => <Select id={id} name="priority" defaultValue={project?.priority ?? 'medium'}>{PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>
+          <Field label={tr('projects.status')}>{(id) => <Select id={id} name="status" defaultValue={project?.status ?? 'idea'}>{PROJECT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('projects.owner')}>{(id) => <Select id={id} name="owner_id" defaultValue={project?.owner_id ?? defaultOwner ?? ''}><option value="">{tr('projects.anyone')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Budget ($)">{(id) => <Input id={id} name="budget" type="number" min={0} step={10} defaultValue={centsToDollars(project?.budget_cents)} placeholder="500" />}</Field>
-          <Field label="Labour paid so far ($)">{(id) => <Input id={id} name="labor" type="number" min={0} step={10} defaultValue={centsToDollars(project?.labor_cents ?? 0)} />}</Field>
+          <Field label={tr('projects.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step={10} defaultValue={centsToDollars(project?.budget_cents)} placeholder="500" />}</Field>
+          <Field label={tr('projects.labourPaidSoFar')}>{(id) => <Input id={id} name="labor" type="number" min={0} step={10} defaultValue={centsToDollars(project?.labor_cents ?? 0)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Start">{(id) => <Input id={id} name="target_start" type="date" defaultValue={project?.target_start ?? ''} />}</Field>
-          <Field label="Finish by">{(id) => <Input id={id} name="target_end" type="date" defaultValue={project?.target_end ?? ''} />}</Field>
+          <Field label={tr('projects.start')}>{(id) => <Input id={id} name="target_start" type="date" defaultValue={project?.target_start ?? ''} />}</Field>
+          <Field label={tr('projects.finishBy')}>{(id) => <Input id={id} name="target_end" type="date" defaultValue={project?.target_end ?? ''} />}</Field>
         </div>
-        {!diy && <Field label="Contractor (from Home & Maintenance)">{(id) => <Select id={id} name="contractor_id" defaultValue={project?.contractor_id ?? ''}><option value="">Not chosen yet</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>}
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={project?.notes ?? ''} />}</Field>
+        {!diy && <Field label={tr('projects.contractorFromHomeMaintenance')}>{(id) => <Select id={id} name="contractor_id" defaultValue={project?.contractor_id ?? ''}><option value="">{tr('projects.notChosenYet')}</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>}
+        <Field label={tr('projects.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={project?.notes ?? ''} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save project</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('projects.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('projects.saveProject')}</Button>
         </div>
       </form>
     </Modal>
@@ -284,6 +288,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<'materials' | 'quotes'>(project.is_diy ? 'materials' : 'quotes');
   const [materialForm, setMaterialForm] = useState<{ open: boolean; material: Material | null }>({ open: false, material: null });
@@ -353,8 +358,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
         <div className="flex flex-wrap items-center gap-2">
           {nextStatuses.map((s) => <Button key={s} size="sm" variant={s === 'done' ? 'primary' : 'secondary'} onClick={() => onStatus(s)}>{s === 'done' ? <Check className="h-3.5 w-3.5" /> : s === 'cancelled' ? <XCircle className="h-3.5 w-3.5" /> : <ArrowRight className="h-3.5 w-3.5" />} {statusLabel(s)}</Button>)}
           <span className="ml-auto flex items-center gap-1">
-            <button onClick={onEdit} aria-label="Edit project" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-            <button onClick={onDelete} aria-label="Delete project" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={onEdit} aria-label={tr('projects.editProject')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+            <button onClick={onDelete} aria-label={tr('projects.deleteProject')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </span>
         </div>
 
@@ -362,34 +367,34 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className={cn('rounded-xl border p-3', bh.status === 'over' ? 'border-rose-500/30 bg-rose-500/10' : bh.status === 'near' ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/60')}>
-            <p className="text-xs text-muted">Budget</p>
+            <p className="text-xs text-muted">{tr('projects.budget')}</p>
             <p className="text-lg font-bold">{bh.status === 'no_budget' ? money(bh.forecastCents) : `${bh.pct}%`}</p>
             <p className="text-[11px] text-muted">{bh.status === 'no_budget' ? 'forecast · no budget set' : `${money(bh.forecastCents)} forecast of ${money(project.budget_cents)} · ${money(bh.committedCents)} committed`}</p>
           </div>
           <div className={cn('rounded-xl border p-3', sc.state === 'overdue' ? 'border-rose-500/30 bg-rose-500/10' : 'border-border bg-surface/60')}>
-            <p className="text-xs text-muted">Schedule</p>
+            <p className="text-xs text-muted">{tr('projects.schedule')}</p>
             <p className="text-lg font-bold">{sc.state === 'none' ? '—' : sc.state === 'done' ? 'Done' : sc.state === 'overdue' ? `${-(sc.days ?? 0)}d over` : `${sc.days}d`}</p>
             <p className="text-[11px] text-muted">{project.target_start ? `${fmtDate(project.target_start)}${project.target_end ? ` → ${fmtDate(project.target_end)}` : ''}` : 'No dates yet'}</p>
           </div>
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
-            <p className="text-xs text-brand-text">Next</p>
+            <p className="text-xs text-brand-text">{tr('projects.next')}</p>
             <p className="text-sm font-medium">{nextAction(project, materials, quotes, today)}</p>
             {project.contractor_id && contractorOf(project.contractor_id) && <p className="text-[11px] text-muted">Pro: {contractorOf(project.contractor_id)?.name}{contractorOf(project.contractor_id)?.phone ? ` · ${contractorOf(project.contractor_id)?.phone}` : ''}</p>}
           </div>
         </div>
 
         <div className="flex items-center gap-2 border-b border-border" role="tablist">
-          <button role="tab" aria-selected={tab === 'materials'} onClick={() => setTab('materials')} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === 'materials' ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>Materials ({mt.count})</button>
-          <button role="tab" aria-selected={tab === 'quotes'} onClick={() => setTab('quotes')} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === 'quotes' ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>Quotes ({quotes.length})</button>
+          <button role="tab" aria-selected={tab === 'materials'} onClick={() => setTab('materials')} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === 'materials' ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>{tr('projects.materials')}{mt.count})</button>
+          <button role="tab" aria-selected={tab === 'quotes'} onClick={() => setTab('quotes')} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === 'quotes' ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>{tr('projects.quotes')}{quotes.length})</button>
           <span className="ml-auto flex items-center gap-1 pb-1">
-            {tab === 'materials' && templates.length > 0 && <Button size="sm" variant="secondary" onClick={suggestMaterials} loading={suggesting}><Wand2 className="h-3.5 w-3.5" /> Suggest</Button>}
-            {tab === 'materials' ? <Button size="sm" onClick={() => setMaterialForm({ open: true, material: null })}><Plus className="h-3.5 w-3.5" /> Material</Button> : <Button size="sm" onClick={() => setQuoteForm({ open: true, quote: null })}><Plus className="h-3.5 w-3.5" /> Quote</Button>}
+            {tab === 'materials' && templates.length > 0 && <Button size="sm" variant="secondary" onClick={suggestMaterials} loading={suggesting}><Wand2 className="h-3.5 w-3.5" /> {tr('projects.suggest')}</Button>}
+            {tab === 'materials' ? <Button size="sm" onClick={() => setMaterialForm({ open: true, material: null })}><Plus className="h-3.5 w-3.5" /> {tr('projects.material')}</Button> : <Button size="sm" onClick={() => setQuoteForm({ open: true, quote: null })}><Plus className="h-3.5 w-3.5" /> {tr('projects.quote')}</Button>}
           </span>
         </div>
 
         {tab === 'materials' && (
           materials.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">No materials yet.{templates.length ? ' “Suggest” fills the list from the matching starter scope.' : ''}</p>
+            <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">{tr('projects.noMaterialsYet')}{templates.length ? ' “Suggest” fills the list from the matching starter scope.' : ''}</p>
           ) : (
             <ul className="space-y-1.5">
               {materials.map((m) => (
@@ -399,22 +404,22 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                     <p className={cn('truncate text-sm', m.is_purchased && 'text-muted line-through')}>{m.name} <span className="text-xs text-muted">×{m.quantity}{m.unit ? ` ${m.unit}` : ''}</span></p>
                     <p className="text-[11px] text-muted">{money(materialLineCents(m))}{m.is_purchased && m.actual_cost_cents !== null && m.est_cost_cents !== null && m.actual_cost_cents !== m.est_cost_cents ? ` (est. ${money(Math.round(m.est_cost_cents * m.quantity))})` : ''}{m.store ? ` · ${m.store}` : ''}</p>
                   </div>
-                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" aria-label="Open link" className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" aria-label={tr('projects.openLink')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
                   <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={`Edit ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => deleteMaterial(m)} aria-label={`Delete ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>
               ))}
-              <li className="flex justify-between px-3 pt-1 text-xs text-muted"><span>{mt.purchased}/{mt.count} bought · {money(mt.actualCents)} spent</span><span>{money(mt.remainingCents)} still to buy</span></li>
+              <li className="flex justify-between px-3 pt-1 text-xs text-muted"><span>{mt.purchased}/{mt.count} {tr('projects.bought')} {money(mt.actualCents)} spent</span><span>{money(mt.remainingCents)} {tr('projects.stillToBuy')}</span></li>
             </ul>
           )
         )}
 
         {tab === 'quotes' && (
           quotes.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">No quotes yet. Three is the number: log each as it arrives and the comparison writes itself.</p>
+            <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">{tr('projects.noQuotesYetThreeIsThe')}</p>
           ) : (
             <ul className="space-y-1.5">
-              {qc.spreadPct !== null && <li className="px-1 text-xs text-muted">Live quotes span {qc.spreadPct}% from lowest to highest{qc.lowest ? ` · lowest ${money(qc.lowest.amount_cents)} (${qc.lowest.contractor_name})` : ''}</li>}
+              {qc.spreadPct !== null && <li className="px-1 text-xs text-muted">{tr('projects.liveQuotesSpan')} {qc.spreadPct}{tr('projects.fromLowestToHighest')}{qc.lowest ? ` · lowest ${money(qc.lowest.amount_cents)} (${qc.lowest.contractor_name})` : ''}</li>}
               {qc.rows.map((q) => {
                 const c = contractorOf(q.contractor_id);
                 return (
@@ -426,12 +431,12 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                         {q.notes && <p className="mt-0.5 text-[11px] text-muted">{q.notes}</p>}
                       </div>
                       <div className="flex shrink-0 items-center gap-0.5">
-                        {q.status === 'requested' && <Button size="sm" variant="secondary" onClick={() => setQuoteForm({ open: true, quote: q })}>Received</Button>}
-                        {q.status === 'received' && !q.isExpired && <Button size="sm" onClick={() => setQuoteStatus(q, 'accepted')}>Accept</Button>}
-                        {q.status === 'received' && <button onClick={() => setQuoteStatus(q, 'declined')} aria-label="Decline quote" className="rounded-lg p-1.5 text-muted hover:text-fg"><XCircle className="h-4 w-4" /></button>}
-                        {q.status === 'accepted' && <button onClick={() => setQuoteStatus(q, 'received')} className="text-xs text-muted hover:text-fg">Undo</button>}
-                        <button onClick={() => setQuoteForm({ open: true, quote: q })} aria-label="Edit quote" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => deleteQuote(q)} aria-label="Delete quote" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                        {q.status === 'requested' && <Button size="sm" variant="secondary" onClick={() => setQuoteForm({ open: true, quote: q })}>{tr('projects.received')}</Button>}
+                        {q.status === 'received' && !q.isExpired && <Button size="sm" onClick={() => setQuoteStatus(q, 'accepted')}>{tr('projects.accept')}</Button>}
+                        {q.status === 'received' && <button onClick={() => setQuoteStatus(q, 'declined')} aria-label={tr('projects.declineQuote')} className="rounded-lg p-1.5 text-muted hover:text-fg"><XCircle className="h-4 w-4" /></button>}
+                        {q.status === 'accepted' && <button onClick={() => setQuoteStatus(q, 'received')} className="text-xs text-muted hover:text-fg">{tr('projects.undo')}</button>}
+                        <button onClick={() => setQuoteForm({ open: true, quote: q })} aria-label={tr('projects.editQuote')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                        <button onClick={() => deleteQuote(q)} aria-label={tr('projects.deleteQuote')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   </li>
@@ -449,6 +454,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
 }
 
 function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved }: { familyId: string; userId: string; projectId: string; material: Material | null; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [purchased, setPurchased] = useState(material?.is_purchased ?? false);
@@ -476,22 +482,22 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
   return (
     <Modal open title={material ? 'Edit material' : 'Add material'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Material" required>{(id) => <Input id={id} name="name" defaultValue={material?.name ?? ''} placeholder="Interior paint (gallon)" autoFocus />}</Field>
+        <Field label={tr('projects.material')} required>{(id) => <Input id={id} name="name" defaultValue={material?.name ?? ''} placeholder={tr('projects.interiorPaintGallon')} autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Qty">{(id) => <Input id={id} name="quantity" type="number" min={0.01} step={0.5} defaultValue={material?.quantity ?? 1} />}</Field>
-          <Field label="Unit">{(id) => <Input id={id} name="unit" defaultValue={material?.unit ?? ''} placeholder="gal, sq ft…" />}</Field>
-          <Field label="Est. unit cost ($)">{(id) => <Input id={id} name="est" type="number" min={0} step={0.5} defaultValue={centsToDollars(material?.est_cost_cents)} />}</Field>
+          <Field label={tr('projects.unit')}>{(id) => <Input id={id} name="unit" defaultValue={material?.unit ?? ''} placeholder={tr('projects.galSqFt')} />}</Field>
+          <Field label={tr('projects.estUnitCost')}>{(id) => <Input id={id} name="est" type="number" min={0} step={0.5} defaultValue={centsToDollars(material?.est_cost_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Actual unit cost ($)">{(id) => <Input id={id} name="actual" type="number" min={0} step={0.5} defaultValue={centsToDollars(material?.actual_cost_cents)} />}</Field>
-          <Field label="Store">{(id) => <Input id={id} name="store" defaultValue={material?.store ?? ''} placeholder="Hardware store" />}</Field>
+          <Field label={tr('projects.actualUnitCost')}>{(id) => <Input id={id} name="actual" type="number" min={0} step={0.5} defaultValue={centsToDollars(material?.actual_cost_cents)} />}</Field>
+          <Field label={tr('projects.store')}>{(id) => <Input id={id} name="store" defaultValue={material?.store ?? ''} placeholder={tr('projects.hardwareStore')} />}</Field>
         </div>
-        <Field label="Link">{(id) => <Input id={id} name="url" type="url" defaultValue={material?.url ?? ''} placeholder="https://" />}</Field>
-        <button type="button" aria-pressed={purchased} onClick={() => setPurchased(!purchased)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', purchased ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>🛒 Purchased</button>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={material?.notes ?? ''} />}</Field>
+        <Field label={tr('projects.link')}>{(id) => <Input id={id} name="url" type="url" defaultValue={material?.url ?? ''} placeholder="https://" />}</Field>
+        <button type="button" aria-pressed={purchased} onClick={() => setPurchased(!purchased)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', purchased ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{tr('projects.purchased')}</button>
+        <Field label={tr('projects.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={material?.notes ?? ''} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save material</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('projects.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('projects.saveMaterial')}</Button>
         </div>
       </form>
     </Modal>
@@ -499,6 +505,7 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
 }
 
 function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, onSaved }: { familyId: string; userId: string; projectId: string; contractors: Contractor[]; quote: Quote | null; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [contractorId, setContractorId] = useState(quote?.contractor_id ?? '');
@@ -531,22 +538,22 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
   return (
     <Modal open title={quote ? 'Edit quote' : 'Log a quote'} description="From your contractor book or anyone new. Log requested quotes too, so you know who owes you a number." onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="From your contractor book">{(id) => <Select id={id} name="contractor_id" value={contractorId} onChange={(e) => setContractorId(e.target.value)}><option value="">Someone new</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.is_preferred ? '⭐ ' : ''}{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>
-        <Field label="Contractor name" required={!chosen}>{(id) => <Input id={id} name="contractor_name" defaultValue={quote?.contractor_name ?? ''} placeholder={chosen?.name ?? 'Bell Plumbing'} />}</Field>
+        <Field label={tr('projects.fromYourContractorBook')}>{(id) => <Select id={id} name="contractor_id" value={contractorId} onChange={(e) => setContractorId(e.target.value)}><option value="">{tr('projects.someoneNew')}</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.is_preferred ? '⭐ ' : ''}{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>
+        <Field label={tr('projects.contractorName')} required={!chosen}>{(id) => <Input id={id} name="contractor_name" defaultValue={quote?.contractor_name ?? ''} placeholder={chosen?.name ?? 'Bell Plumbing'} />}</Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Amount ($)">{(id) => <Input id={id} name="amount" type="number" min={0} step={10} defaultValue={centsToDollars(quote?.amount_cents)} />}</Field>
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={quote?.status === 'requested' ? 'received' : (quote?.status ?? 'received')}>{QUOTE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Lead time (days)">{(id) => <Input id={id} name="lead_time_days" type="number" min={0} defaultValue={quote?.lead_time_days ?? ''} />}</Field>
+          <Field label={tr('projects.amount')}>{(id) => <Input id={id} name="amount" type="number" min={0} step={10} defaultValue={centsToDollars(quote?.amount_cents)} />}</Field>
+          <Field label={tr('projects.status')}>{(id) => <Select id={id} name="status" defaultValue={quote?.status === 'requested' ? 'received' : (quote?.status ?? 'received')}>{QUOTE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('projects.leadTimeDays')}>{(id) => <Input id={id} name="lead_time_days" type="number" min={0} defaultValue={quote?.lead_time_days ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Received on">{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? isoDate(new Date())} />}</Field>
-          <Field label="Valid until">{(id) => <Input id={id} name="valid_until" type="date" defaultValue={quote?.valid_until ?? ''} />}</Field>
+          <Field label={tr('projects.receivedOn')}>{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('projects.validUntil')}>{(id) => <Input id={id} name="valid_until" type="date" defaultValue={quote?.valid_until ?? ''} />}</Field>
         </div>
-        <button type="button" aria-pressed={includesMaterials} onClick={() => setIncludesMaterials(!includesMaterials)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', includesMaterials ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}><Package className="mr-1 inline h-3.5 w-3.5" />Includes materials</button>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={quote?.notes ?? ''} placeholder="Two-day job, needs the water off, 50% deposit…" />}</Field>
+        <button type="button" aria-pressed={includesMaterials} onClick={() => setIncludesMaterials(!includesMaterials)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', includesMaterials ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}><Package className="mr-1 inline h-3.5 w-3.5" />{tr('projects.includesMaterials')}</button>
+        <Field label={tr('projects.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={quote?.notes ?? ''} placeholder={tr('projects.twoDayJobNeedsTheWater')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save quote</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('projects.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('projects.saveQuote')}</Button>
         </div>
       </form>
     </Modal>

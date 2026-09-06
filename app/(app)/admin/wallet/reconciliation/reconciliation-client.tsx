@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { anomalyLabel, type ReconReport, type Anomaly, type AnomalyKind } from '@/lib/wallet/reconcile';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SEVERITY_STYLE: Record<Anomaly['severity'], { icon: typeof AlertOctagon; cls: string; chip: string }> = {
   high: { icon: AlertOctagon, cls: 'border-danger/30 bg-danger/5', chip: 'bg-danger/15 text-danger' },
@@ -16,6 +17,7 @@ const SEVERITY_STYLE: Record<Anomaly['severity'], { icon: typeof AlertOctagon; c
 };
 
 export function ReconciliationClient({ report }: { report: ReconReport }) {
+  const t = useTranslations();
   const [filter, setFilter] = useState<'all' | Anomaly['severity']>('all');
 
   const grouped = useMemo(() => {
@@ -52,7 +54,7 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
             {report.healthy ? 'Ledger is healthy' : `${highCount} critical anomal${highCount === 1 ? 'y' : 'ies'} found`}
           </p>
           <p className="text-sm text-muted">
-            Checked {report.totalTxns.toLocaleString()} transactions across {report.walletsChecked} wallets.
+            {t('adminWalletReconciliationReconciliationClient.checked')} {report.totalTxns.toLocaleString()} {t('adminWalletReconciliationReconciliationClient.transactionsAcross')} {report.walletsChecked} wallets.
             {report.healthy
               ? ' No critical integrity issues — derived balances and reversals reconcile.'
               : ' Review the anomalies below.'}
@@ -62,31 +64,31 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
 
       {/* Volume stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Credit Volume" value={formatCents(report.creditVolumeCents)} icon={TrendingUp} color="text-emerald-400" />
-        <StatCard label="Debit Volume" value={formatCents(report.debitVolumeCents)} icon={TrendingDown} color="text-rose-400" />
-        <StatCard label="Net Position" value={formatCents(report.netCents)} icon={Scale} color="text-brand-text" />
-        <StatCard label="Pending" value={String(report.pendingCount)} icon={Clock} color="text-amber-400" />
+        <StatCard label={t('adminWalletReconciliationReconciliationClient.creditVolume')} value={formatCents(report.creditVolumeCents)} icon={TrendingUp} color="text-emerald-400" />
+        <StatCard label={t('adminWalletReconciliationReconciliationClient.debitVolume')} value={formatCents(report.debitVolumeCents)} icon={TrendingDown} color="text-rose-400" />
+        <StatCard label={t('adminWalletReconciliationReconciliationClient.netPosition')} value={formatCents(report.netCents)} icon={Scale} color="text-brand-text" />
+        <StatCard label={t('adminWalletReconciliationReconciliationClient.pending')} value={String(report.pendingCount)} icon={Clock} color="text-amber-400" />
       </div>
 
       {/* Anomaly severity summary */}
       <div className="grid grid-cols-3 gap-3">
-        <SeverityCard label="Critical" count={highCount} active={filter === 'high'} onClick={() => setFilter(filter === 'high' ? 'all' : 'high')} tone="high" />
-        <SeverityCard label="Warnings" count={medCount} active={filter === 'medium'} onClick={() => setFilter(filter === 'medium' ? 'all' : 'medium')} tone="medium" />
-        <SeverityCard label="Info" count={lowCount} active={filter === 'low'} onClick={() => setFilter(filter === 'low' ? 'all' : 'low')} tone="low" />
+        <SeverityCard label={t('adminWalletReconciliationReconciliationClient.critical')} count={highCount} active={filter === 'high'} onClick={() => setFilter(filter === 'high' ? 'all' : 'high')} tone="high" />
+        <SeverityCard label={t('adminWalletReconciliationReconciliationClient.warnings')} count={medCount} active={filter === 'medium'} onClick={() => setFilter(filter === 'medium' ? 'all' : 'medium')} tone="medium" />
+        <SeverityCard label={t('adminWalletReconciliationReconciliationClient.info')} count={lowCount} active={filter === 'low'} onClick={() => setFilter(filter === 'low' ? 'all' : 'low')} tone="low" />
       </div>
 
       {/* Anomaly list */}
       {report.anomalies.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-border bg-surface/40 py-12 text-center">
           <CheckCircle2 className="mb-3 h-10 w-10 text-emerald-400" />
-          <p className="text-sm font-semibold">Everything reconciles</p>
-          <p className="mt-1 text-xs text-muted">No anomalies detected across the ledger.</p>
+          <p className="text-sm font-semibold">{t('adminWalletReconciliationReconciliationClient.everythingReconciles')}</p>
+          <p className="mt-1 text-xs text-muted">{t('adminWalletReconciliationReconciliationClient.noAnomaliesDetectedAcrossTheLedger')}</p>
         </div>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-              <Filter className="h-4 w-4" /> Anomalies {filter !== 'all' && `· ${filter}`}
+              <Filter className="h-4 w-4" /> {t('adminWalletReconciliationReconciliationClient.anomalies')} {filter !== 'all' && `· ${filter}`}
             </h2>
             <p className="text-xs text-muted">{filtered.length} shown</p>
           </div>
@@ -128,7 +130,7 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
       {/* Reversal summary footer */}
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">
         <RotateCcw className="h-4 w-4 text-brand-text" />
-        <span>{report.reversalCount} reversal transaction{report.reversalCount === 1 ? '' : 's'} in the ledger. Corrections are made via reversals, never edits.</span>
+        <span>{report.reversalCount} {t('adminWalletReconciliationReconciliationClient.reversalTransaction')}{report.reversalCount === 1 ? '' : 's'} {t('adminWalletReconciliationReconciliationClient.inTheLedgerCorrectionsAreMade')}</span>
       </div>
     </div>
   );
