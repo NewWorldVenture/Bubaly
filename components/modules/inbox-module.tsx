@@ -371,9 +371,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   const [copied, setCopied] = useState(false);
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
-  // One submission id per action item: a retry of the same item is the same
-  // reminder, a different item is a different one.
-  const reminderIds = useRef<Record<number, string>>({});
+  // One submission id per action item, keyed by COMMUNICATION AND INDEX — not
+  // index alone. `<CommDetail comm={selected} />` carries no `key`, so selecting
+  // a different message reuses this instance and this ref; keyed by position,
+  // the next message's first action item would reuse the previous one's id and
+  // be answered with the reminder that id already created.
+  const reminderIds = useRef<Record<string, string>>({});
 
   const canReply = comm.direction === 'inbound';
 
@@ -453,7 +456,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       kind: 'task',
       priority: comm.priority === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,
-      submissionId: reminderIds.current[i] ||= newSubmissionId(),
+      submissionId: reminderIds.current[`${comm.id}:${i}`] ||= newSubmissionId(),
     });
     setBusyItem(null);
     if (!result.ok) { toastError(result.error); return; }

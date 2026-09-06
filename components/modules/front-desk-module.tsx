@@ -409,10 +409,15 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   const actions = call.action_items as string[];
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
-  // One submission id per action item, minted on first tap and kept for this
-  // panel's life: a retry of the same item is the same reminder, a different
-  // item is a different one.
-  const reminderIds = useRef<Record<number, string>>({});
+  // One submission id per action item, keyed by CALL AND INDEX — not index alone.
+  //
+  // `<CallDetail call={selected} />` is rendered without a `key`, so selecting a
+  // different call re-renders this instance with a new prop rather than
+  // remounting it, and this ref survives. Keyed by position, call B's first
+  // action item would reuse call A's id, the server would answer with the row
+  // that id already created, and call B's reminder would silently never exist —
+  // the exact failure the idempotency key is here to prevent, caused by the key.
+  const reminderIds = useRef<Record<string, string>>({});
 
   const callerLabel = call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'caller';
 
@@ -431,7 +436,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
       kind: 'task',
       priority: call.priority === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,
-      submissionId: reminderIds.current[i] ||= newSubmissionId(),
+      submissionId: reminderIds.current[`${call.id}:${i}`] ||= newSubmissionId(),
     });
     setBusyItem(null);
     if (!result.ok) { toastError(result.error); return; }

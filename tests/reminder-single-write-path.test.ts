@@ -68,6 +68,36 @@ describe('the surfaces whose reminder create was rejected', () => {
   });
 });
 
+describe('a submission id identifies the composition, not its position', () => {
+  // The bug this caught, in the code that fixed the last one: both detail panels
+  // are rendered WITHOUT a `key` (`<CallDetail call={selected} />`,
+  // `<CommDetail comm={selected} />`), so selecting a different record re-renders
+  // the same instance rather than remounting it, and a ref inside it survives.
+  //
+  // Keyed by array index alone, the next record's first action item reuses the
+  // previous record's id; the server answers with the row that id already
+  // created, and the second reminder silently never exists. An idempotency key
+  // that is not unique to the thing being created causes exactly the loss it is
+  // there to prevent, which makes it worth a guard rather than a comment.
+  const PANELS: [string, string][] = [
+    ['components/modules/front-desk-module.tsx', 'call'],
+    ['components/modules/inbox-module.tsx', 'comm'],
+  ];
+
+  it.each(PANELS)('%s keys its ids by the record id, not the index', (file, record) => {
+    const src = code(file);
+    expect(src).toContain(`reminderIds.current[\`\${${record}.id}:\${i}\`]`);
+    // The shape that reuses one id across two different records.
+    expect(src).not.toMatch(/reminderIds\.current\[i\]/);
+  });
+
+  it.each(PANELS)('%s still holds one id per item across retries of that item', (file) => {
+    // `||=` is what makes the id stable for a second tap on the same item; a
+    // plain assignment would mint a fresh one and reopen the duplicate.
+    expect(code(file)).toMatch(/reminderIds\.current\[[^\]]+\] \|\|= newSubmissionId\(\)/);
+  });
+});
+
 describe('the reminders module, converted only where it can be', () => {
   it('routes its quick-add through the action', () => {
     const src = code(PARTIALLY_CONVERTED);
