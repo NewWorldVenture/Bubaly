@@ -122,9 +122,16 @@ export function wrapToolsWithTrust(
           const caveat = APPROVAL_CANNOT_REPLAY[tool.name]
             ? ' Once a parent approves it they will need to add it by hand — Bubaly cannot finish this one on its own yet.'
             : '';
+          // A resend does not file a second card (0273), so it must not claim to
+          // have sent one. Saying "sent for approval" twice is how a parent ends
+          // up believing two separate things are waiting, approves what looks
+          // like both, and gets the resource written twice.
+          const lead = outcome.alreadyPending
+            ? `⏳ Already waiting for a parent's approval — ${title}.`
+            : `⏳ Sent for parent approval — ${title}.`;
           return {
             ok: true,
-            summary: `⏳ Sent for parent approval — ${title}.${caveat}`,
+            summary: `${lead}${caveat}`,
             pending_approval: true,
             approval_id: outcome.approvalId,
           };

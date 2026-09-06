@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -18,6 +21,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const admin = createServiceClient();
+
+    // One scope per family, built once. Overdue nudges are a courtesy, not an
+    // emergency — they go through the service so they land inside the hours a
+    // household agreed to hear from Bubaly, and so a re-run of the cron cannot
+    // send the same nudge twice before anyone has read the first.
+    const scopes = new Map<string, ServiceScope | null>();
+    const notifyFamily = async (
+      familyId: string,
+      n: { title: string; body: string; relatedType: string; relatedId: string | null },
+    ): Promise<boolean> => {
+      if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
+      const scope = scopes.get(familyId);
+      if (!scope) return false;
+      const sent = await notify(scope, { recipients: 'family', type: 'system', ...n });
+      return sent.ok;
+    };
     const now = new Date();
     const nowIso = now.toISOString();
 
@@ -53,17 +72,16 @@ export async function GET(req: NextRequest) {
 
       if (needsOverdueAlert(order, now)) {
         const late = Math.abs(daysUntilDue(o.ends_on, now) ?? 0);
-        const { error: notificationError } = await admin.from('notifications').insert({
-          family_id: o.family_id, user_id: null, type: 'system',
+        const notified = await notifyFamily(o.family_id, {
           title: `Overdue: "${title}"`,
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
-          related_type: 'marketplace_orders', related_id: o.id,
+          relatedType: 'marketplace_orders', relatedId: o.id,
         });
-        const { error: stampError } = notificationError
-          ? { error: notificationError }
-          : await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id);
-        if (notificationError || stampError) {
-          console.error(`Return-reminders overdue notification failed for ${o.id}:`, notificationError ?? stampError);
+        const { error: stampError } = notified
+          ? await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id)
+          : { error: new Error('notification failed') };
+        if (!notified || stampError) {
+          console.error(`Return-reminders overdue notification failed for ${o.id}:`, stampError);
           failed++;
         } else {
           overdue++;
@@ -73,17 +91,16 @@ export async function GET(req: NextRequest) {
 
       if (needsDueReminder(order, now)) {
         const d = daysUntilDue(o.ends_on, now) ?? 0;
-        const { error: notificationError } = await admin.from('notifications').insert({
-          family_id: o.family_id, user_id: null, type: 'system',
+        const notified = await notifyFamily(o.family_id, {
           title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
           body: `Time to return this ${verb}. Tap to see the exchange details.`,
-          related_type: 'marketplace_orders', related_id: o.id,
+          relatedType: 'marketplace_orders', relatedId: o.id,
         });
-        const { error: stampError } = notificationError
-          ? { error: notificationError }
-          : await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id);
-        if (notificationError || stampError) {
-          console.error(`Return-reminders due notification failed for ${o.id}:`, notificationError ?? stampError);
+        const { error: stampError } = notified
+          ? await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id)
+          : { error: new Error('notification failed') };
+        if (!notified || stampError) {
+          console.error(`Return-reminders due notification failed for ${o.id}:`, stampError);
           failed++;
         } else {
           reminded++;

@@ -92,6 +92,78 @@ jobs:
           CI: '1'
           EXPO_NO_TELEMETRY: '1'
 
+  database:
+    # §45. The boundary probes in docs/audit/ have existed for a while and
+    # NOTHING has ever run them: `tests/rls-isolation-sweep.test.ts` only reads
+    # the probe file and checks it still contains its assertions. So a family's
+    # rows were protected by policies CI never tried to break. This repo has
+    # lived that failure once already — `0118` exists because production tables
+    # had RLS on with their family policies missing, and pages silently returned
+    # zero rows.
+    #
+    # This job replays every migration into a real Postgres and then runs every
+    # probe against it. The runner GLOBS docs/audit/*-check.sql, so a probe added
+    # tomorrow is enforced tomorrow without anyone editing this file.
+    #
+    # pgvector/pgvector:pg16, not postgres:16 — 0237 does `create extension
+    # vector`, and a stock image cannot apply it.
+    name: Database (migration replay · RLS boundary probes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          # Throwaway, job-owned, and reachable only from this ephemeral runner.
+          # This job connects to nothing else: no repository secrets, no database
+          # URL, no production. (move-date-recalculation-runtime.yml goes further
+          # and maps no host port at all, driving psql inside the container over
+          # its Unix socket. That posture is deliberate there; it is not adopted
+          # here because the same scripts have to keep running against a plain
+          # local Postgres for anyone reproducing a failure by hand.)
+          POSTGRES_PASSWORD: ci-only-not-a-production-secret
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 5432:5432
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ci-only-not-a-production-secret
+      PGDATABASE: bubaly
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner image ships a Postgres client, but this job is the one place
+      # in CI that depends on it, and a missing binary would read as a database
+      # failure rather than a toolchain one. Make it explicit and cheap.
+      - name: Ensure the Postgres client is present
+        run: |
+          psql --version || {
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          }
+          psql --version
+
+      - name: Create the database
+        run: PGDATABASE=postgres psql -c 'create database bubaly'
+
+      # Shims, all migrations, the anchor account and SEED_ALL — the same script
+      # docs/audit/verify-pg.sh runs, so what CI proves is what a person
+      # reproduces locally. Exits non-zero if ANY migration fails to apply.
+      - name: Replay every migration
+        run: bash docs/audit/pg-bootstrap.sh
+
+      # Each probe asserts with RAISE EXCEPTION under ON_ERROR_STOP=1. Covers
+      # both directions of the 0118 failure: another family reading your rows,
+      # and your own family losing access to them.
+      - name: Boundary probes
+        run: bash docs/audit/run-probes.sh
+
   e2e:
     # `npm run test:e2e` runs playwright with no project filter, so ALL projects
     # execute here — including the mobile device matrix (iphone-se / iphone / pixel
