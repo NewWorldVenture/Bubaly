@@ -169,6 +169,18 @@ the result rather than narrated as a fresh write.
   and fails with the index dropped — a fake can tell you the application checks,
   only the database can tell you the index exists and its predicate is right.
 
+  **There were TWO filers, not one.** The original finding named
+  `openApprovalRequest`; `lib/ai/tools/execute.ts` opens its own row when the
+  RISK TIER tightened an `allow` the engine had already permitted. Left keyless
+  it would have kept filing duplicate cards on the registry and concierge paths
+  while the chat path was fixed — half a guarantee, and undocumented. It now
+  computes the key with the same exported function, because two hashes of "the
+  same action" that disagree are worse than one: each path would dedupe against
+  itself and neither against the other. Its own test fake had answered a SELECT
+  exactly like an INSERT, so the new pre-check always hit and no card was ever
+  filed; the fake now models the real table, and a resend that reuses the pending
+  card is asserted behaviourally rather than by reading the source.
+
   Still open in §30: the eight chat writes that shadow registry tools, whose
   delegation the design review rejected on the composed-key grounds recorded
   above.

@@ -10,6 +10,7 @@
 // ledger's idempotency reservation cannot help: `executeTool` returns
 // `pending_approval` at step 3, BEFORE the reservation at step 4 — so for every
 // family that turned approvals on, that protection has never been reached.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { approvalDedupeKey, openApprovalRequest } from '@/lib/trust/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -172,5 +173,32 @@ describe('the dedupe key describes the ASK, not how the engine described it', ()
   it('separates different capabilities on the same payload', () => {
     expect(approvalDedupeKey('fam-1', { ...REQ, capability: 'delete' as const }))
       .not.toBe(approvalDedupeKey('fam-1', REQ));
+  });
+});
+
+// The trust bridge is not the only filer. `lib/ai/tools/execute.ts` opens its own
+// approval row when the RISK TIER tightened an `allow` the engine had already
+// permitted — a path the original finding did not name. Left keyless it would
+// have kept filing duplicate cards on the registry/concierge path while the chat
+// path was fixed, which is the worst of both: half a guarantee, undocumented.
+describe('both filers use one definition of "the same action"', () => {
+  const src = readFileSync('lib/ai/tools/execute.ts', 'utf8');
+
+  it('the registry path stamps a key rather than filing keyless rows', () => {
+    // A keyless row is exempt from 0273's partial index by design, so forgetting
+    // the key here is silent: no error, no duplicate protection.
+    expect(src).toContain('approvalDedupeKey(scope.familyId');
+    expect(src).toContain('dedupe_key: dedupeKey');
+  });
+
+  it('it checks before inserting and recovers from the race', () => {
+    expect(src).toContain("eq('dedupe_key', dedupeKey).eq('status', 'pending')");
+    expect(src).toContain("error?.code === '23505'");
+  });
+
+  it('imports the shared key rather than hand-rolling a second one', () => {
+    // Two hashes of "the same action" that disagree are worse than one: each
+    // path would dedupe against itself and neither against the other.
+    expect(src).toMatch(/import \{[^}]*approvalDedupeKey[^}]*\} from '@\/lib\/trust\/server'/);
   });
 });
