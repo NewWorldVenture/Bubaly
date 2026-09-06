@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -407,6 +409,10 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   const actions = call.action_items as string[];
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
+  // One submission id per action item, minted on first tap and kept for this
+  // panel's life: a retry of the same item is the same reminder, a different
+  // item is a different one.
+  const reminderIds = useRef<Record<number, string>>({});
 
   const callerLabel = call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'caller';
 
@@ -414,16 +420,21 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   async function addReminder(text: string, i: number) {
     if (busyItem !== null) return;
     setBusyItem(i);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_reminders').insert({
-      family_id: familyId, created_by: userId,
+    // One id per action item, so tapping the same item again after a failure is
+    // the same reminder while a different item is a different one.
+    // Through the service. The raw insert sent `status: 'pending'` and, off the
+    // urgent branch, `priority: 'normal'` — neither is in 0014's CHECK sets, so
+    // Postgres rejected the row and this button never once saved a reminder.
+    const result = await createReminderAction({
       title: text.slice(0, 200),
       notes: `From call with ${callerLabel}`,
-      kind: 'task', priority: call.priority === 'urgent' ? 'high' : 'normal',
-      status: 'pending', ai_suggested: true,
+      kind: 'task',
+      priority: call.priority === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+      submissionId: reminderIds.current[i] ||= newSubmissionId(),
     });
     setBusyItem(null);
-    if (error) { toastError(describeDbError(error)); return; }
+    if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
     success('Added to reminders');
   }
