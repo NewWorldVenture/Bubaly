@@ -99,7 +99,7 @@ CREATE OR REPLACE FUNCTION public.vacation_import_confirmation(
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
-SET search_path = pg_catalog
+SET search_path = pg_catalog, pg_temp
 SET timezone = 'UTC'
 SET datestyle = 'ISO, YMD'
 AS $function$

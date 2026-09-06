@@ -1,0 +1,91 @@
+name: Travel confirmation runtime
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/travel-confirmation-runtime.yml
+      - supabase/migrations/0070_vacations.sql
+      - supabase/migrations/0270_travel_confirmation_import.sql
+      - tests/fixtures/0270-travel-confirmation-*
+
+permissions:
+  contents: read
+
+jobs:
+  travel-confirmation-runtime:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == 'NewWorldVenture/Bubaly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TRAVEL_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      TRAVEL_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: bubaly_travel_import_ci
+          POSTGRES_PASSWORD: travel_confirmation_ci_only_not_a_secret
+        options: >-
+          --log-driver none
+          --health-cmd "pg_isready --host=/var/run/postgresql --username=postgres --dbname=bubaly_travel_import_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Require the dedicated disposable service
+        env:
+          TRAVEL_IMPORT_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CI" == true && "$GITHUB_ACTIONS" == true ]]
+          [[ "$GITHUB_REPOSITORY" == NewWorldVenture/Bubaly ]]
+          [[ "$GITHUB_EVENT_NAME" == pull_request ]]
+          [[ "$TRAVEL_PR_HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
+          [[ "$TRAVEL_PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TRAVEL_IMPORT_CONTAINER" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(docker inspect --type container --format '{{.Id}}' "$TRAVEL_IMPORT_CONTAINER")" == "$TRAVEL_IMPORT_CONTAINER" ]]
+          [[ "$(docker inspect --type container --format '{{.Config.Image}}' "$TRAVEL_IMPORT_CONTAINER")" == postgres:17 ]]
+          [[ "$(docker inspect --type container --format '{{.State.Running}}' "$TRAVEL_IMPORT_CONTAINER")" == true ]]
+          [[ "$(docker inspect --type container --format '{{.HostConfig.LogConfig.Type}}' "$TRAVEL_IMPORT_CONTAINER")" == none ]]
+          [[ -z "$(docker port "$TRAVEL_IMPORT_CONTAINER")" ]]
+
+      - name: Check out the exact reviewed PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Apply identity bootstrap and actual migrations
+        env:
+          TRAVEL_IMPORT_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg() {
+            docker exec -i "$TRAVEL_IMPORT_CONTAINER" \
+              psql -X --quiet --output=/dev/null --no-password --host=/var/run/postgresql \
+              --username=postgres --dbname=bubaly_travel_import_ci \
+              --set=ON_ERROR_STOP=1 --set=VERBOSITY=sqlstate
+          }
+          pg < tests/fixtures/0270-travel-confirmation-bootstrap.sql
+          pg < supabase/migrations/0070_vacations.sql
+          pg < supabase/migrations/0270_travel_confirmation_import.sql
+
+      - name: Exercise the reviewed import contract
+        env:
+          TRAVEL_IMPORT_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$TRAVEL_IMPORT_CONTAINER" \
+            psql -X --quiet --output=/dev/null --no-password --host=/var/run/postgresql \
+            --username=postgres --dbname=bubaly_travel_import_ci \
+            --set=ON_ERROR_STOP=1 --set=VERBOSITY=sqlstate \
+            < tests/fixtures/0270-travel-confirmation-runtime.sql
+          bash tests/fixtures/0270-travel-confirmation-concurrency.sh

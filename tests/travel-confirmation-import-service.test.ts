@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { previewConfirmationImport, applyConfirmationImport } from '@/lib/services/trips/confirmation-import';
 import { travelImportTools } from '@/lib/ai/tools/travel-import';
@@ -73,7 +74,7 @@ function harness() {
     return query;
   });
   const getUser = vi.fn(async () => ({ data: { user: { id: USER } }, error: null }));
-  const rpc = vi.fn(async () => state.rpcReply);
+  const rpc = vi.fn<(name: string, args: Record<string, unknown>) => Promise<Reply>>(async () => state.rpcReply);
   const db = { from, rpc, auth: { getUser } };
   const scope: ServiceScope = {
     db: db as unknown as ServiceScope['db'],
@@ -87,6 +88,14 @@ function saved(preview: ConfirmationPreview): ConfirmationResult {
     preview, applied: true, requestId: REQUEST, appliedAt: '2026-09-06T12:01:02.123456+00:00',
     reservationId: RESERVATION, itineraryItemId: ITEM,
   };
+}
+
+/** Simulate validated JSON crossing the database/test runtime boundary. */
+function foreignJson<T>(value: T): T {
+  return runInNewContext(
+    'JSON.parse(serialized, (_key, value) => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).reverse()) : value)',
+    { serialized: JSON.stringify(value) },
+  ) as T;
 }
 
 beforeEach(() => {
@@ -119,11 +128,45 @@ describe('reviewed confirmation service', () => {
     expect(h.mutation).not.toHaveBeenCalled();
   });
 
-  it('normalizes user fields and title but never normalizes the source text', async () => {
+  it.each(['title', 'name'] as const)('rejects noncanonical %s without changing source text', async (field) => {
     const h = harness();
-    const input = { ...h.input, source: { ...h.input.source, title: '  Dinner confirmation  ' }, fields: { ...h.input.fields, name: ' Dinner ' } };
-    expect((await previewConfirmationImport(h.scope, input)).ok).toBe(true);
-    expect(h.rpc.mock.calls[0]?.[1]).toMatchObject({ p_source: h.input.source, p_fields: h.input.fields });
+    const input = { ...h.input, source: { ...h.input.source }, fields: { ...h.input.fields } };
+    if (field === 'title') input.source.title = '  Dinner confirmation  ';
+    else input.fields.name = ' Dinner ';
+    expect(await previewConfirmationImport(h.scope, input)).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(input.source.text).toBe(h.input.source.text);
+    expect(h.rpc).not.toHaveBeenCalled();
+  });
+
+  it('accepts schema-valid preview JSON from another realm with reordered object keys', async () => {
+    const h = harness();
+    const response = foreignJson(h.result);
+    expect(Object.getPrototypeOf(response)).not.toBe(Object.getPrototypeOf(h.result));
+    expect(Object.keys(response)).not.toEqual(Object.keys(h.result));
+    h.state.rpcReply.data = response;
+    expect(await previewConfirmationImport(h.scope, h.input)).toEqual({ ok: true, data: h.result });
+    expect(h.mutation).not.toHaveBeenCalled();
+  });
+
+  it('accepts the exact approved apply and receipt across realms without changing timestamp strings', async () => {
+    const h = harness();
+    const receipt = saved(h.preview);
+    h.state.rpcReply.data = foreignJson(receipt);
+    const approved = foreignJson({ ...h.input, expected: h.preview, requestId: REQUEST });
+    expect(await applyConfirmationImport(h.scope, approved)).toEqual({ ok: true, data: receipt });
+    expect(h.rpc.mock.calls[0]?.[1]).toMatchObject({
+      p_expected: h.preview, p_request_id: REQUEST, p_fields: h.input.fields,
+    });
+    expect(h.mutation).not.toHaveBeenCalled();
+  });
+
+  it('still rejects changed source whitespace in otherwise valid cross-realm JSON', async () => {
+    const h = harness();
+    const response = foreignJson(h.result);
+    response.preview.source.text += ' ';
+    response.preview.source.sha256 = createHash('sha256').update(response.preview.source.text, 'utf8').digest('hex');
+    h.state.rpcReply.data = response;
+    expect(await previewConfirmationImport(h.scope, h.input)).toMatchObject({ ok: false, code: 'db' });
   });
 
   it.each(['child', 'teen', 'system'] as const)('denies the %s scope role without an RPC', async (role) => {

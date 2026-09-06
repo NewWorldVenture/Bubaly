@@ -70,7 +70,7 @@ function unmount() {
   mocks.cleanups.forEach((cleanup) => cleanup());
   mocks.cleanups.clear(); mocks.effects = []; mocks.slots = []; mocks.key = null;
 }
-function render(vacationId = TRIP): ReactNode {
+function render(vacationId = TRIP): ReturnType<typeof ConfirmationImportWorkspace> {
   const wrapper = TripConfirmationImport({ vacationId });
   if (!wrapper) { unmount(); return null; }
   expect(wrapper.type).toBe(ConfirmationImportWorkspace);
@@ -257,4 +257,3 @@ describe('travel confirmation review UI', () => {
     expect(nodes(root).find((node) => node.props.name === 'name')?.props.value).toBe('<script>fixture()</script>');
   });
 });
-

@@ -1,6 +1,5 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
 import { planLevel } from '@/lib/constants/plans';
@@ -9,7 +8,7 @@ import { computeEntitlement } from '@/lib/server/entitlement';
 import { fail, ok, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import {
   confirmationSourceSchema, confirmationFieldsSchema, confirmationPreviewSchema,
-  confirmationResultSchema, type ConfirmationSource, type ConfirmationFields,
+  confirmationResultSchema, sameConfirmationValue, type ConfirmationSource, type ConfirmationFields,
   type ConfirmationPreview, type ConfirmationResult,
 } from '@/lib/vacations/confirmation-import';
 
@@ -139,8 +138,8 @@ function matchesPreview(
 ): boolean {
   if (preview.version !== 1 || preview.familyId !== scope.familyId || preview.memberId !== scope.memberId
     || preview.vacationId !== input.vacationId || preview.trip.id !== input.vacationId
-    || !isDeepStrictEqual(preview.source, { ...input.source, sha256: hash })
-    || !isDeepStrictEqual(preview.fields, input.fields)
+    || !sameConfirmationValue(preview.source, { ...input.source, sha256: hash })
+    || !sameConfirmationValue(preview.fields, input.fields)
     || !supportedInstant(input.fields.reservedAt)
     || !realDay(preview.trip.startDate) || !realDay(preview.trip.endDate)
     || preview.trip.startDate > preview.trip.endDate
@@ -160,7 +159,7 @@ function matchesPreview(
     const hour = Number(parts.hour);
     const dayPart = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
     return realDay(date) && date >= preview.trip.startDate && date <= preview.trip.endDate
-      && isDeepStrictEqual(preview.itinerary, { date, startTime, dayPart });
+      && sameConfirmationValue(preview.itinerary, { date, startTime, dayPart });
   } catch {
     return false;
   }
@@ -187,14 +186,23 @@ async function importConfirmation(
 ): Promise<ServiceResult<ConfirmationResult>> {
   if (apply && scope.actorKind !== 'member') return denied();
   try {
-    const parsed = apply ? applyInputSchema.safeParse(input) : previewInputSchema.safeParse(input);
-    if (!parsed.success || !supportedInstant(parsed.data.fields.reservedAt)) return invalid();
-    const normalized = parsed.data;
-    const approval = 'expected' in normalized ? normalized.expected : null;
-    const requestId = 'requestId' in normalized ? normalized.requestId : null;
+    let normalized: PreviewInput;
+    let approval: ConfirmationPreview | null = null;
+    let requestId: string | null = null;
+    if (apply) {
+      const parsed = applyInputSchema.safeParse(input);
+      if (!parsed.success || !sameConfirmationValue(input, parsed.data)) return invalid();
+      normalized = parsed.data;
+      approval = parsed.data.expected;
+      requestId = parsed.data.requestId;
+    } else {
+      const parsed = previewInputSchema.safeParse(input);
+      if (!parsed.success) return invalid();
+      normalized = parsed.data;
+    }
+    if (!supportedInstant(normalized.fields.reservedAt)) return invalid();
     const hash = createHash('sha256').update(normalized.source.text, 'utf8').digest('hex');
-    if (approval && (!('expected' in input) || !isDeepStrictEqual(input.expected, approval)
-      || !matchesPreview(approval, scope, normalized, hash))) return invalid();
+    if (approval && !matchesPreview(approval, scope, normalized, hash)) return invalid();
 
     const permission = await authorize(scope);
     if (!permission.ok) return permission;
@@ -214,7 +222,7 @@ async function importConfirmation(
     if (response.error) return rpcFailure(response.error.code);
 
     const result = confirmationResultSchema.safeParse(response.data);
-    if (!result.success || !isDeepStrictEqual(response.data, result.data)
+    if (!result.success || !sameConfirmationValue(response.data, result.data)
       || !matchesPreview(result.data.preview, scope, normalized, hash)) return unavailable();
     const receipt = result.data;
     if (apply) {
@@ -223,7 +231,7 @@ async function importConfirmation(
       if (!receipt.applied || receipt.requestId !== requestId
         || !dbTimestamp.safeParse(receipt.appliedAt).success
         || !uuid.safeParse(receipt.reservationId).success || !uuid.safeParse(receipt.itineraryItemId).success
-        || !isDeepStrictEqual(receipt.preview, approval)) return unavailable();
+        || !sameConfirmationValue(receipt.preview, approval)) return unavailable();
     } else if (receipt.applied || receipt.requestId !== null || receipt.appliedAt !== null
       || receipt.reservationId !== null || receipt.itineraryItemId !== null) return unavailable();
     return ok(receipt);
