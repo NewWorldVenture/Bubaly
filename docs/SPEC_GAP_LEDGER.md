@@ -357,6 +357,24 @@ the result rather than narrated as a fresh write.
   `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
   both halves.
 
+  **Server actions, not routes — the same wrapper, a different call shape.**
+  The reconnect-message drafter, the paperwork reply drafter and the marketplace
+  assistant are Server Actions returning result objects rather than HTTP
+  responses. They needed nothing new: `ctx` and the client are already in scope,
+  and the failure modes are the familiar ones (an empty answer returned as an
+  error result; the marketplace one swallowing into its deterministic engine).
+  What each does NOT put on the row is the point — not the contact's name, and
+  nothing at all from the paperwork itself, which is OCR of a letter somebody
+  else wrote and the most literally untrusted text in the product.
+
+  **A second surface that will never adopt, for the same reason as the gift
+  route.** `app/(app)/admin/ai/actions.ts` authenticates with `getUser()` +
+  `isSuperAdmin()` and never resolves a family: it answers "does the configured
+  key work?". There is no `familyId` to build a scope from, and billing a
+  connectivity check to whichever family came first would be worse than not
+  recording it. Named in the coverage test with that reason, so the floor is now
+  2 rather than 1.
+
   **The subtlest shape: a canned sentence that reads like the real thing.**
   When the parenting coach at `/api/behavior/insight` replies without JSON, the
   route answers 200 with *"Keep logging — patterns will sharpen over time."* — a
@@ -387,7 +405,7 @@ the result rather than narrated as a fresh write.
   **The remaining 19 silent surfaces are counted, not ignored.**
   `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 

@@ -111,6 +111,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/auto/accident/route.ts', "feature: 'auto.accident'"],
       ['app/api/ai/invest/route.ts', "feature: 'invest.mentor'"],
       ['app/api/behavior/insight/route.ts', "feature: 'behavior.insight'"],
+      ['app/(app)/dashboard/contacts/[id]/actions.ts', "feature: 'contacts.reconnect'"],
+      ['app/(app)/dashboard/paperwork/actions.ts', "feature: 'paperwork.draft-reply'"],
+      ['app/(app)/marketplace/assistant-actions.ts', "feature: 'marketplace.assistant'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -281,6 +284,18 @@ describe('§33 the surfaces a family would ask about are observed', () => {
 });
 
 describe('what is deliberately NOT adopted', () => {
+  it('leaves the admin AI-engine connectivity test alone, with a reason', () => {
+    // `app/(app)/admin/ai/actions.ts` authenticates with getUser() + isSuperAdmin()
+    // and never resolves a family at all — it exists to answer "does the
+    // configured key work?". There is no `familyId` to build a scope from, and
+    // billing a connectivity check to whichever family happens to be first would
+    // be worse than not recording it. Same class as /api/ai/gift.
+    const src = readFileSync('app/(app)/admin/ai/actions.ts', 'utf8');
+    expect(src).not.toContain('withAiRequest(');
+    expect(src).toContain('isSuperAdmin()');
+    expect(src, 'it has no family context to attribute a row to').not.toContain('requireUserContext');
+  });
+
   it('leaves the public gift assistant alone, with a reason', () => {
     // /api/ai/gift is UNAUTHENTICATED by design — givers are not signed in, so
     // there is no user scope to build one from. Attributing a stranger's
@@ -320,7 +335,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
     // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
-    // then 11.
+    // then 11, then 8.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -328,7 +343,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 11;
+    const CEILING = 8;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
