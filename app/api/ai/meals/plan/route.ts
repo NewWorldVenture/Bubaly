@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
@@ -92,12 +94,19 @@ export async function POST(req: Request) {
   // Ask the model ---------------------------------------------------------
   let text: string;
   try {
-    const completion = await (await resolveProvider()).complete({
-      system: buildPlannerSystem(),
-      messages: [{ role: 'user', content: buildPlannerUser(request) }],
-      tools: [], maxTokens: 2000,
-    });
-    text = completion.text;
+    text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'meals.plan', text: 'Plan the week\u2019s meals' },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({
+          system: buildPlannerSystem(),
+          messages: [{ role: 'user', content: buildPlannerUser(request) }],
+          tools: [], maxTokens: 2000,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    );
   } catch (err) {
     console.error('Meal plan generation error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
