@@ -1,0 +1,99 @@
+// lib/trust/ai-gate.ts — one gate for the AI surfaces that hold a client and a
+// family id rather than a ServiceScope.
+//
+// `lib/ai/tools/execute.ts` is the full gate for the tool registry: family
+// settings, then the engine, then the risk tier, then the ledger. Two other
+// surfaces write family data and used to call the bare engine instead — the
+// chat assistant's tool wrapper and Magic Import. The consequence was concrete:
+// "Switch Bubaly off" in Settings → Bubaly AI stopped the run executor and the
+// routine cron, and left chat and Magic Import creating events, chores,
+// reminders and announcements.
+//
+// This is the same set of rules for those two, in one place, so they cannot
+// drift apart again.
+import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@/lib/database.types';
+import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
+import { getTool } from '@/lib/ai/tools/registry';
+import { readAISettings } from '@/lib/services/ai-settings';
+import { riskToDecision, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { evaluateTrust, openApprovalRequest } from '@/lib/trust/server';
+
+type DB = SupabaseClient<Database>;
+
+export type AiGateRequest = {
+  /** The tool's name as this surface spells it; registry aliases are resolved. */
+  toolName: string;
+  domain: string;
+  actorId: string;
+  actorRole: TrustRole;
+  /** Display name of the agent asking, for the approval row. */
+  agent: string;
+  title: string;
+  payload: Record<string, unknown>;
+  confidence?: number;
+  capability?: Capability;
+};
+
+export type AiGateOutcome =
+  | { effect: 'allow' }
+  | { effect: 'deny'; reason: string }
+  | { effect: 'require_approval'; reason: string; approvalId: string | null };
+
+export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRequest): Promise<AiGateOutcome> {
+  const settings = await readAISettings(supabase, familyId);
+  if (!settings.enabled) {
+    // Switched off means switched off: no approval is opened, because there is
+    // nothing for a parent to release — the family turned Bubaly's hands off.
+    return { effect: 'deny', reason: 'Bubaly is switched off for this family in Settings → Bubaly AI.' };
+  }
+
+  const capability = req.capability ?? 'automate';
+  const evaluateRequest = {
+    actor: { kind: 'ai_agent' as const, id: req.actorId, role: req.actorRole },
+    domain: req.domain,
+    capability,
+    agent: req.agent,
+    title: req.title,
+    payload: req.payload,
+    context: { confidence: req.confidence ?? 0.85 },
+  };
+  const { decision: engineDecision, approvalId: engineApprovalId } = await evaluateTrust(supabase, familyId, evaluateRequest);
+
+  // The registry knows this tool's declared risk under its legacy name (these
+  // surfaces spell tools the old way, and every one is a registry alias), so
+  // the family's per-tool overrides and their autonomy dial reach them too.
+  const registryTool = getTool(req.toolName);
+  const risk = registryTool ? effectiveRisk(settings, registryTool) : 'medium';
+
+  // Same rule as the executor's gate: the tier speaks over the generic role
+  // matrix, and over a policy that names no domain — where it may only tighten.
+  const fromGenericRule = engineDecision.basis === 'role_default' || engineDecision.basis === 'fallback';
+  const blanketAllow = engineDecision.basis === 'policy' && engineDecision.effect === 'allow' && engineDecision.policyScope === 'broad';
+  let decision: Decision = engineDecision;
+  if (fromGenericRule || blanketAllow) {
+    const risked = riskToDecision({
+      risk,
+      actor: { kind: 'ai_agent', id: req.actorId, role: req.actorRole },
+      domain: req.domain,
+      capability,
+      behavior: behaviorForDomain(settings, req.domain),
+      explicitAllow: false,
+    });
+    if (risked && !(engineApprovalId && risked.effect === 'allow') && (fromGenericRule || risked.effect !== 'allow')) {
+      decision = risked;
+    }
+  }
+
+  if (decision.effect === 'deny') return { effect: 'deny', reason: decision.reason };
+  if (decision.effect === 'require_approval') {
+    // The engine files its own approval row; a tier that tightened an `allow`
+    // into an approval has to file one too, or "sent for parent approval" names
+    // nothing a parent can find.
+    const approvalId = engineApprovalId
+      ?? await openApprovalRequest(supabase, familyId, { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json> }, decision);
+    return { effect: 'require_approval', reason: decision.reason, approvalId: approvalId ?? null };
+  }
+  return { effect: 'allow' };
+}

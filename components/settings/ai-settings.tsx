@@ -26,6 +26,7 @@ import { loadAISettingsAction, saveAISettingsAction } from '@/app/(app)/dashboar
 import { isManager, type MemberRole } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Card } from '@/components/ui/card';
+import { AIMemoryPanel } from '@/components/settings/ai-memory';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 
@@ -194,6 +195,10 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           </Button>
         </div>
       </Card>
+
+      {/* §32's Review + Clear. The toggle above says what Bubaly MAY keep; this
+          says what it HAS kept, and lets a family take any of it back. */}
+      <AIMemoryPanel canManage={canManage} />
 
       {!canManage && (
         <p className="text-sm text-muted">Only a parent or adult can change what Bubaly may do.</p>

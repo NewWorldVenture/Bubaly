@@ -251,7 +251,9 @@ describe('memory.remember', () => {
       return { data: null, error: null };
     });
     const tool = getTool('memory.remember')!;
-    const res = await run(tool, scopeWith(db), { key: "Doesn't eat", content: 'mushrooms', member: 'tom' });
+    // `asked_for` is the model reporting what happened in the turn — the person
+    // said "remember that". That, and only that, is the confirmed lane.
+    const res = await run(tool, scopeWith(db), { key: "Doesn't eat", content: 'mushrooms', member: 'tom', asked_for: true });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toMatchObject({ kind: 'fact', id: 'fact-1', member_id: 'member-2', confirmed: true, updated: false });
@@ -268,13 +270,33 @@ describe('memory.remember', () => {
       return { data: null, error: null };
     });
     const tool = getTool('memory.remember')!;
-    const res = await run(tool, scopeWith(db), { key: 'Go-to dinner', content: 'Taco night', source: 'ai_conversation', confidence: 65 });
+    // Nothing said the person asked for this, so it is Bubaly's own reading of
+    // the conversation. The model used to be able to call it a fact.
+    const res = await run(tool, scopeWith(db), { key: 'Go-to dinner', content: 'Taco night', confidence: 65 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toMatchObject({ kind: 'suggestion', confirmed: false });
       expect(tool.summarize({}, res.data)).toContain('waiting for someone to confirm');
     }
     expect(calls.some((c) => c.table === 'family_facts')).toBe(false);
+  });
+
+  it('will not let the model call its own inference a fact', async () => {
+    // The lane used to be `input.source ?? 'user'`: the model's word for
+    // whether what it worked out was something a person said, defaulting to
+    // "a person said so". A stray `source: 'user'` in the arguments is now
+    // simply not a field the tool has.
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'insert') {
+        return { data: { ...(call.payload as Record<string, unknown>), id: 'sug-2', fact_id: null, created_at: '', updated_at: '' }, error: null };
+      }
+      return { data: null, error: null };
+    });
+    const res = await run(getTool('memory.remember')!, scopeWith(db), {
+      key: 'Bedtime', content: '8pm', source: 'user', asked_for: false,
+    });
+    expect(res).toMatchObject({ ok: true, data: { kind: 'suggestion', confirmed: false } });
+    expect(calls.some((c) => c.table === 'family_facts' && c.kind === 'insert')).toBe(false);
   });
 
   it('fails loudly for a name nobody in the family answers to', async () => {

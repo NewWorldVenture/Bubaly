@@ -42,6 +42,7 @@ import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
 import { parseNotifyInput } from '@/lib/ai/runs/executor';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';
+import { behaviorForDomain, type AISettings } from '@/lib/ai/family-settings';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { AiStepType } from '@/lib/database.types';
 import { zonedTimeMs } from '@/lib/services/scope';
@@ -87,6 +88,13 @@ export type ValidationInputs = {
   emergencyDomains: string[];
   /** The requester's role as the executor will evaluate it (`system` → adult, see `trustRoleFor`). */
   role: TrustRole;
+  /**
+   * The family's own settings (0257). The planner used to read autonomy from
+   * `subject_kind='ai'` trust policies alone — rows that Settings → Bubaly AI
+   * has never written — so a family who set Meals to "Recommend only" got a
+   * plan whose act steps were neither dropped nor marked approval-required.
+   */
+  settings?: AISettings | null;
   /** Planner confidence fed to policy conditions; the executor's default is 0.85. */
   confidence?: number;
   now: Date;
@@ -147,13 +155,12 @@ function effectToBehavior(effect: Policy['effect']): AutonomyBehavior {
 
 /**
  * The household's autonomy behaviour for a domain, read from the same
- * `subject_kind='ai'` trust policies `evaluateAction` will match: §4.6
- * materialises `family_ai_settings.behavior` as `AI autonomy: <category>`
- * rows (capability `all`) and the concierge dial as the scheduling row. There
- * is no `family_ai_settings` table in this checkout (migration 0253 has not
- * landed), so these rows ARE the setting. A domain with no row and no `all`
- * row returns null: "no preference recorded", which the engine treats as
- * "gate by risk and role", not as permission.
+ * `subject_kind='ai'` trust policies `evaluateAction` will match — today only
+ * the concierge dial writes one (the scheduling row). The settings page writes
+ * `family_ai_settings` instead, which is why `behaviorFor` reads both and takes
+ * the stricter. A domain with no row and no `all` row returns null: "no
+ * preference recorded", which the engine treats as "gate by risk and role",
+ * not as permission.
  */
 export function autonomyBehaviorFor(policies: Policy[], domain: string): AutonomyBehavior | null {
   const matching = policies
@@ -161,6 +168,22 @@ export function autonomyBehaviorFor(policies: Policy[], domain: string): Autonom
     .sort((a, b) => (b.priority - a.priority) || (a.domain === domain ? -1 : b.domain === domain ? 1 : 0));
   const best = matching[0];
   return best ? effectToBehavior(best.effect) : null;
+}
+
+/**
+ * The household's autonomy behaviour for a domain, from BOTH places a family
+ * can express it: the settings page (0257 `family_ai_settings`) and a trust
+ * policy. The stricter of the two wins, because both are the family's word and
+ * the cautious reading is the one they can undo.
+ *
+ * `execute` from the settings row is the default — "no restriction" — so it is
+ * folded back to null, preserving the "no preference recorded" answer the
+ * planner and the engine both rely on.
+ */
+export function behaviorFor(inputs: ValidationInputs, domain: string): AutonomyBehavior | null {
+  const fromPolicy = autonomyBehaviorFor(inputs.policies, domain);
+  const raw = inputs.settings ? behaviorForDomain(inputs.settings, domain) : null;
+  return dominantBehavior([fromPolicy, raw === 'execute' ? null : raw]);
 }
 
 /** The behaviour that describes the plan as a whole: the most restrictive one any act step carries. */
@@ -450,7 +473,7 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
       if (stepType !== raw.step_type) {
         issues.push({ code: 'type_coerced', step: key, message: `Step "${key}" was marked ${raw.step_type} but ${tool.name} is a ${tool.readOnly ? 'read' : 'write'}; it was corrected.` });
       }
-      const behavior = tool.readOnly ? null : autonomyBehaviorFor(inputs.policies, tool.domain);
+      const behavior = tool.readOnly ? null : behaviorFor(inputs, tool.domain);
       if (stepType === 'act' && behavior === 'recommend') {
         // The household's own policy would deny this at the gate; it is not a
         // refusal to report but the §11 level-1 contract — the step becomes

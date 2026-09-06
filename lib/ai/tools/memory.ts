@@ -21,13 +21,13 @@ import { FACT_CATEGORY_LABELS } from '@/lib/memory/facts';
 import {
   forgetFact, isSensitiveMemory, recallFacts, rememberFact, type FamilyFact,
 } from '@/lib/services/memory';
+import { getAISettings } from '@/lib/services/ai-settings';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveAssigneeId } from './family';
 import { defineTool, plural, type ToolDefinition } from './types';
 
 const CATEGORIES = ['about', 'preference', 'contact', 'sizes', 'important', 'date', 'other'] as const;
-const SOURCES = ['user', 'ai_conversation', 'ai_inferred'] as const;
 
 const SENSITIVE_REFUSAL = 'Medical and account details are only saved when a person enters them directly — allergies belong in the health profile, and account details in the accounts vault.';
 
@@ -70,8 +70,8 @@ export const memoryTools: ToolDefinition[] = [
       category: z.enum(CATEGORIES).nullish().describe('Defaults to "preference" for likes/dislikes, otherwise "other"'),
       member: z.string().nullish().describe('Family member the fact is about; omit for the whole family'),
       member_id: z.string().nullish(),
-      source: z.enum(SOURCES).nullish().describe('"user" when a person asked to remember it (default); an AI source lands in the review inbox instead'),
-      confidence: z.number().int().nullish().describe('0–100, only for AI sources'),
+      asked_for: z.boolean().nullish().describe('True ONLY when the person asked in so many words to remember this ("remember that…", "note that…"). Anything you worked out yourself is not asked for.'),
+      confidence: z.number().int().nullish().describe('0–100, how sure you are — used when this is your own inference'),
       note: z.string().nullish().describe('Context or evidence'),
     }),
     output: z.object({
@@ -103,11 +103,21 @@ export const memoryTools: ToolDefinition[] = [
       if (!member.ok) return member;
 
       const category = input.category ?? (/dislike|doesn'?t eat|favou?rite|go-to|likes?|loves?|diet|prefers?/i.test(`${key} ${content}`) ? 'preference' : 'other');
+      // The lane a memory lands in used to be `input.source ?? 'user'` — the
+      // model's own word for whether its inference was a fact, defaulting to
+      // "a person said so". So everything Bubaly worked out went in confirmed,
+      // and §2's "differentiate confirmed facts from inferred ones" was decided
+      // by the party with the least standing to decide it.
+      //
+      // A person asking in so many words is still the confirmed lane, because
+      // that is genuinely what happened and the model can see it in the turn.
+      // Silence is not consent: anything else is an inference, and inferences
+      // go to the review inbox where somebody can say yes.
       const res = await rememberFact(scope, {
         category,
         key,
         content,
-        source: input.source ?? 'user',
+        source: input.asked_for === true ? 'user' : 'ai_conversation',
         confidence: input.confidence ?? null,
         memberId: member.data,
         note: input.note ?? null,
@@ -152,6 +162,11 @@ export const memoryTools: ToolDefinition[] = [
       ? `Nothing remembered${input.query ? ` about "${input.query}"` : ''}`
       : `Recalled ${plural(output.facts.length, 'fact')}${input.query ? ` about "${input.query}"` : ''}`),
     execute: async (scope, input) => {
+      // The other half of "Allow memory": off means Bubaly does not use what it
+      // remembers, whether it arrives through the context slice or by asking.
+      const settings = await getAISettings(scope);
+      if (!settings.memoryEnabled) return ok({ facts: [] });
+
       const member = await resolveAssigneeId(scope, { assignee_id: input.member_id, assignee: input.member });
       if (!member.ok) return member;
       const res = await recallFacts(scope, {
