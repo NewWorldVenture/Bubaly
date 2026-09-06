@@ -7,9 +7,14 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 // failed read returned "0 notifications" — indistinguishable from an empty queue
 // — silently dropping every push. It now fails closed (throws) so the caller
 // (cron / on-demand) counts a dispatch failure instead of hiding it.
+// A pass-through chain: it answers every builder method the real query uses and
+// applies none of them, because this file is about the ERROR path, not about
+// which rows come back. `lte` is here for the `send_at` due-filter — a scheduled
+// notification not being pushed early is proved in push-send-at-boundary.test.ts
+// against a fake that really does filter.
 function chain(result: { data: unknown; error: unknown }) {
   const c: Record<string, unknown> = {
-    select: () => c, is: () => c, eq: () => c, order: () => c, limit: () => c,
+    select: () => c, is: () => c, lte: () => c, eq: () => c, order: () => c, limit: () => c,
     then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
   };
   return c;
