@@ -106,9 +106,32 @@ export function normalizeStatusFilter(raw: string | undefined): { status: AiRunS
   return match ? { status: match, ignored: null } : { status: null, ignored: value };
 }
 
-/** `%` and `_` are wildcards in ILIKE; a family searching for "50%" means the characters. */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+/**
+ * Make a free-text term safe to embed in a PostgREST `or=(...)` filter.
+ *
+ * TWO different escaping problems, and only the second one is obvious.
+ *
+ * 1. `%` and `_` are ILIKE wildcards. A family searching for "50%" means those
+ *    characters, not "50 followed by anything".
+ * 2. `,` `(` `)` are STRUCTURAL inside `or=(...)`: they separate and group the
+ *    conditions. Interpolating a term containing one splits the filter into
+ *    pieces PostgREST then rejects or, worse, reads as different conditions.
+ *    Every other `.or()` in this repo interpolates a UUID or an ISO timestamp,
+ *    which cannot contain them; this is the only one taking a person's text.
+ *
+ * The structural characters are replaced with a space rather than quoted and
+ * escaped. Quoting is the more general fix, but its correctness rests on
+ * PostgREST's tokenizer behaving as documented, which nothing here can test —
+ * and a search box that quietly drops a parenthesis is a far smaller failure
+ * than one that returns wrong rows. Dots survive, because `wallet.coach` is a
+ * feature name someone will reasonably type, and a dot inside the value half of
+ * `column.operator.value` is not structural.
+ */
+function safeSearchTerm(value: string): string {
+  return value
+    .replace(/[(),]/g, ' ')
+    .replace(/[\\%_]/g, (c) => `\\${c}`)
+    .trim();
 }
 
 export type AiActivityPage = {
@@ -146,9 +169,9 @@ export async function listAiActivity(
   if (status) query = query.eq('status', status);
   if (filters.feature) query = query.eq('feature', filters.feature);
   if (filters.familyId) query = query.eq('family_id', filters.familyId);
-  const q = (filters.q ?? '').trim();
-  if (q) {
-    const like = `%${escapeLike(q)}%`;
+  const term = safeSearchTerm(filters.q ?? '');
+  if (term) {
+    const like = `%${term}%`;
     query = query.or(`feature.ilike.${like},error.ilike.${like}`);
   }
 

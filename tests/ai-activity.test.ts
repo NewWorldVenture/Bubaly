@@ -109,6 +109,37 @@ describe('listAiActivity', () => {
     expect(filter).not.toContain('request_text');
   });
 
+  it('cannot have its or-filter split apart by a comma or a bracket in the search box', async () => {
+    // `,` `(` `)` are STRUCTURAL inside PostgREST's `or=(...)`. A term carrying
+    // one would break `feature.ilike.%a,b%,error.ilike.%a,b%` into pieces that
+    // are rejected or, worse, read as different conditions. Every other `.or()`
+    // in this repo interpolates a UUID or a timestamp; this is the only one
+    // taking a person's text, so it is the only one that can be split.
+    const { db, calls } = stubDb();
+    await listAiActivity(db, { q: 'timeout (503), retry' });
+    const [filter] = argsOf(calls, 'or')[0] as [string];
+    // Exactly two conditions, still — one comma, the one that separates them.
+    expect(filter.split(',')).toHaveLength(2);
+    expect(filter).not.toContain('(');
+    expect(filter).not.toContain(')');
+    expect(filter).toMatch(/^feature\.ilike\.%[^,()]*%,error\.ilike\.%[^,()]*%$/);
+  });
+
+  it('keeps the dots, because feature names are full of them', async () => {
+    // A dot inside the value half of `column.operator.value` is not structural,
+    // and `wallet.coach` is a thing someone will reasonably type.
+    const { db, calls } = stubDb();
+    await listAiActivity(db, { q: 'wallet.coach' });
+    const [filter] = argsOf(calls, 'or')[0] as [string];
+    expect(filter).toContain('feature.ilike.%wallet.coach%');
+  });
+
+  it('treats a term that was nothing but structure as no search at all', async () => {
+    const { db, calls } = stubDb();
+    await listAiActivity(db, { q: '  (),  ' });
+    expect(argsOf(calls, 'or')).toEqual([]);
+  });
+
   it('derives the page count from the server count, not from the rows it got back', async () => {
     // The last page holds fewer rows than the page size; deriving pageCount
     // from `rows.length` would say "1 page" on every page.
