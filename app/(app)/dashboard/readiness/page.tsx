@@ -80,7 +80,10 @@ export default async function ReadinessPage() {
   // and cannot speak for.
   const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>): Promise<{ value: number; known: boolean }> => {
     const { count: n, error } = await q;
-    return error ? { value: 0, known: false } : { value: n ?? 0, known: true };
+    if (error || typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0) {
+      return { value: 0, known: false };
+    }
+    return { value: n, known: true };
   };
   const [
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,

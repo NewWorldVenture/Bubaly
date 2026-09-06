@@ -25,7 +25,7 @@ const result = <T,>(data: T[], count = data.length): Result<T> => ({ data, count
 let week: Result<CalendarReadinessEvent>;
 let tomorrow: Result<CalendarReadinessEvent>;
 let roster: Result<{ id: string }>;
-let counts: Record<string, number>;
+let counts: Record<string, number | null>;
 let queries: Query[];
 
 function from(table: string) {
@@ -41,7 +41,11 @@ function from(table: string) {
       if (table === 'family_members') reply = roster;
       else if (table === 'calendar_events' && !record.options?.head) reply = record.limit === 200 ? week : tomorrow;
       else if (table === 'meal_plans' && !record.options?.head) reply = result(Array.from({ length: 7 }, (_, i) => ({ plan_date: `2026-09-${String(6 + i).padStart(2, '0')}` })));
-      else reply = { data: null, count: counts[table] ?? (table === 'meal_plans' ? 1 : 0), error: null };
+      else reply = {
+        data: null,
+        count: Object.prototype.hasOwnProperty.call(counts, table) ? counts[table] : (table === 'meal_plans' ? 1 : 0),
+        error: null,
+      };
       return Promise.resolve(reply).then(resolve);
     },
   });
@@ -153,6 +157,30 @@ describe('readiness page source coverage', () => {
     const html = await render();
     expect(html).toContain(COVERAGE_BANNER);
     expect(html).not.toContain('The week is under control.');
+  });
+
+  it.each([null, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5])('does not turn invalid document count metadata into an all-clear (%s)', async (count) => {
+    counts.documents = count;
+    const html = await render();
+    expect(html).toContain(COVERAGE_BANNER);
+    expect(html).toContain('Documents could not be read');
+    expect(html).not.toContain('Documents are current');
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  it('keeps a missing prep-plan count unknown rather than treating it as no active plans', async () => {
+    counts.prep_plans = null;
+    const html = await render();
+    expect(html).toContain(COVERAGE_BANNER);
+    expect(html).toContain('Prep plans could not be read');
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  it('accepts a confirmed zero document count as complete evidence', async () => {
+    counts.documents = 0;
+    const html = await render();
+    expect(html).toContain('Documents are current');
+    expect(html).not.toContain(COVERAGE_BANNER);
   });
 
   it('does not turn a failed tomorrow read into a clear tomorrow', async () => {

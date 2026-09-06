@@ -340,7 +340,7 @@ describe('the readiness page answers once, and with the rules its links point at
     expect(page).toContain('const readCoverage: Partial<Record<Evidence, ReadinessCoverage>> = {};');
     expect(page).toContain("if (!expiringDocsMonth.known) readCoverage.documents = 'unknown';");
     expect(page).toContain('coverage: readCoverage,');
-    expect(page).toContain('return error ? { value: 0, known: false } : { value: n ?? 0, known: true };');
+    // Count validity is exercised by the rendered page's missing/invalid-count cases.
   });
 
   it('does not pay for a count nothing reads', () => {
