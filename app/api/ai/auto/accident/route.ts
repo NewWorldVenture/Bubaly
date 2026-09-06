@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -53,8 +55,18 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
-    text = completion.text.trim();
+    // Someone has just had a car accident. A 503 here is the one failure on
+    // this list a family is most likely to write in about, and until now it
+    // left nothing behind.
+    text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'auto.accident', text: 'Accident next steps' },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text.trim();
+      },
+    );
   } catch (err) {
     console.error('Accident assistant error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });

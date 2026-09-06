@@ -27,6 +27,7 @@
 import 'server-only';
 import type { AiRequestKind, Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
+import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 import { createRequest, updateRequest } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
 import type { TokenUsage } from '@/lib/ai/usage';
@@ -34,7 +35,12 @@ import type { TokenUsage } from '@/lib/ai/usage';
 export type AiRequestSpec = {
   /** Dotted surface name, e.g. `briefing.daily`, `chat.assistant`. Stored on the row. */
   feature: string;
-  /** What the family asked for. Stored verbatim; keep it short and non-sensitive. */
+  /**
+   * What the family asked for. Keep it non-sensitive — most surfaces pass a
+   * fixed label ("Analyse a note") precisely so a person's own words never land
+   * here. Truncated to `MAX_AI_REQUEST_TEXT_CHARS` on the way in, so a caller
+   * interpolating unbounded input cannot write an unbounded row.
+   */
   text: string;
   kind?: AiRequestKind;
   conversationId?: string | null;
@@ -76,7 +82,14 @@ export async function withAiRequest<T>(
 
   const opened = await createRequest(scope, {
     kind: spec.kind ?? 'feature',
-    requestText: spec.text,
+    // Bounded HERE rather than at each caller, because "keep it short" is this
+    // module's own documented contract and fifteen call sites remembering a
+    // rule is the same rule forgotten somewhere. The concierge intake already
+    // caps this exact column at MAX_AI_REQUEST_TEXT_CHARS; a surface reaching
+    // it through the wrapper was the only way in without that cap — and the
+    // chat assistant's own limit is 8000, twice this one, so it was already
+    // through it.
+    requestText: spec.text.slice(0, MAX_AI_REQUEST_TEXT_CHARS),
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
   }).catch((err: unknown) => {

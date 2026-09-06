@@ -26,7 +26,7 @@ family is right.
 
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
-| **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
+| **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. (**Calendar tranche landed.** Add Event, Find a time, Edit and Delete now go through `lib/services/calendar` via `app/(app)/dashboard/calendar/actions.ts`, so the module's own Save is deduplicated by the same 0256 index Bubaly's writes use, is validated server-side, and filters `family_id` on update and delete instead of leaving tenancy to RLS. Proofs: `tests/calendar-write-path.test.ts` behaviourally, `tests/calendar-single-write-path.test.ts` structurally; `components/modules/routines-panel.tsx` is the one calendar writer still going to PostgREST from the browser, because it materialises a routine as a BATCH and `createEvent` creates one event. **Third symptom is NOT closed and cannot be closed this way.** `recordActivity` no-ops for `actorKind: 'member'` by design: `agent_activity` is Bubaly's ledger — `/dashboard/agents` renders it as the agent roster's feed and `lib/metric/time-saved-server.ts` counts its `done` rows as time the assistant saved — so writing a parent's own edit there unmarked has Bubaly taking credit for it. A trail carrying both needs a column saying WHICH acted, plus a filter in all six readers; that is a product decision about what the agent feed is, not a call-site change. Pinned by the last case in `tests/calendar-write-path.test.ts` so changing it is a visible diff.) |
 | **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, EVERY site that bypassed it has the window — the batch generator keeps its own insert but takes `deliveryTimeFor` — and `child_channels` IS consulted, at delivery, by both push and email. What remains of this row is the push channel itself and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
@@ -38,7 +38,7 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: the admin view over runs now exists at `/admin/ai-activity`, and `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 19 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: the admin view over runs now exists at `/admin/ai-activity`, and `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 17 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
@@ -290,6 +290,32 @@ the result rather than narrated as a fresh write.
   bookkeeping, so the set was widened deliberately and the assertion strengthened
   to also name the actual attack (no `calendar_events` write of any kind).
 
+  **The helper/route pairs needed the scope threaded, not the call site
+  wrapped.** `lib/chores/ai.ts` and `lib/social/ai.ts` hold the provider; their
+  single callers hold the scope. Wrapping at the call site would have observed
+  the surface while leaving the helper counted as silent, because the scanner
+  counts the file that OBTAINS a provider. So `validateChoreSubmission`,
+  `generateChorePlan` and `generate` each take a `ServiceScope` as their first
+  argument now and open their own row — one caller each, so a required parameter
+  was cleaner than an optional one that could silently no-op.
+
+  **The chore validator is the richest case so far, and the most child-facing.**
+  It never throws, and ends at `fallbackValidation` four ways: no API key, a
+  photo chore with no photo, a reply that will not parse, and a provider that
+  threw. From the child's side those four are ONE thing — *the chore I did was
+  not auto-approved and now I wait for a grown-up*. Two of them were silent.
+
+  The sharper half of the fix is which paths open NO row. "No key configured" is
+  a setting and "a photo chore with no photo" is a guard that fires before
+  anything is asked of a model; a row for either would inflate the failure count
+  on `/admin/ai-activity`, which is the first number support reads. Six
+  behavioural tests pin all four paths, including that a chore is never
+  `rejected` for an AI outage, and that the verdict still arrives when the
+  request row cannot be opened at all.
+
+  Three signature changes broke no test, because none of these helpers had one.
+  `tests/chores-ai-observed.test.ts` is the first.
+
   **The ledger is now readable, which is the half the gap row actually names.**
   §33's complaint is not "the rows are missing" — it is *"a family writes in that
   'Bubaly stopped doing my Sunday meal plan' and NOBODY CAN ANSWER THEM."* Until
@@ -331,6 +357,38 @@ the result rather than narrated as a fresh write.
   `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
   both halves.
 
+  **Server actions, not routes — the same wrapper, a different call shape.**
+  The reconnect-message drafter, the paperwork reply drafter and the marketplace
+  assistant are Server Actions returning result objects rather than HTTP
+  responses. They needed nothing new: `ctx` and the client are already in scope,
+  and the failure modes are the familiar ones (an empty answer returned as an
+  error result; the marketplace one swallowing into its deterministic engine).
+  What each does NOT put on the row is the point — not the contact's name, and
+  nothing at all from the paperwork itself, which is OCR of a letter somebody
+  else wrote and the most literally untrusted text in the product.
+
+  **A second surface that will never adopt, for the same reason as the gift
+  route.** `app/(app)/admin/ai/actions.ts` authenticates with `getUser()` +
+  `isSuperAdmin()` and never resolves a family: it answers "does the configured
+  key work?". There is no `familyId` to build a scope from, and billing a
+  connectivity check to whichever family came first would be worse than not
+  recording it. Named in the coverage test with that reason, so the floor is now
+  2 rather than 1.
+
+  **The subtlest shape: a canned sentence that reads like the real thing.**
+  When the parenting coach at `/api/behavior/insight` replies without JSON, the
+  route answers 200 with *"Keep logging — patterns will sharpen over time."* — a
+  warm, plausible sentence a parent cannot distinguish from coaching. The other
+  empty-200 routes at least LOOK empty; this one looks like an answer. Three
+  paths reach it (no JSON in the reply, `JSON.parse` throwing on malformed
+  braces, the provider throwing) and none recorded anything. The canned line is
+  still what the parent sees — the test asserts the failure is recorded BEFORE
+  it, by source position, so a mutant that drops `obs.failed` fails.
+
+  `auto.accident` went in the same tranche and is worth naming for a different
+  reason: someone has just had a car accident, and a 503 there is the failure on
+  this whole list a family is most likely to write in about.
+
   **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
   (the common case), "never throws" (the chat assistant) and "answers 200 with a
   flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
@@ -345,18 +403,24 @@ the result rather than narrated as a fresh write.
   request ledger does not need to repeat which kid is being coached about money.
 
   **The remaining 19 silent surfaces are counted, not ignored.**
-  `tests/ai-observability-coverage.test.ts` caps them at exactly 19 — not a round
+  `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8, then 6) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 
-  **The floor is 1, not 0.** `lib/ai/routing.ts` builds an `OpenAIProvider` and
-  hands it back without ever calling one — there is no request to observe and no
-  scope to observe it with; the caller that asked for the provider is the surface.
-  It stays in the count regardless, because excluding it means teaching the
-  scanner a judgement call, and a scanner that makes judgement calls can be argued
-  into excluding a real surface.
+  **The floor is 3, and this paragraph used to say 1.** That was wrong twice
+  over. `lib/ai/routing.ts` builds an `OpenAIProvider` and hands it back without
+  ever calling one — no request to observe, no scope to observe it with. But
+  `/api/ai/gift` was documented as deliberately-not-adopted in its own paragraph
+  and never counted toward the floor here, despite obtaining a provider and
+  sitting in the count from the first day. The floor was 2 the day "the floor is
+  1" was written, and `app/(app)/admin/ai/actions.ts` makes it 3. All three are
+  now named in one assertion, which is what stops the arithmetic drifting again.
+
+  None is excluded from the count: excluding any means teaching the scanner a
+  judgement call, and a scanner that makes judgement calls can be argued into
+  excluding a real surface.
 
   **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
   by design — a giver following a gift link is not signed in — so
@@ -371,7 +435,7 @@ the result rather than narrated as a fresh write.
   chat assistant which never throws and utility savings which answers 200 on
   failure, and the assistant engine whose stream outlives the call that creates
   it, and the conflict resolver that answers 200 with an empty list. The
-  remaining 19 should be expected to contain more of them: "wrap the provider
+  remaining 17 should be expected to contain more of them: "wrap the provider
   call" is the common case, not the whole set.
 
   **Adopting the wrapper widens what a route reads from its user context.**
@@ -383,7 +447,7 @@ the result rather than narrated as a fresh write.
   not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
   500. Expect the same in the remaining 32: the stub is thinner than the type.
 
-  Still open in §33: the other 19 surfaces. The admin view over runs is now
+  Still open in §33: the other 17 surfaces. The admin view over runs is now
   built; what it cannot show is a surface that never opened a row, which is what
   the ceiling counts. Note that `app/api/ai/route.ts` is not among them and is
   not silent either — it holds the scope, the engine holds the provider, and the

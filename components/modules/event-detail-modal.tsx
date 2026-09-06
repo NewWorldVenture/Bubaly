@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Check, X, HelpCircle, MapPin, Clock, CalendarDays, Pencil, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { deleteCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -46,9 +47,11 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
     if (deleting) return;
     setDeleting(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from('calendar_events').delete().eq('id', event.id);
-      if (error) { toastError(describeDbError(error)); return; }
+      // Through the service, which filters `family_id` as well as `id`. The
+      // client delete filtered on `id` alone and left tenancy entirely to RLS —
+      // one policy between a mistyped id and another household's event.
+      const result = await deleteCalendarEventAction(event.id);
+      if (!result.ok) { toastError(result.error); return; }
       onDeleted?.();
     } catch (err) {
       toastError(describeDbError(err));

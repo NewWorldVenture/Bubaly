@@ -168,7 +168,7 @@ Rules:
 - Score categories 0-100 honestly from the data; be encouraging if data is sparse but never invent events.
 - Emojis: 🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday.`;
 
-    const text = await withAiRequest(
+    let briefing = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'briefing.weekly', text: 'Generate the weekly briefing' },
       async (obs) => {
@@ -180,15 +180,18 @@ Rules:
           maxTokens: 2600,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        return completion.text || '{}';
+        const text = completion.text || '{}';
+        try {
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          return JSON.parse(jsonMatch?.[0] ?? '{}') as Record<string, unknown>;
+        } catch {
+          obs.failed(new Error('The weekly briefing did not parse as JSON; used the deterministic fallback.'));
+          return null;
+        }
       },
     );
 
-    let briefing: Record<string, unknown>;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      briefing = JSON.parse(jsonMatch?.[0] ?? '{}');
-    } catch {
+    if (briefing === null) {
       // Deterministic fallback built from the same data, so the page is never empty.
       briefing = {
         weekRange: weekRangeLabel(w),

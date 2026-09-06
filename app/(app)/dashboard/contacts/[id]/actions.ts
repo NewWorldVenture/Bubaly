@@ -5,6 +5,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import {
   buildContactTimeline, contactHealth,
   type LoggedInteraction, type CommunicationLike,
@@ -123,9 +125,20 @@ export async function draftReconnectMessageAction(
     'Write the reconnect message to send.';
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 220 });
-    const message = (completion.text || '').trim();
+    // The contact's name stays off the row: who a family is trying to reconnect
+    // with is not something the request ledger needs to carry.
+    const message = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'contacts.reconnect', text: 'Draft a reconnect message' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 220 });
+        obs.used(provider.model, completion.usage);
+        const out = (completion.text || '').trim();
+        if (!out) obs.failed(new Error('The model returned an empty message.'));
+        return out;
+      },
+    );
     if (!message) return { ok: false, error: 'Could not draft a message. Please try again.' };
     return { ok: true, message, tone };
   } catch (err) {

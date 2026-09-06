@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildTransformPrompt, parseTransformResult, getRecipeAiAction, type RecipeAiActionId } from '@/lib/recipes/ai-actions';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import type { Database } from '@/lib/database.types';
@@ -49,9 +51,21 @@ export async function POST(req: NextRequest) {
 
   let result;
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system: prompt.system, messages: [{ role: 'user', content: prompt.user }], tools: [], maxTokens: 1800 });
-    result = parseTransformResult(completion.text, actionId as RecipeAiActionId);
+    // The parse belongs inside: a model that answers in prose costs the same
+    // tokens and leaves the cook with the same "please try again", but outside
+    // the wrapper the row would read `completed`.
+    result = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: `recipes.${actionId}`, text: 'Transform a recipe' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system: prompt.system, messages: [{ role: 'user', content: prompt.user }], tools: [], maxTokens: 1800 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseTransformResult(completion.text, actionId as RecipeAiActionId);
+        if (!parsed) obs.failed(new Error('The recipe variant did not parse.'));
+        return parsed;
+      },
+    );
   } catch (err) {
     console.error('Recipe transform error:', err);
     return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });

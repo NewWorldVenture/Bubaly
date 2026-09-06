@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import {
   buildTripResearchPrompt, parseTripResearch, fallbackTripResearch, type TripResearchInput,
 } from '@/lib/trips/research';
@@ -45,14 +47,27 @@ export async function POST(req: NextRequest) {
     if (await isAIConfigured()) {
       try {
         const { system, user } = buildTripResearchPrompt(input);
-        const provider = await resolveProvider();
-        const completion = await provider.complete({
-          system,
-          messages: [{ role: 'user', content: user }],
-          tools: [],
-          maxTokens: 1400,
-        });
-        const parsed = parseTripResearch(completion.text || '');
+        // Inside the swallow, so both ways this ends at `source: 'fallback'` —
+        // the provider threw, or the research would not parse — are told apart
+        // on the row. From the traveller's side they are one thing, and both
+        // look like "no API key configured" too.
+        const parsed = await withAiRequest(
+          scopeFromUserContext(ctx, supabase),
+          { feature: 'travel.research', text: `Research a trip to ${input.destination}` },
+          async (obs) => {
+            const provider = await resolveProvider();
+            const completion = await provider.complete({
+              system,
+              messages: [{ role: 'user', content: user }],
+              tools: [],
+              maxTokens: 1400,
+            });
+            obs.used(completion.model ?? 'unknown', completion.usage);
+            const out = parseTripResearch(completion.text || '');
+            if (!out) obs.failed(new Error('The trip research did not parse; fell back to the deterministic plan.'));
+            return out;
+          },
+        );
         if (parsed) {
           recommendations = parsed;
           source = 'ai';

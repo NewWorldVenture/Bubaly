@@ -6,8 +6,9 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { expandEvents } from '@/lib/calendar/recurrence';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
-import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
@@ -828,8 +829,8 @@ export function CalendarModule() {
         </div>
       </div>
 
-      {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
-      {editing && <NewEventModal familyId={familyId} userId={userId} existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
+      {open && <NewEventModal onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {editing && <NewEventModal existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
       {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && (
         <EventDetailModal
@@ -852,13 +853,23 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
-  familyId: string; userId: string; existing?: Event | null; onClose: () => void; onSaved: () => void;
+function NewEventModal({ existing, onClose, onSaved }: {
+  existing?: Event | null; onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // One id for this composition, held across every retry of it. The modal
+  // unmounts on save and on close, so the next Add Event mints a new one and two
+  // deliberately identical events both get created; a Save pressed again after a
+  // response that never arrived reuses this one and gets the first event back.
+  //
+  // Deliberately NOT reset when a save fails. The failure a parent retries is
+  // usually a lost response, not a rejected write, and re-minting on failure is
+  // exactly what turns that retry into the duplicate this is here to prevent.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -881,14 +892,22 @@ function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
     setErrors({});
     setLoading(true);
     try {
-      const supabase = createClient();
-      const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-      const { error } = existing
-        ? await supabase.from('calendar_events')
-            .update({ ...parsed.data, recurrence, ends_at: parsed.data.ends_at ?? null, location: parsed.data.location ?? null, description: parsed.data.description ?? null })
-            .eq('id', existing.id)
-        : await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
-      if (error) { toastError(describeDbError(error)); return; }
+      const recurrence = String(form.get('recurrence') ?? 'none');
+      const fields = {
+        title: parsed.data.title,
+        startsAt: parsed.data.starts_at,
+        endsAt: parsed.data.ends_at ?? null,
+        category: parsed.data.category,
+        location: parsed.data.location ?? null,
+        description: parsed.data.description ?? null,
+        recurrence,
+      };
+      // No family_id and no created_by: the action reads both from the session,
+      // so this component can no longer name the household it writes into.
+      const result = existing
+        ? await updateCalendarEventAction(existing.id, fields)
+        : await createCalendarEventAction({ ...fields, submissionId: submissionId.current });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

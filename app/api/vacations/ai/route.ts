@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
@@ -121,11 +123,20 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
 
     let plan: VacationAIPlan;
     try {
-      const provider = await resolveProvider();
-      const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
-      const validated = parseVacationAIOutput(completion.text, range.length);
-      if (!validated) return NextResponse.json({ error: 'AI builder returned an invalid trip plan. Please try again.' }, { status: 502 });
-      plan = validated;
+      const built = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'vacations.build', text: `Build a plan for ${nights} nights` },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
+          obs.used(provider.model, completion.usage);
+          const validated = parseVacationAIOutput(completion.text, range.length);
+          if (!validated) obs.failed(new Error('The trip plan did not validate against the requested day count.'));
+          return validated;
+        },
+      );
+      if (!built) return NextResponse.json({ error: 'AI builder returned an invalid trip plan. Please try again.' }, { status: 502 });
+      plan = built;
     } catch (err) {
       console.error('Vacation build error:', err);
       return NextResponse.json({ error: 'AI builder is temporarily unavailable.' }, { status: 502 });
@@ -290,13 +301,24 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
 
     let reply: string;
     try {
-      const provider = await resolveProvider();
-      const completion = await provider.complete({
-        system,
-        messages: (history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-        tools: [], maxTokens: 1000,
-      });
-      reply = completion.text || 'Sorry, I could not generate a reply.';
+      reply = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'vacations.concierge', text: 'Vacation concierge reply' },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const completion = await provider.complete({
+            system,
+            messages: (history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+            tools: [], maxTokens: 1000,
+          });
+          obs.used(provider.model, completion.usage);
+          // The apology is persisted to vacation_ai_messages as if it were an
+          // answer, so without a row the conversation keeps a polite non-reply
+          // and nothing says why.
+          if (!completion.text) obs.failed(new Error('The concierge returned no text; the apology was stored instead.'));
+          return completion.text || 'Sorry, I could not generate a reply.';
+        },
+      );
     } catch (err) {
       console.error('Concierge error:', err);
       return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });

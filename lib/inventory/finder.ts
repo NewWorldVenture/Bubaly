@@ -89,9 +89,25 @@ export function locationTree<T extends LocationLike>(locations: T[]): { location
 
 export type SearchHit<T extends ItemLike = ItemLike> = { item: T; score: number; matched: string[]; where: string };
 
-/** Tokenised search across name, brand, model, serial, tags and the location path. */
+const normalizeSearchText = (value: string) => value.normalize('NFKC').replace(/[\u2018\u2019]/g, "'").toLowerCase();
+const trimSearchPunctuation = (value: string) => value.replace(/^[^\p{L}\p{N}+#]+|[^\p{L}\p{N}+#]+$/gu, '');
+
+/** Remove request wording, not arbitrary stop words that may identify an item. */
+function searchTokens(query: string): string[] {
+  let text = trimSearchPunctuation(normalizeSearchText(query).replace(/\s+/g, ' ').trim());
+  const request = /^(?:where(?:'s|'re| is| are)|where (?:can|could) (?:i|we) find|where (?:do|did) (?:i|we) (?:keep|put|store)|(?:can|could|would) you (?:find|locate|show me)|(?:please )?(?:find|locate|show me|help me find))(?:\s+|$)/;
+  if (request.test(text)) {
+    text = text.replace(request, '')
+      .replace(/^(?:(?:a|an|the|my|our)(?:\s+|$))+/, '')
+      .replace(/(?:,\s*|\s+)please$/, '');
+  }
+  // Preserve internal model/serial separators and names such as C++ or C#.
+  return text.split(/[\s,!?;]+/u).map(trimSearchPunctuation).filter(Boolean);
+}
+
+/** Search only supplied records; every meaningful token must match stored evidence. */
 export function searchItems<T extends ItemLike>(items: T[], locations: LocationLike[], query: string): SearchHit<T>[] {
-  const tokens = query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter(Boolean);
+  const tokens = searchTokens(query);
   if (!tokens.length) return [];
   const hits: SearchHit<T>[] = [];
   for (const item of items) {
@@ -105,7 +121,7 @@ export function searchItems<T extends ItemLike>(items: T[], locations: LocationL
     for (const token of tokens) {
       let tokenHit = false;
       for (const [field, value] of fields) {
-        const v = value.toLowerCase();
+        const v = normalizeSearchText(value);
         if (!v || !v.includes(token)) continue;
         tokenHit = true;
         matched.add(field);

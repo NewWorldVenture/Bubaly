@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Sparkles, Clock, CalendarCheck, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { createCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
@@ -37,7 +38,6 @@ export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
   const tr = useTranslations();
-  const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
@@ -84,24 +84,34 @@ export function FindTimeModal({
     }
   }
 
+  // One submission id per slot, minted on first tap and kept for the life of this
+  // modal. Tapping the same slot again after a failure is the same booking and is
+  // deduplicated; tapping a different slot is a different booking and is not.
+  const bookingIds = useRef(new Map<string, string>());
+  function bookingIdFor(slotStart: string): string {
+    const held = bookingIds.current.get(slotStart);
+    if (held) return held;
+    const minted = newSubmissionId();
+    bookingIds.current.set(slotStart, minted);
+    return minted;
+  }
+
   async function book(slot: Slot) {
     setBooking(slot.startISO);
     try {
-      const supabase = createClient();
       // A meeting for several people books under the family; one person → that person.
-      const assignee_id = selectedMembers.length === 1 ? selectedMembers[0] : null;
-      const { error } = await supabase.from('calendar_events').insert({
-        family_id: familyId,
-        created_by: userId,
+      const assigneeId = selectedMembers.length === 1 ? selectedMembers[0] : null;
+      const result = await createCalendarEventAction({
         title: title.trim() || 'New event',
         category: 'general',
-        assignee_id,
-        starts_at: slot.startISO,
-        ends_at: slot.endISO,
-        all_day: false,
+        assigneeId,
+        startsAt: slot.startISO,
+        endsAt: slot.endISO,
+        allDay: false,
         recurrence: 'none',
+        submissionId: bookingIdFor(slot.startISO),
       });
-      if (error) { toastError(describeDbError(error)); return; }
+      if (!result.ok) { toastError(result.error); return; }
       success('Event scheduled');
       onScheduled();
     } catch (err) {
