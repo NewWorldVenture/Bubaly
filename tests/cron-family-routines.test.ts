@@ -5,7 +5,7 @@
 // notice: being told the same thing twice (so the occurrence is reserved
 // before anything is filed), and a paused Bubaly still doing work on a
 // schedule set up before it was paused.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createRequest: vi.fn(),
@@ -91,7 +91,25 @@ const RULE = {
   next_run_at: '2026-09-05T12:00:00.000Z', said: 'every Sunday at 5pm', is_enabled: true,
 };
 
+// The rule below fires on `0 17 * * 0` in America/New_York — Sunday 17:00 NY,
+// which is 21:00 UTC — and the reschedule assertions name that exact instant on
+// Sunday 2026-09-06. That is only "the next occurrence" while now is BEFORE it,
+// so with a live clock these tests passed until 21:00 UTC on 2026-09-06 and
+// have failed every run since: the worker correctly rolled forward a week and
+// the hard-coded date did not. Pin the clock to the Saturday instead, just
+// after the fixture's own next_run_at, so the expectations describe the
+// scheduler's behaviour rather than the day the suite happens to run.
+//
+// Only Date is faked. Faking timers wholesale would stall the awaits in the
+// worker under test.
+const NOW = new Date('2026-09-05T13:00:00.000Z');
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   vi.clearAllMocks();
   state.rules = [{ ...RULE }];
   state.families = [{ id: 'fam-1', timezone: 'America/New_York' }];
