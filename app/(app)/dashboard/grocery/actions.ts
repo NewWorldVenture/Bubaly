@@ -30,7 +30,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { addItems, type GroceryItemInput } from '@/lib/services/groceries';
+import { addItems, checkItem, clearChecked, removeItem, type GroceryItemInput } from '@/lib/services/groceries';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -71,5 +71,71 @@ export async function addGroceryItemsAction(input: AddGroceryItemsInput): Promis
   } catch (err) {
     console.error('[grocery-action] add failed', err);
     return { ok: false, error: describeActionError(err, 'Could not add those items.') };
+  }
+}
+
+export type GroceryItemActionResult =
+  | { ok: true; id: string }
+  | { ok: false; error: string };
+
+/** Session + scope, OUTSIDE the try: `requireUserContext` redirects by throwing. */
+async function groceryScope() {
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  return scopeFromUserContext(ctx, supabase);
+}
+
+/** Tick an item off, or put it back. */
+export async function setGroceryItemCheckedAction(itemId: string, checked: boolean): Promise<GroceryItemActionResult> {
+  if (!itemId) return { ok: false, error: 'That item could not be found.' };
+  const scope = await groceryScope();
+  try {
+    const result = await checkItem(scope, itemId, checked);
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.id };
+  } catch (err) {
+    console.error('[grocery-action] check failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not update that item.') };
+  }
+}
+
+export async function removeGroceryItemAction(itemId: string): Promise<GroceryItemActionResult> {
+  if (!itemId) return { ok: false, error: 'That item could not be found.' };
+  const scope = await groceryScope();
+  try {
+    const result = await removeItem(scope, itemId);
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.id };
+  } catch (err) {
+    console.error('[grocery-action] remove failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not remove that item.') };
+  }
+}
+
+export type ClearCheckedResult =
+  | { ok: true; removed: number }
+  | { ok: false; error: string };
+
+/**
+ * Empty the cart at the end of a shop.
+ *
+ * Takes the LIST, not a set of ids the browser collected. The client sent
+ * `.in('id', checkedIds)` from whatever its last render happened to hold, so an
+ * item ticked on another phone between render and tap survived the clear. The
+ * service asks the database which items are checked, at the moment of asking.
+ */
+export async function clearCheckedGroceriesAction(listId: string): Promise<ClearCheckedResult> {
+  if (!listId) return { ok: false, error: 'That list could not be found.' };
+  const scope = await groceryScope();
+  try {
+    const result = await clearChecked(scope, listId);
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    return { ok: true, removed: result.data.removed };
+  } catch (err) {
+    console.error('[grocery-action] clear checked failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not clear the checked items.') };
   }
 }
