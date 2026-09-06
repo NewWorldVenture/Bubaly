@@ -46,6 +46,22 @@ describe('translation catalogue integrity', () => {
     expect(orphans).toEqual([]);
   });
 
+  // Every locale we ship is written in the Latin script. A stray CJK, Cyrillic
+  // or Arabic character means text from somewhere else leaked into a
+  // translation mid-edit — it renders as tofu or as a word no reader of that
+  // language knows, and it is invisible in a diff full of accented Latin.
+  // Emoji are deliberately allowed — the English source uses them on purpose.
+  // Adding a non-Latin locale means deliberately removing it from this list.
+  const LATIN_SCRIPT = FILES;
+  it.each(LATIN_SCRIPT)('%s is written in the Latin script', (file) => {
+    const offenders = Object.entries(read(file))
+      .filter(([, value]) =>
+        /[\u0370-\u074F\u0900-\u0DFF\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/.test(value),
+      )
+      .map(([key, value]) => `${key}: ${value}`);
+    expect(offenders).toEqual([]);
+  });
+
   it('has no blank English values', () => {
     const blank = Object.entries(source)
       .filter(([, value]) => !value.trim())
