@@ -2580,9 +2580,14 @@ export interface Database {
         Partial<{ title: string; from_address: string | null; to_address: string | null; move_date: string; status: MoveStatus; move_kind: MoveKind; budget_cents: number | null; spent_cents: number; mover_name: string | null; mover_phone: string | null; mover_quote_cents: number | null; has_kids: boolean; has_pets: boolean; is_renting_out: boolean; notes: string | null }>
       >;
       move_tasks: T<
-        { id: string; family_id: string; move_id: string; title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; completed_at: string | null; template_key: string | null; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; move_id: string; title: string; category?: MoveTaskCategory; offset_days?: number; due_date?: string | null; assignee_id?: string | null; status?: MoveTaskStatus; completed_at?: string | null; template_key?: string | null; notes?: string | null; created_by?: string | null },
-        Partial<{ title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; completed_at: string | null; template_key: string | null; notes: string | null }>
+        { id: string; family_id: string; move_id: string; title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; date_mode: 'fixed' | 'relative'; completed_at: string | null; template_key: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; move_id: string; title: string; category?: MoveTaskCategory; offset_days?: number; due_date?: string | null; assignee_id?: string | null; status?: MoveTaskStatus; date_mode?: 'fixed' | 'relative'; completed_at?: string | null; template_key?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; category: MoveTaskCategory; offset_days: number; due_date: string | null; assignee_id: string | null; status: MoveTaskStatus; date_mode: 'fixed' | 'relative'; completed_at: string | null; template_key: string | null; notes: string | null }>
+      >;
+      move_date_recalculations: T<
+        { request_id: string; family_id: string; move_id: string; actor_user_id: string; actor_member_id: string; from_date: string; to_date: string; reviewed: Json; result: Json; created_at: string },
+        { request_id: string; family_id: string; move_id: string; actor_user_id: string; actor_member_id: string; from_date: string; to_date: string; reviewed: Json; result: Json; created_at?: string },
+        Record<string, never>
       >;
       move_boxes: T<
         { id: string; family_id: string; move_id: string; box_number: number; label: string; from_room: string | null; to_room: string | null; contents: string[]; is_fragile: boolean; is_essential: boolean; status: MoveBoxStatus; packed_by: string | null; photo_path: string | null; notes: string | null; created_by: string | null } & Stamps,
@@ -2638,6 +2643,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      move_recalculate_date: {
+        Args: { p_family_id: string; p_move_id: string; p_member_id: string; p_new_date: string; p_expected?: Json | null; p_request_id?: string | null };
+        Returns: Json;
+      };
       ensure_family_for_user: {
         Args: { p_user_id: string; p_name: string; p_timezone?: string; p_display_name?: string | null };
         Returns: string;
