@@ -22,11 +22,43 @@ const LANGS = { de: 'de-DE', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', nl: 'nl-NL',
 
 const patchPath = process.argv[2];
 if (!patchPath) {
-  console.error('usage: node scripts/i18n-apply.mjs <patch.json>');
+  console.error('usage: node scripts/i18n-apply.mjs <patch.json|patch.tsv> [--by-text]');
   process.exit(1);
 }
 
-const rawPatch = JSON.parse(readFileSync(patchPath, 'utf8'));
+// A patch may be JSON, or — for the bulk translation passes — a tab-separated
+// file with one line per English string:
+//
+//   <english>\t<de>\t<es>\t<fr>\t<it>\t<nl>\t<pt>
+//
+// TSV exists because the JSON shape costs six key names and eleven punctuation
+// characters per string; across thousands of strings that overhead is the
+// difference between one translation pass and three. TSV implies --by-text:
+// the first column is the English source string, not a catalogue key. A line
+// must carry exactly seven columns, so a stray tab inside a translation is a
+// hard error rather than a silently shifted language column.
+const TSV_ORDER = ['de', 'es', 'fr', 'it', 'nl', 'pt'];
+
+function parseTsv(text) {
+  const out = {};
+  text.split('\n').forEach((line, i) => {
+    if (!line.trim() || line.startsWith('#')) return;
+    const cols = line.split('\t');
+    if (cols.length !== TSV_ORDER.length + 1) {
+      console.error(
+        `line ${i + 1}: expected ${TSV_ORDER.length + 1} tab-separated columns, got ${cols.length}`,
+      );
+      process.exit(1);
+    }
+    const [english, ...values] = cols;
+    out[english] = Object.fromEntries(TSV_ORDER.map((lang, j) => [lang, values[j]]));
+  });
+  return out;
+}
+
+const isTsv = patchPath.endsWith('.tsv');
+const patchText = readFileSync(patchPath, 'utf8');
+const rawPatch = isTsv ? parseTsv(patchText) : JSON.parse(patchText);
 const source = JSON.parse(readFileSync(`${DIR}/en-US.json`, 'utf8'));
 
 // --by-text: the patch is keyed by the ENGLISH STRING rather than by catalogue
@@ -36,9 +68,10 @@ const source = JSON.parse(readFileSync(`${DIR}/en-US.json`, 'utf8'));
 // 125 different keys; authoring it 125 times invites 125 chances to translate it
 // differently, and a product where the same button reads "Cancelar" on one
 // screen and "Anular" on the next looks broken in a way no test catches.
-const byText = process.argv.includes('--by-text');
+const byText = isTsv || process.argv.includes('--by-text');
 
 const patch = {};
+const unmatched = [];
 if (byText) {
   const keysFor = new Map();
   for (const [key, english] of Object.entries(source)) {
@@ -48,8 +81,8 @@ if (byText) {
   for (const [english, values] of Object.entries(rawPatch)) {
     const keys = keysFor.get(english);
     if (!keys) {
-      console.error(`no catalogue key holds: ${JSON.stringify(english)}`);
-      process.exit(1);
+      unmatched.push(english);
+      continue;
     }
     for (const key of keys) patch[key] = values;
   }
@@ -95,6 +128,12 @@ for (const [key, values] of Object.entries(patch)) {
     catalogues[lang][key] = value;
     written++;
   }
+}
+
+if (unmatched.length) {
+  problems.push(
+    ...unmatched.map((e) => `no catalogue key holds: ${JSON.stringify(e)}`),
+  );
 }
 
 if (problems.length) {

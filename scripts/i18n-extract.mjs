@@ -67,12 +67,37 @@ const ENTITIES = {
   '&amp;': '&', '&apos;': "'", '&rsquo;': '’', '&lsquo;': '‘', '&quot;': '"',
   '&nbsp;': ' ', '&mdash;': '—', '&ndash;': '–', '&hellip;': '…',
   '&lt;': '<', '&gt;': '>', '&middot;': '·',
+  '&ldquo;': '“', '&rdquo;': '”', '&sbquo;': '‚', '&bdquo;': '„',
+  '&larr;': '←', '&rarr;': '→', '&uarr;': '↑', '&darr;': '↓',
+  '&harr;': '↔', '&bull;': '•', '&times;': '×', '&divide;': '÷',
+  '&copy;': '©', '&reg;': '®', '&trade;': '™', '&deg;': '°',
+  '&plusmn;': '±', '&frac12;': '½', '&frac14;': '¼', '&frac34;': '¾',
+  '&dagger;': '†', '&sect;': '§', '&para;': '¶', '&permil;': '‰',
+  '&euro;': '€', '&pound;': '£', '&yen;': '¥', '&cent;': '¢',
+  '&laquo;': '«', '&raquo;': '»', '&prime;': '′', '&Prime;': '″',
+  '&ensp;': ' ', '&emsp;': ' ', '&thinsp;': ' ', '&shy;': '',
 };
 
+/** JSX decodes entities before the browser ever sees them; a catalogue string
+ *  does not. So `View all &rarr;` extracted verbatim would render the literal
+ *  seven characters "&rarr;" to every user in every language — a defect no test
+ *  catches, because the source still reads exactly as its author wrote it.
+ *  Anything still shaped like a named entity after this runs is therefore a hard
+ *  error, not a warning: silently shipping it is the failure mode. */
 function decodeEntities(text) {
   let out = text;
   for (const [entity, char] of Object.entries(ENTITIES)) out = out.split(entity).join(char);
-  return out.replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(Number(code)));
+  out = out
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCodePoint(Number(code)));
+  const leftover = out.match(/&[a-zA-Z][a-zA-Z0-9]{1,10};/);
+  if (leftover) {
+    throw new Error(
+      `unknown HTML entity ${leftover[0]} in ${JSON.stringify(text)} — add it to ENTITIES, ` +
+        'or it ships to users as literal text',
+    );
+  }
+  return out;
 }
 
 /** Is this JSX text actual copy? The parser guarantees it is text rather than
