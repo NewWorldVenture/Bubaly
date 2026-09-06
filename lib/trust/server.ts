@@ -94,6 +94,43 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
  * branch on `outcome.decision.effect`.
  */
 
+/**
+ * File the approval row a `require_approval` decision implies.
+ *
+ * Exported because a caller can reach `require_approval` by a route this
+ * function did not decide — the chat wrapper applies the family's risk tier
+ * over the engine's answer, and telling somebody "sent for approval" with
+ * nothing in the inbox to approve is worse than not gating at all.
+ */
+export async function openApprovalRequest(
+  supabase: DB,
+  familyId: string,
+  req: EvaluateRequest,
+  decision: Decision,
+): Promise<string | null> {
+  const writer = await ledgerWriter(supabase);
+  const { data: appr } = await writer.from('approval_requests').insert({
+    family_id: familyId,
+    domain: req.domain,
+    capability: req.capability,
+    requested_by_kind: req.actor.kind === 'ai_agent' ? 'ai' : 'member',
+    requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : null,
+    agent: req.actor.kind === 'ai_agent' ? (req.agent ?? req.actor.id) : null,
+    title: req.title ?? `${req.capability} · ${req.domain}`,
+    summary: req.summary ?? null,
+    payload: (req.payload ?? {}) as Json,
+    amount_cents: req.context?.amountCents ?? null,
+    confidence: req.context?.confidence ?? null,
+    policy_id: decision.policyId ?? null,
+    reasoning: decision.reason,
+    approval_model: decision.approvalModel ?? 'single',
+    required_approvals: decision.requiredApprovals ?? 1,
+    status: 'pending',
+    priority: req.context?.amountCents && req.context.amountCents > 20000 ? 'high' : 'normal',
+  }).select('id').single();
+  return appr?.id ?? null;
+}
+
 export async function evaluateTrust(supabase: DB, familyId: string, req: EvaluateRequest): Promise<EvaluateOutcome> {
   const inputs = await loadTrustInputs(supabase, familyId);
   // Approval requests and audit rows are Bubaly's own, not the caller's: 0252
@@ -108,26 +145,7 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
 
   let approvalId: string | undefined;
   if (decision.effect === 'require_approval' && (req.openApproval ?? true)) {
-    const { data: appr } = await writer.from('approval_requests').insert({
-      family_id: familyId,
-      domain: req.domain,
-      capability: req.capability,
-      requested_by_kind: req.actor.kind === 'ai_agent' ? 'ai' : 'member',
-      requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : null,
-      agent: req.actor.kind === 'ai_agent' ? (req.agent ?? req.actor.id) : null,
-      title: req.title ?? `${req.capability} · ${req.domain}`,
-      summary: req.summary ?? null,
-      payload: (req.payload ?? {}) as Json,
-      amount_cents: req.context?.amountCents ?? null,
-      confidence: req.context?.confidence ?? null,
-      policy_id: decision.policyId ?? null,
-      reasoning: decision.reason,
-      approval_model: decision.approvalModel ?? 'single',
-      required_approvals: decision.requiredApprovals ?? 1,
-      status: 'pending',
-      priority: req.context?.amountCents && req.context.amountCents > 20000 ? 'high' : 'normal',
-    }).select('id').single();
-    approvalId = appr?.id;
+    approvalId = (await openApprovalRequest(supabase, familyId, req, decision)) ?? undefined;
   }
 
   // Explainable audit trail — always recorded.

@@ -4,7 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { roleOf } from '@/lib/trust/server';
+import { gateAiAction } from '@/lib/trust/ai-gate';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // Map a Magic-Import action to a Trust Engine domain so the governance layer can
@@ -71,20 +72,27 @@ export async function POST(req: NextRequest) {
       const results = await Promise.all(
         body.confirm.slice(0, 50).map(async (item) => {
           const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
-          const { decision } = await evaluateTrust(supabase, familyId, {
-            actor: { kind: 'ai_agent', id: 'magic_import', role: actorRole },
-            domain, capability: 'automate',
+          // The shared AI gate (lib/trust/ai-gate.ts), same as chat and the
+          // tool registry. Magic Import used to call the bare engine, so a
+          // family who had switched Bubaly off — or set a category to
+          // "Suggests only" — still had a pasted school letter written straight
+          // into their calendar.
+          const outcome = await gateAiAction(supabase, familyId, {
+            toolName: item.name,
+            domain,
+            actorId: 'magic_import',
+            actorRole,
             agent: 'Magic Import',
             title: item.summary,
             payload: { name: item.name, args: item.args },
-            context: { confidence: 0.9 },
+            confidence: 0.9,
           });
 
-          if (decision.effect === 'deny') {
-            return { summary: item.summary, ok: false, blocked: true, error: decision.reason };
+          if (outcome.effect === 'deny') {
+            return { summary: item.summary, ok: false, blocked: true, error: outcome.reason };
           }
-          if (decision.effect === 'require_approval') {
-            return { summary: item.summary, ok: false, pendingApproval: true, error: decision.reason };
+          if (outcome.effect === 'require_approval') {
+            return { summary: item.summary, ok: false, pendingApproval: true, error: outcome.reason };
           }
           // Trust was just evaluated for this exact item a few lines up, so the
           // registry does not evaluate it a second time.

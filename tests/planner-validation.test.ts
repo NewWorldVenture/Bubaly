@@ -329,6 +329,43 @@ describe('validatePlan: risk and the pure trust dry run', () => {
     expect(result.issues.find((i) => i.step === 'money')?.message).toMatch(/private to the adults/);
   });
 
+  it('reads the family’s own dial, not just their trust policies', () => {
+    // §11's autonomy dial lives in `family_ai_settings`, which the Trust
+    // policies table has never mirrored. The planner read only the policies,
+    // so a family who set Meals to "Recommend only" in Settings → Bubaly AI
+    // got a plan whose act steps were neither dropped nor held for a yes.
+    const settings = {
+      familyId: 'fam-1', enabled: true, behavior: 'execute' as const,
+      categoryBehavior: { meal_planning: 'recommend' as const },
+      riskOverrides: {}, childChannels: {}, memoryEnabled: true, quietHours: null,
+    };
+    const one = plan([step({ key: 'meal', step_type: 'act', tool_name: 'meals.setSlot', input: '{"date":"2026-09-07","slot":"dinner","title":"Tacos"}' })]);
+
+    // Same plan, same family, the only difference being the dial.
+    const asIs = validatePlan(one, inputsWith());
+    expect(asIs.ok && asIs.steps.map((s) => s.key)).toEqual(['meal']);
+
+    const dialled = validatePlan(one, inputsWith({ settings }));
+    // Nothing left to execute — which is what "Recommend only" means, and why
+    // the planner hands it back as a recommendation instead.
+    expect(dialled).toMatchObject({ ok: false, code: 'empty' });
+    expect(dialled.issues.find((i) => i.step === 'meal')?.code).toBe('recommend_only');
+  });
+
+  it('takes the stricter of the two when a family has expressed both', () => {
+    const settings = {
+      familyId: 'fam-1', enabled: true, behavior: 'prepare' as const, categoryBehavior: {},
+      riskOverrides: {}, childChannels: {}, memoryEnabled: true, quietHours: null,
+    };
+    const result = validatePlan(plan([
+      step({ key: 'todo', step_type: 'act', tool_name: 'tasks.createTodo', input: '{"title":"Homework"}' }),
+    ]), inputsWith({ settings }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // "Prepare" stages the work rather than dropping it.
+    expect(result.steps.map((s) => [s.key, s.approvalRequired])).toEqual([['todo', true]]);
+  });
+
   it('mirrors the executor gate: a household allow policy beats the risk tier', () => {
     const tool = getTool('calendar.deleteEvent')!;
     const withoutPolicy = dryRunGate(tool, { event_id: 'x' }, inputsWith(), null);

@@ -31,6 +31,7 @@ import { isManager } from '@/lib/constants/roles';
 import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
+import { getAISettings } from '../ai-settings';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyFact = Tables<'family_facts'>;
@@ -113,13 +114,33 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   if (!MEMORY_SOURCES.includes(input.source)) return fail('Unknown memory source.', { code: SERVICE_CODES.invalidInput });
   const category: FactCategory = isCategory(input.category) ? input.category : 'other';
 
-  const fromPerson = input.source === 'user' || input.source === 'import';
+  // Two independent conditions for the confirmed lane, because it used to have
+  // none: `lib/ai/tools/memory.ts` no longer lets the model set `source` (it
+  // reports whether the person asked in so many words), and a turn with nobody
+  // in it — a cron, a background run — cannot produce a confirmed fact at all,
+  // whatever it claims, because there was nobody there to ask.
+  const fromPerson = (input.source === 'user' || input.source === 'import') && scope.actorKind !== 'system';
   // The assistant never gets to decide a medical or account fact is true.
   if (!fromPerson && isSensitiveMemory({ category, key, content })) {
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
   }
   if (fromPerson && scope.actorKind === 'ai' && isSensitiveMemory({ category, key, content })) {
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
+  }
+
+  // "Allow memory" (Settings → Bubaly AI) is about what BUBALY keeps: the copy
+  // reads "Let Bubaly remember what it learns about your family … and use it
+  // next time." It was stored, toggled and read by nothing, so a family that
+  // switched it off went on being learned from. A person typing a fact into
+  // Family Memory is their own record and is untouched by it.
+  //
+  // Checked after the sensitive-content refusals above, which are absolute and
+  // need no settings read to say no.
+  if (!fromPerson) {
+    const settings = await getAISettings(scope);
+    if (!settings.memoryEnabled) {
+      return fail('This family has memory switched off, so Bubaly does not keep what it notices.', { code: SERVICE_CODES.denied });
+    }
   }
 
   if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false });

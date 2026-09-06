@@ -1,5 +1,7 @@
 // lib/assistant/trust-wrapper.ts — intercepts every chat-tool execution and
-// routes it through the Trust & Permissions Engine before writing anything.
+// routes it through the shared AI gate (lib/trust/ai-gate.ts) before writing
+// anything: the family's settings, the Trust & Permissions Engine, then the
+// risk tier.
 // allow → execute normally
 // require_approval → create approval_request, return "pending" chip
 // deny → return blocked result (no write happens)
@@ -7,7 +9,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolSpec } from '@/lib/ai/provider';
-import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { roleOf } from '@/lib/trust/server';
+import { gateAiAction } from '@/lib/trust/ai-gate';
 
 type DB = SupabaseClient<Database>;
 
@@ -48,21 +51,25 @@ export function wrapToolsWithTrust(
       execute: async (args: Record<string, unknown>) => {
         const title = fmtTitle(tool.name, args);
 
-        const { decision } = await evaluateTrust(supabase, familyId, {
-          actor: { kind: 'ai_agent', id: 'assistant', role: actorRole },
+        // One gate for every AI surface (lib/trust/ai-gate.ts): the family's
+        // settings, then the engine, then the risk tier. Chat used to call the
+        // bare engine, so "Switch Bubaly off" and the autonomy dial — both set
+        // in Settings → Bubaly AI — never reached the tools a family talks to.
+        const outcome = await gateAiAction(supabase, familyId, {
+          toolName: tool.name,
           domain,
-          capability: 'automate',
+          actorId: 'assistant',
+          actorRole,
           agent: 'AI Assistant',
           title,
           // Payload stored so an approved request can be auto-executed later.
           payload: { name: tool.name, args },
-          context: { confidence: 0.85 },
         });
 
-        if (decision.effect === 'deny') {
-          return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+        if (outcome.effect === 'deny') {
+          return { ok: false, error: `Blocked by household policy: ${outcome.reason}` };
         }
-        if (decision.effect === 'require_approval') {
+        if (outcome.effect === 'require_approval') {
           return {
             ok: true,
             summary: `⏳ Sent for parent approval — ${title}`,

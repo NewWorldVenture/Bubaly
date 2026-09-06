@@ -24,16 +24,28 @@ type Row = Database['public']['Tables']['family_ai_settings']['Row'];
 
 /** The family's settings, or the defaults. Never fails: see the header. */
 export async function getAISettings(scope: ServiceScope): Promise<AISettings> {
-  const { data, error } = await scope.db
+  return readAISettings(scope.db, scope.familyId);
+}
+
+/**
+ * The same read for callers that hold a client and a family id but no
+ * `ServiceScope` — the chat assistant's trust wrapper, which gates the tools a
+ * family actually talks to and needs to know whether Bubaly is switched on.
+ */
+export async function readAISettings(
+  db: ServiceScope['db'],
+  familyId: string,
+): Promise<AISettings> {
+  const { data, error } = await db
     .from('family_ai_settings')
     .select('*')
-    .eq('family_id', scope.familyId)
+    .eq('family_id', familyId)
     .maybeSingle();
   if (error) {
     console.error('[service:ai-settings] read failed; using defaults', error);
-    return { familyId: scope.familyId, ...DEFAULT_AI_SETTINGS };
+    return { familyId, ...DEFAULT_AI_SETTINGS };
   }
-  return settingsFromRow(scope.familyId, (data as Row | null) ?? null);
+  return settingsFromRow(familyId, (data as Row | null) ?? null);
 }
 
 export type AISettingsPatch = {
