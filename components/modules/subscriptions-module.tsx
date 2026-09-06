@@ -16,7 +16,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { usd } from '@/lib/finance/splits';
 import {
-  CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents,
+  CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
   type SubLike,
 } from '@/lib/finance/subscriptions';
 import type { Tables } from '@/lib/database.types';
@@ -38,7 +38,8 @@ export function SubscriptionsModule() {
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const all = useMemo(() => subs ?? [], [subs]);
   const stats = useMemo(() => summarizeSubscriptions(all as SubLike[]), [all]);
-  const wasted = useMemo(() => wastedMonthlyCents(all as SubLike[]), [all]);
+  const usageNow = new Date();
+  const reviewMonthly = wastedMonthlyCents(all as SubLike[], 60, usageNow);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -96,15 +97,15 @@ export function SubscriptionsModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Active</p><p className="text-xl font-bold">{stats.active}</p></div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Monthly</p><p className="text-xl font-bold">{usd(stats.monthlyCents)}</p></div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Annual</p><p className="text-xl font-bold">{usd(stats.annualCents)}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Wasted / mo</p><p className={`text-xl font-bold ${wasted > 0 ? 'text-amber-500' : ''}`}>{usd(wasted)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Usage review / mo</p><p className={`text-xl font-bold ${reviewMonthly > 0 ? 'text-amber-500' : ''}`}>{usd(reviewMonthly)}</p></div>
       </div>
 
       <SavingsCoachCard />
 
-      {wasted > 0 && (
+      {reviewMonthly > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p>You could save <strong>{usd(wasted)}/mo</strong> ({usd(wasted * 12)}/yr) by reviewing subscriptions unused for 60+ days (flagged below).</p>
+          <p>Subscriptions totaling <strong>{usd(reviewMonthly)}/mo</strong> have recorded use more than 60 days ago. Confirm current household use before deciding what to keep. This amount is not confirmed savings.</p>
         </div>
       )}
 
@@ -112,19 +113,24 @@ export function SubscriptionsModule() {
         {all.length === 0 ? (
           <EmptyState icon={RefreshCw} title="No subscriptions tracked" description="Add streaming, apps and memberships to see your true recurring spend." />
         ) : all.map((s) => {
-          const stale = isStale(s as SubLike);
+          const usage = subscriptionUsage(s, usageNow);
+          const stale = isStale(s as SubLike, 60, usageNow);
           const canceled = s.status === 'canceled';
           return (
             <div key={s.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3">
               <div className="min-w-0">
                 <p className={`font-medium ${canceled ? 'text-muted line-through' : ''}`}>
                   {s.name} <span className="text-muted">· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
-                  {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> unused</span>}
+                  {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> review usage</span>}
                   {s.status === 'trial' && <span className="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">trial</span>}
                 </p>
                 <p className="text-xs text-muted">
                   {s.category ?? 'Other'} · {usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo · {usd(annualCostCents(s.cost_cents, s.cadence))}/yr
-                  {s.next_charge ? ` · next ${fmtDate(s.next_charge)}` : ''}{s.last_used ? ` · used ${fmtDate(s.last_used)}` : ' · never used'}
+                  {s.next_charge ? ` · next ${fmtDate(s.next_charge)}` : ''}
+                  {usage.state === 'recorded' ? ` · last recorded use ${fmtDate(usage.lastUsed)}`
+                    : usage.state === 'unknown' ? ' · usage unknown; Edit to add last use'
+                      : usage.state === 'future' ? ' · last-use date is in the future; Edit to correct'
+                        : ' · last-use date is invalid; Edit to correct'}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
@@ -152,7 +158,7 @@ export function SubscriptionsModule() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Next charge">{(id) => <Input id={id} type="date" value={form.next_charge} onChange={(e) => setForm({ ...form, next_charge: e.target.value })} />}</Field>
-              <Field label="Last used">{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
+              <Field label="Last used" hint="Leave blank if usage is unknown; record only actual use.">{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
             </div>
             <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
