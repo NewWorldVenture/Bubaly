@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { toggleDateOnCalendarAction } from '@/app/(app)/dashboard/relationship/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -21,7 +22,6 @@ import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
-import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -173,23 +173,14 @@ export function RelationshipModule() {
     success('Removed');
   }
   async function toggleCalendar(d: RDate) {
-    const sb = createClient();
-    if (d.calendar_event_id) {
-      await sb.from('calendar_events').delete().eq('id', d.calendar_event_id);
-      const { error: err } = await sb.from('relationship_dates').update({ calendar_event_id: null }).eq('id', d.id);
-      if (err) { toastError(describeDbError(err)); return; }
-      success('Removed from calendar');
-      return;
-    }
-    const payload = buildCalendarEventForDate(
-      { kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, location: d.location },
-      familyId, userId,
-    );
-    const { data: created, error: err } = await sb.from('calendar_events').insert(payload).select('id').single();
-    if (err || !created) { toastError(describeDbError(err)); return; }
-    const { error: e2 } = await sb.from('relationship_dates').update({ calendar_event_id: created.id }).eq('id', d.id);
-    if (e2) { toastError(describeDbError(e2)); return; }
-    success('Added to your family calendar 📅');
+    // Both halves in one call. This used to delete the event and then clear
+    // `calendar_event_id` REGARDLESS — the delete's result was discarded — so a
+    // failed delete left the date saying "not on your calendar" while the event
+    // sat there with nothing linking them. The action clears the link only once
+    // the event is actually gone.
+    const result = await toggleDateOnCalendarAction(d.id);
+    if (!result.ok) { toastError(result.error); return; }
+    success(result.onCalendar ? 'Added to your family calendar 📅' : 'Removed from calendar');
   }
 
   // ── Gifts CRUD ──

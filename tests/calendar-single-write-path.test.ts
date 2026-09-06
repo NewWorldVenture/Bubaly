@@ -75,6 +75,15 @@ describe('the calendar surface writes through the service', () => {
     }
   });
 
+  it('the relationship page puts a date on the calendar through the service too', () => {
+    // Not part of the calendar page, but a `calendar_events` writer all the same
+    // — and it had the sharper bug: it deleted the event and cleared
+    // `calendar_event_id` REGARDLESS, so a failed delete orphaned the event.
+    const src = code('components/modules/relationship-module.tsx');
+    expect(writesIn('components/modules/relationship-module.tsx')).toEqual([]);
+    expect(src).toMatch(/from '@\/app\/\(app\)\/dashboard\/relationship\/actions'/);
+  });
+
   it('names the one calendar component that still writes from the browser', () => {
     // Fails the day routines-panel is converted, which is the point: the list
     // has to be edited deliberately rather than drifting out of date.
