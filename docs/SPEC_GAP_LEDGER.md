@@ -97,10 +97,10 @@ Three further findings from the same review, each verified against the code:
   `pending_approval` and `denied` at step 3, *before* the ledger reservation at
   step 4. Any PR claiming a resent chat message is deduplicated is false for every
   family that turned approvals on.
-- **A resent submission opens two `approval_requests` rows.** `openApprovalRequest`
-  is an unguarded INSERT and no migration puts a unique index on that table.
-  Approving both writes the resource twice — this, not the tool ledger, is where a
-  gated family's duplicate actually comes from.
+- ~~**A resent submission opens two `approval_requests` rows.**~~ **CLOSED by
+  0273** — see "one pending approval per request" below. It was exactly as
+  described: an unguarded INSERT with no unique index, and approving both cards
+  wrote the resource twice.
 - **`create_calendar_event` and `add_grocery_item` are in both `AI_TOOLS` and
   `TOOL_DOMAIN`**, and `action-tools.ts` never sets `skipTrust`. Deleting the
   hand-written set without also deleting the `lib/ai/actions.ts` bridge would
@@ -112,6 +112,66 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§30, one pending approval per request, however many times the phone sends
+  it.** The smallest and most concrete piece of the row, and the one that
+  actually bites a family today. `openApprovalRequest` was an unguarded INSERT
+  and nothing on `approval_requests` stopped a second identical row, so a resend
+  — a flaky connection mid-answer, a double-tapped send, a reloaded tab, Bubaly's
+  own retry — filed **two pending approvals for one intent**. A parent sees two
+  cards that look like the same thing they wanted, approves both, and the
+  resource is written twice.
+
+  This is where a gated family's duplicate actually comes from, and it is the one
+  the tool ledger structurally cannot catch: `executeTool` returns
+  `pending_approval` at step 3, **before** the idempotency reservation at step 4.
+  For every family that turned approvals on, the protection §30 describes has
+  never been reached.
+
+  `0273` adds `dedupe_key` and a partial unique index. Both halves of the
+  predicate are load-bearing:
+
+  * `where status = 'pending'` — a decided request is history. Asking again for
+    something already approved is a new request and must be allowed, or a family
+    could never repeat anything they had once been granted.
+  * `where dedupe_key is not null` — every row that exists today has none, and a
+    caller supplying none keeps exactly the old behaviour instead of colliding
+    with every other keyless row in the family.
+
+  **The key is the ASK, not the engine's description of it.** Domain, capability,
+  who it is for, and the FULL payload — never a natural key, which is the trap
+  the earlier design review caught: a natural key cannot see the assignee, so
+  "give Emma and Jack each a chore due Friday" collapses two different chores
+  into one. Title, summary, reasoning and priority are excluded: they are how the
+  engine described the request, and letting them vary would let two identical
+  asks through. Payload keys are sorted before hashing, because `JSON.stringify`
+  preserves insertion order and two code paths can assemble the same arguments in
+  a different sequence.
+
+  **The duplicate is visible rather than narrated as a fresh write**, which the
+  design review named as a requirement. The lookup returns `alreadyPending`, and
+  chat says *"⏳ Already waiting for a parent's approval"* instead of claiming to
+  have sent a second one — telling a parent twice that something was sent is how
+  they come to believe two separate things are queued.
+
+  **The application check is a lookup, and a lookup loses a race.** The index is
+  what makes it correct: on 23505 the loser re-reads and returns the WINNER's id,
+  because a null there would tell a family "Bubaly could not send that for
+  approval" about a card already sitting in their inbox. The unit test for that
+  path was vacuous at first — the second call's own lookup found the row, so it
+  never reached the insert — and now blinds both pre-checks to reproduce the real
+  ordering; removing the recovery branch fails it.
+
+  Proven against real Postgres through the harness wired up in §45: 288
+  migrations apply, the index refuses a resend, allows a re-ask after approval,
+  does not cross families, and leaves keyless rows alone. That proof is now a
+  permanent probe (`docs/audit/approval-dedupe-check.sql`) which runs on every PR
+  and fails with the index dropped — a fake can tell you the application checks,
+  only the database can tell you the index exists and its predicate is right.
+
+  Still open in §30: the eight chat writes that shadow registry tools, whose
+  delegation the design review rejected on the composed-key grounds recorded
+  above.
 
 - **§45, the boundary probes now actually run.** The row said a family's rows are
   protected by policies nothing in CI ever tries to break, and that was exactly
