@@ -14,6 +14,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
+import { MoveDateRecalculation } from '@/components/modules/move-date-recalculation';
+import { isMoveDate, moveDateContextKey, type MoveDateResult } from '@/lib/moving/recalculation';
 import type { Tables, MoveBoxStatus, MoveKind, MoveStatus, MoveTaskCategory } from '@/lib/database.types';
 import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
@@ -30,8 +32,16 @@ const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
 export function MovingModule() {
+  const { familyId, userId, selfMember } = useApp();
+  const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
+  return <MovingWorkspace key={moveDateContextKey(context)} />;
+}
+
+export function MovingWorkspace() {
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
+  const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
+  const canRecalculate = context.active && !!context.memberId && (context.role === 'parent' || context.role === 'adult');
 
   const moves = useRealtimeQuery<Move>({
     table: 'moves', familyId,
@@ -63,6 +73,9 @@ export function MovingModule() {
   const [query, setQuery] = useState('');
   const [planning, setPlanning] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [dateMoveId, setDateMoveId] = useState<string | null>(null);
+  const [dateReceipt, setDateReceipt] = useState<MoveDateResult | null>(null);
+  const dateMove = moves.data.find((candidate) => candidate.id === dateMoveId) ?? null;
 
   const today = useMemo(() => new Date(), []);
   const todayIso = isoDate(today);
@@ -81,7 +94,7 @@ export function MovingModule() {
     if (!plan.length) return toastError('The full checklist for this move is already here.');
     setPlanning(true);
     const { error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
-      family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, template_key: p.key, status: 'todo' as const, created_by: userId,
+      family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, date_mode: 'relative' as const, template_key: p.key, status: 'todo' as const, created_by: userId,
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
@@ -229,11 +242,19 @@ export function MovingModule() {
                 {move.mover_name && <p className="mt-1 text-xs text-muted">Movers: {move.mover_name}{move.mover_phone ? ` · ${move.mover_phone}` : ''}{move.mover_quote_cents ? ` · quote ${money(move.mover_quote_cents)}` : ''}</p>}
               </div>
               <div className="flex items-center gap-1">
+                {canRecalculate && move.status !== 'done' && move.status !== 'cancelled' && <Button size="sm" variant="secondary" onClick={() => setDateMoveId(move.id)}>Change date</Button>}
                 <button onClick={() => setMoveForm({ open: true, move })} aria-label="Edit move" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                 <button onClick={() => deleteMove(move)} aria-label="Delete move" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
+
+          {dateReceipt?.preview.moveId === move.id && (
+            <p role="status" className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-sm">
+              Saved move date {dateReceipt.preview.fromDate} to {dateReceipt.preview.toDate}; {dateReceipt.preview.changes} reviewed deadlines shifted.
+              {' '}Change record: {dateReceipt.requestId}. Saved at {dateReceipt.appliedAt}.
+            </p>
+          )}
 
           {/* Summary */}
           <div className="grid gap-4 md:grid-cols-4">
@@ -324,6 +345,10 @@ export function MovingModule() {
         </>
       )}
 
+      {dateMove && (
+        <MoveDateRecalculation key={JSON.stringify([moveDateContextKey(context), dateMove.id])} context={context} move={dateMove}
+          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success('Move date and reviewed deadlines saved'); }} />
+      )}
       {moveForm.open && (
         <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success('Move saved'); }} />
       )}
@@ -353,10 +378,11 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
     const title = String(f.get('title') ?? '').trim();
     const moveDate = String(f.get('move_date') ?? '');
     if (!title) return toastError('Name the move');
-    if (!moveDate) return toastError('Pick the move date');
+    if (!isMoveDate(moveDate)) return toastError('Pick a valid move date');
+    if (move && moveDate !== move.move_date) return toastError('Use Change date to review the existing deadlines first.');
     setLoading(true);
     const payload = {
-      title, move_date: moveDate, from_address: String(f.get('from_address') ?? '').trim() || null, to_address: String(f.get('to_address') ?? '').trim() || null,
+      title, from_address: String(f.get('from_address') ?? '').trim() || null, to_address: String(f.get('to_address') ?? '').trim() || null,
       move_kind: String(f.get('move_kind') ?? 'local') as MoveKind, status: String(f.get('status') ?? 'planning') as MoveStatus,
       budget_cents: dollarsToCents(f.get('budget')), spent_cents: dollarsToCents(f.get('spent')) ?? 0, mover_quote_cents: dollarsToCents(f.get('mover_quote')),
       mover_name: String(f.get('mover_name') ?? '').trim() || null, mover_phone: String(f.get('mover_phone') ?? '').trim() || null,
@@ -364,8 +390,8 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
     };
     const supabase = createClient();
     const { data, error } = move
-      ? await supabase.from('moves').update(payload).eq('id', move.id).select('id').single()
-      : await supabase.from('moves').insert({ family_id: familyId, created_by: userId, ...payload }).select('id').single();
+      ? await supabase.from('moves').update(payload).eq('family_id', familyId).eq('id', move.id).select('id').single()
+      : await supabase.from('moves').insert({ family_id: familyId, created_by: userId, move_date: moveDate, ...payload }).select('id').single();
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     onSaved(data.id);
@@ -380,8 +406,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Move" required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder="Move to Maple Street" autoFocus />}</Field>
-          <Field label="Move day" required>{(id) => <Input id={id} name="move_date" type="date" defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
+          <Field label="Move day" required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
         </div>
+        {move && <p className="text-xs text-muted">Use Change date on the move to review task deadlines before changing this date.</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label="From">{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder="12 Old Road" />}</Field>
           <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder="34 Maple Street" />}</Field>
@@ -417,6 +444,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const [followDate, setFollowDate] = useState(task?.date_mode === 'relative');
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -424,10 +452,13 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
     const title = String(f.get('title') ?? '').trim();
     if (!title) return toastError('Give the task a title');
     const dueDate = String(f.get('due_date') ?? '') || null;
+    if (dueDate && !isMoveDate(dueDate)) return toastError('Pick a valid task date.');
+    const offset = dueDate ? dayDiff(move.move_date, dueDate) : (task?.offset_days ?? 0);
+    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError('A following deadline needs a date within 365 days of the move. Otherwise keep a fixed date.');
     setLoading(true);
     const payload = {
       title, category: String(f.get('category') ?? 'other') as MoveTaskCategory, due_date: dueDate,
-      offset_days: dueDate ? Math.max(-365, Math.min(365, dayDiff(move.move_date, dueDate))) : (task?.offset_days ?? 0),
+      offset_days: Math.max(-365, Math.min(365, offset)), date_mode: followDate ? 'relative' as const : 'fixed' as const,
       assignee_id: String(f.get('assignee_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
@@ -447,6 +478,8 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
           <Field label="Category">{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
           <Field label="Due" hint={`Move day is ${fmtDate(move.move_date)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
         </div>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> Follow the move date</label>
+        <p className="text-xs text-muted">Fixed dates, including older tasks, stay unchanged. Turn this on only when the deadline should move with the move date. Completed and skipped tasks are always kept.</p>
         <Field label="Who">{(id) => <Select id={id} name="assignee_id" defaultValue={task?.assignee_id ?? ''}><option value="">Anyone</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={task?.notes ?? ''} rows={2} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
