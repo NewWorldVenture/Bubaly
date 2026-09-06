@@ -12,7 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
-import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { createReminderAction, deleteReminderAction, snoozeReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -207,10 +207,10 @@ export function RemindersModule() {
 
   function snooze(id: string, mins: number) {
     return run(`snooze:${id}`, async () => {
-      const until = new Date(Date.now() + mins * 60000).toISOString();
-      const { error } = await createClient().from('family_reminders')
-        .update({ status: 'snoozed', snoozed_until: until }).eq('id', id);
-      if (error) throw error;
+      // The service computes the same `snoozed_until` from the scope's clock, and
+      // adds the family filter and a length check this had neither of.
+      const result = await snoozeReminderAction(id, mins);
+      if (!result.ok) throw new Error(result.error);
       success(`Snoozed for ${mins < 60 ? mins + ' min' : mins / 60 + ' hr'}`);
       void refresh();
     });
@@ -218,8 +218,12 @@ export function RemindersModule() {
 
   function deleteReminder(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('family_reminders').delete().eq('id', id);
-      if (error) throw error;
+      // Through the service, family-scoped where this filtered `id` alone. The
+      // editor and the recurrence respawn above cannot follow yet — they write
+      // columns `CreateReminderInput` cannot express — but a delete needs none
+      // of them.
+      const result = await deleteReminderAction(id);
+      if (!result.ok) throw new Error(result.error);
       success('Reminder deleted');
       void refresh();
     });

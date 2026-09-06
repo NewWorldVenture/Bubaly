@@ -105,11 +105,27 @@ describe('the reminders module, converted only where it can be', () => {
     expect(src).toMatch(/createReminderAction\(/);
   });
 
-  it('still writes directly for the editor and the recurrence respawn', () => {
-    // Fails the day someone converts them, which is the point: doing so needs
-    // the service to grow the 0100 columns first, and needs the recurrence
-    // question answered. Neither is a silent edit.
-    expect(writesIn(PARTIALLY_CONVERTED).length).toBeGreaterThan(0);
+  it('routes its delete and its snooze through the service too', () => {
+    // Neither needs anything the service lacks — `snoozeReminder` computes the
+    // same `snoozed_until` and adds a family filter and a length check — so both
+    // are converted, and only what is genuinely blocked remains.
+    const src = code(PARTIALLY_CONVERTED);
+    expect(src).toMatch(/deleteReminderAction\(/);
+    expect(src).toMatch(/snoozeReminderAction\(/);
+    expect(writesIn(PARTIALLY_CONVERTED)).not.toContain('delete');
+  });
+
+  it('leaves exactly the six writes that are actually blocked', () => {
+    // Pinned at six so a NEW direct write cannot hide among the blocked ones,
+    // and so converting any of them has to edit this number deliberately:
+    //
+    //   editor insert + update ....... need the six columns 0100 added
+    //   respawn insert x2 ............ same, plus the stripNewCols tolerance
+    //   toggleSubtask update ......... writes `subtasks`, a 0100 column
+    //   complete update .............. the recurrence question: this spawns a
+    //                                  history row, completeReminder rolls the
+    //                                  same row forward in place
+    expect(writesIn(PARTIALLY_CONVERTED)).toHaveLength(6);
   });
 
   it('keeps its tolerance for an unapplied 0100', () => {
