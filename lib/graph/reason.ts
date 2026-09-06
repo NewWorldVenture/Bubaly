@@ -144,6 +144,9 @@ export function propagateImpact(
   const maxDepth = opts.maxDepth ?? 4;
   const threshold = opts.threshold ?? 0.05;
   const best = new Map<string, { score: number; via: string }>();
+  const traversalScores = new Map<string, Map<number, number>>([
+    [sourceId, new Map([[0, 1]])],
+  ]);
   // DFS accumulating multiplicative weight along outgoing edges.
   const walk = (id: string, score: number, depth: number, via: string) => {
     if (depth > maxDepth) return;
@@ -152,11 +155,18 @@ export function propagateImpact(
       if (!next) continue;
       const nextScore = score * edge.weight;
       if (nextScore < threshold) continue;
+      const scoresByHop = traversalScores.get(next.id) ?? new Map<number, number>();
+      // A weaker arrival can still reach further when it uses fewer hops.
+      // Equal-or-stronger arrivals at no greater depth dominate this state;
+      // seeding the source at zero hops also prunes cycles with 0..1 weights.
+      if ([...scoresByHop].some(([hops, knownScore]) => hops <= depth && knownScore >= nextScore)) continue;
+      scoresByHop.set(depth, nextScore);
+      traversalScores.set(next.id, scoresByHop);
       const existing = best.get(next.id);
       if (!existing || nextScore > existing.score) {
         best.set(next.id, { score: nextScore, via: edge.relation });
-        walk(next.id, nextScore, depth + 1, edge.relation);
       }
+      walk(next.id, nextScore, depth + 1, edge.relation);
     }
   };
   walk(sourceId, 1, 1, 'root');
