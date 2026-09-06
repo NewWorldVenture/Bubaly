@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { addAeoQuestion, deleteAeoQuestion, updateAeoQuestion } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · AEO', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'warning' | 'brand' | 'success'> =
 const LIST_LIMIT = 50;
 
 export default async function AeoPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [totalRes, answeredRes, listRes] = await Promise.all([
     supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }),
@@ -50,8 +52,8 @@ export default async function AeoPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing AEO</h1>
-          <p className="mt-1 text-sm text-muted">Answer Engine Optimization — track the questions customers ask AI engines and publish clear, structured answers.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingAeo.marketingAeo')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('adminMarketingAeo.answerEngineOptimizationTrackTheQuestions')}</p>
         </div>
         <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text hover:underline">SEO →</Link>
       </div>
@@ -64,17 +66,17 @@ export default async function AeoPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <Card><p className="text-xs text-muted">Questions</p><p className="text-2xl font-bold">{total.toLocaleString()}</p></Card>
-            <Card><p className="text-xs text-muted">Answered</p><p className="text-2xl font-bold">{answered.toLocaleString()}</p></Card>
-            <Card><p className="text-xs text-muted">Readiness</p><p className="text-2xl font-bold">{readiness}%</p></Card>
+            <Card><p className="text-xs text-muted">{t('adminMarketingAeo.questions')}</p><p className="text-2xl font-bold">{total.toLocaleString()}</p></Card>
+            <Card><p className="text-xs text-muted">{t('adminMarketingAeo.answered')}</p><p className="text-2xl font-bold">{answered.toLocaleString()}</p></Card>
+            <Card><p className="text-xs text-muted">{t('adminMarketingAeo.readiness')}</p><p className="text-2xl font-bold">{readiness}%</p></Card>
           </div>
 
           {total === 0 ? (
-            <EmptyState icon={MessagesSquare} title="No questions tracked" description="Capture the questions your customers ask AI engines." />
+            <EmptyState icon={MessagesSquare} title={t('adminMarketingAeo.noQuestionsTracked')} description="Capture the questions your customers ask AI engines." />
           ) : (
             <div className="space-y-2">
               {total > rows.length && (
-                <p className="px-1 text-xs text-muted">Showing the latest {rows.length} of {total.toLocaleString()} questions.</p>
+                <p className="px-1 text-xs text-muted">{t('adminMarketingAeo.showingTheLatest')} {rows.length} of {total.toLocaleString()} questions.</p>
               )}
               {rows.map((q) => (
                 <Card key={q.id}>
@@ -109,14 +111,14 @@ export default async function AeoPage() {
         </div>
 
         <Card className="h-fit">
-          <h2 className="mb-3 font-semibold">Add a question</h2>
+          <h2 className="mb-3 font-semibold">{t('adminMarketingAeo.addAQuestion')}</h2>
           <form action={addAeoQuestion} className="space-y-3 text-sm">
-            <input name="question" required placeholder="What is the best family organizer app?" className={inputCls} />
-            <select name="pattern" className={inputCls}><option value="">Pattern (optional)</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
-            <input name="entity" placeholder="Entity (e.g. Bubaly)" className={inputCls} />
-            <input name="source_path" placeholder="Source path (/features)" className={inputCls} />
-            <textarea name="answer" rows={4} placeholder="Structured answer draft…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Add question</button>
+            <input name="question" required placeholder={t('adminMarketingAeo.whatIsTheBestFamilyOrganizer')} className={inputCls} />
+            <select name="pattern" className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
+            <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
+            <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
+            <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAeo.addQuestion')}</button>
           </form>
         </Card>
       </div>

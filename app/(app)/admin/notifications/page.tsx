@@ -5,6 +5,7 @@ import { unreadCount, type AdminNotificationRow } from '@/lib/admin/notification
 import { buildAdminDigest } from '@/lib/admin/digest';
 import { AdminNotificationsList } from '@/components/admin/admin-notifications-list';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Notifications', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 // in app/(app)/admin/layout.tsx; here we just read the whole admin_notifications
 // feed with the service role (the table has no client policy).
 export default async function AdminNotificationsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('admin_notifications')
@@ -41,7 +43,7 @@ export default async function AdminNotificationsPage() {
           <Bell className="h-6 w-6 text-brand-text" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Notifications</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminNotifications.notifications')}</h1>
           <p className="mt-1 text-sm text-muted">
             Every super-admin alert in one place — new feedback &amp; bugs, GitHub sync relays, support
             tickets, Trust &amp; Safety reports, new family signups, and paid conversions.
@@ -57,7 +59,7 @@ export default async function AdminNotificationsPage() {
               <TrendingUp className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Last 24 hours</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('adminNotifications.last24Hours')}</p>
               <p className="text-sm font-semibold text-fg">{digest.headline}</p>
             </div>
           </div>

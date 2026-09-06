@@ -6,11 +6,13 @@ import { PROVIDERS, type SocialPlatform } from '@/lib/social/capabilities';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Analytics · Social' };
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const [{ totals, byPlatform }, accounts] = await Promise.all([
@@ -56,7 +58,7 @@ export default async function AnalyticsPage() {
       )}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">By platform</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialAnalytics.byPlatform')}</h2>
         <div className="space-y-2">
           {(['x','facebook','instagram','linkedin','tiktok','youtube','pinterest','threads','reddit'] as SocialPlatform[]).map((p) => {
             const def = PROVIDERS[p];

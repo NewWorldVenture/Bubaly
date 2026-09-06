@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family CFO' };
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 
 export default async function FamilyCfoPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -59,17 +61,17 @@ export default async function FamilyCfoPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Family CFO" description="Your household's finances at a glance — every figure is live." />
+      <PageHeader title={tr('dashboardFamilyCfo.familyCfo')} description="Your household's finances at a glance — every figure is live." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Net position" value={usd(netWorth)} icon={Wallet} accent="bg-emerald-600" href="/dashboard/billing" sublabel="Accounts" />
-        <StatTile label="Due in 30 days" value={usd(upcomingTotal)} icon={CalendarClock} accent="bg-orange-500" />
-        <StatTile label="Spent this month" value={usd(monthSpend)} icon={TrendingDown} accent="bg-rose-500" />
-        <StatTile label="Savings goals" value={goals?.length ?? 0} icon={PiggyBank} accent="bg-violet-600" />
+        <StatTile label={tr('dashboardFamilyCfo.netPosition')} value={usd(netWorth)} icon={Wallet} accent="bg-emerald-600" href="/dashboard/billing" sublabel="Accounts" />
+        <StatTile label={tr('dashboardFamilyCfo.dueIn30Days')} value={usd(upcomingTotal)} icon={CalendarClock} accent="bg-orange-500" />
+        <StatTile label={tr('dashboardFamilyCfo.spentThisMonth')} value={usd(monthSpend)} icon={TrendingDown} accent="bg-rose-500" />
+        <StatTile label={tr('dashboardFamilyCfo.savingsGoals')} value={goals?.length ?? 0} icon={PiggyBank} accent="bg-violet-600" />
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="Upcoming Bills" description="Next 30 days" viewAllHref="/dashboard/billing">
+        <SectionCard title={tr('dashboardFamilyCfo.upcomingBills')} description="Next 30 days" viewAllHref="/dashboard/billing">
           {bills && bills.length > 0 ? (
             <ul className="divide-y divide-border">
               {bills.map((b) => (
@@ -84,7 +86,7 @@ export default async function FamilyCfoPage() {
           ) : <MiniEmpty icon={CalendarClock} text="No bills due in the next 30 days." />}
         </SectionCard>
 
-        <SectionCard title="Spending vs Budget" description="This month by category" viewAllHref="/dashboard/billing">
+        <SectionCard title={tr('dashboardFamilyCfo.spendingVsBudget')} description="This month by category" viewAllHref="/dashboard/billing">
           {byCat.size > 0 ? (
             <ul className="space-y-3">
               {[...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([cat, amt]) => {
@@ -107,7 +109,7 @@ export default async function FamilyCfoPage() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Savings Goals" viewAllHref="/dashboard/billing">
+      <SectionCard title={tr('dashboardFamilyCfo.savingsGoals')} viewAllHref="/dashboard/billing">
         {goals && goals.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {goals.map((g) => {

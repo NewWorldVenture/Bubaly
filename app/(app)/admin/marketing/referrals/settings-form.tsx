@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import type { ReferralConfig } from '@/lib/referrals/core';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ReferralSettingsForm({ config, action }: {
   config: ReferralConfig;
   action: (formData: FormData) => Promise<void>;
 }) {
+  const t = useTranslations();
   const [saved, setSaved] = useState(false);
 
   return (
@@ -15,21 +17,21 @@ export function ReferralSettingsForm({ config, action }: {
       className="space-y-3 text-sm"
     >
       <label className="flex items-center justify-between gap-2">
-        <span>Program enabled</span>
+        <span>{t('adminMarketingReferralsSettingsForm.programEnabled')}</span>
         <input type="checkbox" name="enabled" defaultChecked={config.enabled} className="h-4 w-4 accent-[var(--brand)]" />
       </label>
       <label className="block">
-        <span className="text-xs text-muted">Referrer reward ($)</span>
+        <span className="text-xs text-muted">{t('adminMarketingReferralsSettingsForm.referrerReward')}</span>
         <input type="number" name="referrerRewardDollars" min="0" step="0.5" defaultValue={(config.referrerRewardCents / 100).toString()}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>
       <label className="block">
-        <span className="text-xs text-muted">Referred reward ($)</span>
+        <span className="text-xs text-muted">{t('adminMarketingReferralsSettingsForm.referredReward')}</span>
         <input type="number" name="referredRewardDollars" min="0" step="0.5" defaultValue={(config.referredRewardCents / 100).toString()}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>
       <label className="block">
-        <span className="text-xs text-muted">Reward label</span>
+        <span className="text-xs text-muted">{t('adminMarketingReferralsSettingsForm.rewardLabel')}</span>
         <input type="text" name="rewardLabel" defaultValue={config.rewardLabel}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>

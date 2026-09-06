@@ -1,8 +1,10 @@
 import { Car } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { AutoSubnav } from '@/components/auto/auto-subnav';
+import { getTranslations } from '@/lib/i18n/server';
 
 export default async function AutoLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslations();
   await requireFeature('/dashboard/auto');
   return (
     <div className="module-page">
@@ -11,8 +13,8 @@ export default async function AutoLayout({ children }: { children: React.ReactNo
           <Car className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Auto &amp; Vehicles</h1>
-          <p className="text-sm text-muted">Licenses, registration, inspections, insurance, rentals — with renewal reminders.</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('dashboardAuto.autoAmpVehicles')}</h1>
+          <p className="text-sm text-muted">{t('dashboardAuto.licensesRegistrationInspectionsInsuranceRentalsWith')}</p>
         </div>
       </div>
       <AutoSubnav />

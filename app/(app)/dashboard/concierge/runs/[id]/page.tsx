@@ -34,6 +34,7 @@ import { StatusBadge } from '@/components/concierge/status-badge';
 import { RunTimeline } from '@/components/concierge/run-timeline';
 import { RunControls, type EditableStep, type FailedStep } from '@/components/concierge/run-controls';
 import { ClarificationCard } from '@/components/concierge/clarification-card';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Bubaly is on it' };
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ function RunUnavailable({ message }: { message: string }) {
 }
 
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   if (!id) notFound();
 
@@ -133,17 +135,17 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 pb-28">
       <Link href="/home" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted hover:text-fg coarse:min-h-11">
-        <ArrowLeft className="h-4 w-4" aria-hidden /> Home
+        <ArrowLeft className="h-4 w-4" aria-hidden /> {t('dashboardConciergeRuns.home')}
       </Link>
 
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge state={view.state} />
-          {requestId === null && <span className="text-xs text-muted">Started by a routine</span>}
+          {requestId === null && <span className="text-xs text-muted">{t('dashboardConciergeRuns.startedByARoutine')}</span>}
         </div>
         <h1 className="text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">{view.objective}</h1>
         {view.requestText && view.requestText !== view.objective && (
-          <p className="text-sm text-muted">You asked: “{view.requestText}”</p>
+          <p className="text-sm text-muted">{t('dashboardConciergeRuns.youAsked')}{view.requestText}”</p>
         )}
         {view.reasoningSummary && (
           <p className="flex gap-2 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-3 text-sm text-fg/90">
@@ -169,14 +171,14 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       )}
 
       {pendingApprovals.length > 0 && (
-        <section aria-label="Approvals" className="space-y-2">
+        <section aria-label={t('dashboardConciergeRuns.approvals')} className="space-y-2">
           {pendingApprovals.map((approval) => (
             <ApprovalCard key={approval.id} approval={approval} canDecide={manager} />
           ))}
         </section>
       )}
 
-      <section aria-label="Progress" className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
+      <section aria-label={t('dashboardConciergeRuns.progress')} className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
         <RunTimeline view={view} showActivity={showActivity} />
       </section>
     </div>

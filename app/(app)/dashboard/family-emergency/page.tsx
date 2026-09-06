@@ -9,11 +9,13 @@ import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Emergency' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyEmergencyPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -50,12 +52,12 @@ export default async function FamilyEmergencyPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Emergency Hub"
+        title={t('dashboardFamilyEmergency.familyEmergencyHub')}
         description="Everything a caregiver needs in a crisis — contacts, plans and medical summaries."
         action={manager ? (
           <QuickAdd
             table="family_emergency_contacts"
-            title="Add contact"
+            title={t('dashboardFamilyEmergency.addContact')}
             members={members ?? []}
             fields={[
               { name: 'name', label: 'Name', type: 'text', required: true },
@@ -69,7 +71,7 @@ export default async function FamilyEmergencyPage() {
         ) : undefined}
       />
 
-      <SectionCard title="Emergency Contacts" description="Ordered by priority">
+      <SectionCard title={t('dashboardFamilyEmergency.emergencyContacts')} description="Ordered by priority">
         {contacts && contacts.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-2">
             {contacts.map((c) => (
@@ -90,10 +92,10 @@ export default async function FamilyEmergencyPage() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <SectionCard
-          title="Emergency Plans"
+          title={t('dashboardFamilyEmergency.emergencyPlans')}
           action={manager ? (
             <QuickAdd
-              table="family_emergency_plans" title="Add plan"
+              table="family_emergency_plans" title={t('dashboardFamilyEmergency.addPlan')}
               fields={[
                 { name: 'title', label: 'Title', type: 'text', required: true, placeholder: 'Fire / evacuation' },
                 { name: 'plan_type', label: 'Type', type: 'text', placeholder: 'fire, medical, weather' },
@@ -117,7 +119,7 @@ export default async function FamilyEmergencyPage() {
         </SectionCard>
 
         {manager && (
-          <SectionCard title="Medical Summary" description="One-tap card for first responders">
+          <SectionCard title={t('dashboardFamilyEmergency.medicalSummary')} description="One-tap card for first responders">
             {profiles && profiles.length > 0 ? (
               <ul className="space-y-2.5">
                 {profiles.map((p) => (

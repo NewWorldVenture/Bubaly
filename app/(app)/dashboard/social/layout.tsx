@@ -1,6 +1,7 @@
 import { Share2 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { SocialSubnav, type SubnavItem } from '@/components/social/subnav';
+import { getTranslations } from '@/lib/i18n/server';
 
 const SECTIONS: SubnavItem[] = [
   { href: '/dashboard/social', label: 'Overview' },
@@ -16,6 +17,7 @@ const SECTIONS: SubnavItem[] = [
 ];
 
 export default async function SocialLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslations();
   await requireUserContext();
   return (
     <div className="module-page">
@@ -24,8 +26,8 @@ export default async function SocialLayout({ children }: { children: React.React
           <Share2 className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Social Command Center</h1>
-          <p className="text-sm text-muted">Connect accounts, see one unified feed, create with AI, and publish everywhere.</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('dashboardSocial.socialCommandCenter')}</h1>
+          <p className="text-sm text-muted">{t('dashboardSocial.connectAccountsSeeOneUnifiedFeed')}</p>
         </div>
       </div>
       <SocialSubnav items={SECTIONS} />

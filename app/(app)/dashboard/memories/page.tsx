@@ -15,6 +15,7 @@ import {
   type AlbumRow, type PhotoRow, type MemberLite,
 } from '@/lib/memories/memories';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Memories' };
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,7 @@ function countVideos(photos: PhotoRow[] | undefined): number {
 }
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? 'highlights') as TabKey;
   const q = (sp.q ?? '').trim();
@@ -216,14 +218,14 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
       {/* Header */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">Memories</h1>
-          <p className="mt-1 text-sm text-muted">Capture, organize, and relive life&apos;s best moments.</p>
+          <h1 className="text-2xl font-bold sm:text-3xl">{tr('dashboardMemories.memories')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('dashboardMemories.captureOrganizeAndReliveLifeApos')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <HeaderButton href="/dashboard/memories/create" icon={Plus} label="Add Memory" primary />
-          <HeaderButton href="/dashboard/photos" icon={Upload} label="Upload Photos" />
-          <HeaderButton href="/dashboard/photos" icon={FolderPlus} label="Create Album" />
-          <Link href="/dashboard/photos" aria-label="More options" className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-surface/40 text-muted hover:bg-elevated">
+          <HeaderButton href="/dashboard/memories/create" icon={Plus} label={tr('dashboardMemories.addMemory')} primary />
+          <HeaderButton href="/dashboard/photos" icon={Upload} label={tr('dashboardMemories.uploadPhotos')} />
+          <HeaderButton href="/dashboard/photos" icon={FolderPlus} label={tr('dashboardMemories.createAlbum')} />
+          <Link href="/dashboard/photos" aria-label={tr('dashboardMemories.moreOptions')} className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-surface/40 text-muted hover:bg-elevated">
             <MoreHorizontal className="h-4 w-4" />
           </Link>
         </div>
@@ -250,11 +252,11 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
               <form className="relative" action="/dashboard/memories">
                 <input type="hidden" name="tab" value={tab} />
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <input name="q" defaultValue={q} placeholder="Search memories..."
+                <input name="q" defaultValue={q} placeholder={tr('dashboardMemories.searchMemories')}
                   className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 lg:w-56" />
               </form>
               <Link href={`/dashboard/memories?tab=${tab}`} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface/40 px-3 text-sm text-muted hover:bg-elevated">
-                <Filter className="h-4 w-4" /> Filter
+                <Filter className="h-4 w-4" /> {tr('dashboardMemories.filter')}
               </Link>
             </div>
           </div>
@@ -263,7 +265,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
             <>
               {highlights.length > 0 && (
                 <section>
-                  <SectionHeader title="Recent Highlights" action="View all" href="/dashboard/memories?tab=albums" />
+                  <SectionHeader title={tr('dashboardMemories.recentHighlights')} action="View all" href="/dashboard/memories?tab=albums" />
                   <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                     {highlights.slice(0, 8).map((a) => (
                       <Link key={a.id} href="/dashboard/photos" className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border bg-surface/40">
@@ -288,7 +290,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
 
               {collections.length > 0 && (
                 <section>
-                  <SectionHeader title="Albums" action="View all albums" href="/dashboard/memories?tab=albums" />
+                  <SectionHeader title={tr('dashboardMemories.albums')} action="View all albums" href="/dashboard/memories?tab=albums" />
                   <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                     {collections.slice(0, 8).map((a) => <AlbumCard key={a.id} album={a} videos={countVideos(photosByAlbum.get(a.id))} />)}
                   </div>
@@ -304,7 +306,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           {tab === 'photos' && <MediaGrid items={photos.filter((p) => p.media_type !== 'video')} empty="No photos yet." />}
           {tab === 'videos' && <MediaGrid items={photos.filter((p) => p.media_type === 'video')} empty="No videos yet." />}
           {tab === 'albums' && (
-            collections.concat(highlights).length === 0 ? <EmptyBlock label="No albums yet." /> : (
+            collections.concat(highlights).length === 0 ? <EmptyBlock label={tr('dashboardMemories.noAlbumsYet')} /> : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {collections.concat(highlights).map((a) => <AlbumCard key={a.id} album={a} videos={countVideos(photosByAlbum.get(a.id))} />)}
               </div>
@@ -320,7 +322,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
             <div className="rounded-2xl border border-accent/25 bg-gradient-to-br from-accent/10 to-transparent p-5">
               <div className="mb-3 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-accent" />
-                <h3 className="text-base font-bold">On this day</h3>
+                <h3 className="text-base font-bold">{tr('dashboardMemories.onThisDay')}</h3>
               </div>
               <p className="mb-3 text-xs text-muted">
                 {onThisDay.length === 1 ? onThisDay[0].label : `${onThisDay.length} memories · from ${onThisDay[onThisDay.length - 1].label}`}
@@ -340,21 +342,21 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
 
           {/* Family Moments */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <h3 className="mb-4 text-base font-bold">Family Moments</h3>
+            <h3 className="mb-4 text-base font-bold">{tr('dashboardMemories.familyMoments')}</h3>
             <div className="relative mx-auto grid h-24 w-24 place-items-center rounded-full bg-brand/15">
               <Camera className="h-9 w-9 text-brand-text" />
               <Sparkles className="absolute -right-1 top-2 h-4 w-4 text-brand-text/70" />
               <Sparkles className="absolute -left-2 bottom-3 h-3 w-3 text-brand-text/50" />
             </div>
-            <p className="mt-4 text-center text-sm font-semibold">Add memories every day</p>
-            <p className="mt-1 text-center text-xs text-muted">Small moments. Big memories.</p>
-            <Link href="/dashboard/memories/create" className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg hover:brightness-110">Add Photos</Link>
+            <p className="mt-4 text-center text-sm font-semibold">{tr('dashboardMemories.addMemoriesEveryDay')}</p>
+            <p className="mt-1 text-center text-xs text-muted">{tr('dashboardMemories.smallMomentsBigMemories')}</p>
+            <Link href="/dashboard/memories/create" className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg hover:brightness-110">{tr('dashboardMemories.addPhotos')}</Link>
           </div>
 
           {/* Memory Stats */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <h3 className="text-base font-bold">Memory Stats</h3>
-            <p className="mb-3 text-xs text-muted">This Year</p>
+            <h3 className="text-base font-bold">{tr('dashboardMemories.memoryStats')}</h3>
+            <p className="mb-3 text-xs text-muted">{tr('dashboardMemories.thisYear')}</p>
             <div className="space-y-3">
               {stats.map((s) => (
                 <div key={s.label} className="flex items-center gap-3">
@@ -364,17 +366,17 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 </div>
               ))}
             </div>
-            <Link href="/dashboard/photos" className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></Link>
+            <Link href="/dashboard/photos" className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">{tr('dashboardMemories.viewFullReport')} <ChevronRight className="h-3.5 w-3.5" /></Link>
           </div>
 
           {/* Upcoming Events */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold">Upcoming Events</h3>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View calendar</Link>
+              <h3 className="text-base font-bold">{tr('dashboardMemories.upcomingEvents')}</h3>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{tr('dashboardMemories.viewCalendar')}</Link>
             </div>
             {(upcoming ?? []).length === 0 ? (
-              <p className="text-sm text-muted">Nothing scheduled yet.</p>
+              <p className="text-sm text-muted">{tr('dashboardMemories.nothingScheduledYet')}</p>
             ) : (
               <div className="space-y-3">
                 {(upcoming ?? []).map((e) => {
@@ -396,11 +398,11 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           {/* Shared With You */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold">Shared With You</h3>
-              <Link href="/dashboard/photos" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
+              <h3 className="text-base font-bold">{tr('dashboardMemories.sharedWithYou')}</h3>
+              <Link href="/dashboard/photos" className="text-xs font-semibold text-brand-text hover:underline">{tr('dashboardMemories.viewAll')}</Link>
             </div>
             {shared.length === 0 ? (
-              <p className="text-sm text-muted">No new shares.</p>
+              <p className="text-sm text-muted">{tr('dashboardMemories.noNewShares')}</p>
             ) : (
               <div className="space-y-3">
                 {shared.map((s) => {

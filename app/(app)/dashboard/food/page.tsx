@@ -8,6 +8,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { makeDegradeRead } from '@/lib/meals/degrade-read';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Food & Nutrition' };
 export const dynamic = 'force-dynamic';
@@ -70,6 +71,7 @@ const FEATURES = [
 ];
 
 export default async function FoodPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -123,16 +125,16 @@ export default async function FoodPage() {
     <div className="space-y-6 pb-28">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Food &amp; Nutrition</h1>
-          <p className="mt-1 text-sm text-muted">Plan healthy meals, discover recipes, manage groceries, track nutrition and enjoy dining together.</p>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{t('dashboardFood.foodAmpNutrition')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('dashboardFood.planHealthyMealsDiscoverRecipesManage')}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-bold">
-          <LayoutGrid className="h-4 w-4 text-emerald-400" /> 7 Pages
+          <LayoutGrid className="h-4 w-4 text-emerald-400" /> {t('dashboardFood.7Pages')}
         </span>
       </div>
 
       <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-brand/5 p-6">
-        <p className="text-sm font-semibold text-emerald-300">Eat well. Live well. — smart planning for a healthier, happier family.</p>
+        <p className="text-sm font-semibold text-emerald-300">{t('dashboardFood.eatWellLiveWellSmartPlanning')}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {PAGES.map((p) => <span key={p} className="rounded-full border border-border bg-surface/60 px-3 py-1 text-xs font-semibold text-fg/80">{p}</span>)}
         </div>
@@ -140,37 +142,37 @@ export default async function FoodPage() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {/* 1. Meal Planner */}
-        <FeatureCard index={1} title="Meal Planner" href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={planCount ?? 0} countLabel="dinners planned this week">
-          {planRows.length === 0 ? <EmptyHint>No dinners planned yet.</EmptyHint>
+        <FeatureCard index={1} title={t('dashboardFood.mealPlanner')} href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={planCount ?? 0} countLabel="dinners planned this week">
+          {planRows.length === 0 ? <EmptyHint>{t('dashboardFood.noDinnersPlannedYet')}</EmptyHint>
             : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? 'Planned meal') : 'Planned meal'} meta={p.plan_date === todayIso ? 'Today' : fmtDay(p.plan_date)} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Recipes */}
-        <FeatureCard index={2} title="Recipes" href="/dashboard/recipes" icon={BookOpen} tint="bg-emerald-500/15 text-emerald-400" count={recipeCount ?? 0} countLabel="recipes">
-          {(recipes ?? []).length === 0 ? <EmptyHint>No recipes yet.</EmptyHint>
+        <FeatureCard index={2} title={t('dashboardFood.recipes')} href="/dashboard/recipes" icon={BookOpen} tint="bg-emerald-500/15 text-emerald-400" count={recipeCount ?? 0} countLabel="recipes">
+          {(recipes ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noRecipesYet')}</EmptyHint>
             : (recipes as R[]).map((r) => <ListRow key={r.id} label={r.name} meta={r.rating ? `★ ${r.rating}` : ''} dot="bg-emerald-400" />)}
         </FeatureCard>
 
         {/* 3. Grocery List */}
-        <FeatureCard index={3} title="Grocery List" href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryCount ?? 0} countLabel="items to buy">
-          {(grocery ?? []).length === 0 ? <EmptyHint>Your list is empty.</EmptyHint>
+        <FeatureCard index={3} title={t('dashboardFood.groceryList')} href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryCount ?? 0} countLabel="items to buy">
+          {(grocery ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.yourListIsEmpty')}</EmptyHint>
             : (grocery as G[]).map((g) => <ListRow key={g.id} label={g.name} dot="bg-amber-400" />)}
         </FeatureCard>
 
         {/* 4. Pantry Inventory */}
-        <FeatureCard index={4} title="Pantry Inventory" href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryCount ?? 0} countLabel="expiring soon">
-          {(pantry ?? []).length === 0 ? <EmptyHint>Nothing expiring soon.</EmptyHint>
+        <FeatureCard index={4} title={t('dashboardFood.pantryInventory')} href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryCount ?? 0} countLabel="expiring soon">
+          {(pantry ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.nothingExpiringSoon')}</EmptyHint>
             : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDay(p.expires_at) : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
         </FeatureCard>
 
         {/* 5. Family Favorites */}
-        <FeatureCard index={5} title="Family Favorites" href="/dashboard/recipes" icon={Heart} tint="bg-rose-500/15 text-rose-400" count={favoriteCount ?? 0} countLabel="favorites">
-          {(favorites ?? []).length === 0 ? <EmptyHint>No favorites yet.</EmptyHint>
+        <FeatureCard index={5} title={t('dashboardFood.familyFavorites')} href="/dashboard/recipes" icon={Heart} tint="bg-rose-500/15 text-rose-400" count={favoriteCount ?? 0} countLabel="favorites">
+          {(favorites ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noFavoritesYet')}</EmptyHint>
             : (favorites as R[]).map((r) => <ListRow key={r.id} label={r.name} meta={r.rating ? `★ ${r.rating}` : ''} dot="bg-rose-400" />)}
         </FeatureCard>
 
         {/* 6. Nutrition Tracker */}
-        <FeatureCard index={6} title="Nutrition Tracker" href="/dashboard/kitchen" icon={Activity} tint="bg-violet-500/15 text-violet-400" count={score?.overall ?? 0} countLabel="family food score">
+        <FeatureCard index={6} title={t('dashboardFood.nutritionTracker')} href="/dashboard/kitchen" icon={Activity} tint="bg-violet-500/15 text-violet-400" count={score?.overall ?? 0} countLabel="family food score">
           {score ? (
             <div className="flex items-center gap-3">
               <span className={cn('grid h-14 w-14 place-items-center rounded-full text-lg font-black',
@@ -178,16 +180,16 @@ export default async function FoodPage() {
                 {score.overall}
               </span>
               <div>
-                <p className="text-sm font-bold">Grade {score.grade}</p>
-                <p className="text-xs text-muted">Calories, macros & nutrients tracked for your family.</p>
+                <p className="text-sm font-bold">{t('dashboardFood.grade')} {score.grade}</p>
+                <p className="text-xs text-muted">{t('dashboardFood.caloriesMacrosNutrientsTrackedForYour')}</p>
               </div>
             </div>
-          ) : <EmptyHint>No nutrition snapshot yet.</EmptyHint>}
+          ) : <EmptyHint>{t('dashboardFood.noNutritionSnapshotYet')}</EmptyHint>}
         </FeatureCard>
 
         {/* 7. Dining Out */}
-        <FeatureCard index={7} title="Dining Out" href="/dashboard/dining" icon={Utensils} tint="bg-indigo-500/15 text-indigo-400" count={diningCount ?? 0} countLabel="saved places">
-          {(dining ?? []).length === 0 ? <EmptyHint>No dining spots saved yet.</EmptyHint>
+        <FeatureCard index={7} title={t('dashboardFood.diningOut')} href="/dashboard/dining" icon={Utensils} tint="bg-indigo-500/15 text-indigo-400" count={diningCount ?? 0} countLabel="saved places">
+          {(dining ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noDiningSpotsSavedYet')}</EmptyHint>
             : (dining as D[]).map((d) => <ListRow key={d.id} label={d.name} meta={d.rating ? `★ ${d.rating}` : (d.cuisine ?? '')} dot="bg-indigo-400" />)}
         </FeatureCard>
 
@@ -195,7 +197,7 @@ export default async function FoodPage() {
         <section className="flex flex-col rounded-2xl border border-border bg-surface/40 p-5 sm:col-span-2 xl:col-span-4">
           <div className="mb-4 flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400"><Soup className="h-5 w-5" /></span>
-            <h2 className="text-sm font-bold">Food &amp; Nutrition features</h2>
+            <h2 className="text-sm font-bold">{t('dashboardFood.foodAmpNutritionFeatures')}</h2>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {FEATURES.map((f) => (
@@ -209,7 +211,7 @@ export default async function FoodPage() {
             ))}
           </div>
           <p className="mt-5 flex items-center gap-1.5 border-t border-border/60 pt-4 text-sm font-semibold text-emerald-300">
-            <Heart className="h-4 w-4" /> Healthy choices. Happy family.
+            <Heart className="h-4 w-4" /> {t('dashboardFood.healthyChoicesHappyFamily')}
           </p>
         </section>
       </div>

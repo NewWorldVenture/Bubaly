@@ -39,6 +39,7 @@ import { DEMO_ACCOUNT_NAME } from '@/lib/demo/config';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
@@ -129,6 +130,7 @@ const ACTIONS = [
 type Member = { id: string; display_name: string; color: string | null; role: string; birthday: string | null; user_id: string | null };
 
 export default async function HomePage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -364,7 +366,7 @@ export default async function HomePage() {
             {isDemoAccount ? `Welcome ${DEMO_ACCOUNT_NAME}` : roleGreeting(me.role, myFirstName, dayPhase(now))}
             {roleSurface(me.role).tone !== 'kid' && <span aria-hidden> 👋</span>}
           </h1>
-          <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
+          <p className="mt-1 text-sm text-muted">{tr('home.hereAposSWhatAposS')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {ACTIONS.map((a) => (
@@ -390,10 +392,10 @@ export default async function HomePage() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{setupNudge.headline}</span>
-            <span className="block text-xs text-muted">A couple of quick questions tailor Bubaly to your family.</span>
+            <span className="block text-xs text-muted">{tr('home.aCoupleOfQuickQuestionsTailor')}</span>
           </span>
           <span className="hidden shrink-0 items-center gap-2 sm:flex">
-            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-xs font-bold text-brand-text tabular-nums">{setupNudge.score}% set up</span>
+            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-xs font-bold text-brand-text tabular-nums">{setupNudge.score}{tr('home.setUp')}</span>
             <ArrowRight className="h-4 w-4 text-muted" />
           </span>
         </Link>
@@ -418,8 +420,8 @@ export default async function HomePage() {
       <WorkingOn familyId={familyId} initial={workingRuns} />
 
       <Card>
-        <CardHead icon={Clock} title="Today" href="/dashboard/calendar" action="View calendar" />
-        {today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>A clear day — nothing scheduled and nothing due.</EmptyRow>}
+        <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
+        {today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
         {today.schedule.length > 0 && (
           <ul className="space-y-3" aria-label="Today's schedule">
             {today.schedule.map((item) => {
@@ -439,7 +441,7 @@ export default async function HomePage() {
           </ul>
         )}
         {today.tasks.length > 0 && (
-          <ul className={cn('space-y-2.5', today.schedule.length > 0 && 'mt-4 border-t border-border pt-4')} aria-label="Due today">
+          <ul className={cn('space-y-2.5', today.schedule.length > 0 && 'mt-4 border-t border-border pt-4')} aria-label={tr('home.dueToday')}>
             {today.tasks.map((item) => {
               const who = item.memberId ? memberById.get(item.memberId) : undefined;
               const overdue = item.bucket === 'overdue';
@@ -459,9 +461,9 @@ export default async function HomePage() {
       </Card>
 
       <Card>
-        <CardHead icon={CalendarDays} title="Coming up" href="/dashboard/calendar" action="View calendar" />
+        <CardHead icon={CalendarDays} title={tr('home.comingUp')} href="/dashboard/calendar" action="View calendar" />
         <div className="space-y-2.5">
-          {(upcomingEvents ?? []).length === 0 && <EmptyRow>Nothing on the horizon yet.</EmptyRow>}
+          {(upcomingEvents ?? []).length === 0 && <EmptyRow>{tr('home.nothingOnTheHorizonYet')}</EmptyRow>}
           {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
             const d = new Date(e.starts_at);
             const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
@@ -501,7 +503,7 @@ export default async function HomePage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* My Family */}
         <Card className="lg:col-span-2">
-          <CardHead icon={Sparkles} title="My Family" href="/dashboard/family-tree" />
+          <CardHead icon={Sparkles} title={tr('home.myFamily')} href="/dashboard/family-tree" />
           <div className="flex flex-wrap gap-5">
             {memberList.map((m) => (
               <div key={m.id} className="flex w-16 flex-col items-center gap-1.5 text-center">
@@ -514,14 +516,14 @@ export default async function HomePage() {
             ))}
             <Link href="/dashboard/settings#members" className="flex w-16 flex-col items-center gap-1.5 text-center text-muted hover:text-brand-text">
               <span className="grid h-[52px] w-[52px] place-items-center rounded-full border border-dashed border-border"><Plus className="h-5 w-5" /></span>
-              <span className="text-[10px]">Invite</span>
+              <span className="text-[10px]">{tr('home.invite')}</span>
             </Link>
           </div>
         </Card>
 
         {/* Family Score */}
         <Card>
-          <CardHead icon={Sparkles} title="Family Score" href="/dashboard/readiness" action="View insights" />
+          <CardHead icon={Sparkles} title={tr('home.familyScore')} href="/dashboard/readiness" action="View insights" />
           <div className="flex flex-1 items-center gap-4">
             <Ring value={score.score}>
               <div>
@@ -535,9 +537,9 @@ export default async function HomePage() {
 
         {/* Tasks */}
         <Card>
-          <CardHead icon={ListChecks} title="Tasks" href="/dashboard/todos" />
+          <CardHead icon={ListChecks} title={tr('home.tasks')} href="/dashboard/todos" />
           <div className="space-y-2.5">
-            {(tasks ?? []).length === 0 && <EmptyRow>No open tasks. Nicely done.</EmptyRow>}
+            {(tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
             {((tasks ?? []) as { id: string; title: string; due_date: string | null; assigned_to_id: string | null }[]).map((t) => {
               const owner = t.assigned_to_id ? memberById.get(t.assigned_to_id) : undefined;
               const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : null;
@@ -552,7 +554,7 @@ export default async function HomePage() {
             })}
           </div>
           <Link href="/dashboard/todos" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand-text">
-            <Plus className="h-3.5 w-3.5" /> Add a new task
+            <Plus className="h-3.5 w-3.5" /> {tr('home.addANewTask')}
           </Link>
         </Card>
 
@@ -566,7 +568,7 @@ export default async function HomePage() {
                 {todayMeal.notes && <p className="mt-0.5 text-xs text-muted line-clamp-2">{todayMeal.notes}</p>}
               </div>
             ) : (
-              <EmptyRow>No dinner planned for today.</EmptyRow>
+              <EmptyRow>{tr('home.noDinnerPlannedForToday')}</EmptyRow>
             )}
             <div className="mt-4 flex justify-between gap-1">
               {week.map((d) => (
@@ -584,9 +586,9 @@ export default async function HomePage() {
 
         {/* Chores */}
         <Card>
-          <CardHead icon={ClipboardCheck} title="Chores" href="/dashboard/chores" />
+          <CardHead icon={ClipboardCheck} title={tr('home.chores')} href="/dashboard/chores" />
           <div className="space-y-2.5">
-            {(choreRows ?? []).length === 0 && <EmptyRow>No chores assigned.</EmptyRow>}
+            {(choreRows ?? []).length === 0 && <EmptyRow>{tr('home.noChoresAssigned')}</EmptyRow>}
             {choreList.map((c) => {
               const owner = memberById.get(c.member_id);
               const done = c.status === 'approved';
@@ -602,29 +604,29 @@ export default async function HomePage() {
             })}
           </div>
           <Link href="/dashboard/chores" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand-text">
-            <Plus className="h-3.5 w-3.5" /> Add a chore
+            <Plus className="h-3.5 w-3.5" /> {tr('home.addAChore')}
           </Link>
         </Card>
 
         {/* Family Finances */}
         <Card>
-          <CardHead icon={DollarSign} title="Family Finances" href="/dashboard/billing" action="View finances" />
-          <p className="text-xs text-muted">This Month · {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
+          <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
+          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
           <div className="mt-3 flex items-center gap-4">
             <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
             <div className="flex-1 space-y-2 text-sm">
-              <Row label="Total Income" value={usd(finances.income)} valueClass="text-emerald-400" />
-              <Row label="Total Expenses" value={usd(finances.expenses)} valueClass="text-rose-400" />
-              <Row label="Remaining" value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
+              <Row label={tr('home.totalIncome')} value={usd(finances.income)} valueClass="text-emerald-400" />
+              <Row label={tr('home.totalExpenses')} value={usd(finances.expenses)} valueClass="text-rose-400" />
+              <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
             </div>
           </div>
         </Card>
 
         {/* Recent Memories */}
         <Card className="lg:col-span-2">
-          <CardHead icon={ImageIcon} title="Recent Memories" href="/dashboard/memories" action="View all memories" />
+          <CardHead icon={ImageIcon} title={tr('home.recentMemories')} href="/dashboard/memories" action="View all memories" />
           {(photos ?? []).length === 0 ? (
-            <EmptyRow>No memories yet — capture your first moment.</EmptyRow>
+            <EmptyRow>{tr('home.noMemoriesYetCaptureYourFirst')}</EmptyRow>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {((photos ?? []) as { id: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; created_at: string }[]).map((p) => {
@@ -645,9 +647,9 @@ export default async function HomePage() {
 
         {/* Family Messages */}
         <Card>
-          <CardHead icon={MessageCircle} title="Family Messages" href="/dashboard/messages" />
+          <CardHead icon={MessageCircle} title={tr('home.familyMessages')} href="/dashboard/messages" />
           <div className="space-y-3">
-            {msgs.length === 0 && <EmptyRow>No messages yet.</EmptyRow>}
+            {msgs.length === 0 && <EmptyRow>{tr('home.noMessagesYet')}</EmptyRow>}
             {msgs.map((m) => {
               const sender = m.sender_id ? memberById.get(m.sender_id) : undefined;
               const name = m.sender_name ?? sender?.display_name ?? 'Someone';

@@ -8,6 +8,7 @@ import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } from '@/lib/marketing/video';
 import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Video Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 const PROVIDER_LABEL: Record<VideoProvider, string> = { youtube: 'YouTube', vimeo: 'Vimeo', upload: 'Uploaded' };
 
 export default async function VideoPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const [videosResult, assetsResult] = await Promise.all([
     supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300),
@@ -44,35 +46,35 @@ export default async function VideoPage() {
       </p>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Film className="h-4 w-4 text-brand-text" /> Add video</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Film className="h-4 w-4 text-brand-text" /> {tr('adminMarketingVideo.addVideo')}</h2>
         <form action={saveVideoAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
-          <select name="status" defaultValue="draft" className={inputCls} aria-label="Status">
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
+          <input name="title" required placeholder={tr('adminMarketingVideo.title')} className={`${inputCls} lg:col-span-2`} />
+          <select name="status" defaultValue="draft" className={inputCls} aria-label={tr('adminMarketingVideo.status')}>
+            <option value="draft">{tr('adminMarketingVideo.draft')}</option>
+            <option value="published">{tr('adminMarketingVideo.published')}</option>
           </select>
-          <input name="duration_seconds" type="number" min="0" placeholder="Duration (sec)" className={inputCls} />
-          <input name="url" placeholder="YouTube / Vimeo URL" className={`${inputCls} lg:col-span-2`} />
-          <input name="attribution" placeholder="Attribution (if required)" className={inputCls} />
-          <select name="asset_id" defaultValue="" className={inputCls} aria-label="Or pick an uploaded video">
-            <option value="">…or pick uploaded video</option>
+          <input name="duration_seconds" type="number" min="0" placeholder={tr('adminMarketingVideo.durationSec')} className={inputCls} />
+          <input name="url" placeholder={tr('adminMarketingVideo.youtubeVimeoUrl')} className={`${inputCls} lg:col-span-2`} />
+          <input name="attribution" placeholder={tr('adminMarketingVideo.attributionIfRequired')} className={inputCls} />
+          <select name="asset_id" defaultValue="" className={inputCls} aria-label={tr('adminMarketingVideo.orPickAnUploadedVideo')}>
+            <option value="">{tr('adminMarketingVideo.orPickUploadedVideo')}</option>
             {videoAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
-          <input name="poster_url" placeholder="Poster image URL (optional)" className={inputCls} />
-          <select name="license" defaultValue="embedded_source" className={inputCls} aria-label="Video license">
-            <option value="embedded_source">Embedded source terms</option><option value="original">Original / owned</option><option value="cc0">CC0 / public domain</option><option value="cc_by">Creative Commons BY</option><option value="licensed">Licensed with proof</option>
+          <input name="poster_url" placeholder={tr('adminMarketingVideo.posterImageUrlOptional')} className={inputCls} />
+          <select name="license" defaultValue="embedded_source" className={inputCls} aria-label={tr('adminMarketingVideo.videoLicense')}>
+            <option value="embedded_source">{tr('adminMarketingVideo.embeddedSourceTerms')}</option><option value="original">{tr('adminMarketingVideo.originalOwned')}</option><option value="cc0">{tr('adminMarketingVideo.cc0PublicDomain')}</option><option value="cc_by">{tr('adminMarketingVideo.creativeCommonsBy')}</option><option value="licensed">{tr('adminMarketingVideo.licensedWithProof')}</option>
           </select>
-          <input name="tags" placeholder="Tags, comma-separated" className={`${inputCls} lg:col-span-2`} />
-          <textarea name="transcript" placeholder="Transcript (optional — feeds AEO/SEO)" rows={2} className={`${inputCls} h-auto py-2 lg:col-span-2`} />
-          <button type="submit" className={btnCls}>Add video</button>
+          <input name="tags" placeholder={tr('adminMarketingVideo.tagsCommaSeparated')} className={`${inputCls} lg:col-span-2`} />
+          <textarea name="transcript" placeholder={tr('adminMarketingVideo.transcriptOptionalFeedsAeoSeo')} rows={2} className={`${inputCls} h-auto py-2 lg:col-span-2`} />
+          <button type="submit" className={btnCls}>{tr('adminMarketingVideo.addVideo')}</button>
         </form>
         <p className="mt-3 text-xs text-muted">
-          {videos.length} video{videos.length === 1 ? '' : 's'} · {published} published. Paste a URL, or pick a video uploaded in the Asset Library.
+          {videos.length} video{videos.length === 1 ? '' : 's'} · {published} {tr('adminMarketingVideo.publishedPasteAUrlOrPick')}
         </p>
       </Card>
 
       {videos.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No videos yet — add your first above.</p>
+        <p className="py-8 text-center text-sm text-muted">{tr('adminMarketingVideo.noVideosYetAddYourFirst')}</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {videos.map((v) => {

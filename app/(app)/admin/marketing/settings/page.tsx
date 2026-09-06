@@ -7,6 +7,7 @@ import { ErrorState } from '@/components/ui/states';
 import { saveSetting } from '../actions';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getAIConfigView, type AIConfigView } from '@/lib/ai/settings';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,7 @@ const KNOWN_SETTINGS = [
 ];
 
 export default async function MarketingSettingsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [{ data: settings, error: settingsError }, aiConfig] = await Promise.all([
     supabase.from('marketing_settings').select('*'),
@@ -44,7 +46,7 @@ export default async function MarketingSettingsPage() {
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Card>
-        <h2 className="mb-3 font-semibold">Channel providers</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingSettings.channelProviders')}</h2>
         <ul className="space-y-2">
           {providerStatus(aiConfig).map((p) => (
             <li key={p.env} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
@@ -59,7 +61,7 @@ export default async function MarketingSettingsPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 font-semibold">Marketing settings</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingSettings.marketingSettings')}</h2>
         <div className="space-y-4">
           {KNOWN_SETTINGS.map((s) => {
             const current = byKey.get(s.key) as { text?: string } | undefined;

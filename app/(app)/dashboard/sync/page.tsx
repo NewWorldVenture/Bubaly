@@ -12,6 +12,7 @@ import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,7 @@ function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: Sync
 }
 
 export default async function SyncHubPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -55,9 +57,9 @@ export default async function SyncHubPage() {
     console.error('[sync-hub] family sync read failed', readError);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSync.sync')}</h1>
         <ErrorState message="Could not load your sync status from Supabase. Refresh and try again." />
-        <a href="/dashboard/sync" className="text-sm font-medium text-brand-text underline">Refresh sync status</a>
+        <a href="/dashboard/sync" className="text-sm font-medium text-brand-text underline">{t('dashboardSync.refreshSyncStatus')}</a>
       </div>
     );
   }
@@ -73,13 +75,13 @@ export default async function SyncHubPage() {
     <div className="module-page">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sync</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSync.sync')}</h1>
           <p className="mt-1 text-sm text-muted">
-            Connect Google, Microsoft/Outlook, or Apple to sync your calendars and reminders.
+            {t('dashboardSync.connectGoogleMicrosoftOutlookOrApple')}
           </p>
         </div>
         <Link href="/dashboard/sync/accounts" className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
-          <Plug className="h-4 w-4" /> Connect an account
+          <Plug className="h-4 w-4" /> {t('dashboardSync.connectAnAccount')}
         </Link>
       </div>
 
@@ -87,25 +89,25 @@ export default async function SyncHubPage() {
       <div className="grid-stats">
         <div className="stat-card">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><CheckCircle2 className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{healthy}</p><p className="mt-1 text-xs text-muted">Healthy connections</p></div>
+          <div><p className="text-xl font-bold leading-none">{healthy}</p><p className="mt-1 text-xs text-muted">{t('dashboardSync.healthyConnections')}</p></div>
         </div>
         <div className="stat-card">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-danger/10 text-danger"><XCircle className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{errored}</p><p className="mt-1 text-xs text-muted">Connection errors</p></div>
+          <div><p className="text-xl font-bold leading-none">{errored}</p><p className="mt-1 text-xs text-muted">{t('dashboardSync.connectionErrors')}</p></div>
         </div>
         <div className="stat-card">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-warning/10 text-warning"><AlertTriangle className="h-5 w-5" /></div>
-          <Link href="/dashboard/sync/conflicts"><p className="text-xl font-bold leading-none">{conflictCount}</p><p className="mt-1 text-xs text-muted">Open conflicts</p></Link>
+          <Link href="/dashboard/sync/conflicts"><p className="text-xl font-bold leading-none">{conflictCount}</p><p className="mt-1 text-xs text-muted">{t('dashboardSync.openConflicts')}</p></Link>
         </div>
         <div className="stat-card">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><CalendarClock className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{calendarCount}</p><p className="mt-1 text-xs text-muted">Synced calendars</p></div>
+          <div><p className="text-xl font-bold leading-none">{calendarCount}</p><p className="mt-1 text-xs text-muted">{t('dashboardSync.syncedCalendars')}</p></div>
         </div>
       </div>
 
       {/* Capability matrix — the honest source of truth */}
       <Card>
-        <h2 className="mb-1 text-base font-semibold">What each provider supports</h2>
+        <h2 className="mb-1 text-base font-semibold">{t('dashboardSync.whatEachProviderSupports')}</h2>
         <p className="mb-4 text-xs text-muted">
           Based on each provider&rsquo;s real public API. Where two-way sync isn&rsquo;t possible we say so plainly rather than pretend.
         </p>
@@ -113,7 +115,7 @@ export default async function SyncHubPage() {
           <table className="w-full min-w-[480px] border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-muted">
-                <th className="pb-2 pr-4 font-medium">Provider</th>
+                <th className="pb-2 pr-4 font-medium">{t('dashboardSync.provider')}</th>
                 {ITEM_KINDS.map((k) => (
                   <th key={k.key} className="pb-2 pr-4 font-medium">
                     <span className="inline-flex items-center gap-1.5"><k.icon className="h-3.5 w-3.5" /> {k.label}</span>
@@ -137,7 +139,7 @@ export default async function SyncHubPage() {
 
       {/* Quick connect */}
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Connect an account</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('dashboardSync.connectAnAccount')}</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {CONNECTABLE.map((p) => {
             const conn = conns.find((c) => c.provider === p);
@@ -162,11 +164,11 @@ export default async function SyncHubPage() {
       {/* Recent activity */}
       <Card>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Recent sync activity</h2>
-          <Link href="/dashboard/sync/history" className="text-xs text-brand-text hover:underline">View history</Link>
+          <h2 className="text-base font-semibold">{t('dashboardSync.recentSyncActivity')}</h2>
+          <Link href="/dashboard/sync/history" className="text-xs text-brand-text hover:underline">{t('dashboardSync.viewHistory')}</Link>
         </div>
         {runs.length === 0 ? (
-          <p className="text-sm text-muted">No sync runs yet. Connect an account to get started.</p>
+          <p className="text-sm text-muted">{t('dashboardSync.noSyncRunsYetConnectAn')}</p>
         ) : (
           <div className="space-y-2">
             {runs.map((r) => (

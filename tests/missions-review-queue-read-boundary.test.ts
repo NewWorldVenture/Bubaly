@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // A-07 §3e slice (agent-05, PLA-0795): the Family Missions approval queue read
@@ -8,7 +9,7 @@ import fs from 'node:fs';
 // hide a safety-flagged submission. The primary read now surfaces a retryable
 // error instead of a false-empty queue.
 
-const page = fs.readFileSync('app/(app)/missions/page.tsx', 'utf8');
+const page = readUiSource('app/(app)/missions/page.tsx');
 
 describe('missions approval queue surfaces a failed read (A-07 §3e)', () => {
   it('captures the chore_submissions read error', () => {

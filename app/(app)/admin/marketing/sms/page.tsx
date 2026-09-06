@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSmsDraft } from '../actions';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · SMS', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function SmsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [smsResult, segmentsResult] = await Promise.all([
     supabase.from('marketing_sms_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
@@ -34,14 +36,14 @@ export default async function SmsPage() {
       <div className={`flex items-center gap-3 rounded-2xl border p-4 text-sm ${ready ? 'border-success/30 bg-success/10' : 'border-warning/30 bg-warning/10'}`}>
         {ready ? <CheckCircle2 className="h-5 w-5 text-success" /> : <AlertTriangle className="h-5 w-5 text-warning" />}
         {ready
-          ? <span>SMS provider connected. Only SMS-consented contacts will receive messages.</span>
-          : <span><strong>No SMS provider configured.</strong> Set <code>TWILIO_AUTH_TOKEN</code> to enable sending. Draft now — sends are never faked, and require valid opt-in consent.</span>}
+          ? <span>{t('adminMarketingSms.smsProviderConnectedOnlySmsConsented')}</span>
+          : <span><strong>{t('adminMarketingSms.noSmsProviderConfigured')}</strong> Set <code>TWILIO_AUTH_TOKEN</code> {t('adminMarketingSms.toEnableSendingDraftNowSends')}</span>}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
           {(sms ?? []).length === 0 ? (
-            <EmptyState icon={MessageSquare} title="No SMS campaigns yet" description="Draft your first message on the right." />
+            <EmptyState icon={MessageSquare} title={t('adminMarketingSms.noSmsCampaignsYet')} description="Draft your first message on the right." />
           ) : (
             (sms ?? []).map((s) => (
               <Card key={s.id} className="flex items-start justify-between gap-3">
@@ -56,15 +58,15 @@ export default async function SmsPage() {
         </div>
 
         <Card className="h-fit">
-          <h2 className="mb-3 font-semibold">New SMS draft</h2>
+          <h2 className="mb-3 font-semibold">{t('adminMarketingSms.newSmsDraft')}</h2>
           <form action={createSmsDraft} className="space-y-3 text-sm">
             <select name="segment_id" className={inputCls}>
-              <option value="">SMS-consented contacts</option>
+              <option value="">{t('adminMarketingSms.smsConsentedContacts')}</option>
               {(segments ?? []).map((sg) => <option key={sg.id} value={sg.id}>{sg.name}</option>)}
             </select>
-            <textarea name="message" required maxLength={320} rows={4} placeholder="Message (keep under 160 chars; include opt-out)…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <p className="text-xs text-muted">Always include “Reply STOP to opt out.”</p>
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Save draft</button>
+            <textarea name="message" required maxLength={320} rows={4} placeholder={t('adminMarketingSms.messageKeepUnder160CharsInclude')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+            <p className="text-xs text-muted">{t('adminMarketingSms.alwaysIncludeReplyStopToOpt')}</p>
+            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSms.saveDraft')}</button>
           </form>
         </Card>
       </div>

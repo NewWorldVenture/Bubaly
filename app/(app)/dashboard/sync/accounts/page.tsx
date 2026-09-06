@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, isSupported, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync accounts' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const PROVIDERS: SyncProvider[] = ['google', 'microsoft', 'apple'];
 const KINDS: SyncItemKind[] = ['calendar', 'reminder', 'note'];
 
 export default async function SyncAccountsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -29,9 +31,9 @@ export default async function SyncAccountsPage() {
     console.error('[sync-accounts] connected-account read failed', error);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Connected accounts</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
         <ErrorState message="Could not load your connected accounts from Supabase. Refresh and try again." />
-        <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">Refresh connected accounts</Link>
+        <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshConnectedAccounts')}</Link>
       </div>
     );
   }
@@ -41,8 +43,8 @@ export default async function SyncAccountsPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Connected accounts</h1>
-        <p className="mt-1 text-sm text-muted">Link a provider to start syncing. Each card shows exactly what that provider can do.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('dashboardSyncAccounts.linkAProviderToStartSyncing')}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

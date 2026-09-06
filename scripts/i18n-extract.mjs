@@ -35,6 +35,7 @@ const ts = createRequire(import.meta.url)('typescript');
 
 const CATALOGUE = 'lib/i18n/messages/en-US.json';
 const HOOK_IMPORT = "import { useTranslations } from '@/components/i18n/locale-provider';";
+const SERVER_IMPORT = "import { getTranslations } from '@/lib/i18n/server';";
 
 /** JSX attributes whose string value is copy a person reads. */
 const COPY_PROPS = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label']);
@@ -81,7 +82,7 @@ function isCopy(text) {
  * exactly the "Cannot find name 't'" this guards against. An edit with no
  * hookable host is dropped rather than written.
  */
-function hookableComponent(node, sf) {
+function hookableComponent(node, sf, server) {
   let current = node.parent;
   while (current) {
     if (
@@ -89,11 +90,23 @@ function hookableComponent(node, sf) {
       ts.isArrowFunction(current) ||
       ts.isFunctionExpression(current)
     ) {
-      return isComponent(current, sf) ? current : undefined;
+      if (!isComponent(current, sf)) return undefined;
+      // Server components resolve their catalogue with `await
+      // getTranslations()`, so the host has to be async ALREADY. Making a sync
+      // one async is not safe from here: a server component imported into a
+      // client tree becomes a client component, where an async component is a
+      // runtime error. Files whose components are sync are left for a human.
+      if (server && !isAsync(current)) return undefined;
+      return current;
     }
     current = current.parent;
   }
   return undefined;
+}
+
+/** Does this function carry the `async` modifier? */
+function isAsync(node) {
+  return !!node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword);
 }
 
 /**
@@ -135,6 +148,7 @@ function pickBinding(sf) {
 /** Collect every rewritable site in a file. */
 export function collect(file, namespace) {
   const source = readFileSync(file, 'utf8');
+  const server = !source.startsWith("'use client'");
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const binding = pickBinding(sf);
   const edits = [];
@@ -143,7 +157,7 @@ export function collect(file, namespace) {
     if (ts.isJsxText(node)) {
       const raw = node.getText();
       const text = raw.replace(/\s+/g, ' ').trim();
-      const host = hookableComponent(node, sf);
+      const host = hookableComponent(node, sf, server);
       if (isCopy(text) && host) {
         // Preserve the original leading/trailing whitespace so JSX spacing
         // between adjacent elements is unchanged.
@@ -161,7 +175,7 @@ export function collect(file, namespace) {
     } else if (ts.isJsxAttribute(node) && node.initializer && ts.isStringLiteral(node.initializer)) {
       const name = node.name.getText(sf);
       const text = node.initializer.text;
-      const propHost = hookableComponent(node, sf);
+      const propHost = hookableComponent(node, sf, server);
       if (COPY_PROPS.has(name) && isCopy(text) && propHost) {
         edits.push({
           start: node.initializer.getStart(sf),
@@ -177,15 +191,12 @@ export function collect(file, namespace) {
   };
   ts.forEachChild(sf, visit);
 
-  return { source, sf, edits, binding };
+  return { source, sf, edits, binding, server };
 }
 
 export function rewriteFile(file, namespace) {
-  const { source, edits, binding } = collect(file, namespace);
+  const { source, edits, binding, server } = collect(file, namespace);
   if (!edits.length) return null;
-  if (!source.startsWith("'use client'")) {
-    return { skipped: 'server component — needs await getTranslations()', count: edits.length };
-  }
 
   let out = source;
   const keys = {};
@@ -199,14 +210,16 @@ export function rewriteFile(file, namespace) {
   // Hooks are inserted by re-parsing the REWRITTEN source rather than by
   // reusing offsets from the original: the text edits above moved everything,
   // and a stale offset is how a tool like this corrupts a file.
-  out = insertHooks(out, file, binding);
+  out = insertHooks(out, file, binding, server);
 
   // Test for the IMPORT, not the identifier: insertHooks has just written
   // `const t = useTranslations()` into the body, so an identifier check always
   // matches and the import silently never gets added.
-  if (!out.includes("from '@/components/i18n/locale-provider'")) {
+  const needed = server ? SERVER_IMPORT : HOOK_IMPORT;
+  const marker = server ? "from '@/lib/i18n/server'" : "from '@/components/i18n/locale-provider'";
+  if (!out.includes(marker)) {
     const end = afterLastImport(out, file);
-    out = `${out.slice(0, end)}\n${HOOK_IMPORT}${out.slice(end)}`;
+    out = `${out.slice(0, end)}\n${needed}${out.slice(end)}`;
   }
 
   return { out, keys, count: edits.length, binding };
@@ -247,7 +260,7 @@ function isComponent(node, sf) {
 /** Insert `const t = useTranslations();` into each COMPONENT that calls t() and
  *  does not already declare it. Operates on the rewritten source via a fresh
  *  parse, so offsets are real rather than estimated. */
-function insertHooks(source, file, binding) {
+function insertHooks(source, file, binding, server) {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const inserts = [];
 
@@ -257,7 +270,7 @@ function insertHooks(source, file, binding) {
     if (isFn && node.body && ts.isBlock(node.body) && isComponent(node, sf)) {
       const body = node.body.getText(sf);
       const calls = new RegExp(`\\b${binding}\\(['"]`).test(body);
-      const declares = new RegExp(`const\\s+${binding}\\s*=\\s*useTranslations\\(\\)`).test(body);
+      const declares = new RegExp(`const\\s+${binding}\\s*=\\s*(?:await\\s+getTranslations|useTranslations)\\(\\)`).test(body);
       if (calls && !declares) {
         inserts.push({ pos: node.body.getStart(sf) + 1 });
       }
@@ -268,7 +281,8 @@ function insertHooks(source, file, binding) {
 
   let out = source;
   for (const { pos } of inserts.sort((a, b) => b.pos - a.pos)) {
-    out = `${out.slice(0, pos)}\n  const ${binding} = useTranslations();${out.slice(pos)}`;
+    const decl = server ? `await getTranslations()` : `useTranslations()`;
+    out = `${out.slice(0, pos)}\n  const ${binding} = ${decl};${out.slice(pos)}`;
   }
   return out;
 }
@@ -294,15 +308,39 @@ if (isMain) {
   const explicitNs = nsAt === -1 ? undefined : args[nsAt + 1];
   const files = args.filter((a, i) => !a.startsWith('--') && i !== nsAt + 1);
 
-  // Without --ns, the namespace comes from the file: components/modules/
-  // billing-module.tsx → `billing`. Keeps keys grouped by the surface they came
-  // from, which is what makes the catalogue reviewable by a translator.
-  const namespaceFor = (file) =>
-    explicitNs ??
-    (file.split('/').pop() ?? 'ui')
-      .replace(/\.tsx$/, '')
-      .replace(/-(module|panel|hub|page|form|card|view)$/, '')
-      .replace(/[^A-Za-z0-9]+(.)/g, (_m, c) => c.toUpperCase());
+  // Without --ns, the namespace comes from the file's location, because that is
+  // what makes the catalogue reviewable: a translator seeing `adminBackup.*`
+  // knows which screen the words belong to.
+  //
+  // The basename alone is not enough for routes. Every page in app/ is called
+  // page.tsx, so deriving from the basename put 1,412 keys under a single
+  // `page.` namespace — indistinguishable to a reviewer, and colliding keys
+  // (same name, different text) were being silently skipped. Route namespaces
+  // therefore come from the PATH, with Next's route groups `(marketing)` and
+  // dynamic segments `[slug]` dropped since neither is meaningful to a human.
+  const namespaceFor = (file) => {
+    if (explicitNs) return explicitNs;
+    const camel = (parts) =>
+      parts
+        .filter(Boolean)
+        .join('-')
+        .replace(/[^A-Za-z0-9]+(.)/g, (_m, c) => c.toUpperCase())
+        .replace(/^./, (c) => c.toLowerCase());
+
+    const clean = file.replace(/^\.\//, '').split('/');
+    const base = (clean.pop() ?? 'ui').replace(/\.tsx$/, '');
+
+    if (clean[0] === 'app') {
+      const segments = clean
+        .slice(1)
+        .filter((seg) => !/^\(.*\)$/.test(seg) && !/^\[.*\]$/.test(seg));
+      const leaf = /^(page|layout|template|loading|error|not-found|default)$/.test(base)
+        ? []
+        : [base];
+      return camel([...segments, ...leaf]) || 'root';
+    }
+    return camel([base.replace(/-(module|panel|hub|page|form|card|view)$/, '')]);
+  };
 
   if (!files.length) {
     console.log('usage: node scripts/i18n-extract.mjs --ns <namespace> [--check] <files...>');

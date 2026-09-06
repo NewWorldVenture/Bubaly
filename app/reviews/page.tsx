@@ -3,11 +3,13 @@ import Link from 'next/link';
 import { Star } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { ratingStats, PUBLIC_STATUSES, stars } from '@/lib/marketing/reviews';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Reviews · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function ReviewsWallPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: reviews } = await supabase
     .from('reviews')
@@ -24,19 +26,19 @@ export default async function ReviewsWallPage() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-12">
       <div className="text-center">
-        <p className="text-lg font-bold tracking-tight">Bubaly</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">What families say</h1>
+        <p className="text-lg font-bold tracking-tight">{t('reviews.bubaly')}</p>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">{t('reviews.whatFamiliesSay')}</h1>
         {s.total > 0 && (
           <div className="mt-2 flex items-center justify-center gap-2 text-amber-400">
             <span className="text-lg" aria-hidden>{stars(s.average)}</span>
             <span className="text-sm text-muted">{s.average} from {s.total} review{s.total === 1 ? '' : 's'}</span>
           </div>
         )}
-        <Link href="/reviews/new" className="mt-4 inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-brand-fg">Write a review</Link>
+        <Link href="/reviews/new" className="mt-4 inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-brand-fg">{t('reviews.writeAReview')}</Link>
       </div>
 
       {rows.length === 0 ? (
-        <p className="mt-10 text-center text-sm text-muted">No reviews yet — be the first to share your experience.</p>
+        <p className="mt-10 text-center text-sm text-muted">{t('reviews.noReviewsYetBeTheFirst')}</p>
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           {rows.map((r) => (

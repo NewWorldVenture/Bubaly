@@ -4,11 +4,13 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { reconcileLedger, type ReconTxn } from '@/lib/wallet/reconcile';
 import { ErrorState } from '@/components/ui/states';
 import { ReconciliationClient } from './reconciliation-client';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Wallet Reconciliation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function ReconciliationPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
 
   // Pull buckets to map bucket_id → kind, then the ledger rows.
@@ -27,12 +29,12 @@ export default async function ReconciliationPage() {
       <div className="space-y-5">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <ShieldCheck className="h-6 w-6 text-brand-text" /> Wallet Reconciliation
+            <ShieldCheck className="h-6 w-6 text-brand-text" /> {tr('adminWalletReconciliation.walletReconciliation')}
           </h1>
-          <p className="mt-1 text-sm text-muted">Read-only ledger integrity checks across every family.</p>
+          <p className="mt-1 text-sm text-muted">{tr('adminWalletReconciliation.readOnlyLedgerIntegrityChecksAcross')}</p>
         </div>
         <ErrorState message="Could not load wallet ledger data from Supabase. Refresh and try again." />
-        <a href="/admin/wallet/reconciliation" className="text-sm font-medium text-brand-text underline">Refresh reconciliation</a>
+        <a href="/admin/wallet/reconciliation" className="text-sm font-medium text-brand-text underline">{tr('adminWalletReconciliation.refreshReconciliation')}</a>
       </div>
     );
   }
@@ -60,7 +62,7 @@ export default async function ReconciliationPage() {
     <div className="space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <ShieldCheck className="h-6 w-6 text-brand-text" /> Wallet Reconciliation
+          <ShieldCheck className="h-6 w-6 text-brand-text" /> {tr('adminWalletReconciliation.walletReconciliation')}
         </h1>
         <p className="mt-1 text-sm text-muted">
           Ledger integrity across every family. Verifies derived balances, bucket sums, reversal

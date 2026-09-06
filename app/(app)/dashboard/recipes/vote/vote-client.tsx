@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import { createMealVote, castBallot, closeMealVote, reopenMealVote, addWinnerToGrocery } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type VoteView = {
   id: string; title: string; status: string; mealDate: string | null; mealType: string | null;
@@ -25,6 +26,7 @@ const CHOICES: { v: 'yes' | 'maybe' | 'no'; icon: typeof Check; cls: string }[] 
 ];
 
 export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes: RecipeLite[] }) {
+  const tr = useTranslations();
   const { selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [pending, start] = useTransition();
@@ -41,14 +43,14 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold"><Vote className="h-5 w-5 text-brand-text" /> Meal Voting</h1>
-          <p className="text-sm text-muted">Propose meals, let the family vote, and pick a winner.</p>
+          <h1 className="flex items-center gap-2 text-xl font-bold"><Vote className="h-5 w-5 text-brand-text" /> {tr('dashboardRecipesVoteVoteClient.mealVoting')}</h1>
+          <p className="text-sm text-muted">{tr('dashboardRecipesVoteVoteClient.proposeMealsLetTheFamilyVote')}</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New vote</Button>
+        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> {tr('dashboardRecipesVoteVoteClient.newVote')}</Button>
       </div>
 
       {votes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted">No votes yet — start one to settle dinner.</div>
+        <div className="rounded-2xl border border-dashed border-border py-16 text-center text-muted">{tr('dashboardRecipesVoteVoteClient.noVotesYetStartOneTo')}</div>
       ) : (
         <div className="space-y-4">
           {votes.map((v) => {
@@ -112,6 +114,7 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
 }
 
 function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose: () => void }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [title, setTitle] = useState('');
   const [mealDate, setMealDate] = useState('');
@@ -138,15 +141,15 @@ function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose:
   }
 
   return (
-    <Modal open onClose={onClose} title="New meal vote">
+    <Modal open onClose={onClose} title={tr('dashboardRecipesVoteVoteClient.newMealVote')}>
       <div className="space-y-4">
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Friday dinner" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('dashboardRecipesVoteVoteClient.eGFridayDinner')} />
         <Input type="date" value={mealDate} onChange={(e) => setMealDate(e.target.value)} />
         <div>
-          <p className="mb-1.5 text-sm font-semibold">Options from your recipes</p>
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search your recipes…" />
+          <p className="mb-1.5 text-sm font-semibold">{tr('dashboardRecipesVoteVoteClient.optionsFromYourRecipes')}</p>
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr('dashboardRecipesVoteVoteClient.searchYourRecipes')} />
           <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-            {filtered.length === 0 && <p className="text-xs text-muted">No recipes — add free-text options below.</p>}
+            {filtered.length === 0 && <p className="text-xs text-muted">{tr('dashboardRecipesVoteVoteClient.noRecipesAddFreeTextOptions')}</p>}
             {filtered.map((r) => (
               <label key={r.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
                 <input type="checkbox" checked={!!picked[r.id]} onChange={(e) => setPicked((p) => ({ ...p, [r.id]: e.target.checked }))} className="h-4 w-4 accent-[var(--brand)]" />
@@ -156,12 +159,12 @@ function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose:
           </div>
         </div>
         <div>
-          <p className="mb-1 text-sm font-semibold">Or add options (one per line)</p>
+          <p className="mb-1 text-sm font-semibold">{tr('dashboardRecipesVoteVoteClient.orAddOptionsOnePerLine')}</p>
           <textarea value={extra} onChange={(e) => setExtra(e.target.value)} rows={2} placeholder={'Pizza night\nTacos'} className="w-full rounded-lg border border-border bg-bg p-2 text-sm" />
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={saving}><Plus className="h-4 w-4" /> Create vote</Button>
+          <Button variant="ghost" onClick={onClose}>{tr('dashboardRecipesVoteVoteClient.cancel')}</Button>
+          <Button onClick={submit} loading={saving}><Plus className="h-4 w-4" /> {tr('dashboardRecipesVoteVoteClient.createVote')}</Button>
         </div>
       </div>
     </Modal>

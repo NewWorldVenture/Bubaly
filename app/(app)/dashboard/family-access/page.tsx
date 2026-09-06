@@ -5,11 +5,13 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Kid Logins' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyAccessPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   // Managing logins is a parent/guardian task.
   if (!isManager(ctx.active.role)) redirect('/home');
@@ -42,20 +44,20 @@ export default async function FamilyAccessPage() {
       <div className="flex items-center gap-3">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand-text"><KeyRound className="h-6 w-6" /></span>
         <div>
-          <h1 className="text-2xl font-black tracking-tight">Kid Logins</h1>
-          <p className="mt-0.5 text-sm text-muted">Give a child their own sign-in — a username and 4-digit PIN, no email required.</p>
+          <h1 className="text-2xl font-black tracking-tight">{t('dashboardFamilyAccess.kidLogins')}</h1>
+          <p className="mt-0.5 text-sm text-muted">{t('dashboardFamilyAccess.giveAChildTheirOwnSign')}</p>
         </div>
       </div>
 
       <ChildAccessManager members={list} configured={configured} />
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">
-        <p className="font-semibold text-fg">How it works</p>
+        <p className="font-semibold text-fg">{t('dashboardFamilyAccess.howItWorks')}</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs">
-          <li>Create a username + PIN for your child above.</li>
-          <li>They go to <span className="font-semibold text-fg">bubaly.com/kid-login</span> and enter it — no email needed.</li>
-          <li>They land in their own Bubaly with their chores, rewards and family.</li>
-          <li>Forgot the PIN? Reset it here anytime.</li>
+          <li>{t('dashboardFamilyAccess.createAUsernamePinForYour')}</li>
+          <li>{t('dashboardFamilyAccess.theyGoTo')} <span className="font-semibold text-fg">bubaly.com/kid-login</span> {t('dashboardFamilyAccess.andEnterItNoEmailNeeded')}</li>
+          <li>{t('dashboardFamilyAccess.theyLandInTheirOwnBubaly')}</li>
+          <li>{t('dashboardFamilyAccess.forgotThePinResetItHere')}</li>
         </ol>
       </div>
     </div>

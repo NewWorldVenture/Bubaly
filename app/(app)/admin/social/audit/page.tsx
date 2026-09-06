@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ClipboardList } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ function ReadFailure() {
 }
 
 export default async function AdminAuditPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: logs, error } = await supabase
     .from('social_audit_logs')
@@ -36,11 +38,11 @@ export default async function AdminAuditPage() {
 
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Audit log</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('adminSocialAudit.auditLog')}</h1>
       <AdminSocialSubnav active="/admin/social/audit" />
-      <p className="text-sm text-muted">Account, post, and publish-result mutations across all families, written by database audit triggers.</p>
+      <p className="text-sm text-muted">{t('adminSocialAudit.accountPostAndPublishResultMutations')}</p>
       {(logs ?? []).length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No audit entries yet" description="Connection, draft, and publish activity will be recorded here." />
+        <EmptyState icon={ClipboardList} title={t('adminSocialAudit.noAuditEntriesYet')} description="Connection, draft, and publish activity will be recorded here." />
       ) : (
         <Card>
           <div className="space-y-1.5 text-sm">

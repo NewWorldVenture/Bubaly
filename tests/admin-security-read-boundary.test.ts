@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/admin/security/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/admin/security/page.tsx');
 
 describe('admin security read boundary', () => {
   it('does not render empty account or audit security signals after a required read failure', () => {

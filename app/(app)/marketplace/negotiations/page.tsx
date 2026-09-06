@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { whoseTurn, statusLine, type Party, type NegotiationStatus } from '@/lib/marketplace/negotiation';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Offers · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ type Row = {
 /** The negotiation inbox — every "Make an Offer" thread you're part of, split by
  *  whose move it is. The full thread + accept/counter lives on the item page. */
 export default async function NegotiationsInboxPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -38,7 +40,7 @@ export default async function NegotiationsInboxPage() {
   if (negError) {
     return (
       <div className="module-page">
-        <PageHeader title="Offers" description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
+        <PageHeader title={tr('marketplaceNegotiations.offers')} description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
         <ErrorState message="Couldn’t load your offers. Refresh and try again." />
       </div>
     );
@@ -103,21 +105,21 @@ export default async function NegotiationsInboxPage() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Offers" description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
+      <PageHeader title={tr('marketplaceNegotiations.offers')} description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
       {items.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Handshake className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">No offers going yet</p>
-          <p className="mt-1 text-sm text-muted">Make an offer on a listing, or wait for a buyer to make one on yours — the back-and-forth shows up here.</p>
+          <p className="mt-3 text-sm font-semibold">{tr('marketplaceNegotiations.noOffersGoingYet')}</p>
+          <p className="mt-1 text-sm text-muted">{tr('marketplaceNegotiations.makeAnOfferOnAListing')}</p>
           <Link href="/marketplace/browse?kind=sell" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
-            Browse things for sale
+            {tr('marketplaceNegotiations.browseThingsForSale')}
           </Link>
         </div>
       ) : (
         <>
-          <Section title="Your move" tone="text-brand-text" list={yourMove} />
-          <Section title="Waiting on them" tone="text-muted" list={waiting} />
-          <Section title="Settled" tone="text-muted" list={settled} />
+          <Section title={tr('marketplaceNegotiations.yourMove')} tone="text-brand-text" list={yourMove} />
+          <Section title={tr('marketplaceNegotiations.waitingOnThem')} tone="text-muted" list={waiting} />
+          <Section title={tr('marketplaceNegotiations.settled')} tone="text-muted" list={settled} />
         </>
       )}
     </div>

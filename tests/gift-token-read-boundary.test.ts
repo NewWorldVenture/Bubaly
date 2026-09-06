@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
-const page = fs.readFileSync('app/gift/[token]/page.tsx', 'utf8');
+const page = readUiSource('app/gift/[token]/page.tsx');
 
 // PLA-0807: the public gift-redemption page must distinguish a genuinely
 // missing/expired link (data null, no error → "no longer active") from a

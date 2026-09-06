@@ -6,11 +6,13 @@ import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfig } fr
 import { summarizeReferrals, referralLink } from '@/lib/referrals/core';
 import { fmtMoney } from '@/lib/utils/format';
 import { ReferralPanel } from '@/components/referrals/referral-panel';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Refer a Family', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function ReferralsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
 
@@ -44,9 +46,9 @@ export default async function ReferralsPage() {
       <header className="flex items-center gap-3">
         <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Gift className="h-6 w-6" /></div>
         <div>
-          <h1 className="text-xl font-bold">Refer a Family</h1>
+          <h1 className="text-xl font-bold">{t('referrals.referAFamily')}</h1>
           <p className="text-sm text-muted">
-            Give {config.rewardLabel}, get {config.rewardLabel} when a family you invite upgrades.
+            {t('referrals.give')} {config.rewardLabel}{t('referrals.get')} {config.rewardLabel} {t('referrals.whenAFamilyYouInviteUpgrades')}
           </p>
         </div>
       </header>

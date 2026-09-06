@@ -12,6 +12,7 @@ import { TicketRowActions } from '@/components/admin/ticket-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Support Tickets', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,7 @@ type Params = {
 };
 
 export default async function SupportTicketsPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
@@ -148,15 +150,15 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Support Tickets</h1>
-          <p className="mt-1 text-sm text-muted">Manage and resolve customer support requests.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminSupportTickets.supportTickets')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('adminSupportTickets.manageAndResolveCustomerSupportRequests')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 text-sm font-medium hover:bg-elevated">
-            <ArrowDownToLine className="h-4 w-4" /> Export
+            <ArrowDownToLine className="h-4 w-4" /> {tr('adminSupportTickets.export')}
           </button>
           <button className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-fg hover:brightness-110">
-            <Plus className="h-4 w-4" /> New Ticket
+            <Plus className="h-4 w-4" /> {tr('adminSupportTickets.newTicket')}
           </button>
         </div>
       </div>
@@ -178,7 +180,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
           <Card>
             {/* Filter bar */}
             <FilterForm action="/admin/support-tickets" hidden={{ tab }}>
-              <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search tickets..." />
+              <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminSupportTickets.searchTickets')} />
               <FilterSelect name="status" defaultValue={statusFilter} options={[
                 { value: '', label: 'All Status' },
                 { value: 'open',        label: 'Open' },
@@ -203,26 +205,26 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 ...agentNames.map((n) => ({ value: n, label: n })),
               ]} />
               <button type="submit" className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 text-sm hover:bg-elevated">
-                <Filter className="h-4 w-4" /> Filters
+                <Filter className="h-4 w-4" /> {tr('adminSupportTickets.filters')}
               </button>
             </FilterForm>
 
             {pageRows.length === 0 ? (
-              <div className="mt-6"><EmptyState icon={TicketCheck} title="No tickets match these filters" /></div>
+              <div className="mt-6"><EmptyState icon={TicketCheck} title={tr('adminSupportTickets.noTicketsMatchTheseFilters')} /></div>
             ) : (
               <div className="table-responsive mt-4">
                 <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted">
-                      <th className="px-3 py-2 font-medium">Ticket ID</th>
-                      <th className="px-3 py-2 font-medium">Subject</th>
-                      <th className="px-3 py-2 font-medium">Requester</th>
-                      <th className="px-3 py-2 font-medium">Category</th>
-                      <th className="px-3 py-2 font-medium">Priority</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium">Agent</th>
-                      <th className="px-3 py-2 font-medium">Updated</th>
-                      <th className="px-3 py-2 font-medium">Actions</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.ticketId')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.subject')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.requester')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.category')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.priority')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.status')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.agent')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.updated')}</th>
+                      <th className="px-3 py-2 font-medium">{tr('adminSupportTickets.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
@@ -285,7 +287,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
             {/* Pagination */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
               <span>
-                Showing {filtered.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to{' '}
+                {tr('adminSupportTickets.showing')} {filtered.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to{' '}
                 {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} tickets
               </span>
               <div className="flex items-center gap-1">
@@ -326,24 +328,24 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
           {/* Tickets Overview */}
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Tickets Overview</h2>
-              <span className="text-xs text-muted">This Week</span>
+              <h2 className="text-base font-semibold">{tr('adminSupportTickets.ticketsOverview')}</h2>
+              <span className="text-xs text-muted">{tr('adminSupportTickets.thisWeek')}</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <OverviewStat icon={TicketCheck} label="Total"       value={total}      color="text-brand-text    bg-brand/10" />
-              <OverviewStat icon={Circle}      label="Open"        value={openCount}  color="text-blue-400 bg-blue-500/10" />
-              <OverviewStat icon={Clock}       label="In Progress" value={inProgress} color="text-orange-400 bg-orange-500/10" />
-              <OverviewStat icon={Circle}      label="Pending"     value={pending}    color="text-yellow-400 bg-yellow-500/10" />
-              <OverviewStat icon={CheckCircle2} label="Resolved"   value={resolved}   color="text-success  bg-success/10" />
-              <OverviewStat icon={XCircle}     label="Closed"      value={closed}     color="text-muted    bg-elevated" />
+              <OverviewStat icon={TicketCheck} label={tr('adminSupportTickets.total')}       value={total}      color="text-brand-text    bg-brand/10" />
+              <OverviewStat icon={Circle}      label={tr('adminSupportTickets.open')}        value={openCount}  color="text-blue-400 bg-blue-500/10" />
+              <OverviewStat icon={Clock}       label={tr('adminSupportTickets.inProgress')} value={inProgress} color="text-orange-400 bg-orange-500/10" />
+              <OverviewStat icon={Circle}      label={tr('adminSupportTickets.pending')}     value={pending}    color="text-yellow-400 bg-yellow-500/10" />
+              <OverviewStat icon={CheckCircle2} label={tr('adminSupportTickets.resolved')}   value={resolved}   color="text-success  bg-success/10" />
+              <OverviewStat icon={XCircle}     label={tr('adminSupportTickets.closed')}      value={closed}     color="text-muted    bg-elevated" />
             </div>
           </Card>
 
           {/* Tickets by Status donut */}
           <Card>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Tickets by Status</h2>
-              <span className="text-xs text-muted">This Week</span>
+              <h2 className="text-base font-semibold">{tr('adminSupportTickets.ticketsByStatus')}</h2>
+              <span className="text-xs text-muted">{tr('adminSupportTickets.thisWeek')}</span>
             </div>
             <StatusDonut segments={donutSegments} total={total} centerLabel="Total" />
           </Card>
@@ -351,8 +353,8 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
           {/* Top Categories */}
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Top Categories</h2>
-              <span className="text-xs text-muted">This Week</span>
+              <h2 className="text-base font-semibold">{tr('adminSupportTickets.topCategories')}</h2>
+              <span className="text-xs text-muted">{tr('adminSupportTickets.thisWeek')}</span>
             </div>
             <ul className="space-y-2.5">
               {topCategories.slice(0, 5).map(([cat, count]) => (
@@ -363,13 +365,13 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
               ))}
             </ul>
             <a href="/admin/support-tickets?tab=all" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
-              View all categories →
+              {tr('adminSupportTickets.viewAllCategories')}
             </a>
           </Card>
 
           {/* Quick Actions */}
           <Card>
-            <h2 className="mb-3 text-base font-semibold">Quick Actions</h2>
+            <h2 className="mb-3 text-base font-semibold">{tr('adminSupportTickets.quickActions')}</h2>
             <ul className="space-y-1">
               {[
                 [Plus,          'New Support Ticket',  '/admin/support-tickets'],

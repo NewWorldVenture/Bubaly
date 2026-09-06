@@ -10,6 +10,7 @@ import type { Tables } from '@/lib/database.types';
 import { pushConfigured } from '@/lib/server/push';
 import { summarizePush, canSendPush, deliveryRate } from '@/lib/marketing/push';
 import { createPushCampaignAction, sendPushCampaignAction, deletePushCampaignAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Push', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> 
 };
 
 export default async function PushPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [campaignsResult, devicesResult] = await Promise.all([
     supabase.from('marketing_push_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
@@ -43,13 +45,13 @@ export default async function PushPage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Broadcast a push to all opted-in devices (suppressed emails are excluded). Reuses the product&apos;s VAPID/FCM delivery.
+        {t('adminMarketingPush.broadcastAPushToAllOpted')}
       </p>
 
       {!cfg.web && !cfg.native && (
         <Card className="flex items-start gap-2 border-amber-500/30 bg-amber-500/5 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-          <p>Push delivery isn&apos;t configured (no VAPID/FCM keys). Campaigns will send but all devices will be <strong>skipped</strong> until keys are set.</p>
+          <p>{t('adminMarketingPush.pushDeliveryIsnAposTConfigured')} <strong>skipped</strong> {t('adminMarketingPush.untilKeysAreSet')}</p>
         </Card>
       )}
 
@@ -68,17 +70,17 @@ export default async function PushPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BellRing className="h-4 w-4 text-brand-text" /> New push</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BellRing className="h-4 w-4 text-brand-text" /> {t('adminMarketingPush.newPush')}</h2>
         <form action={createPushCampaignAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
-          <input name="url" placeholder="Click URL (e.g. /pricing)" className={`${inputCls} lg:col-span-2`} />
-          <input name="body" placeholder="Body text" className={`${inputCls} lg:col-span-3`} />
-          <button type="submit" className={btnCls}>Create draft</button>
+          <input name="title" required placeholder={t('adminMarketingPush.title')} className={`${inputCls} lg:col-span-2`} />
+          <input name="url" placeholder={t('adminMarketingPush.clickUrlEGPricing')} className={`${inputCls} lg:col-span-2`} />
+          <input name="body" placeholder={t('adminMarketingPush.bodyText')} className={`${inputCls} lg:col-span-3`} />
+          <button type="submit" className={btnCls}>{t('adminMarketingPush.createDraft')}</button>
         </form>
       </Card>
 
       {campaigns.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No push campaigns yet.</p>
+        <p className="py-8 text-center text-sm text-muted">{t('adminMarketingPush.noPushCampaignsYet')}</p>
       ) : (
         <div className="space-y-2">
           {campaigns.map((c) => (

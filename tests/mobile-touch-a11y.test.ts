@@ -12,7 +12,7 @@ import fs from 'node:fs';
 const shopping = readUiSource('components/modules/shopping-module.tsx');
 const inbox = readUiSource('components/modules/inbox-module.tsx');
 const concierge = readUiSource('components/modules/concierge-module.tsx');
-const feedback = fs.readFileSync('app/(app)/feedback/feedback-board.tsx', 'utf8');
+const feedback = readUiSource('app/(app)/feedback/feedback-board.tsx');
 
 describe('icon-only controls expose an accessible name (Phase 6 a11y)', () => {
   it('shopping list edit button is labeled + focus-reachable', () => {

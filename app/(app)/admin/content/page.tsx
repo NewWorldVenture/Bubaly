@@ -7,6 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { DocumentRowActions } from '@/components/admin/document-row-actions';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Content Management', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ function typeLabel(mime: string | null): { label: string; icon: string } {
 }
 
 export default async function AdminContentPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
@@ -83,8 +85,8 @@ export default async function AdminContentPage({ searchParams }: Params) {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Content Management</h1>
-        <p className="mt-1 text-sm text-muted">Manage all documents and files across every family on Bubaly.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminContent.contentManagement')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminContent.manageAllDocumentsAndFilesAcross')}</p>
       </div>
 
       <div className="tab-bar border-b border-border pb-px">
@@ -97,9 +99,9 @@ export default async function AdminContentPage({ searchParams }: Params) {
 
       {tab === 'categories' ? (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Storage by category</h2>
+          <h2 className="mb-4 text-base font-semibold">{tr('adminContent.storageByCategory')}</h2>
           {categories.length === 0 ? (
-            <EmptyState icon={FolderKanban} title="No documents uploaded yet" />
+            <EmptyState icon={FolderKanban} title={tr('adminContent.noDocumentsUploadedYet')} />
           ) : (
             <ul className="space-y-3">
               {categories.map((cat) => {
@@ -125,15 +127,15 @@ export default async function AdminContentPage({ searchParams }: Params) {
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={FileText} label="Total items" value={docs.length} tone="bg-brand/10 text-brand-text" />
-              <StatCard icon={HardDrive} label="Storage used" value={fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
-              <StatCard icon={FolderKanban} label="Categories" value={categories.length} tone="bg-accent/10 text-accent" />
-              <StatCard icon={Clock} label="Added this week" value={recentUploads} tone="bg-warning/10 text-warning" />
+              <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docs.length} tone="bg-brand/10 text-brand-text" />
+              <StatCard icon={HardDrive} label={tr('adminContent.storageUsed')} value={fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
+              <StatCard icon={FolderKanban} label={tr('adminContent.categories')} value={categories.length} tone="bg-accent/10 text-accent" />
+              <StatCard icon={Clock} label={tr('adminContent.addedThisWeek')} value={recentUploads} tone="bg-warning/10 text-warning" />
             </div>
 
             <Card>
               <FilterForm action="/admin/content" hidden={{ tab }}>
-                <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search content by title or family..." />
+                <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminContent.searchContentByTitleOrFamily')} />
                 <FilterSelect name="category" defaultValue={categoryFilter} options={[
                   { value: '', label: 'All Categories' },
                   ...categories.map((c) => ({ value: c, label: c })),
@@ -145,18 +147,18 @@ export default async function AdminContentPage({ searchParams }: Params) {
               </FilterForm>
 
               {filtered.length === 0 ? (
-                <EmptyState icon={ImageIcon} title="No content matches these filters" />
+                <EmptyState icon={ImageIcon} title={tr('adminContent.noContentMatchesTheseFilters')} />
               ) : (
                 <div className="table-responsive mt-4">
                   <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
-                        <th className="px-3 py-2 font-medium">Title</th>
-                        <th className="px-3 py-2 font-medium">Type</th>
-                        <th className="px-3 py-2 font-medium">Family</th>
-                        <th className="px-3 py-2 font-medium">Uploaded by</th>
-                        <th className="px-3 py-2 font-medium">Size</th>
-                        <th className="px-3 py-2 font-medium">Added</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.title')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.type')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.family')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.uploadedBy')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.size')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminContent.added')}</th>
                         <th className="px-3 py-2 font-medium" />
                       </tr>
                     </thead>
@@ -183,7 +185,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                     </tbody>
                   </table></div>
                   {filtered.length > 50 && (
-                    <p className="mt-3 text-center text-xs text-muted">Showing the first 50 of {filtered.length} matching items — narrow your search to see more precisely.</p>
+                    <p className="mt-3 text-center text-xs text-muted">{tr('adminContent.showingTheFirst50Of')} {filtered.length} {tr('adminContent.matchingItemsNarrowYourSearchTo')}</p>
                   )}
                 </div>
               )}
@@ -192,9 +194,9 @@ export default async function AdminContentPage({ searchParams }: Params) {
 
           <div className="space-y-5">
             <Card>
-              <h2 className="mb-3 text-base font-semibold">Recent uploads</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('adminContent.recentUploads')}</h2>
               {docs.length === 0 ? (
-                <p className="text-sm text-muted">Nothing uploaded yet.</p>
+                <p className="text-sm text-muted">{tr('adminContent.nothingUploadedYet')}</p>
               ) : (
                 <ul className="space-y-3">
                   {docs.slice(0, 6).map((d) => {

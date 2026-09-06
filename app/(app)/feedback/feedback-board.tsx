@@ -11,6 +11,7 @@ import {
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Comment = { id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 
@@ -29,6 +30,7 @@ const SORTS: { id: FeedbackSort; label: string }[] = [
 
 // ── Share-your-idea form (inline card) ───────────────────────────────────────
 function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea: IdeaRow) => void }) {
+  const t = useTranslations();
   const { success, error } = useToast();
   const [kind, setKind] = useState<FeedbackKind>('idea');
   const [title, setTitle] = useState('');
@@ -68,7 +70,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
     <form onSubmit={submit} className="space-y-4">
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
-        <label className={label}>What are you sharing?</label>
+        <label className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</label>
         <div className="grid grid-cols-2 gap-2">
           {(['idea', 'bug'] as FeedbackKind[]).map((k) => {
             const active = kind === k;
@@ -88,7 +90,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
         </div>
       </div>
       <div>
-        <label className={label}>Title</label>
+        <label className={label}>{t('feedbackFeedbackBoard.title')}</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
           placeholder={isBug ? 'A short summary of what’s broken' : 'A quick, memorable summary'} className={field} />
       </div>
@@ -104,32 +106,32 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className={label}>Category</label>
+          <label className={label}>{t('feedbackFeedbackBoard.category')}</label>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
             {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>Impact</label>
+          <label className={label}>{t('feedbackFeedbackBoard.impact')}</label>
           <select value={impact} onChange={(e) => setImpact(e.target.value)} className={field}>
             {IMPACT_ORDER.map((i) => <option key={i} value={i}>{IMPACT_META[i].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>For you or others?</label>
+          <label className={label}>{t('feedbackFeedbackBoard.forYouOrOthers')}</label>
           <select value={audience} onChange={(e) => setAudience(e.target.value)} className={field}>
             {AUDIENCE_ORDER.map((a) => <option key={a} value={a}>{AUDIENCE_META[a].label}</option>)}
           </select>
         </div>
       </div>
       <div>
-        <label className={label}>Add an image or file</label>
+        <label className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</label>
         <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
       </div>
       <div className="flex items-center justify-between gap-3 pt-1">
-        <span className="text-xs text-muted">All fields optional except a title.</span>
+        <span className="text-xs text-muted">{t('feedbackFeedbackBoard.allFieldsOptionalExceptATitle')}</span>
         <div className="flex gap-2">
-          <button type="button" onClick={reset} disabled={pending} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={reset} disabled={pending} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated disabled:opacity-50">{t('feedbackFeedbackBoard.cancel')}</button>
           <button type="submit" disabled={pending || !title.trim()}
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isBug ? <Bug className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />} {isBug ? 'Submit bug report' : 'Submit idea'}
@@ -142,6 +144,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
 // ── Comment thread (lazy-loaded on expand) ───────────────────────────────────
 function CommentThread({ ideaId }: { ideaId: string }) {
+  const t = useTranslations();
   const { error } = useToast();
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -179,16 +182,16 @@ function CommentThread({ ideaId }: { ideaId: string }) {
 
   return (
     <div className="mt-3 border-t border-border/60 pt-3">
-      {loading && <p className="py-2 text-center text-xs text-muted">Loading discussion…</p>}
+      {loading && <p className="py-2 text-center text-xs text-muted">{t('feedbackFeedbackBoard.loadingDiscussion')}</p>}
       {loadError && !loading && (
         <p className="py-2 text-center text-xs text-danger">
-          Couldn’t load the discussion.{' '}
+          {t('feedbackFeedbackBoard.couldntLoadTheDiscussion')}{' '}
           <button
             type="button"
             onClick={() => { setLoadError(false); setComments(null); }}
             className="font-medium underline"
           >
-            Retry
+            {t('feedbackFeedbackBoard.retry')}
           </button>
         </p>
       )}
@@ -210,13 +213,13 @@ function CommentThread({ ideaId }: { ideaId: string }) {
           </div>
         ))}
         {comments !== null && comments.length === 0 && !loading && (
-          <p className="py-1 text-xs text-muted">No comments yet — start the conversation.</p>
+          <p className="py-1 text-xs text-muted">{t('feedbackFeedbackBoard.noCommentsYetStartTheConversation')}</p>
         )}
       </div>
       <form onSubmit={post} className="mt-3 flex items-center gap-2">
         <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={2000}
-          placeholder="Add a comment…" className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-brand" />
-        <button type="submit" disabled={pending || !draft.trim()} aria-label="Post feedback"
+          placeholder={t('feedbackFeedbackBoard.addAComment')} className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-brand" />
+        <button type="submit" disabled={pending || !draft.trim()} aria-label={t('feedbackFeedbackBoard.postFeedback')}
           className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
@@ -227,6 +230,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
 
 // ── Admin roadmap control ────────────────────────────────────────────────────
 function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status: FeedbackStatus) => void }) {
+  const t = useTranslations();
   const { success, error } = useToast();
   const [pending, start] = useTransition();
   return (
@@ -242,7 +246,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
         });
       }}
       className="rounded-lg border border-border bg-bg px-2 py-1 text-[11px] font-semibold outline-none focus:border-brand"
-      aria-label="Set idea status"
+      aria-label={t('feedbackFeedbackBoard.setIdeaStatus')}
     >
       {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
     </select>
@@ -253,6 +257,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
 function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
   idea: IdeaRow; voted: boolean; onVote: () => void; isSuperAdmin: boolean; onStatus: (s: FeedbackStatus) => void;
 }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [voting, start] = useTransition();
   const { error } = useToast();
@@ -288,7 +293,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
             <h3 className="flex items-center gap-2 text-sm font-bold sm:text-base">
               {idea.kind === 'bug' && (
                 <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide', kindMeta('bug').tone)}>
-                  🐛 Bug
+                  {t('feedbackFeedbackBoard.bug')}
                 </span>
               )}
               {idea.title}
@@ -302,7 +307,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
           )}
           {idea.admin_note && (
             <p className="mt-2 rounded-lg border border-brand/25 bg-brand/5 px-3 py-1.5 text-xs text-brand-text">
-              <span className="font-semibold">Team note:</span> {idea.admin_note}
+              <span className="font-semibold">{t('feedbackFeedbackBoard.teamNote')}</span> {idea.admin_note}
             </p>
           )}
           <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -311,7 +316,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
             <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 hover:text-brand-text">
               <MessageCircle className="h-3.5 w-3.5" /> {idea.comment_count} {idea.comment_count === 1 ? 'comment' : 'comments'}
             </button>
-            <span className="text-muted/70">· by {idea.author_name}</span>
+            <span className="text-muted/70">{t('feedbackFeedbackBoard.by')} {idea.author_name}</span>
             {isSuperAdmin && <span className="ml-auto"><StatusControl idea={idea} onChanged={onStatus} /></span>}
           </div>
           {open && <CommentThread ideaId={idea.id} />}
@@ -325,6 +330,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
 export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: {
   initialIdeas: IdeaRow[]; votedIds: string[]; userId: string; isSuperAdmin: boolean;
 }) {
+  const t = useTranslations();
   const [ideas, setIdeas] = useState<IdeaRow[]>(initialIdeas);
   const [voted, setVoted] = useState<string[]>(votedIds);
   const [sort, setSort] = useState<FeedbackSort>('top');
@@ -370,15 +376,15 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
         <div className="mb-4 flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><Lightbulb className="h-5 w-5" /></span>
           <div>
-            <h2 className="text-base font-bold sm:text-lg">Share your idea</h2>
-            <p className="text-xs text-muted">Small ideas. Big impact.</p>
+            <h2 className="text-base font-bold sm:text-lg">{t('feedbackFeedbackBoard.shareYourIdea')}</h2>
+            <p className="text-xs text-muted">{t('feedbackFeedbackBoard.smallIdeasBigImpact')}</p>
           </div>
         </div>
         <ShareIdeaForm userId={userId} onCreated={handleCreated} />
       </section>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-bold sm:text-xl">Popular ideas</h2>
+        <h2 className="text-lg font-bold sm:text-xl">{t('feedbackFeedbackBoard.popularIdeas')}</h2>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-xs font-semibold text-muted tabular-nums">
           {isFiltered ? `${visible.length} of ${ideas.length}` : ideas.length}
         </span>
@@ -388,12 +394,12 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search ideas…"
-            aria-label="Search ideas"
+            placeholder={t('feedbackFeedbackBoard.searchIdeas')}
+            aria-label={t('feedbackFeedbackBoard.searchIdeas')}
             className="h-9 w-full rounded-lg border border-border bg-bg pl-9 pr-8 text-sm outline-none transition focus:border-brand"
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} aria-label="Clear search"
+            <button type="button" onClick={() => setSearch('')} aria-label={t('feedbackFeedbackBoard.clearSearch')}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
               <X className="h-4 w-4" />
             </button>
@@ -412,18 +418,18 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
           ))}
         </div>
         <Filter className="h-4 w-4 text-muted" />
-        <button onClick={() => setStatusFilter('all')} className={pill(statusFilter === 'all')}>All status</button>
+        <button onClick={() => setStatusFilter('all')} className={pill(statusFilter === 'all')}>{t('feedbackFeedbackBoard.allStatus')}</button>
         {FILTERABLE_STATUSES.map((s) => (
           <button key={s} onClick={() => setStatusFilter(s)} className={pill(statusFilter === s)}>{STATUS_META[s].label}</button>
         ))}
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <button onClick={() => setKindFilter('all')} className={pill(kindFilter === 'all')}>All types</button>
+        <button onClick={() => setKindFilter('all')} className={pill(kindFilter === 'all')}>{t('feedbackFeedbackBoard.allTypes')}</button>
         {KIND_ORDER.map((k) => (
           <button key={k} onClick={() => setKindFilter(k)} className={pill(kindFilter === k)}>{KIND_META[k].emoji} {KIND_META[k].label}</button>
         ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button onClick={() => setCategoryFilter('all')} className={pill(categoryFilter === 'all')}>All categories</button>
+        <button onClick={() => setCategoryFilter('all')} className={pill(categoryFilter === 'all')}>{t('feedbackFeedbackBoard.allCategories')}</button>
         {CATEGORY_ORDER.map((c) => (
           <button key={c} onClick={() => setCategoryFilter(c)} className={pill(categoryFilter === c)}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</button>
         ))}
@@ -433,12 +439,12 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
       <div ref={listRef} className="mt-5 space-y-3">
         {visible.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border py-16 text-center">
-            <p className="text-sm font-semibold">No ideas match these filters</p>
-            <p className="mt-1 text-xs text-muted">Try clearing a filter, or add a new idea above.</p>
+            <p className="text-sm font-semibold">{t('feedbackFeedbackBoard.noIdeasMatchTheseFilters')}</p>
+            <p className="mt-1 text-xs text-muted">{t('feedbackFeedbackBoard.tryClearingAFilterOrAdd')}</p>
             <button
               onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); setKindFilter('all'); setSearch(''); }}
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-elevated">
-              Clear filters
+              {t('feedbackFeedbackBoard.clearFilters')}
             </button>
           </div>
         ) : visible.map((idea) => (

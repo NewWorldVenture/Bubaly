@@ -6,11 +6,13 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Saved · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceSavedPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
 
@@ -35,12 +37,12 @@ export default async function MarketplaceSavedPage() {
 
   return (
     <div>
-      <PageHeader title="Saved" description="The listings you’ve ♥’d — they’re here whenever you’re ready." />
+      <PageHeader title={t('marketplaceSaved.saved')} description="The listings you’ve ♥’d — they’re here whenever you’re ready." />
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Heart className="mx-auto mb-2 h-6 w-6" />
-          Nothing saved yet — tap the ♥ on any listing to keep it here.
-          <div className="mt-2"><Link href="/marketplace/browse" className="text-brand-text hover:underline">Browse the board</Link></div>
+          {t('marketplaceSaved.nothingSavedYetTapTheOn')}
+          <div className="mt-2"><Link href="/marketplace/browse" className="text-brand-text hover:underline">{t('marketplaceSaved.browseTheBoard')}</Link></div>
         </div>
       ) : (
         <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">

@@ -8,6 +8,7 @@ import {
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { relativeTime, type ActivityItem, type ActivityKind } from '@/lib/activity/feed';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = { id: string; display_name: string; color: string | null };
 
@@ -58,6 +59,7 @@ export function ActivityFeed({
   memberByUser: Map<string, Member>;
   members: Member[];
 }) {
+  const t = useTranslations();
   const [filterKind, setFilterKind] = useState<ActivityKind | 'all'>('all');
   const [filterMember, setFilterMember] = useState<string>('all');
   const [showSummary, setShowSummary] = useState(false);
@@ -82,21 +84,21 @@ export function ActivityFeed({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ActivityIcon className="h-5 w-5 text-brand-text" />
-          <h1 className="text-lg font-bold">Family Activity</h1>
+          <h1 className="text-lg font-bold">{t('dashboardActivityActivityFeed.familyActivity')}</h1>
         </div>
         <button
           type="button"
           onClick={() => setShowSummary((s) => !s)}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-fg transition"
         >
-          <Sparkles className="h-3.5 w-3.5" /> Summary
+          <Sparkles className="h-3.5 w-3.5" /> {t('dashboardActivityActivityFeed.summary')}
         </button>
       </div>
 
       {showSummary && (
         <div className="rounded-xl border border-brand/20 bg-brand/5 p-4">
           <div className="flex items-center gap-2 text-sm font-medium text-brand-text">
-            <Sparkles className="h-4 w-4" /> Activity Summary
+            <Sparkles className="h-4 w-4" /> {t('dashboardActivityActivityFeed.activitySummary')}
           </div>
           <p className="mt-1 text-sm text-muted">{summary}</p>
         </div>
@@ -137,7 +139,7 @@ export function ActivityFeed({
             onChange={(e) => setFilterMember(e.target.value)}
             className="ml-auto rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg"
           >
-            <option value="all">All members</option>
+            <option value="all">{t('dashboardActivityActivityFeed.allMembers')}</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>{m.display_name}</option>
             ))}

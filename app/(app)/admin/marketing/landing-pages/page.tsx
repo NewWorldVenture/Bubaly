@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { archiveLandingPage, createLandingPage, setLandingPublished, updateLandingPage } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Landing Pages', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function LandingPagesPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: pages, error: pagesError } = await supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (pagesError) {
@@ -24,7 +26,7 @@ export default async function LandingPagesPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(pages ?? []).length === 0 ? (
-          <EmptyState icon={Layout} title="No landing pages yet" description="Draft your first landing page on the right." />
+          <EmptyState icon={Layout} title={t('adminMarketingLandingPages.noLandingPagesYet')} description="Draft your first landing page on the right." />
         ) : (
           (pages ?? []).map((p) => (
             <Card key={p.id} className="flex items-start justify-between gap-3">
@@ -79,17 +81,17 @@ export default async function LandingPagesPage() {
         )}
       </div>
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New landing page</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingLandingPages.newLandingPage')}</h2>
         <form action={createLandingPage} className="space-y-3 text-sm">
-          <input name="title" required placeholder="Internal title" className={inputCls} />
+          <input name="title" required placeholder={t('adminMarketingLandingPages.internalTitle')} className={inputCls} />
           <input name="slug" required placeholder="url-slug" className={inputCls} />
-          <input name="headline" placeholder="Hero headline" className={inputCls} />
-          <input name="subhead" placeholder="Subhead" className={inputCls} />
-          <textarea name="body" rows={4} placeholder="Body copy (blank line between paragraphs)…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <input name="cta_label" placeholder="CTA label (e.g. Get started free)" className={inputCls} />
-          <input name="cta_href" placeholder="CTA link (/signup or https://…)" className={inputCls} />
-          <p className="text-xs text-muted">Pages are created as drafts. Use <strong>Publish</strong> to make them live at <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create page</button>
+          <input name="headline" placeholder={t('adminMarketingLandingPages.heroHeadline')} className={inputCls} />
+          <input name="subhead" placeholder={t('adminMarketingLandingPages.subhead')} className={inputCls} />
+          <textarea name="body" rows={4} placeholder={t('adminMarketingLandingPages.bodyCopyBlankLineBetweenParagraphs')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <input name="cta_label" placeholder={t('adminMarketingLandingPages.ctaLabelEGGetStarted')} className={inputCls} />
+          <input name="cta_href" placeholder={t('adminMarketingLandingPages.ctaLinkSignupOrHttps')} className={inputCls} />
+          <p className="text-xs text-muted">{t('adminMarketingLandingPages.pagesAreCreatedAsDraftsUse')} <strong>{t('adminMarketingLandingPages.publish')}</strong> {t('adminMarketingLandingPages.toMakeThemLiveAt')} <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingLandingPages.createPage')}</button>
         </form>
       </Card>
     </div>

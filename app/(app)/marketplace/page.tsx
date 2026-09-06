@@ -19,6 +19,7 @@ import {
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,7 @@ const BADGE_STYLE: Record<string, string> = {
 
 
 export default async function MarketplaceHomePage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -174,11 +176,11 @@ export default async function MarketplaceHomePage() {
       {dataWarnings.length > 0 && (
         <div
           role="status"
-          aria-label="Marketplace data health"
+          aria-label={t('marketplace.marketplaceDataHealth')}
           className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
         >
-          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some marketplace data is temporarily unavailable.</p>
-          <p className="mt-1 text-xs">The page is still usable, but affected sections may be incomplete. Refresh after the connection is restored.</p>
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> {t('marketplace.someMarketplaceDataIsTemporarilyUnavailable')}</p>
+          <p className="mt-1 text-xs">{t('marketplace.thePageIsStillUsableBut')}</p>
           <p className="mt-1 text-xs">Unavailable: {Array.from(new Set(dataWarnings)).join(', ')}.</p>
         </div>
       )}
@@ -189,11 +191,11 @@ export default async function MarketplaceHomePage() {
           <div className="flex flex-col gap-5 md:flex-row md:items-center">
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold leading-tight sm:text-3xl">
-                The world’s easiest<br />
-                <span className="text-brand-text">AI-first marketplace</span>
+                {t('marketplace.theWorldsEasiest')}<br />
+                <span className="text-brand-text">{t('marketplace.aiFirstMarketplace')}</span>
               </h1>
               <p className="mt-2 text-sm text-muted">
-                Buy, sell, rent, borrow, lend &amp; more — all in one trusted family community.
+                {t('marketplace.buySellRentBorrowLendAmp')}
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {[
@@ -231,8 +233,8 @@ export default async function MarketplaceHomePage() {
         {/* ── What would you like to do? ───────────────────────────────────── */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold">What would you like to do?</h2>
-            <span className="text-[11px] text-muted">Post in under 60 seconds</span>
+            <h2 className="text-sm font-semibold">{t('marketplace.whatWouldYouLikeToDo')}</h2>
+            <span className="text-[11px] text-muted">{t('marketplace.postInUnder60Seconds')}</span>
           </div>
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
             {ACTIONS.map((a) => {
@@ -254,14 +256,14 @@ export default async function MarketplaceHomePage() {
         <section>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4 text-brand-text" /> AI Picks for You
-              <span className="text-[11px] font-normal text-muted">Personalized</span>
+              <Sparkles className="h-4 w-4 text-brand-text" /> {t('marketplace.aiPicksForYou')}
+              <span className="text-[11px] font-normal text-muted">{t('marketplace.personalized')}</span>
             </h2>
-            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">View all</Link>
+            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">{t('marketplace.viewAll')}</Link>
           </div>
           {picks.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-              Nothing on the board yet — <Link href={`${BASE}/browse?post=1`} className="text-brand-text hover:underline">post the first item</Link>.
+              {t('marketplace.nothingOnTheBoardYet')} <Link href={`${BASE}/browse?post=1`} className="text-brand-text hover:underline">{t('marketplace.postTheFirstItem')}</Link>.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
@@ -288,20 +290,20 @@ export default async function MarketplaceHomePage() {
         {/* ── Assistant / Matches / Safety row ─────────────────────────────── */}
         <section className="grid gap-2.5 sm:grid-cols-3">
           <Link href="/dashboard/assistant" className="group rounded-2xl border border-brand/30 bg-brand/[0.06] p-4 transition hover:bg-brand/10">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Buyer Assistant</p>
-            <p className="mt-1 text-xs text-muted">Find exactly what you need in seconds — ask in plain language.</p>
-            <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-text">Ask anything <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" /></p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('marketplace.aiBuyerAssistant')}</p>
+            <p className="mt-1 text-xs text-muted">{t('marketplace.findExactlyWhatYouNeedIn')}</p>
+            <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-text">{t('marketplace.askAnything')} <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" /></p>
           </Link>
           <Link href={`${BASE}/browse?kind=wanted`} className="group rounded-2xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
-            <p className="flex items-center gap-2 text-sm font-semibold"><HandHeart className="h-4 w-4 text-brand-text" /> Request &amp; Get Matched</p>
-            <p className="mt-1 text-xs text-muted">Can’t find it? Post a request and we’ll match it for you.</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><HandHeart className="h-4 w-4 text-brand-text" /> {t('marketplace.requestAmpGetMatched')}</p>
+            <p className="mt-1 text-xs text-muted">{t('marketplace.cantFindItPostARequest')}</p>
             <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {matchCount > 0 ? `${matchCount} match${matchCount === 1 ? '' : 'es'} found!` : 'Post a request'}
             </p>
           </Link>
           <div className="rounded-2xl border border-border bg-surface/60 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-emerald-500" /> Verified. Trusted. Safe.</p>
-            <p className="mt-1 text-xs text-muted">All members verified. Two-sided reviews. Exchange with confidence.</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-emerald-500" /> {t('marketplace.verifiedTrustedSafe')}</p>
+            <p className="mt-1 text-xs text-muted">{t('marketplace.allMembersVerifiedTwoSidedReviews')}</p>
             <div className="mt-2 flex gap-1.5">
               {[BadgeCheck, Users, Lock, CreditCard].map((Icon, i) => (
                 <span key={i} className="grid h-7 w-7 place-items-center rounded-full bg-elevated"><Icon className="h-3.5 w-3.5 text-muted" /></span>
@@ -313,8 +315,8 @@ export default async function MarketplaceHomePage() {
         {/* ── Browse by Category ───────────────────────────────────────────── */}
         <section>
           <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold">Browse by Category</h2>
-            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">View all</Link>
+            <h2 className="text-sm font-semibold">{t('marketplace.browseByCategory')}</h2>
+            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">{t('marketplace.viewAll')}</Link>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {(Object.keys(CATEGORY_LABELS) as ListingCategory[]).map((c) => {
@@ -333,8 +335,8 @@ export default async function MarketplaceHomePage() {
         {collections.length > 0 && (
           <section>
             <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold">Popular Collections</h2>
-              <Link href={`${BASE}/collections`} className="text-xs text-brand-text hover:underline">View all</Link>
+              <h2 className="text-sm font-semibold">{t('marketplace.popularCollections')}</h2>
+              <Link href={`${BASE}/collections`} className="text-xs text-brand-text hover:underline">{t('marketplace.viewAll')}</Link>
             </div>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               {collections.slice(0, 4).map((c) => (
@@ -357,10 +359,10 @@ export default async function MarketplaceHomePage() {
 
         {/* Nearby Activity */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand-text" /> Nearby Activity</p>
-          <p className="mt-0.5 text-[11px] text-muted">See what’s happening near you</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand-text" /> {t('marketplace.nearbyActivity')}</p>
+          <p className="mt-0.5 text-[11px] text-muted">{t('marketplace.seeWhatsHappeningNearYou')}</p>
           {feed.length === 0 ? (
-            <p className="mt-2 text-xs text-muted">Quiet so far — activity shows here as the family trades.</p>
+            <p className="mt-2 text-xs text-muted">{t('marketplace.quietSoFarActivityShowsHere')}</p>
           ) : (
             <ul className="mt-2 space-y-2">
               {feed.map((a) => (
@@ -376,12 +378,12 @@ export default async function MarketplaceHomePage() {
         {/* Top Creators */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
           <div className="flex items-baseline justify-between">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> Top Creators</p>
-            <Link href={`${BASE}/creators`} className="text-[11px] text-brand-text hover:underline">View all</Link>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> {t('marketplace.topCreators')}</p>
+            <Link href={`${BASE}/creators`} className="text-[11px] text-brand-text hover:underline">{t('marketplace.viewAll')}</Link>
           </div>
           {creators.length === 0 ? (
             <p className="mt-2 text-xs text-muted">
-              No storefronts yet — <Link href={`${BASE}/store`} className="text-brand-text hover:underline">open the first one</Link>.
+              {t('marketplace.noStorefrontsYet')} <Link href={`${BASE}/store`} className="text-brand-text hover:underline">{t('marketplace.openTheFirstOne')}</Link>.
             </p>
           ) : (
             <ul className="mt-2 space-y-2.5">
@@ -404,15 +406,15 @@ export default async function MarketplaceHomePage() {
 
         {/* Safety First */}
         <section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-emerald-500" /> Safety First</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-emerald-500" /> {t('marketplace.safetyFirst')}</p>
           <ul className="mt-2 space-y-1 text-xs text-muted">
-            <li>✓ Verified members</li>
-            <li>✓ Secure payments</li>
-            <li>✓ Two-sided reviews</li>
-            <li>✓ Dispute protection</li>
+            <li>{t('marketplace.verifiedMembers')}</li>
+            <li>{t('marketplace.securePayments')}</li>
+            <li>{t('marketplace.twoSidedReviews')}</li>
+            <li>{t('marketplace.disputeProtection')}</li>
           </ul>
           <Link href="/dashboard/trust" className="mt-2 inline-block text-[11px] text-emerald-600 hover:underline dark:text-emerald-400">
-            Learn more about safety
+            {t('marketplace.learnMoreAboutSafety')}
           </Link>
         </section>
       </aside>

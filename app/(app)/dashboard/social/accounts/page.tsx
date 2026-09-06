@@ -9,6 +9,7 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Accounts · Social' };
 export const dynamic = 'force-dynamic';
@@ -18,24 +19,25 @@ function cap(ok: boolean, limitation?: string) {
 }
 
 export default async function AccountsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const accounts = await getAccounts(ctx.active.familyId);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Connected accounts</h2>
+        <h2 className="text-sm font-semibold">{t('dashboardSocialAccounts.connectedAccounts')}</h2>
         <Link href="/dashboard/social/accounts/connect" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <Plug className="h-4 w-4" /> Connect
+          <Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connect')}
         </Link>
       </div>
 
       {accounts.length === 0 ? (
         <EmptyState
           icon={Plug}
-          title="No accounts yet"
+          title={t('dashboardSocialAccounts.noAccountsYet')}
           description="Connect a social account to begin."
-          action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> Connect an account</Link>}
+          action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connectAnAccount')}</Link>}
         />
       ) : (
         <div className="space-y-2">
@@ -55,17 +57,17 @@ export default async function AccountsPage() {
 
       {/* Honest capability matrix */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">What each platform supports</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialAccounts.whatEachPlatformSupports')}</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted">
               <tr>
-                <th className="px-2 py-1.5 font-medium">Platform</th>
-                <th className="px-2 py-1.5 font-medium">Feed</th>
-                <th className="px-2 py-1.5 font-medium">Post</th>
-                <th className="px-2 py-1.5 font-medium">Analytics</th>
-                <th className="px-2 py-1.5 font-medium">Inbox</th>
-                <th className="px-2 py-1.5 font-medium">App review</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.platform')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.feed')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.post')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.analytics')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.inbox')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.appReview')}</th>
               </tr>
             </thead>
             <tbody>

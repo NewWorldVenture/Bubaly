@@ -4,11 +4,13 @@ import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
 import { Users, ArrowLeft } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Trust Graph · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function ContactsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -37,7 +39,7 @@ export default async function ContactsPage() {
           <Users className="h-5 w-5 text-blue-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">Family Trust Graph™</h1>
+          <h1 className="text-xl font-bold leading-tight">{t('guardianContacts.familyTrustGraph')}</h1>
           <p className="text-sm text-muted">{contacts?.length ?? 0} contacts</p>
         </div>
       </div>
