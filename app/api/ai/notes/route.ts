@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildNotesPrompt, parseNotesResponse } from '@/lib/notes/ai';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -29,16 +31,32 @@ export async function POST(req: NextRequest) {
     }
 
     const { system, user } = buildNotesPrompt(text);
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system,
-      messages: [{ role: 'user', content: user }],
-      tools: [],
-      maxTokens: 700,
-    });
-
-    const insights = parseNotesResponse(completion.text || '');
-    if (!insights.summary && insights.actionItems.length === 0 && insights.tags.length === 0) {
+    // The note itself is not stored on the row — a family note is exactly the
+    // kind of thing `text` must not carry verbatim.
+    const insights = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'notes.assist', text: 'Analyse a note' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system,
+          messages: [{ role: 'user', content: user }],
+          tools: [],
+          maxTokens: 700,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseNotesResponse(completion.text || '');
+        // The model answered and the tokens are spent; the answer was just
+        // unusable. Recorded as a failure, because `completed` here would
+        // describe the one turn the family actually complained about.
+        if (!parsed.summary && parsed.actionItems.length === 0 && parsed.tags.length === 0) {
+          obs.failed(new Error('The model returned no usable summary, actions or tags.'));
+          return null;
+        }
+        return parsed;
+      },
+    );
+    if (!insights) {
       return NextResponse.json({ error: 'Could not analyze this note. Please try again.' }, { status: 502 });
     }
 

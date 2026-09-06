@@ -19,14 +19,56 @@ const walk = (dir: string): string[] =>
       : e.isDirectory() ? walk(`${dir}/${e.name}`)
       : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : []);
 
+// The only four exports of `lib/ai/provider` that hand back an AIProvider.
+// Importing anything else from that module — a `ToolSpec` type, `describeAIError`,
+// `isAIConfigured` — does not put a file anywhere near a model.
+const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfig', 'OpenAIProvider'];
+
+/**
+ * Every import statement in `src` that ends at `@/lib/ai/provider`, found by
+ * scanning BACK from the specifier to the `import` that opens the statement.
+ *
+ * A forward regex cannot do this. `import\s+(type\s+)?\{[\s\S]*?\}\s+from '…provider'`
+ * starts matching at the FIRST `import {` in the file and lazily extends to the
+ * provider specifier, swallowing every import in between — so a file whose first
+ * import happens to be `import type {…}` is read as type-only no matter what it
+ * actually imports from the provider. That misread `lib/ai/assistant-engine.ts`,
+ * which imports `resolveProvider` and calls `provider.runTools`, as unable to
+ * reach a model at all.
+ */
+function providerImports(src: string): string[] {
+  // Leading newline so a provider import on line 1 is still found.
+  const text = `\n${src}`;
+  const out: string[] = [];
+  const re = /from '@\/lib\/ai\/provider'/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const start = text.lastIndexOf('\nimport ', m.index);
+    if (start >= 0) out.push(text.slice(start + 1, m.index));
+  }
+  return out;
+}
+
+/** Whether a file can actually obtain a provider, as opposed to naming a type. */
+export function reachesAModel(src: string): boolean {
+  return providerImports(src).some((clause) => {
+    if (/^import\s+type\b/.test(clause)) return false;
+    const inner = clause.slice(clause.indexOf('{') + 1, clause.lastIndexOf('}'));
+    return inner
+      .split(',')
+      .map((n) => n.trim())
+      .filter((n) => n && !/^type\s/.test(n))
+      .some((n) => PROVIDER_PRODUCERS.includes(n.split(/\s/)[0]));
+  });
+}
+
 /** Files that reach a model without opening a request row. */
 function silentSurfaces(): string[] {
   const found: string[] = [];
   for (const file of ['app', 'lib'].flatMap(walk)) {
     if (file.startsWith('lib/ai/observability')) continue;
     const src = readFileSync(file, 'utf8');
-    const callsModel = /from '@\/lib\/ai\/provider'/.test(src);
-    if (!callsModel) continue;
+    if (!reachesAModel(src)) continue;
     const observed = /withAiRequest\(/.test(src) || /requestId/.test(src);
     if (!observed) found.push(file);
   }
@@ -51,6 +93,14 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/habits/route.ts', "feature: 'habits.coach'"],
       ['app/api/ai/savings/route.ts', "feature: 'finances.savings'"],
       ['app/api/ai/journal/route.ts', "feature: 'journal.prompt'"],
+      ['app/api/ai/home/diagnose/route.ts', "feature: 'home.diagnose'"],
+      ['app/api/ai/home/find-pro/route.ts', "feature: 'home.find-pro'"],
+      ['app/api/ai/home/forecast/route.ts', "feature: 'home.forecast'"],
+      ['app/api/ai/home/utility-savings/route.ts', "feature: 'home.utility-savings'"],
+      ['app/api/ai/notes/route.ts', "feature: 'notes.assist'"],
+      ['app/api/ai/relationship/route.ts', "feature: 'relationship.digest'"],
+      ['app/api/ai/meals/nutrition/route.ts', "feature: 'meals.nutrition'"],
+      ['app/api/ai/chef/route.ts', "feature: 'meals.chef'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -76,6 +126,51 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     // never fires — `obs.failed` is the only way the evidence survives.
     expect(src).toContain('obs.failed(streamErr');
     expect(src).toContain('obs.failed(fallbackErr)');
+  });
+
+  it('utility savings records the failure it swallows, before it swallows it', () => {
+    // This route answers 200 either way: on a provider failure it drops the
+    // narrative and returns the deterministic findings alone, with `aiUsed:
+    // false`. That flag cannot distinguish "the model errored" from "no API key
+    // is configured", so the swallow has to happen OUTSIDE the wrapper or the
+    // evidence is gone. Ordering is the whole assertion.
+    const src = readFileSync('app/api/ai/home/utility-savings/route.ts', 'utf8');
+    // The wrapper body — everything from the call to the `aiUsed = true` that
+    // follows it — must not swallow: a catch in there settles the row
+    // `completed` for a call that never produced anything. Slicing to
+    // `obs.used(` instead would miss a catch placed after it, which is exactly
+    // where a well-meaning `try { ... } catch { return null }` lands.
+    const wrapped = src.slice(src.indexOf('withAiRequest('), src.indexOf('aiUsed = true'));
+    expect(wrapped, 'the wrapper body must not swallow its own failure').not.toContain('catch');
+    // And the fallback that drops the narrative sits after it, so the wrapper
+    // has already recorded by the time the route decides to answer 200 anyway.
+    expect(src.indexOf('recommendations = null; // fall back'))
+      .toBeGreaterThan(src.indexOf('obs.used('));
+  });
+
+  it('an answer the surface could not use is a failure, and the tokens still count', () => {
+    // Four surfaces share one failure mode nothing recorded: the model answered,
+    // the tokens were spent, and the reply could not be parsed into anything
+    // usable. Each ends at a 502/422 or a silent fallback that looks exactly
+    // like "AI is not configured" from the outside.
+    //
+    // Two things have to be true in each, and the ORDER is the assertion:
+    // `obs.used` first, so the spend is on the row even though the turn failed,
+    // then `obs.failed`, so the row does not read `completed` for the one turn
+    // the family wrote in about.
+    for (const file of [
+      'app/api/ai/notes/route.ts',
+      'app/api/ai/relationship/route.ts',
+      'app/api/ai/meals/nutrition/route.ts',
+      'app/api/ai/chef/route.ts',
+    ]) {
+      const src = readFileSync(file, 'utf8');
+      const used = src.indexOf('obs.used(');
+      const failed = src.indexOf('obs.failed(');
+      expect(used, `${file} must record the model that answered`).toBeGreaterThan(-1);
+      expect(failed, `${file} must record an unusable answer as a failure`).toBeGreaterThan(-1);
+      expect(used, `${file} must charge the tokens before reporting the failure`).toBeLessThan(failed);
+    }
   });
 
   it('a partial stream is recorded as partial, not as a clean completion', () => {
@@ -108,6 +203,22 @@ describe('what is deliberately NOT adopted', () => {
     expect(src).not.toContain('withAiRequest(');
     expect(src).toContain('createServiceClient()');
   });
+
+  it('counts the provider factory, which will never adopt, so the floor is 1', () => {
+    // `resolveProviderForTask` builds an OpenAIProvider and hands it back; it
+    // never calls one. There is no request to observe here and no scope to
+    // observe it with — the caller that asked for the provider is the surface.
+    //
+    // It stays in the count anyway. Excluding it would mean teaching the scanner
+    // a judgement call, and a scanner that makes judgement calls is one that can
+    // be argued into excluding a real surface. The floor of the ceiling is 1,
+    // not 0, and that is written down rather than discovered by whoever gets
+    // there.
+    const src = readFileSync('lib/ai/routing.ts', 'utf8');
+    expect(src).toContain('return new OpenAIProvider(');
+    expect(src).not.toContain('.complete(');
+    expect([...SILENT]).toContain('lib/ai/routing.ts');
+  });
 });
 
 describe('the remaining silence is counted, not ignored', () => {
@@ -118,13 +229,67 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 so far.
-    const CEILING = 40;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
+    // when the scanner stopped counting files that cannot reach a model at all.
+    //
+    // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
+    // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
+    // `AIProviderConfig` type, and three importing only `describeAIError` /
+    // `isAIConfigured`, sat in the count. None of them can obtain a provider.
+    // They were nine units of slack in the very ratchet this comment says must
+    // have none.
+    const CEILING = 23;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
       'Wrap the call in withAiRequest(), or raise CEILING deliberately and say why.',
     ).toBeLessThanOrEqual(CEILING);
+  });
+
+  it('counts what can reach a model, and nothing else', () => {
+    // The scanner has been wrong twice, in both directions, so it gets its own
+    // fixtures. Every line here is a file whose behaviour was checked by hand.
+    //
+    // Counted: obtains a provider and calls it.
+    expect([...SILENT]).toContain('lib/chores/ai.ts');
+    expect([...SILENT]).toContain('app/api/ai/wallet/route.ts');
+    // Counted, and found only after the backward scan was fixed: this one
+    // imports `resolveProvider` and calls `provider.runTools`, but a forward
+    // regex read its earlier `import type` line and called it type-only.
+    expect([...SILENT]).toContain('lib/ai/assistant-engine.ts');
+
+    // Not counted: `import type { ToolSpec }` and nothing else.
+    for (const file of [
+      'lib/assistant/tools.ts',
+      'lib/assistant/trust-wrapper.ts',
+      'lib/ai/action-tools.ts',
+      'lib/ai/tools/legacy-adapter.ts',
+      'lib/ai/settings.ts',
+      'lib/ai/provider-stub.ts',
+    ]) expect([...SILENT], `${file} imports only types`).not.toContain(file);
+
+    // Not counted: imports a value, but one that never yields a provider.
+    for (const file of [
+      'app/api/ai/route.ts',
+      'app/api/social/ai/route.ts',
+      'app/(app)/dashboard/concierge/run-actions.ts',
+    ]) expect([...SILENT], `${file} imports no provider producer`).not.toContain(file);
+  });
+
+  it('reads a provider import the same way whichever line it sits on', () => {
+    // Direct unit checks on the classifier, so a regression shows up here rather
+    // than as a ceiling that silently drifts.
+    expect(reachesAModel("import { resolveProvider } from '@/lib/ai/provider';")).toBe(true);
+    // Line 1 with no preceding newline — the backward scan has to find it.
+    expect(reachesAModel("import { getProvider } from '@/lib/ai/provider';\nconst x = 1;")).toBe(true);
+    expect(reachesAModel("import type { ToolSpec } from '@/lib/ai/provider';")).toBe(false);
+    expect(reachesAModel("import { type AIProvider } from '@/lib/ai/provider';")).toBe(false);
+    expect(reachesAModel("import { describeAIError, isAIConfigured } from '@/lib/ai/provider';")).toBe(false);
+    // The exact shape the old forward regex got wrong: an unrelated `import type`
+    // above a real value import from the provider.
+    expect(reachesAModel(
+      "import type { Foo } from '@/lib/foo';\nimport { resolveProvider, type AIMessage } from '@/lib/ai/provider';",
+    )).toBe(true);
   });
 
   it('is actually scanning something, so the ceiling is not vacuously satisfied', () => {
