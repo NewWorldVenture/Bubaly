@@ -55,6 +55,10 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/home/find-pro/route.ts', "feature: 'home.find-pro'"],
       ['app/api/ai/home/forecast/route.ts', "feature: 'home.forecast'"],
       ['app/api/ai/home/utility-savings/route.ts', "feature: 'home.utility-savings'"],
+      ['app/api/ai/notes/route.ts', "feature: 'notes.assist'"],
+      ['app/api/ai/relationship/route.ts', "feature: 'relationship.digest'"],
+      ['app/api/ai/meals/nutrition/route.ts', "feature: 'meals.nutrition'"],
+      ['app/api/ai/chef/route.ts', "feature: 'meals.chef'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -102,6 +106,31 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       .toBeGreaterThan(src.indexOf('obs.used('));
   });
 
+  it('an answer the surface could not use is a failure, and the tokens still count', () => {
+    // Four surfaces share one failure mode nothing recorded: the model answered,
+    // the tokens were spent, and the reply could not be parsed into anything
+    // usable. Each ends at a 502/422 or a silent fallback that looks exactly
+    // like "AI is not configured" from the outside.
+    //
+    // Two things have to be true in each, and the ORDER is the assertion:
+    // `obs.used` first, so the spend is on the row even though the turn failed,
+    // then `obs.failed`, so the row does not read `completed` for the one turn
+    // the family wrote in about.
+    for (const file of [
+      'app/api/ai/notes/route.ts',
+      'app/api/ai/relationship/route.ts',
+      'app/api/ai/meals/nutrition/route.ts',
+      'app/api/ai/chef/route.ts',
+    ]) {
+      const src = readFileSync(file, 'utf8');
+      const used = src.indexOf('obs.used(');
+      const failed = src.indexOf('obs.failed(');
+      expect(used, `${file} must record the model that answered`).toBeGreaterThan(-1);
+      expect(failed, `${file} must record an unusable answer as a failure`).toBeGreaterThan(-1);
+      expect(used, `${file} must charge the tokens before reporting the failure`).toBeLessThan(failed);
+    }
+  });
+
   it('a partial stream is recorded as partial, not as a clean completion', () => {
     const src = readFileSync('app/api/ai/chat/route.ts', 'utf8');
     expect(src).toContain('partial: Boolean(content)');
@@ -142,8 +171,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // saying why in the same change.
     // Set to the exact count, not a round number above it: slack in a ratchet is
     // room for new silent surfaces to slip in green. Lower it every time a
-    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 so far.
-    const CEILING = 36;
+    // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32 so far.
+    const CEILING = 32;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
