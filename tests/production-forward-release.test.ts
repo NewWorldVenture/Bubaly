@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { assertNoNewerMigrations, assertPreflight, assertReleased, buildReleaseSql, readReleaseFiles, releaseLedger, runForwardRelease } from '../scripts/apply-production-forward-release.mjs';
+import { assertNoNewerMigrations, assertPreflight, assertReleased, buildReleaseSql, readReleaseFiles, releaseLedger, releaseModeFromArgs, runForwardRelease } from '../scripts/apply-production-forward-release.mjs';
 
 const manifest = JSON.parse(readFileSync('supabase/production-forward-release.json', 'utf8'));
 const files = readReleaseFiles(manifest);
@@ -27,6 +27,83 @@ const released = () => ({
 const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 201 });
 
 describe('reviewed production forward release', () => {
+  it('parses read-only proof separately from apply and rejects ambiguous or unknown options', () => {
+    expect(releaseModeFromArgs([])).toEqual({ apply: false, requireApplied: false });
+    expect(releaseModeFromArgs(['--apply'])).toEqual({ apply: true, requireApplied: false });
+    expect(releaseModeFromArgs(['--require-applied'])).toEqual({ apply: false, requireApplied: true });
+    expect(() => releaseModeFromArgs(['--apply', '--require-applied'])).toThrow('cannot be combined');
+    expect(() => releaseModeFromArgs(['--require-applied=true'])).toThrow('Unknown release option');
+  });
+
+  it('rejects conflicting proof/apply options before inventory or database access', async () => {
+    const fetchImpl = vi.fn();
+    const listMigrationFiles = vi.fn(listReviewedMigrationFiles);
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token',
+      apply: true, requireApplied: true, fetchImpl, listMigrationFiles,
+    })).rejects.toThrow('cannot be combined');
+    expect(listMigrationFiles).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps applied-proof mode held before database access when newer migrations are unreviewed', async () => {
+    const fetchImpl = vi.fn();
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', requireApplied: true, fetchImpl,
+      listMigrationFiles: () => [...listReviewedMigrationFiles(), '0255_ai_runtime_lockdown.sql', '0261_unreviewed.sql'],
+    })).rejects.toThrow('outside the pinned 0240-0254 release');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if inventory is unavailable in applied-proof mode', async () => {
+    const fetchImpl = vi.fn();
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', requireApplied: true, fetchImpl,
+      listMigrationFiles: () => { throw new Error('Repository inventory unavailable'); },
+    })).rejects.toThrow('Repository inventory unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each(['baseline', 'partial', 'unexpected'])('does not report applied proof for a %s ledger', async (state) => {
+    const before = snapshot();
+    if (state === 'partial') before.migrations.push(releaseLedger(manifest)[manifest.baseline.length]);
+    if (state === 'unexpected') before.migrations.push({ version: '9999', name: 'unreviewed' });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: before }])).mockResolvedValueOnce(reply(before.migrations));
+    const error = await runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', requireApplied: true, fetchImpl,
+      listMigrationFiles: listReviewedMigrationFiles,
+    }).catch((cause: Error) => cause);
+    if (!(error instanceof Error)) throw new Error('Expected missing applied-release proof to fail.');
+    expect(error.message).toContain('Reviewed release is not applied');
+    expect(error.message).toContain('observed versions: 0001, 0002, 0003');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const call of fetchImpl.mock.calls) expect(JSON.parse(call[1].body).read_only).toBe(true);
+  });
+
+  it('proves an exact completed release using only metadata reads', async () => {
+    const after = released();
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: after }])).mockResolvedValueOnce(reply(after.migrations));
+    const result = await runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', requireApplied: true, fetchImpl,
+      listMigrationFiles: listReviewedMigrationFiles,
+    });
+    expect(result.status).toBe('already_applied');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const call of fetchImpl.mock.calls) expect(JSON.parse(call[1].body).read_only).toBe(true);
+  });
+
+  it('refuses applied proof when the recorded ledger lacks a required security postcondition', async () => {
+    const after = released();
+    after.workerRpc.authenticatedExecute = true;
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply([{ snapshot: after }])).mockResolvedValueOnce(reply(after.migrations));
+    await expect(runForwardRelease({
+      manifest, files, projectRef: manifest.projectRef, token: 'test-token', requireApplied: true, fetchImpl,
+      listMigrationFiles: listReviewedMigrationFiles,
+    })).rejects.toThrow('Released worker RPC grants were not confirmed');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const call of fetchImpl.mock.calls) expect(JSON.parse(call[1].body).read_only).toBe(true);
+  });
+
   it('allows reviewed and historical filenames without replaying historical migrations', () => {
     expect(() => assertNoNewerMigrations([
       '0001_extensions_enums.sql', '0194_first.sql', '0194_second.sql',

@@ -4,8 +4,6 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { buildBrief } from '@/lib/briefing/build';
-import { saveBrief } from '@/lib/briefing/store';
-import { scopeFromUserContext } from '@/lib/services/scope';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -363,16 +361,11 @@ ${UNTRUSTED_CONTENT_RULE}
       }),
     };
 
-    // File the brief so the delivery cron and the next page load read the same
-    // one (0258 is unique on family + day + kind, so this is idempotent). A
-    // failure here must not cost the family their briefing.
-    if (type !== 'weekly') {
-      const saved = await saveBrief(scopeFromUserContext(ctx, supabase), brief);
-      if (!saved.ok) console.error('[briefing] could not persist the brief', saved.error);
-    }
-
-    // The envelope is unchanged: `briefing-module.tsx` is the only consumer and
-    // the composed brief's home is the `home_briefs` row, not this response.
+    // Saved snapshots are paused until source access can be revalidated (#341's
+    // quarantine), so nothing is filed here. The brief is still COMPOSED —
+    // `brief.handled` is what makes "Completed Today" evidence rather than the
+    // model's word for it, and that is computed, not stored.
+    // Return the fresh briefing and completion evidence in the same envelope.
     return NextResponse.json({ briefing, digest, generatedAt: new Date().toISOString() });
   } catch (err) {
     console.error('Briefing error:', err);

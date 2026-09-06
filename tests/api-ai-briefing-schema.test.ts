@@ -352,6 +352,7 @@ describe('Daily Brief route schema boundary', () => {
     // that really finished. Here no run has, so the honest answer is none.
     expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tools: [], maxTokens: 2000 }));
+    expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -448,12 +449,16 @@ describe('the caller may not write the system prompt', () => {
     expect(route).not.toMatch(/const \{ type = 'morning' \} =/);
   });
 
-  it('does not file a weekly request as the day’s brief', () => {
-    // 0258's unique key is (family_id, as_of_date, kind); the client's
-    // "This Week" tab posts `weekly` to this same route, and every visit used
-    // to overwrite the daily row.
+  it('files nothing at all while saved snapshots are quarantined', () => {
+    // The clobbering this used to guard against — the client's "This Week" tab
+    // posting `weekly` and overwriting the daily row under 0258's unique key —
+    // cannot happen now that #341 paused snapshot persistence entirely. What
+    // still matters is that the route does not reach for the store.
     const route = readFileSync('app/api/ai/briefing/route.ts', 'utf8');
-    expect(route).toMatch(/if \(type !== 'weekly'\) \{\s*\n\s*const saved = await saveBrief/);
+    expect(route).not.toContain('saveBrief');
+    // The brief is still COMPOSED: `brief.handled` is what makes "Completed
+    // Today" evidence rather than the model's word for it.
+    expect(route).toContain('buildBrief(');
   });
 });
 
