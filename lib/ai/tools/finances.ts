@@ -325,9 +325,17 @@ export const financeTools: ToolDefinition[] = [
     // would silently delete the second one.
     idempotencyFrom: () => null,
     summarize: (_input, output) => `Recorded ${formatDollars(toCents(output.amount))}${output.merchant ? ` at ${output.merchant}` : ''} on ${output.date}`,
-    consequences: (input) => [
-      `Adds ${Number.isFinite(input.amount) ? formatDollars(toCents(input.amount)) : 'a charge'}${input.merchant ? ` at ${input.merchant}` : ''} to the household books, where it counts against the budget.`,
-    ],
+    consequences: (input) => {
+      const amount = Number.isFinite(input.amount) ? formatDollars(toCents(input.amount)) : 'the amount';
+      const merchant = input.merchant ? ` at ${input.merchant}` : '';
+      if (input.type === 'income') {
+        return [`Records ${amount}${merchant} as income on the household books. It does not count as expense spending.`];
+      }
+      if (input.type === 'transfer') {
+        return [`Records ${amount}${merchant} as a transfer on the household books. It does not count as income or expense spending.`];
+      }
+      return [`Records ${amount}${merchant} as an expense on the household books. It counts toward expense spending.`];
+    },
     resource: (output) => ({ table: 'transactions', id: output.id }),
     execute: async (scope, input) => {
       const res = await createTransaction(scope, {

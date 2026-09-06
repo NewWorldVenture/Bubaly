@@ -784,6 +784,10 @@ export async function createTransaction(
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     return fail('A transaction needs an amount above zero. Use the type to say whether money came in or went out.', { code: SERVICE_CODES.invalidInput });
   }
+  const amount = toDollars(toCents(input.amount));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fail('A transaction needs a valid amount of at least one cent after rounding.', { code: SERVICE_CODES.invalidInput });
+  }
   const date = input.date?.trim() || dayKeyInTz(scopeNow(scope), scope.tz);
   if (!DAY_KEY.test(date)) return fail('The date must be YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
   const source = input.source?.trim() || (scope.actorKind === 'ai' ? 'ai' : 'manual');
@@ -816,7 +820,6 @@ export async function createTransaction(
     if (!data) return fail(`That ${noun} does not belong to this family.`, { code: SERVICE_CODES.notFound });
   }
 
-  const amount = toDollars(toCents(input.amount));
   const { data, error } = await scope.db
     .from('transactions')
     .insert({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { financeTools } from '@/lib/ai/tools/finances';
 import { createTransaction } from '@/lib/services/finances';
 import type { ServiceScope } from '@/lib/services/types';
 
@@ -60,6 +61,22 @@ describe('createTransaction writes the row', () => {
     });
   });
 
+  it.each([
+    [0.005, 0.01],
+    [0.01, 0.01],
+    [42.1, 42.1],
+    [42.12, 42.12],
+    [42.126, 42.13],
+  ])('records %s as %s without changing the caller input', async (amount, expectedAmount) => {
+    const { db, calls } = makeDb(ours);
+    const input = Object.freeze({ name: 'Groceries', amount });
+    const res = await createTransaction(scope({ db }), input);
+
+    expect(res).toMatchObject({ ok: true, data: { amount: expectedAmount } });
+    expect(insertOf(calls)).toMatchObject({ amount: expectedAmount });
+    expect(input.amount).toBe(amount);
+  });
+
   it('dates it in the family time zone, not UTC', async () => {
     // 00:30 UTC on the 6th is still the 5th in New York. A charge dated a day
     // late lands in the wrong budget month at a month boundary.
@@ -100,6 +117,17 @@ describe('createTransaction refuses what it cannot stand behind', () => {
     const res = await createTransaction(scope({ db }), { name: 'Groceries', amount });
     expect(res.ok).toBe(false);
     expect(calls).toHaveLength(0);
+  });
+
+  it.each([[0.001], [0.0049], [Number.MIN_VALUE], [Number.MAX_VALUE]])('refuses %s when cent normalization is zero or non-finite before any query', async (amount) => {
+    const { db, calls } = makeDb(ours);
+    const input = Object.freeze({ name: 'Groceries', amount, accountId: 'acct-1' });
+    const res = await createTransaction(scope({ db }), input);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('one cent');
+    expect(calls).toHaveLength(0);
+    expect(input.amount).toBe(amount);
   });
 
   it('refuses a malformed date rather than guessing one', async () => {
@@ -147,6 +175,27 @@ describe('every foreign key it writes is checked against THIS family', () => {
     const res = await createTransaction(scope({ db }), { name: 'Groceries', amount: 10, accountId: 'acct-1', memberId: 'member-2', receiptDocumentId: 'doc-1' });
     expect(res.ok).toBe(true);
     expect(insertOf(calls)).toMatchObject({ account_id: 'acct-1', member_id: 'member-2', receipt_document_id: 'doc-1' });
+  });
+});
+
+describe('purchase approval consequences', () => {
+  const tool = financeTools.find((entry) => entry.name === 'finances.createTransaction')!;
+
+  it.each([
+    ['expense', 'an expense', 'It counts toward expense spending.'],
+    ['income', 'income', 'It does not count as expense spending.'],
+    ['transfer', 'a transfer', 'It does not count as income or expense spending.'],
+    [undefined, 'an expense', 'It counts toward expense spending.'],
+    [null, 'an expense', 'It counts toward expense spending.'],
+  ])('describes the direction and spending effect for type %s', (type, direction, effect) => {
+    const input = tool.input.parse({ name: 'Household transaction', amount: 42.1, merchant: 'Corner Shop', type });
+    const consequences = tool.consequences?.(input);
+
+    expect(consequences).toHaveLength(1);
+    expect(consequences?.[0]).toContain('$42.10 at Corner Shop');
+    expect(consequences?.[0]).toContain(`as ${direction} on the household books`);
+    expect(consequences?.[0]).toContain(effect);
+    expect(consequences?.[0]).not.toContain('counts against the budget');
   });
 });
 
