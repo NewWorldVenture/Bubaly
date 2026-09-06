@@ -5,12 +5,14 @@
 // history and lets a family save them as reusable routines, then apply a
 // routine to a week (materializing concrete calendar_events). 100% Supabase.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Plus, Sparkles, Repeat, Trash2, Pencil, Loader2, X, Wand2, CalendarPlus } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { applyRoutineToCalendarAction, undoCalendarEventsAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -114,6 +116,12 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     });
   }
 
+  // One submission id per (routine, week) — the composition a family means when
+  // they say "put this routine on this week". Dropped on undo, so changing their
+  // mind and applying again is a new composition rather than being answered with
+  // events that no longer exist.
+  const applyIds = useRef<Record<string, string>>({});
+
   if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{tr('routines.loadingRoutines')}</div>;
   if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
 
@@ -126,15 +134,36 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
         weekStartMonday, 1,
       );
       if (rows.length === 0) { toastError('This routine has no active days.'); return; }
-      const sb = createClient();
-      const { data: inserted, error } = await sb.from('calendar_events')
-        .insert(rows.map((r) => ({ ...r, family_id: familyId, created_by: userId, recurrence: 'none' as const })))
-        .select('id');
-      if (error) throw error;
-      const ids = (inserted ?? []).map((r) => r.id);
+      // One write, and one composition. Applying this routine to this week twice
+      // used to add the week twice; the batch carries a key derived from the id
+      // below, so the second Apply is answered with the events the first created.
+      const key = `${t.id}:${weekStartMonday.toISOString().slice(0, 10)}`;
+      const result = await applyRoutineToCalendarAction({
+        events: rows.map((r) => ({
+          title: r.title,
+          startsAt: r.starts_at,
+          endsAt: r.ends_at,
+          category: r.category,
+          assigneeId: r.assignee_id,
+        })),
+        submissionId: (applyIds.current[key] ||= newSubmissionId()),
+      });
+      if (!result.ok) { toastError(result.error); return; }
+
+      const ids = result.eventIds;
       success(`Added ${ids.length} events for this week`, {
         label: 'Undo',
-        onClick: () => { void createClient().from('calendar_events').delete().in('id', ids).then(() => { success('Undone'); onApplied(); }); },
+        onClick: () => {
+          void undoCalendarEventsAction(ids).then((undone) => {
+            if (!undone.ok) { toastError(undone.error); return; }
+            // Undo means the family changed their mind, so the next Apply of this
+            // routine and week is a NEW composition — otherwise the batch key
+            // would answer it with events that no longer exist.
+            delete applyIds.current[key];
+            success('Undone');
+            onApplied();
+          });
+        },
       });
       onApplied();
     });

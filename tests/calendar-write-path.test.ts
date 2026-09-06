@@ -24,7 +24,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
 import {
-  createCalendarEventAction, deleteCalendarEventAction, updateCalendarEventAction,
+  applyRoutineToCalendarAction, createCalendarEventAction, deleteCalendarEventAction,
+  undoCalendarEventsAction, updateCalendarEventAction,
 } from '@/app/(app)/dashboard/calendar/actions';
 
 const FAMILY = 'family-1';
@@ -317,5 +318,84 @@ describe('the activity trail, as it stands today', () => {
     await createCalendarEventAction({ ...concert, submissionId: SAVE_ONE });
     expect(events()).toHaveLength(1);
     expect(db.table('agent_activity')).toHaveLength(0);
+  });
+});
+
+describe('applying a routine to a week', () => {
+  const routine = [
+    { title: 'Wake up', startsAt: '2026-09-07T07:00:00.000Z', endsAt: '2026-09-07T07:15:00.000Z' },
+    { title: 'Breakfast', startsAt: '2026-09-07T07:15:00.000Z', endsAt: '2026-09-07T07:45:00.000Z' },
+    { title: 'School run', startsAt: '2026-09-07T08:00:00.000Z', endsAt: '2026-09-07T08:30:00.000Z' },
+  ];
+
+  it('adds the whole week in one write', async () => {
+    const result = await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(result.ok && result.eventIds).toHaveLength(3);
+    expect(events()).toHaveLength(3);
+    expect(events().every((r) => r.family_id === FAMILY && r.created_by === 'user-1')).toBe(true);
+  });
+
+  it('adds ONE week when the same routine and week are applied twice', async () => {
+    // The batch carries a key per row derived from the composition, and a
+    // multi-row insert is all-or-nothing — so "any row present" answers "all",
+    // and the second Apply returns the first one's events.
+    //
+    // This asserts the OUTCOME, not which mechanism produced it: the probe
+    // short-circuits, and if two taps race past it the unique index refuses the
+    // second and the guard hands back the winner's rows. Both are correct and a
+    // family cannot tell them apart, which is exactly why the assertion is on
+    // the row count and the ids rather than on the path taken.
+    const first = await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+    const again = await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+
+    expect(first.ok && again.ok).toBe(true);
+    expect(events()).toHaveLength(3);
+    expect(again.ok && again.eventIds.sort()).toEqual(first.ok ? first.eventIds.sort() : []);
+  });
+
+  it('adds a second week when a different week is applied', async () => {
+    await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+    await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_TWO });
+    expect(events()).toHaveLength(6);
+  });
+
+  it('adds nothing at all when one row is invalid', async () => {
+    // Atomicity is the point: half a routine on the calendar with nothing to
+    // undo it is worse than a refusal.
+    const result = await applyRoutineToCalendarAction({
+      events: [...routine, { title: '   ', startsAt: '2026-09-07T09:00:00.000Z' }],
+      submissionId: SAVE_ONE,
+    });
+    expect(result.ok).toBe(false);
+    expect(events()).toHaveLength(0);
+  });
+
+  it('refuses a routine with no active days', async () => {
+    const result = await applyRoutineToCalendarAction({ events: [], submissionId: SAVE_ONE });
+    expect(result.ok).toBe(false);
+    expect(events()).toHaveLength(0);
+  });
+
+  it('undoes the whole batch, and only this family’s', async () => {
+    const applied = await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    db.seed('calendar_events', [{ id: 'theirs', family_id: OTHER_FAMILY, title: 'Not ours', starts_at: '2026-09-07T07:00:00.000Z' }]);
+
+    const undone = await undoCalendarEventsAction([...applied.eventIds, 'theirs']);
+    expect(undone.ok && undone.removed).toBe(3);
+    expect(events()).toHaveLength(0);
+    // The client deleted on ids alone; the service filters family_id too.
+    expect(db.table('calendar_events').some((r) => r.id === 'theirs')).toBe(true);
+  });
+
+  it('undoes nothing for an empty list rather than issuing an unfiltered delete', async () => {
+    await applyRoutineToCalendarAction({ events: routine, submissionId: SAVE_ONE });
+    const undone = await undoCalendarEventsAction([]);
+    expect(undone.ok && undone.removed).toBe(0);
+    expect(events()).toHaveLength(3);
   });
 });
