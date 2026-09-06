@@ -5,6 +5,8 @@
 // system + user prompt. Keeping this pure (no Supabase, no fetch) makes every prompt
 // unit-testable: given data, assert the prompt carries the right facts.
 
+import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+
 export type InsightKind =
   | 'chores'
   | 'calendar'
@@ -116,7 +118,24 @@ const q = (data: InsightData) =>
     ? `\n\nThe family specifically asks: ${(data.params.question as string).trim()}`
     : '';
 
+/**
+ * Insight kinds whose data a child or teen has no business reading through a
+ * model — the same areas `ROLE_DEFAULTS.sensitiveDomains` already carves out
+ * for teens and children (medical, finances, banking, insurance, documents),
+ * plus the household's private correspondence and settings.
+ *
+ * The route used to have no role check at all: `requireUserContext()` plus RLS
+ * was the whole guard, and RLS on these tables is family-wide. So a child's
+ * session could ask for a summary of the family's medications, messages and
+ * documents and get one, phrased helpfully.
+ */
+export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKind>([
+  'medications', 'care', 'documents', 'expenses', 'billing', 'subscriptions',
+  'renewals', 'messages', 'notifications', 'settings',
+]);
+
 const SHARED_RULES =
+  `${UNTRUSTED_CONTENT_RULE} ` +
   'Use ONLY the household data provided — never invent items, names, dates, or amounts. ' +
   'If there is too little data to be useful, say so briefly and suggest what to add. ' +
   'Be concrete, warm, and concise. Prefer short plain-text sections and tight bullet lists over long paragraphs.';

@@ -11,6 +11,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { serverWriter } from '@/lib/supabase/service-writer';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { briefRow, briefSchema, type Brief, type BriefKind } from './build';
 
@@ -25,7 +26,11 @@ type DB = SupabaseClient<Database>;
  * row, never the briefing, so everything here comes back as a ServiceResult.
  */
 export async function saveBrief(scope: ServiceScope, brief: Brief, opts?: { db?: DB }): Promise<ServiceResult<{ id: string }>> {
-  const db = opts?.db ?? scope.db;
+  // 0262 removed member INSERT/UPDATE on home_briefs. The row is a delivery
+  // ledger, not a document a family edits: `delivered_at` is the compare-and-set
+  // that decides whether they are told once or twice, and a member who could
+  // stamp it could silence their own family's morning brief.
+  const db = opts?.db ?? await serverWriter(scope.db);
   const row = briefRow(brief, scope.familyId, scope.userId);
   try {
     const { data, error } = await db
@@ -89,7 +94,9 @@ export async function markDelivered(
   briefId: string,
   opts?: { db?: DB; now?: Date },
 ): Promise<ServiceResult<boolean>> {
-  const db = opts?.db ?? scope.db;
+  // Server-written for the same reason as `saveBrief`: this stamp is what makes
+  // "tell the family" happen exactly once.
+  const db = opts?.db ?? await serverWriter(scope.db);
   const { data, error } = await db
     .from('home_briefs')
     .update({ delivered_at: (opts?.now ?? scope.now ?? new Date()).toISOString() })

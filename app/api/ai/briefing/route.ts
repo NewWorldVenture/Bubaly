@@ -10,6 +10,7 @@ import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/response-schema';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 export async function POST(req: NextRequest) {
   try {
@@ -238,6 +239,8 @@ Rules:
 - For evening briefing, populate completed/outstanding/tomorrowPreview
 - For weekly briefing, populate weeklyHighlights and weeklyConflicts
 - ALWAYS fold the CROSS-DOMAIN ACTION ITEMS (bills due, medications, home maintenance, expiring warranties, upcoming trips, expiring pantry food) into "reminders" and "outstanding" with honest urgency — overdue→high, today→high, coming up→medium. Never invent amounts or dates; only use what is given.
+
+${UNTRUSTED_CONTENT_RULE}
 - If data is sparse, be honest but still encouraging`;
 
     // The concierge digest is the deterministic backbone: reminders and
@@ -255,7 +258,10 @@ Rules:
       const provider = await resolveProvider();
       const completion = await provider.complete({
         system: systemPrompt,
-        messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${context}` }],
+        // `context` is the family's own rows — event titles, reminder text,
+        // meal names, contractor notes — assembled into one blob. Same §44 rule
+        // as the context builder applies to the same strings.
+        messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${fenceUntrustedBlock('briefing_data', context, 24_000)}` }],
         tools: [],
         maxTokens: 2000,
       });
