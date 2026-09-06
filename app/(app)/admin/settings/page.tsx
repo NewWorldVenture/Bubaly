@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard } from 'lucide-react';
+import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard, Share2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAIConfigView } from '@/lib/ai/settings';
 import { Card } from '@/components/ui/card';
@@ -74,6 +74,7 @@ export default async function AdminSettingsPage() {
     { href: '/admin/integrations', label: 'Integrations', desc: 'Connected services & keys', icon: Plug },
     { href: '/admin/security', label: 'Security', desc: 'Access & audit controls', icon: ShieldCheck },
     { href: '/admin/backup', label: 'Data & Storage', desc: 'Row counts, storage, backups', icon: Database },
+    { href: '/admin/settings/social-links', label: 'Social links', desc: 'Bubaly’s own profiles, shown in the marketing footer', icon: Share2 },
   ];
 
   return (

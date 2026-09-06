@@ -17,6 +17,7 @@ import { ThemeSwitch } from './theme-switch';
 import { SidebarAccount } from './sidebar-account';
 import { isActive, resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { FreeTierSidebar } from './free-tier-sidebar';
+import { LanguageBar } from '@/components/i18n/language-picker';
 import { NotificationBell } from './notification-bell';
 import { BlogLauncher } from './blog-launcher';
 import { UpgradeModal } from './upgrade-modal';
@@ -391,6 +392,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main id="main-content" className="app-main flex-1 pb-24 pt-4 sm:pt-6 lg:pb-8">
           <div className="mx-auto max-w-[1480px]">{children}</div>
+          {/* Bottom of the signed-in page, the same place every other layout
+              keeps it. In flow, so it clears the fixed tab bar with the rest of
+              the content rather than hovering above it. */}
+          <div className="mx-auto mt-10 flex max-w-[1480px] justify-start px-4">
+            <LanguageBar />
+          </div>
         </main>
       </div>
 
