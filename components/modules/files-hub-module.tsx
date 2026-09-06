@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
-import { isSensitiveCategory } from '@/lib/documents/sensitivity';
+import { performUpload } from '@/lib/documents/upload';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -127,37 +127,34 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
     // REFUSE, DO NOT DOWNGRADE, AND DO IT BEFORE THE BYTES MOVE.
     //
-    // This used to compute `is_secure: view === 'vault' && manager`, so a
-    // non-manager on the Vault tab got their file uploaded and filed as Shared
-    // — visible to the whole family — under a success toast. Someone putting a
-    // passport somewhere private and being silently given the opposite is
-    // worse than being told no, and the bytes were already in the bucket by
-    // the time the classification was decided.
-    //
-    // The same for a sensitive category: 0266's policy would reject the insert
-    // and the orphan cleanup would run, but a person deserves the reason, not
-    // a database error.
-    if (!manager && view === 'vault') {
-      return toastError('Only a parent or another adult can add a file to the Secure Vault. Ask one of them, or upload it to Shared Files instead.');
-    }
-    if (!manager && isSensitiveCategory(category)) {
-      return toastError(`Only a parent or another adult can file a ${category.trim().toLowerCase()} document. Ask one of them to add it.`);
-    }
-
+    // The decision and the ordering live in `lib/documents/upload.ts` so they
+    // can be executed by a test holding real spies, rather than asserted by
+    // reading this file. `performUpload` refuses first and only then calls
+    // `store`, so a refused Vault submission makes neither a storage upload nor
+    // a document insert — which is the property, and it is now provable.
     setSaving(true);
     const sb = createClient();
-    const folder = category.trim() || meta.folder;
-    const { path, error: upErr } = await uploadFamilyDocument(sb, { familyId, folder, file });
-    if (upErr || !path) { setSaving(false); return toastError(upErr ?? 'Upload failed'); }
-    const { error: err } = await sb.from('documents').insert({
-      family_id: familyId, title: title.trim(), category: category.trim() || null,
-      storage_path: path, mime_type: file.type || null, size_bytes: file.size,
-      // The requested destination, honoured as asked. A non-manager never
-      // reaches here with `view === 'vault'`.
-      is_secure: view === 'vault', created_by: userId,
-    });
+    const outcome = await performUpload(
+      { view, category, manager, folderFallback: meta.folder },
+      {
+        store: async (folder) => {
+          const { path, error } = await uploadFamilyDocument(sb, { familyId, folder, file });
+          return { path: path ?? null, error: error ?? null };
+        },
+        record: async ({ storagePath, isSecure }) => {
+          const { error } = await sb.from('documents').insert({
+            family_id: familyId, title: title.trim(), category: category.trim() || null,
+            storage_path: storagePath, mime_type: file.type || null, size_bytes: file.size,
+            // The requested destination, honoured as asked.
+            is_secure: isSecure, created_by: userId,
+          });
+          return { error: error ? describeDbError(error) : null };
+        },
+        discard: async (path) => { await removeFamilyDocument(sb, path); },
+      },
+    );
     setSaving(false);
-    if (err) { await removeFamilyDocument(sb, path); return toastError(describeDbError(err)); }
+    if (!outcome.ok) return toastError(outcome.reason);
     success('File uploaded');
     setOpen(false); setTitle(''); setCategory(''); setFile(null); refresh();
   }

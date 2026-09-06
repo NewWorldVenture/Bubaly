@@ -78,9 +78,18 @@ export default async function ReadinessPage() {
   // card now makes positive claims ("Documents are current"). So each of these
   // reports whether it succeeded, and the assessor is told which sources it can
   // and cannot speak for.
+  //
+  // An ABSENT count is not a confirmed zero either. A `head: true` count query
+  // carries its answer in the Content-Range header, and supabase-js reports a
+  // missing or unparseable header as `{ count: null, error: null }` — no error
+  // to catch. Coercing that to 0 would turn "we could not count your documents"
+  // into "your documents are current", which is precisely the claim §51 must
+  // never invent. `known` therefore requires a real number, not merely the
+  // absence of an error.
   const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>): Promise<{ value: number; known: boolean }> => {
     const { count: n, error } = await q;
-    return error ? { value: 0, known: false } : { value: n ?? 0, known: true };
+    if (error || typeof n !== 'number' || !Number.isFinite(n)) return { value: 0, known: false };
+    return { value: n, known: true };
   };
   const [
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,

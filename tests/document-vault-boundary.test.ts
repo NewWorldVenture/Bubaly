@@ -75,40 +75,31 @@ describe('the Files hub refuses rather than downgrades', () => {
   // Comments here describe the shape being replaced, so assert against code.
   const hub = raw.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
 
-  it('does not silently file a Vault upload as Shared', () => {
-    // This computed `is_secure: view === 'vault' && manager`, so a non-manager
-    // on the Vault tab got their file uploaded and filed as Shared — visible
-    // to the whole family — under a success toast. Someone putting a passport
-    // somewhere private and being handed the opposite is worse than being
-    // told no.
+  // WHAT the hub refuses, and that a refusal performs neither the storage
+  // upload nor the documents insert, is proved by executing the real decision
+  // in tests/document-upload-refusal.test.ts. Source-text assertions could not
+  // tell "refuses" from "refuses too late" — they only ever compared two
+  // indexOf positions, which is a fact about line order, not about behaviour.
+  //
+  // What is left here is the one thing a unit test genuinely cannot reach: that
+  // the component still routes through that decision rather than growing a
+  // second copy of the rule inline.
+  it('routes the upload through the one shared decision', () => {
+    expect(hub).toContain("from '@/lib/documents/upload'");
+    expect(hub).toContain('await performUpload(');
+    // No second copy of either rule in the component.
     expect(hub).not.toMatch(/is_secure:\s*view === 'vault' && manager/);
-    expect(hub).toContain("is_secure: view === 'vault', created_by: userId,");
+    expect(hub).not.toMatch(/isSensitiveCategory\(/);
   });
 
-  it('refuses before the bytes move, not after the policy rejects them', () => {
-    // The old shape decided the classification AFTER `uploadFamilyDocument`
-    // had already put the file in the bucket.
-    const upload = hub.slice(hub.indexOf('async function upload('));
-    const body = upload.slice(0, upload.indexOf('\n  }'));
-    const refusal = body.indexOf("Only a parent or another adult can add a file to the Secure Vault");
-    const putBytes = body.indexOf('uploadFamilyDocument(');
-    expect(refusal).toBeGreaterThan(-1);
-    expect(putBytes).toBeGreaterThan(-1);
-    expect(refusal).toBeLessThan(putBytes);
-  });
-
-  it('also refuses a sensitive category, with the reason rather than a database error', () => {
-    // 0266's policy would reject the insert anyway; a person deserves to know
-    // why, and not to have the file uploaded first.
-    const upload = hub.slice(hub.indexOf('async function upload('));
-    const body = upload.slice(0, upload.indexOf('\n  }'));
-    expect(body).toContain('isSensitiveCategory(category)');
-    expect(body.indexOf('isSensitiveCategory(category)')).toBeLessThan(body.indexOf('uploadFamilyDocument('));
+  it('hands performUpload the acting member\'s role, not a hardcoded one', () => {
+    // The decision is only worth anything if the component tells it who is
+    // uploading. `manager` comes from `isManager(role)` on the app context.
+    expect(hub).toContain('const manager = isManager(role);');
+    expect(hub).toMatch(/\{ view, category, manager, folderFallback: meta\.folder \}/);
   });
 
   it('shares one definition of sensitive with the server, not a second list', () => {
-    expect(hub).toContain("from '@/lib/documents/sensitivity'");
-    // The categories the hub will refuse are the ones the policy refuses.
     for (const category of ['medical', 'Passport ', 'BANK']) {
       expect(isSensitiveCategory(category)).toBe(true);
     }

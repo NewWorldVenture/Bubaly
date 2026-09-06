@@ -25,7 +25,9 @@ const result = <T,>(data: T[], count = data.length): Result<T> => ({ data, count
 let week: Result<CalendarReadinessEvent>;
 let tomorrow: Result<CalendarReadinessEvent>;
 let roster: Result<{ id: string }>;
-let counts: Record<string, number>;
+// `null` is a configured value, not an unset one: it stands for a count
+// query that came back with no count and no error.
+let counts: Record<string, number | null>;
 let queries: Query[];
 
 function from(table: string) {
@@ -41,7 +43,7 @@ function from(table: string) {
       if (table === 'family_members') reply = roster;
       else if (table === 'calendar_events' && !record.options?.head) reply = record.limit === 200 ? week : tomorrow;
       else if (table === 'meal_plans' && !record.options?.head) reply = result(Array.from({ length: 7 }, (_, i) => ({ plan_date: `2026-09-${String(6 + i).padStart(2, '0')}` })));
-      else reply = { data: null, count: counts[table] ?? (table === 'meal_plans' ? 1 : 0), error: null };
+      else reply = { data: null, count: table in counts ? counts[table] : (table === 'meal_plans' ? 1 : 0), error: null };
       return Promise.resolve(reply).then(resolve);
     },
   });
@@ -136,6 +138,33 @@ describe('readiness page source coverage', () => {
     // nothing about how much this family is running through Bubaly, and
     // greying it would blur the very line §51 asks the page to draw.
     expect(html).toContain('On top of it');
+  });
+
+  it('does not turn a count-less document read into "Documents are current"', async () => {
+    // A `head: true` count query carries its answer in the Content-Range
+    // header. When that header is missing or unparseable, supabase-js reports
+    // `{ count: null, error: null }` — there is no error to catch, so the old
+    // `n ?? 0` read it as a confirmed zero and the month card printed the ✓.
+    // "We could not count your documents" and "your documents are current" are
+    // opposite claims; only one of them is safe to invent.
+    counts.documents = null;
+    const html = await render();
+    expect(html).not.toContain('Documents are current');
+    expect(html).toContain('Documents could not be read; expiries are unknown');
+    expect(html).toContain(COVERAGE_BANNER);
+    // The other month rules are untouched by a documents failure: workload is
+    // still known from the complete calendar and roster, and still says so.
+    expect(html).toContain('The load is spread evenly');
+  });
+
+  it('still claims a genuine zero when the count really is zero', async () => {
+    // The guard must not swallow the honest answer it exists to protect. A real
+    // 0 is a read that succeeded, and the ✓ is earned.
+    counts.documents = 0;
+    const html = await render();
+    expect(html).toContain('Documents are current');
+    expect(html).not.toContain('Documents could not be read');
+    expect(html).not.toContain(COVERAGE_BANNER);
   });
 
   it('labels capped conflicts as a lower bound and does not claim exact workload', async () => {

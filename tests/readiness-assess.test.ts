@@ -340,7 +340,12 @@ describe('the readiness page answers once, and with the rules its links point at
     expect(page).toContain('const readCoverage: Partial<Record<Evidence, ReadinessCoverage>> = {};');
     expect(page).toContain("if (!expiringDocsMonth.known) readCoverage.documents = 'unknown';");
     expect(page).toContain('coverage: readCoverage,');
-    expect(page).toContain('return error ? { value: 0, known: false } : { value: n ?? 0, known: true };');
+    // What `known` MEANS is not asserted here, on purpose. A source-string
+    // assertion pins whatever the line currently says — this one used to pin
+    // `n ?? 0`, and so quietly held the null-count bug in place while looking
+    // like coverage of it. The rule (an absent count is not a confirmed zero)
+    // is proved through the rendered page in
+    // tests/readiness-page-coverage.test.ts, where it can actually fail.
   });
 
   it('does not pay for a count nothing reads', () => {

@@ -42,6 +42,7 @@ import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memo
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { getAISettings } from '../ai-settings';
+import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyFact = Tables<'family_facts'>;
@@ -164,7 +165,14 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     }
   }
 
-  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: normalizeExpiry(input.expiresAt) });
+  // Read the deadline once, before either lane, so a malformed one is refused
+  // rather than quietly turned into "remember this forever".
+  const expiry = readExpiry(input.expiresAt);
+  if (!expiry.ok) {
+    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a date like 2026-09-30.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: expiry.at });
   return rememberUnconfirmed(scope, {
     category, key, content, memberId: input.memberId ?? null, source: input.source,
     confidence: clampConfidence(input.confidence), evidence: input.note ?? null,
@@ -172,7 +180,7 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     // "swim class on Thursdays" is exactly the kind of thing that stops being
     // true. Dropping the deadline here meant accepting the card made it
     // permanent (0268).
-    expiresAt: normalizeExpiry(input.expiresAt),
+    expiresAt: expiry.at,
   });
 }
 
@@ -181,11 +189,25 @@ function clampConfidence(value: number | null | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value as number)));
 }
 
-/** An expiry Bubaly or a person offered, or null. An unparseable date is no expiry, never a past one. */
-function normalizeExpiry(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const at = Date.parse(value);
-  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+/**
+ * An expiry Bubaly or a person offered.
+ *
+ * Absent is the honest "no shelf life" — null, undefined and a blank string all
+ * mean the caller named no deadline, and the fact is kept until someone forgets
+ * it. But a caller who WROTE something and got it wrong ("next Marchh", a
+ * half-built ISO string) asked for a bound, and silently returning null hands
+ * them permanence instead: the one outcome they did not ask for, with no
+ * signal. So an unparseable non-empty value is an input error, not a null.
+ *
+ * Reported as `{ ok: false }` rather than thrown, because every caller here is
+ * already a `ServiceResult` path and this is a message a person can act on.
+ */
+function readExpiry(value: string | null | undefined): { ok: true; at: string | null } | { ok: false } {
+  if (value === null || value === undefined) return { ok: true, at: null };
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, at: null };
+  const at = Date.parse(trimmed);
+  return Number.isFinite(at) ? { ok: true, at: new Date(at).toISOString() } : { ok: false };
 }
 
 async function rememberConfirmed(
@@ -404,6 +426,15 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
       return fail(describeDbError(error, 'Could not read that memory.'), { code: SERVICE_CODES.db });
     }
     return ok({ fact: fact ?? null, alreadyAccepted: true });
+  }
+
+  // A card whose own deadline has already passed cannot be accepted into a
+  // fact, because the fact would be born invisible: `isExpiredFact` filters it
+  // out of every read, so the parent presses Confirm and nothing appears. That
+  // is the inbox lying about what the button did. Say so instead — the card
+  // stays open, and dismissing it is the honest action left.
+  if (suggestion.expires_at && isExpiredFact({ expires_at: suggestion.expires_at }, scopeNow(scope))) {
+    return fail('That one had already lapsed, so confirming it would save nothing. Dismiss it, or ask Bubaly again for something current.', { code: SERVICE_CODES.invalidInput });
   }
 
   const { data: fact, error: insertError } = await scope.db
