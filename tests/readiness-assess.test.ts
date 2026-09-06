@@ -63,6 +63,46 @@ describe('assessReadiness', () => {
     expect(partial.gaps.map((g) => g.label).join(' ')).not.toMatch(/dinner/i);
   });
 
+  // ── A ✓ is a claim, so it needs evidence ─────────────────────────────────
+  it('does not call a check passed when the read that would prove it failed', () => {
+    // Every signal arrives from a best-effort read that returns 0 on failure.
+    // That was harmless while the card only listed gaps — nothing to report
+    // reads the same as nothing wrong. The moment a zero became "Documents are
+    // current" it stopped being harmless.
+    const [, , month] = assessReadiness(sig({ unavailable: ['documents'] }));
+    expect(month.ready.map((r) => r.label)).not.toContain('Documents are current');
+    expect(month.gaps.map((g) => g.label).join(' ')).toMatch(/Documents could not be read/);
+  });
+
+  it('says the check could not be run, and does not call the horizon ready', () => {
+    const [tomorrow] = assessReadiness(sig({ unavailable: ['calendar_tomorrow'] }));
+    expect(tomorrow.ready.map((r) => r.label)).not.toContain('Calendar is clear');
+    expect(tomorrow.ready.map((r) => r.label)).not.toContain('Everything has an owner');
+    expect(tomorrow.status).toBe('at_risk');
+    // The rules that DID have their evidence still report.
+    expect(tomorrow.ready.map((r) => r.label)).toContain("Tomorrow's dinner is planned");
+  });
+
+  it('reports one unknown per missing source, not one per rule that used it', () => {
+    // Two tomorrow rules rest on the same calendar read; a person can only do
+    // one thing about it.
+    const [tomorrow] = assessReadiness(sig({ unavailable: ['calendar_tomorrow'] }));
+    const unknowns = tomorrow.gaps.filter((g) => g.label.includes('could not be read'));
+    expect(unknowns).toHaveLength(1);
+  });
+
+  it('cannot work out the workload when the week it is measured over is missing', () => {
+    const [, , month] = assessReadiness(sig({ unavailable: ['calendar_week'] }));
+    expect(month.ready.map((r) => r.label)).not.toContain('The load is spread evenly');
+    expect(month.gaps.map((g) => g.label).join(' ')).toMatch(/could not be worked out/);
+  });
+
+  it('leaves a household whose reads all succeeded exactly as it was', () => {
+    // The guard must not make a working page cautious.
+    expect(assessReadiness(sig())).toEqual(assessReadiness(sig({ unavailable: [] })));
+    expect(overallReadiness(assessReadiness(sig()))).toEqual({ score: 100, status: 'ready' });
+  });
+
   // ── §51's [Let Bubaly Handle It] ─────────────────────────────────────────
   it('hands Bubaly the gaps, not just the horizon', () => {
     // "Get us ready for tomorrow" gives the planner nothing to work from.
@@ -191,6 +231,23 @@ describe('the readiness page computes what it claims to know', () => {
     // An assignee outside the accessible roster must not be padded in as a
     // zero-load member — that would drag the average down and invent a person.
     expect(page).toContain('if (!perMember.has(e.assignee_id)) continue;');
+  });
+
+  it('tells the assessor which reads actually succeeded', () => {
+    // A failed query and a genuinely quiet week both arrive as zero. Without
+    // this the §51 ✓ list turns a source failure into "Documents are current".
+    expect(page).toContain('const unavailable: Evidence[] = [];');
+    expect(page).toContain("if (tomorrowEventsRes.error) unavailable.push('calendar_tomorrow');");
+    expect(page).toContain('unavailable,');
+    // `cnt` used to swallow the error into a zero.
+    expect(page).toContain('return error ? { value: 0, known: false } : { value: n ?? 0, known: true };');
+  });
+
+  it('knows when the week was longer than the page asked for', () => {
+    // The week is capped at 200 events; an exact count is what distinguishes a
+    // fully-measured quiet week from a truncated busy one.
+    expect(page).toContain('const weekTruncated = typeof weekEventsRes.count === \'number\' && weekEventsRes.count > weekEvents.length;');
+    expect(page).toContain("if (weekEventsRes.error || weekTruncated) unavailable.push('calendar_week');");
   });
 
   it('does not pay for a count nothing reads', () => {

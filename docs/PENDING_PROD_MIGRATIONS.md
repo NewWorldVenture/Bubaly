@@ -26,7 +26,7 @@ from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
 
-`0255` through `0267` are all outside the unchanged pinned bundle. Code
+`0255` through `0268` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
 application.
 
@@ -43,6 +43,8 @@ applied:
 | `0265_family_facts_provenance` | `source`, `confidence` and `expires_at` on `family_facts`, with a backfill classifying existing rows by the `Learned by Bubaly` note prefix they carry today. Additive; changes no existing row's meaning | Three added columns, two check constraints, two indexes |
 | `0266_document_vault_boundary` | Makes the Secure Vault real. `documents` SELECT/INSERT/UPDATE/DELETE and the three `documents` storage-bucket policies now consult `is_sensitive_document(is_secure, category)` and `can_manage_family`. **Closes a live leak**: before this, any member — including a child with a PIN login — could read every vault row (with its `storage_path`), fetch the bytes, move a file out of the vault, or delete it | Four table policies + three storage policies recreated, one new function, one index |
 | `0267_money_write_boundary` | `financial_accounts`, `transactions`, `budgets`, `bills`, `savings_goals`: INSERT/UPDATE/DELETE move to `can_manage_family`; SELECT deliberately unchanged. **Also drops 0006's `"Members can manage <table>"` `FOR ALL` policy**, which 0109 left in place beside the four named ones — permissive policies are OR'd, so that one had been the effective rule all along and 0109's "repair" was decoration | Five policies dropped, twenty recreated, per table via the 0109 loop shape |
+
+| `0268_suggestion_expiry` | `expires_at` on `family_playbook_suggestions`, so a suggestion offered with a deadline keeps it through acceptance instead of becoming a permanent fact. Additive and nullable | One added column |
 
 `0266` and `0267` are the first two migrations in this range that **take capability away from a role**. Both are proved behaviourally against a real Postgres as an `authenticated` session — `docs/audit/document-vault-boundary-check.sql` and `docs/audit/money-write-boundary-check.sql` — and both proofs fail without their migration. The money proof also asserts the *whole* policy set rather than only the policies it wrote, which is the check that caught the `FOR ALL` survivor; without it `0267` would have applied cleanly and changed nothing.
 

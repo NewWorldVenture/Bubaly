@@ -4,7 +4,7 @@ import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-re
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
-import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
+import { assessReadiness, overallReadiness, type Evidence, type ReadinessSignals } from '@/lib/readiness/assess';
 import { detectConflicts, type TimedEvent } from '@/lib/family/conflicts';
 import { mostLoaded } from '@/lib/operating-index/score';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
@@ -71,21 +71,29 @@ export default async function ReadinessPage() {
   const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
 
   // Forward-looking horizon readiness (tomorrow / week / month). Counts are
-  // best-effort: a table from an unapplied migration yields 0, never an error.
+  // best-effort — a table from an unapplied migration yields 0, never an error
+  // — but "best effort" and "nothing to report" are different answers, and the
+  // §51 card now makes positive claims ("Documents are current"). So each read
+  // reports whether it actually succeeded, and `unavailable` carries the ones
+  // that did not through to the assessor, which then says the check could not
+  // be run rather than that it passed.
   const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
   const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
-  const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>) => {
-    const { count: n, error } = await q; return error ? 0 : (n ?? 0);
+  const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>): Promise<{ value: number; known: boolean }> => {
+    const { count: n, error } = await q;
+    return error ? { value: 0, known: false } : { value: n ?? 0, known: true };
   };
   const [
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
     // The week, for the card that claims to know about the week. It used to be
     // told `conflictsWeek: 0` as a literal, so it could never report a clash.
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+    // `count: 'exact'` so a week with more events than the cap is known to be
+    // truncated rather than quietly reported as fully measured.
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
       .order('starts_at').limit(200),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
@@ -128,17 +136,42 @@ export default async function ReadinessPage() {
     perMember.set(e.assignee_id, perMember.get(e.assignee_id)! + 1);
   }
   const overloadedMembers = mostLoaded(
+    // `openTasks: 0` on purpose, and worth stating: the Family Operating Index
+    // feeds `mostLoaded` events AND open tasks, so this is the same RULE over a
+    // narrower input, not the same answer. It can therefore name nobody where
+    // that page would — never the reverse — which is the safe direction for a
+    // gap whose whole job is to send someone there.
     [...perMember.entries()].map(([memberId, upcoming]) => ({ memberId, name: memberId, upcoming, openTasks: 0 })),
   ) ? 1 : 0;
+
+  // WHAT WE ACTUALLY MANAGED TO READ. A failed query and a genuinely quiet week
+  // both arrive as zero; only this tells them apart, and the §51 card needs the
+  // difference the moment it starts saying "Documents are current".
+  const weekTruncated = typeof weekEventsRes.count === 'number' && weekEventsRes.count > weekEvents.length;
+  const unavailable: Evidence[] = [];
+  if (tomorrowEventsRes.error) unavailable.push('calendar_tomorrow');
+  if (weekEventsRes.error || weekTruncated) unavailable.push('calendar_week');
+  // The roster is a primary read (a failure already fails the page above), so
+  // the workload is unknown only when the week it is measured over is.
+  if (!dinnerTomorrowRes.known) unavailable.push('meals_tomorrow');
+  if (!mealsRes.data) unavailable.push('meals_week');
+  if (!overduePrepSteps.known) unavailable.push('prep_steps');
+  if (!openPrepPlans.known) unavailable.push('prep_plans');
+  if (!billsDueWeek.known) unavailable.push('bills');
+  if (!expiringDocsMonth.known) unavailable.push('documents');
+  if (!upcomingTripsMonth.known) unavailable.push('trips');
 
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
     tomorrowConflicts, tomorrowUnassigned: tEvents.filter((e) => !e.assignee_id).length,
-    dinnerPlannedTomorrow: dinnerTomorrowRes > 0,
-    conflictsWeek, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
-    expiringDocsMonth, overloadedMembers, upcomingTripsMonth, openPrepPlans,
+    dinnerPlannedTomorrow: dinnerTomorrowRes.value > 0,
+    conflictsWeek, unplannedDinnersWeek,
+    overduePrepSteps: overduePrepSteps.value, billsDueWeek: billsDueWeek.value,
+    expiringDocsMonth: expiringDocsMonth.value, overloadedMembers,
+    upcomingTripsMonth: upcomingTripsMonth.value, openPrepPlans: openPrepPlans.value,
+    unavailable,
   };
   const horizonCards = assessReadiness(signals);
 

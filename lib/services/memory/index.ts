@@ -168,6 +168,11 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   return rememberUnconfirmed(scope, {
     category, key, content, memberId: input.memberId ?? null, source: input.source,
     confidence: clampConfidence(input.confidence), evidence: input.note ?? null,
+    // The inbox is where the time-bound facts mostly land — Bubaly noticing
+    // "swim class on Thursdays" is exactly the kind of thing that stops being
+    // true. Dropping the deadline here meant accepting the card made it
+    // permanent (0268).
+    expiresAt: normalizeExpiry(input.expiresAt),
   });
 }
 
@@ -212,8 +217,14 @@ async function rememberConfirmed(
         // inferred is correcting it, not claiming to have said it first — and
         // under the old notes-prefix scheme this very write was what erased
         // the provenance and hid the row from "clear what Bubaly learned".
-        // A restated fact does keep its expiry: the value is fresh again.
-        expires_at: null,
+        //
+        // The expiry is whatever the restatement said. Writing `null` here
+        // unconditionally — as this did — threw away a deadline the caller had
+        // just supplied, so "remember the swim class runs until December" made
+        // it permanent. No deadline given still means no deadline: restating a
+        // value is saying it is true now, not that it expires when the old one
+        // did.
+        expires_at: input.expiresAt,
       })
       .eq('id', existing.id)
       .eq('family_id', scope.familyId)
@@ -266,7 +277,7 @@ export function memorySignature(input: { memberId: string | null; category: stri
 
 async function rememberUnconfirmed(
   scope: ServiceScope,
-  input: { category: FactCategory; key: string; content: string; memberId: string | null; source: MemorySource; confidence: number; evidence: string | null },
+  input: { category: FactCategory; key: string; content: string; memberId: string | null; source: MemorySource; confidence: number; evidence: string | null; expiresAt: string | null },
 ): Promise<ServiceResult<RememberResult>> {
   const signature = memorySignature(input);
   const { data: existing, error: probeError } = await scope.db
@@ -293,6 +304,7 @@ async function rememberUnconfirmed(
       value: input.content,
       evidence,
       confidence: input.confidence,
+      expires_at: input.expiresAt,
       signature,
       status: 'suggested',
       created_by: scope.userId,
@@ -412,6 +424,9 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
       // How sure Bubaly was, which the move across used to discard at the one
       // moment a person is deciding whether to keep the belief.
       confidence: suggestion.confidence,
+      // And when it stops being true. A card offered as "until December" that
+      // became permanent on acceptance was the same discard, one field over.
+      expires_at: suggestion.expires_at ?? null,
       created_by: scope.userId,
     })
     .select('*')
