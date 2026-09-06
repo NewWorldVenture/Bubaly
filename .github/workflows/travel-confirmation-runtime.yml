@@ -87,6 +87,6 @@ jobs:
           docker exec -i "$TRAVEL_IMPORT_CONTAINER" \
             psql -X --quiet --output=/dev/null --no-password --host=/var/run/postgresql \
             --username=postgres --dbname=bubaly_travel_import_ci \
-            --set=ON_ERROR_STOP=1 --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            --set=ON_ERROR_STOP=1 --set=VERBOSITY=terse --set=SHOW_CONTEXT=never --file=- \
             < tests/fixtures/0270-travel-confirmation-runtime.sql
           bash tests/fixtures/0270-travel-confirmation-concurrency.sh
