@@ -27,7 +27,7 @@ family is right.
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
 | **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
-| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, the raw-insert sites that bypassed it are down to one (`lib/server/notifications.ts`), and `child_channels` IS consulted — at delivery, by both push and email. What remains is that last generator, and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
+| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, EVERY site that bypassed it has the window — the batch generator keeps its own insert but takes `deliveryTimeFor` — and `child_channels` IS consulted, at delivery, by both push and email. What remains of this row is the push channel itself and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
 | **30** | high / M | IDEMPOTENCY | A parent types "add soccer practice Saturday at 9" into Bubaly's chat, the phone loses signal mid-answer and the app re-sends — and the family now has two soccer practices on the calendar, the exact duplicate the concierge path is protected against. The same applies to a double-tapped send, a reloaded tab, or Bubaly's own retry of a chat write: nothing can tell an already-succeeded write from a new one, so the family cleans up duplicate chores, duplicate grocery lines and duplicate reminders by hand and stops trusting the assistant with anything that matters. |
@@ -112,6 +112,39 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§21, the last writer that could still wake a house at 2am.**
+  `generateFamilyNotifications` was the final entry on the write-boundary
+  ratchet, carried for tranches with the note "needs its own tranche". It does
+  not route through `notify()` — and now, deliberately, it still does not.
+
+  **The exemption is justified rather than owed.** It assembles up to 150 rows
+  across events, reminders and medications, each type with its own dedupe read,
+  and inserts them in ONE batch. Pushing that through `notify()` would turn one
+  insert into 150 round trips on a cron, to re-solve duplicates the function
+  already handles. What it was actually missing was never dedupe: it was the
+  quiet-hours window.
+
+  So it takes the window and keeps the batch. `deliveryTimeFor` is the decision
+  `notify()` already made, lifted out and exported, and the generator resolves it
+  ONCE for the whole batch — every row belongs to one family, so a per-row lookup
+  would be the same answer fetched 150 times. One definition of "when does this
+  land", because two would eventually disagree and the one that drifts is the one
+  nobody is testing.
+
+  **"Does not call `notify()`" and "ignores quiet hours" turned out to be
+  different claims**, and only the second was ever the problem. The boundary test
+  caught this directly: removing the entry from `ALLOWED` made the list assert
+  something untrue, because the file IS still a raw-insert site. It stays listed,
+  with its reason rewritten from debt to exemption, and its actual behaviour
+  asserted in a block of its own.
+
+  **A family that cannot be read is sent to, not held.** When the scope lookup
+  fails the zone is unknown, and a notice that arrives is recoverable where one
+  held for eight hours against a guessed clock is not.
+
+  Still open in §21: the push channel itself, and the fact that no UI exists for
+  a parent to set `child_channels` — a product decision, not a bug.
 
 - **§33 (in part), the two surfaces a family would actually ask about now leave a
   record.** The row says a family writes in that "Bubaly stopped doing my Sunday
