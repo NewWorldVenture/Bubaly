@@ -18,11 +18,26 @@ import { RUN_STATES } from '@/lib/ai/runs/states';
 
 export const AI_ACTIVITY_PAGE_SIZE = 25;
 
-/** The columns the console shows. Selected by name so a new column never leaks by default. */
-const COLUMNS =
-  'id, family_id, feature, kind, status, model, prompt_tokens, completion_tokens, ' +
-  'latency_ms, error, request_text, requested_by, requested_by_member_id, ' +
-  'conversation_id, created_at, started_at, completed_at';
+/**
+ * The columns the console shows. Selected by name so a new column never leaks
+ * by default.
+ *
+ * Typed against the GENERATED row type rather than written as a string. A
+ * hand-written select list is a runtime failure waiting for its first typo:
+ * PostgREST rejects the query, the page shows its read-error state, and neither
+ * a stubbed unit test nor `next build` would have noticed. `satisfies` turns
+ * that into a compile error instead. (`created_at` is real but lives on the
+ * `& Stamps` half of the row type, which is exactly the sort of thing worth
+ * having the compiler confirm rather than eyeballing.)
+ */
+const COLUMN_LIST = [
+  'id', 'family_id', 'feature', 'kind', 'status', 'model',
+  'prompt_tokens', 'completion_tokens', 'latency_ms', 'error', 'request_text',
+  'requested_by', 'requested_by_member_id', 'conversation_id',
+  'created_at', 'started_at', 'completed_at',
+] as const satisfies readonly (keyof Database['public']['Tables']['ai_requests']['Row'])[];
+
+const COLUMNS = COLUMN_LIST.join(', ');
 
 export type AiActivityRow = {
   id: string;
@@ -91,9 +106,32 @@ export function normalizeStatusFilter(raw: string | undefined): { status: AiRunS
   return match ? { status: match, ignored: null } : { status: null, ignored: value };
 }
 
-/** `%` and `_` are wildcards in ILIKE; a family searching for "50%" means the characters. */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+/**
+ * Make a free-text term safe to embed in a PostgREST `or=(...)` filter.
+ *
+ * TWO different escaping problems, and only the second one is obvious.
+ *
+ * 1. `%` and `_` are ILIKE wildcards. A family searching for "50%" means those
+ *    characters, not "50 followed by anything".
+ * 2. `,` `(` `)` are STRUCTURAL inside `or=(...)`: they separate and group the
+ *    conditions. Interpolating a term containing one splits the filter into
+ *    pieces PostgREST then rejects or, worse, reads as different conditions.
+ *    Every other `.or()` in this repo interpolates a UUID or an ISO timestamp,
+ *    which cannot contain them; this is the only one taking a person's text.
+ *
+ * The structural characters are replaced with a space rather than quoted and
+ * escaped. Quoting is the more general fix, but its correctness rests on
+ * PostgREST's tokenizer behaving as documented, which nothing here can test —
+ * and a search box that quietly drops a parenthesis is a far smaller failure
+ * than one that returns wrong rows. Dots survive, because `wallet.coach` is a
+ * feature name someone will reasonably type, and a dot inside the value half of
+ * `column.operator.value` is not structural.
+ */
+function safeSearchTerm(value: string): string {
+  return value
+    .replace(/[(),]/g, ' ')
+    .replace(/[\\%_]/g, (c) => `\\${c}`)
+    .trim();
 }
 
 export type AiActivityPage = {
@@ -131,9 +169,9 @@ export async function listAiActivity(
   if (status) query = query.eq('status', status);
   if (filters.feature) query = query.eq('feature', filters.feature);
   if (filters.familyId) query = query.eq('family_id', filters.familyId);
-  const q = (filters.q ?? '').trim();
-  if (q) {
-    const like = `%${escapeLike(q)}%`;
+  const term = safeSearchTerm(filters.q ?? '');
+  if (term) {
+    const like = `%${term}%`;
     query = query.or(`feature.ilike.${like},error.ilike.${like}`);
   }
 

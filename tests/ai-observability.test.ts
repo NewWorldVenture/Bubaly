@@ -7,6 +7,7 @@
 // planner ever opened a row. Of ~50 model entrypoints, five carried one.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ServiceScope } from '@/lib/services/types';
+import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 
 const createRequest = vi.fn();
 const updateRequest = vi.fn();
@@ -153,3 +154,34 @@ describe('bookkeeping never fails the family’s work', () => {
     await expect(withAiRequest(scope, { feature: 'f', text: 't' }, async () => { throw boom; })).rejects.toBe(boom);
   });
 });
+
+describe('the row cannot be longer than the column\'s own contract', () => {
+  it('truncates request text at MAX_AI_REQUEST_TEXT_CHARS, wherever the caller got it', async () => {
+    // The concierge intake already caps this exact column; a surface reaching
+    // `ai_requests` through the wrapper was the only way in without that cap.
+    // The chat assistant's own message limit is 8000 — twice this one — so it
+    // was already through it, and `travel.research` interpolated a destination
+    // nothing bounded at all.
+    //
+    // Enforced here rather than at each caller because "keep it short" is this
+    // module's documented contract, and fifteen call sites remembering a rule
+    // is the same rule forgotten somewhere.
+    const huge = 'x'.repeat(MAX_AI_REQUEST_TEXT_CHARS + 5_000);
+    await withAiRequest(scope, { feature: 'travel.research', text: huge }, async (obs) => {
+      obs.used('m', null);
+      return 'ok';
+    });
+    const [, input] = createRequest.mock.calls[0] as [unknown, { requestText: string }];
+    expect(input.requestText).toHaveLength(MAX_AI_REQUEST_TEXT_CHARS);
+  });
+
+  it('leaves a short one exactly as the caller wrote it', async () => {
+    await withAiRequest(scope, { feature: 'notes.assist', text: 'Analyse a note' }, async (obs) => {
+      obs.used('m', null);
+      return 'ok';
+    });
+    const [, input] = createRequest.mock.calls[0] as [unknown, { requestText: string }];
+    expect(input.requestText).toBe('Analyse a note');
+  });
+});
+
