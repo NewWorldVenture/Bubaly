@@ -109,7 +109,7 @@ export type RememberInput = {
   /** Free-text context. For AI sources this is the evidence shown on the inbox card. */
   note?: string | null;
   pinned?: boolean;
-  /** When this stops being true. Null (the default) is a fact with no shelf life. */
+  /** ISO date or zoned timestamp. Omitted/null or blank clears a restated fact's expiry. */
   expiresAt?: string | null;
 };
 
@@ -150,6 +150,13 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
   }
 
+  // Read the deadline once, before either lane, so a malformed one is refused
+  // rather than quietly turned into "remember this forever".
+  const expiry = readExpiry(input.expiresAt);
+  if (!expiry.ok) {
+    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a real date as 2026-09-30, or a time with its zone as 2026-09-30T17:00:00Z.', { code: SERVICE_CODES.invalidInput });
+  }
+
   // "Allow memory" (Settings → Bubaly AI) is about what BUBALY keeps: the copy
   // reads "Let Bubaly remember what it learns about your family … and use it
   // next time." It was stored, toggled and read by nothing, so a family that
@@ -163,13 +170,6 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     if (!settings.memoryEnabled) {
       return fail('This family has memory switched off, so Bubaly does not keep what it notices.', { code: SERVICE_CODES.denied });
     }
-  }
-
-  // Read the deadline once, before either lane, so a malformed one is refused
-  // rather than quietly turned into "remember this forever".
-  const expiry = readExpiry(input.expiresAt);
-  if (!expiry.ok) {
-    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a real date as 2026-09-30, or a time with its zone as 2026-09-30T17:00:00Z.', { code: SERVICE_CODES.invalidInput });
   }
 
   if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: expiry.at });
@@ -224,7 +224,7 @@ function clampConfidence(value: number | null | undefined): number {
  * already a `ServiceResult` path and this is a message a person can act on.
  */
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
-const ZONED_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ZONED_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 
 /** True when y-m-d is a real calendar date — `Date.parse` rolls 2026-02-30 into March instead of refusing it. */
 function isRealCalendarDate(year: number, month: number, day: number): boolean {
@@ -236,6 +236,7 @@ function isRealCalendarDate(year: number, month: number, day: number): boolean {
 
 function readExpiry(value: string | null | undefined): { ok: true; at: string | null } | { ok: false } {
   if (value === null || value === undefined) return { ok: true, at: null };
+  if (typeof value !== 'string') return { ok: false };
   const trimmed = value.trim();
   if (!trimmed) return { ok: true, at: null };
 
@@ -463,6 +464,12 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
       return fail(describeDbError(error, 'Could not read that memory.'), { code: SERVICE_CODES.db });
     }
     return ok({ fact: fact ?? null, alreadyAccepted: true });
+  }
+
+  // Validate the stored timestamp without reformatting it: PostgreSQL can
+  // return fractional seconds more precise than the JavaScript clock.
+  if (suggestion.expires_at != null && !Number.isFinite(Date.parse(suggestion.expires_at))) {
+    return fail('That suggestion has an invalid expiry date. Dismiss it or add an up-to-date memory.', { code: SERVICE_CODES.invalidInput });
   }
 
   // A card whose own deadline has already passed cannot be accepted into a

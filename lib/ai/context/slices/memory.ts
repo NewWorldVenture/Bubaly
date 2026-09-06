@@ -18,7 +18,7 @@ const MAX_PENDING = 5;
 
 export type MemorySliceData = {
   facts: { id: string; category: string; label: string; value: string; member: string | null; pinned: boolean; source: 'person' | 'bubaly'; confidence: number | null }[];
-  pending: { id: string; category: string; label: string; value: string; confidence: number }[];
+  pending: { id: string; category: string; label: string; value: string; confidence: number; expires_at: string | null }[];
   /** How many confirmed facts were withheld from this viewer by category policy. */
   withheld: number;
 };
@@ -61,7 +61,7 @@ export const memorySlice: SliceDefinition = {
         confidence: f.confidence,
       })),
       pending: canManage
-        ? memories.data.pending.slice(0, MAX_PENDING).map((s) => ({ id: s.id, category: s.category, label: s.label, value: s.value, confidence: s.confidence }))
+        ? memories.data.pending.filter((s) => !isExpiredFact(s, now)).slice(0, MAX_PENDING).map((s) => ({ id: s.id, category: s.category, label: s.label, value: s.value, confidence: s.confidence, expires_at: s.expires_at ?? null }))
         : [],
       withheld: memories.data.facts.length - visible.length,
     };
@@ -83,7 +83,7 @@ export const memorySlice: SliceDefinition = {
     }
     if (!data.facts.length) lines.push('- Nothing remembered yet beyond what the other sections show.');
     for (const s of data.pending) {
-      lines.push(`- Unconfirmed guess (not a fact, do not rely on it): ${fenceUntrusted('suggestion', `${s.label}: ${s.value}`)}`);
+      lines.push(`- Unconfirmed guess (not a fact, do not rely on it): ${fenceUntrusted('suggestion', `${s.label}: ${s.value}`)}${s.expires_at ? ` (expires ${fenceUntrusted('expiry', s.expires_at)})` : ''}`);
     }
 
     return ok({ data, count: data.facts.length + data.pending.length, lines });

@@ -131,6 +131,9 @@ export function PlaybookModule() {
             const conf = confidenceMeta(s.confidence);
             const cat = (FACT_CATEGORY_LABELS[s.category as FactCategory] ? s.category : 'other') as FactCategory;
             const busy = busyId === s.id;
+            const expiry = s.expires_at ? new Date(s.expires_at) : null;
+            const invalidExpiry = expiry !== null && !Number.isFinite(expiry.getTime());
+            const expired = expiry !== null && expiry.getTime() <= Date.now();
             return (
               <li
                 key={s.id}
@@ -151,6 +154,18 @@ export function PlaybookModule() {
                         {s.member_id ? `${memberName(s.member_id)} · ` : ''}{s.evidence ?? 'Learned from your family’s activity'}
                       </span>
                     </div>
+                    {expiry && (
+                      <p className={cn('mt-2 text-xs', expired || invalidExpiry ? 'text-amber-500' : 'text-muted')}>
+                        {invalidExpiry ? 'Invalid expiry. Dismiss this suggestion and add it again.' : (
+                          <>
+                            {expired ? 'Expired: ' : 'Stops being true: '}
+                            <time dateTime={s.expires_at ?? undefined}>
+                              {expiry.toLocaleString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}
+                            </time>
+                          </>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
@@ -162,7 +177,7 @@ export function PlaybookModule() {
                     >
                       <X className="h-4 w-4" />
                     </button>
-                    <Button onClick={() => onAccept(s)} disabled={busy} size="sm">
+                    <Button onClick={() => onAccept(s)} disabled={busy || expired || invalidExpiry} size="sm">
                       <Check className="h-4 w-4" />
                       Save
                     </Button>
