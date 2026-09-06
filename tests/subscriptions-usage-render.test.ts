@@ -8,7 +8,7 @@ import { SubscriptionsModule } from '@/components/modules/subscriptions-module';
 type Fixture = SubLike & { id: string; name: string; category: string | null; next_charge: string | null };
 const state = vi.hoisted(() => ({ subs: [] as Fixture[], createClient: vi.fn() }));
 
-vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'test-family', userId: 'test-user' }) }));
+vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'test-family', userId: 'test-user', selfMember: { id: 'test-member', role: 'parent', is_active: true } }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({
   useRealtimeQuery: () => ({ data: state.subs, loading: false, error: null, refresh: vi.fn() }),
 }));
