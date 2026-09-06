@@ -15,14 +15,12 @@ const SURFACE = [
 ];
 
 /**
- * `components/modules/grocery-module.tsx` is NOT on that list, and not because
- * it was skipped: nothing imports it. `/dashboard/grocery` renders
- * `ShoppingModule`, there is no barrel and no dynamic import, and the only other
- * mention of the file in the repository is a ratchet listing it by name. It is a
- * second, unreachable copy of the shopping list — so "fixing" its insert would
- * have changed a file no family loads while the live one kept duplicating milk.
+ * There used to be a fourth: `components/modules/grocery-module.tsx`, a second
+ * and unreachable copy of the shopping list. `/dashboard/grocery` renders
+ * `ShoppingModule`, nothing imported the duplicate, and converting its insert
+ * would have changed a file no family loads while the live one kept duplicating
+ * milk. It has since been deleted, so the three above are the whole surface.
  */
-const DEAD_MODULE = 'components/modules/grocery-module.tsx';
 
 const WRITE = /\.from\(\s*['"]grocery_items['"]\s*\)[\s\S]{0,200}?\.(insert|upsert)\s*\(/g;
 
@@ -76,12 +74,5 @@ describe('the grocery surface adds through the service', () => {
       expect(byFlag, `${file} has open-list lookups`).toBeGreaterThan(0);
       expect(byStamp, `${file} checks archived_at as often as is_archived`).toBe(byFlag);
     }
-  });
-
-  it('names the unreachable duplicate rather than quietly converting it', () => {
-    // Fails the day someone deletes it or wires it up — either is a deliberate
-    // act that should edit this list, not drift past it.
-    expect(insertsIn(DEAD_MODULE).length, 'still the old client-side insert').toBeGreaterThan(0);
-    expect(code(DEAD_MODULE)).not.toMatch(/from '@\/app\/\(app\)\/dashboard\/grocery\/actions'/);
   });
 });
