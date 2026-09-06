@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { cacheKey, readCache, writeCache } from '@/lib/offline/cache';
+import { realtimeChannelFor } from '@/lib/realtime/published-tables';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
@@ -84,12 +85,19 @@ export function useRealtimeQuery<T>({
   }, [refresh]);
 
   useEffect(() => {
+    // Only subscribe to a table the database actually publishes. Realtime
+    // happily accepts a channel on an unpublished table and then never sends
+    // anything, so the socket looks healthy while the screen quietly goes
+    // stale. Holding it costs a connection slot and phone battery and buys
+    // nothing; the mount/deps refetch above is the honest refresh for those.
+    const spec = realtimeChannelFor(table, familyId);
+    if (!spec) return;
     const supabase = createClient();
     const channel = supabase
-      .channel(`${table}:${familyId}`)
+      .channel(spec.name)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table, filter: `family_id=eq.${familyId}` },
+        { event: '*', schema: 'public', table, filter: spec.filter },
         () => { void refresh(); },
       )
       .subscribe();
