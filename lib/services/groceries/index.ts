@@ -258,6 +258,14 @@ export async function checkItem(scope: ServiceScope, itemId: string, checked = t
     return fail(describeDbError(error, 'Could not update that item.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That item could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'groceries',
+    action: 'update',
+    title: checked ? `Ticked ${data.name} off the shopping list` : `Put ${data.name} back on the shopping list`,
+    href: '/dashboard/grocery',
+    resourceId: data.id,
+  });
   return ok(data);
 }
 
@@ -268,13 +276,22 @@ export async function removeItem(scope: ServiceScope, itemId: string): Promise<S
     .delete()
     .eq('id', itemId)
     .eq('family_id', scope.familyId)
-    .select('id')
+    // The name comes back with the deleted row; asking afterwards is too late.
+    .select('id, name')
     .maybeSingle();
   if (error) {
     console.error('[service:groceries] remove item failed', error);
     return fail(describeDbError(error, 'Could not remove that item.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That item could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'groceries',
+    action: 'delete',
+    title: `Took ${data.name} off the shopping list`,
+    href: '/dashboard/grocery',
+    resourceId: data.id,
+  });
   return ok({ id: data.id });
 }
 
@@ -290,12 +307,26 @@ export async function clearChecked(scope: ServiceScope, listId: string): Promise
     .eq('family_id', scope.familyId)
     .eq('list_id', listId)
     .eq('is_checked', true)
-    .select('id');
+    .select('id, name');
   if (error) {
     console.error('[service:groceries] clear checked failed', error);
     return fail(describeDbError(error, 'Could not clear the checked items.'), { code: SERVICE_CODES.db });
   }
-  return ok({ removed: (data ?? []).length });
+
+  const removed = data ?? [];
+  // Nothing cleared is not a change, and a trail line for it would be noise.
+  if (removed.length) {
+    await recordActivitySafely(scope, {
+      agent: 'groceries',
+      action: 'delete',
+      title: removed.length === 1
+        ? `Cleared ${removed[0]!.name} from the shopping list`
+        : `Cleared ${removed.length} bought items from the shopping list`,
+      detail: removed.map((r) => r.name).join(', ').slice(0, 500),
+      href: '/dashboard/grocery',
+    });
+  }
+  return ok({ removed: removed.length });
 }
 
 // ── From the meal plan ──────────────────────────────────────────────────────

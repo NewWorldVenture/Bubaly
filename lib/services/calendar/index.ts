@@ -250,12 +250,27 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
     .delete()
     .eq('family_id', scope.familyId)
     .in('id', ids)
-    .select('id');
+    .select('id, title');
   if (error) {
     console.error('[service:calendar] batch delete failed', error);
     return fail(describeDbError(error, 'Could not undo those events.'), { code: SERVICE_CODES.db });
   }
-  return ok({ removed: (data ?? []).length });
+
+  const removed = data ?? [];
+  // The batch create records a line; without this its Undo left none, so the
+  // trail showed a week going onto the calendar and never coming off.
+  if (removed.length) {
+    await recordActivitySafely(scope, {
+      agent: 'calendar',
+      action: 'delete',
+      title: removed.length === 1
+        ? `Removed "${removed[0]!.title}" from the calendar`
+        : `Removed ${removed.length} events from the calendar`,
+      detail: removed.map((r) => r.title).join(', ').slice(0, 500),
+      href: '/dashboard/calendar',
+    });
+  }
+  return ok({ removed: removed.length });
 }
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };

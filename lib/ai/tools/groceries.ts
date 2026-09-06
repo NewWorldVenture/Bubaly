@@ -137,6 +137,10 @@ export const groceryTools: ToolDefinition[] = [
     capability: 'edit',
     risk: 'low',
     readOnly: false,
+    // The service records this one now, with its own copy, so the family sees
+    // the same line whether Bubaly did it or a person did. Without this the
+    // executor would add a second, blander entry for the assistant's path.
+    activityFrom: 'service',
     input: z.object({ item_id: z.string(), checked: z.boolean().nullish().describe('Defaults to true') }),
     output: itemOutput,
     summarize: (_input, output) => (output.is_checked ? `Ticked ${output.name} off the list` : `Put ${output.name} back on the list`),
@@ -157,6 +161,10 @@ export const groceryTools: ToolDefinition[] = [
     capability: 'delete',
     risk: 'medium',
     readOnly: false,
+    // The service records this one now, with its own copy, so the family sees
+    // the same line whether Bubaly did it or a person did. Without this the
+    // executor would add a second, blander entry for the assistant's path.
+    activityFrom: 'service',
     input: z.object({ list_id: z.string() }),
     output: z.object({ removed: z.number() }),
     summarize: (_input, output) => `Cleared ${plural(output.removed, 'bought item')} off the shopping list`,
