@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   shortTime, sortRides, groupByDate, driverConflicts, upcomingRides,
-  needsDriverCount, type RideLike,
+  needsDriverCount, assessDriverSchedule, type RideLike,
 } from '@/lib/rides/schedule';
 
 const ride = (over: Partial<RideLike>): RideLike => ({
@@ -66,6 +66,85 @@ describe('upcomingRides', () => {
     const done = ride({ id: 'd', ride_date: '2026-06-26', status: 'completed' });
     const out = upcomingRides([past, today, future, done], '2026-06-21');
     expect(out.map((r) => r.id)).toEqual(['t', 'f']);
+  });
+});
+
+describe('recorded driver windows', () => {
+  it('flags different pickups inside a recorded ride window', () => {
+    const result = assessDriverSchedule([
+      ride({ id: 'a', pickup_time: '08:00', dropoff_time: '09:00' }),
+      ride({ id: 'b', pickup_time: '08:30', dropoff_time: '08:45' }),
+    ]);
+    expect([...result.conflicts].sort()).toEqual(['a', 'b']);
+    expect(result.incompleteTiming.size).toBe(0);
+  });
+
+  it('retains proven overlap when the later drop-off is unknown', () => {
+    const result = assessDriverSchedule([
+      ride({ id: 'a', pickup_time: '08:00', dropoff_time: '09:00' }),
+      ride({ id: 'b', pickup_time: '08:30', dropoff_time: null }),
+    ]);
+    expect([...result.conflicts].sort()).toEqual(['a', 'b']);
+    expect([...result.incompleteTiming]).toEqual(['b']);
+  });
+
+  it('does not invent a duration for an unknown earlier drop-off', () => {
+    const result = assessDriverSchedule([
+      ride({ id: 'a', pickup_time: '08:00', dropoff_time: null }),
+      ride({ id: 'b', pickup_time: '08:30', dropoff_time: '09:00' }),
+    ]);
+    expect(result.conflicts.size).toBe(0);
+    expect([...result.incompleteTiming]).toEqual(['a']);
+  });
+
+  it('keeps touching windows distinct without adding a fictional travel buffer', () => {
+    expect(driverConflicts([
+      ride({ id: 'a', pickup_time: '08:00', dropoff_time: '08:30' }),
+      ride({ id: 'b', pickup_time: '08:30', dropoff_time: '09:00' }),
+    ]).size).toBe(0);
+  });
+
+  it('separates drivers and dates and excludes completed or cancelled rides', () => {
+    const result = assessDriverSchedule([
+      ride({ id: 'a', pickup_time: '08:00', dropoff_time: '09:00' }),
+      ride({ id: 'b', driver_id: 'd2', pickup_time: '08:30', dropoff_time: '09:00' }),
+      ride({ id: 'c', ride_date: '2026-06-23', pickup_time: '08:30', dropoff_time: '09:00' }),
+      ride({ id: 'done', status: 'completed' }),
+      ride({ id: 'cancelled', status: 'cancelled' }),
+      ride({ id: 'unassigned', driver_id: null }),
+    ]);
+    expect(result.conflicts.size).toBe(0);
+    expect(result.incompleteTiming.size).toBe(0);
+  });
+
+  it.each([
+    { pickup_time: null, dropoff_time: '09:00' },
+    { pickup_time: '25:00', dropoff_time: '09:00' },
+    { pickup_time: '08:60', dropoff_time: '09:00' },
+    { pickup_time: '08:00', dropoff_time: '08:00' },
+    { pickup_time: '23:30', dropoff_time: '00:30' },
+    { pickup_time: '08:00', dropoff_time: 'bad' },
+    { ride_date: '2026-02-30', pickup_time: '08:00', dropoff_time: '09:00' },
+  ])('marks unsupported timing unknown: %j', (fields) => {
+    const result = assessDriverSchedule([ride({ id: 'a', ...fields })]);
+    expect([...result.incompleteTiming]).toEqual(['a']);
+    expect(result.conflicts.size).toBe(0);
+  });
+
+  it('uses recorded seconds and reports all overlapping pairs regardless of input order', () => {
+    const result = assessDriverSchedule([
+      ride({ id: 'c', pickup_time: '08:00:45', dropoff_time: '08:01' }),
+      ride({ id: 'a', pickup_time: '08:00:00', dropoff_time: '08:00:30' }),
+      ride({ id: 'b', pickup_time: '08:00:20', dropoff_time: '08:00:50' }),
+    ]);
+    expect([...result.conflicts].sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('does not double-book a duplicated row and does not mutate source rows', () => {
+    const a = Object.freeze(ride({ id: 'a', pickup_time: '08:00', dropoff_time: '09:00' }));
+    const rows = [a, a];
+    expect(driverConflicts(rows).size).toBe(0);
+    expect(rows).toEqual([a, a]);
   });
 });
 
