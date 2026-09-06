@@ -1,9 +1,17 @@
-// One door into `todo_items`, and an honest account of what is outside it.
+// One door into `todo_items` FROM THIS MODULE, and an honest account of what is
+// outside it.
 //
 // The companion to `todo-write-path.test.ts`: that file proves the actions are
 // right, this one proves the module calls them. A client component with hooks
 // does not render under `environment: 'node'`, and a passing action is exactly
 // what a module still writing straight to PostgREST would leave behind.
+//
+// SCOPE, stated because getting it wrong cost a real bug: this file reads ONE
+// module and can only ever speak for that module. It passed while
+// `next-actions-module.tsx` updated `todo_items` directly, filtering `id` alone,
+// and the tranche report said the table was at zero browser writes on the
+// strength of it. The per-TABLE claim lives in `tests/service-layer-forks.test.ts`,
+// which sweeps every component in the repo.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
