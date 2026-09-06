@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
@@ -154,7 +155,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   // Run AI validation (degrades safely to parent review).
   let verdict: Awaited<ReturnType<typeof validateChoreSubmission>>;
   try {
-    verdict = await validateChoreSubmission({
+    verdict = await validateChoreSubmission(scopeFromUserContext(ctx, supabase), {
       choreTitle: chore.title,
       instructions: chore.instructions ?? chore.description,
       proofKind: proofKind as 'none' | 'photo' | 'video' | 'before_after',
@@ -428,7 +429,7 @@ export async function createChoreAction(formData: FormData): Promise<void> {
 
 /** AI chore-plan generator — returns suggestions for the parent to review. */
 export async function generatePlanAction(prompt: string, kidAges: number[]): Promise<{ items: ChorePlanItem[]; error?: string }> {
-  await requireUserContext();
+  const ctx = await requireUserContext();
   if (!prompt.trim()) return { items: [], error: 'Describe what you want first.' };
-  return generateChorePlan(prompt, kidAges);
+  return generateChorePlan(scopeFromUserContext(ctx, await createServer()), prompt, kidAges);
 }

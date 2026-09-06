@@ -104,11 +104,16 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/ai/wallet/route.ts', "feature: 'wallet.coach'"],
       ['app/api/ai/wallet/child/[childId]/route.ts', "feature: 'wallet.coach.child'"],
       ['app/api/ai/resolve-conflict/route.ts', "feature: 'calendar.resolve-conflict'"],
+      ['lib/social/ai.ts', 'feature: `social.${input.kind}`'],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
       expect(src, `${file} must name its surface`).toContain(feature);
-      expect(src, `${file} must record the model that answered`).toMatch(/obs\.used\((?:completion|done)\.model/);
+      // `provider.model` is the same fact as `completion.model` — a helper that
+      // resolved its provider first names it that way. What is still excluded is
+      // a caller naming its own MODEL constant, which records the model it meant
+      // to use rather than the one that answered.
+      expect(src, `${file} must record the model that answered`).toMatch(/obs\.used\((?:completion|done|provider)\.model/);
     }
   });
 
@@ -283,7 +288,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // room for new silent surfaces to slip in green. Lower it every time a
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
-    // then 22 when the assistant engine adopted it, then 19.
+    // then 22 when the assistant engine adopted it, then 19, then 17.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -291,7 +296,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 19;
+    const CEILING = 17;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
@@ -303,11 +308,14 @@ describe('the remaining silence is counted, not ignored', () => {
     // The scanner has been wrong twice, in both directions, so it gets its own
     // fixtures. Every line here is a file whose behaviour was checked by hand.
     //
-    // Counted: obtains a provider and calls it. These two are here to prove the
-    // scanner still finds real surfaces — swap them for others as they adopt
-    // (`app/api/ai/wallet/route.ts` used to be one of them).
-    expect([...SILENT]).toContain('lib/chores/ai.ts');
-    expect([...SILENT]).toContain('app/api/ai/import/route.ts');
+    // Counted: obtains a provider and calls it. These prove the scanner still
+    // finds real surfaces. Deliberately the two ADMIN/marketing ones rather than
+    // a family-facing route: §33 is about what a family writes in about, so
+    // those adopt first and these stay put. (`app/api/ai/wallet/route.ts` and
+    // `lib/chores/ai.ts` each sat here until they adopted, one tranche apart —
+    // hence picking fixtures that are not next in line.)
+    expect([...SILENT]).toContain('lib/marketing/platform.ts');
+    expect([...SILENT]).toContain('app/api/admin/marketing/ai/route.ts');
     // `lib/ai/assistant-engine.ts` used to be asserted here. It was found only
     // after the backward scan was fixed — a forward regex read its earlier
     // `import type` line and called it type-only — and it has since adopted the

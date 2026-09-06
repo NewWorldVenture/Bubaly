@@ -5,6 +5,8 @@
 // social_ai_generations so history is auditable. No output is published here.
 import 'server-only';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import type { ServiceScope } from '@/lib/services/types';
 import { PROVIDERS, type SocialPlatform } from './capabilities';
 import { type AiGenerationKind } from './ai-kinds';
 
@@ -70,21 +72,30 @@ function instructionFor(input: AiGenerateInput): string {
  * Run a generation. Throws if no AI key is configured so the caller can surface
  * an honest "AI not configured" state rather than returning fabricated text.
  */
-export async function generate(input: AiGenerateInput): Promise<AiGenerateResult> {
+export async function generate(scope: ServiceScope, input: AiGenerateInput): Promise<AiGenerateResult> {
   if (!(await isAIConfigured())) {
     throw new Error('AI is not configured: set OPENAI_API_KEY to enable content generation.');
   }
-  const provider = await resolveProvider();
   const system =
     'You are a senior social media strategist and copywriter for a family-focused brand. ' +
     'Write clear, on-brand, platform-appropriate content. Never invent statistics or fake engagement. ' +
     'Return only the requested content with no preamble.';
 
-  const completion = await provider.complete({
-    system,
-    messages: [{ role: 'user', content: instructionFor(input) }],
-    tools: [],
-  });
-
-  return { kind: input.kind, text: completion.text.trim(), model: provider.model };
+  // This one throws on failure rather than swallowing, so the wrapper's own
+  // catch records it and re-raises unchanged — the route already writes its
+  // `social_ai_logs` error row and answers honestly.
+  return withAiRequest(
+    scope,
+    { feature: `social.${input.kind}`, text: (input.topic ?? input.kind).slice(0, 200) },
+    async (obs) => {
+      const provider = await resolveProvider();
+      const completion = await provider.complete({
+        system,
+        messages: [{ role: 'user', content: instructionFor(input) }],
+        tools: [],
+      });
+      obs.used(provider.model, completion.usage);
+      return { kind: input.kind, text: completion.text.trim(), model: provider.model };
+    },
+  );
 }

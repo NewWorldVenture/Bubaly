@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { getSocialAccess } from '@/lib/social/access';
 import { generate, AI_GENERATION_KINDS, type AiGenerationKind } from '@/lib/social/ai';
 import { isPlatform } from '@/lib/social/capabilities';
@@ -35,14 +36,18 @@ export async function POST(req: Request) {
   const tone = body.tone ? String(body.tone).slice(0, 60) : undefined;
   const source = body.source ? String(body.source).slice(0, 8000) : undefined;
 
+  // One client for the whole handler: the request row, the failure log and the
+  // success log all want it, and three `createServer()` calls for one request
+  // is three of everything it builds.
+  const supabase = await createServer();
+
   let result;
   try {
-    result = await generate({ kind, topic, platform, tone, source });
+    result = await generate(scopeFromUserContext(ctx, supabase), { kind, topic, platform, tone, source });
   } catch (err) {
     console.error('Social AI generation error:', err);
     const message = describeAIError(err).message;
     // Persist the failed attempt for auditability.
-    const supabase = await createServer();
     await supabase.from('social_ai_generations').insert({
       family_id: familyId, user_id: ctx.user.id, kind, platform, prompt: topic,
       input: { tone: tone ?? null, hasSource: Boolean(source) }, status: 'failed',
@@ -51,7 +56,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  const supabase = await createServer();
   await supabase.from('social_ai_generations').insert({
     family_id: familyId,
     user_id: ctx.user.id,
