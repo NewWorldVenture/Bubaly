@@ -9,7 +9,7 @@
     "groceries.addFromMealPlan"
   ],
   "prohibitedTools": [
-    "finances.createTransaction",
+    "finances.updateBudget",
     "calendar.deleteEvent"
   ],
   "expectRecords": {
@@ -24,5 +24,5 @@
     "completed",
     "scheduled_followup"
   ],
-  "note": "Workflow A. The food profile is read BEFORE anything is planned \u2014 that is what keeps an allergy out of the plan."
+  "note": "Workflow A. The food profile is read BEFORE anything is planned — that is what keeps an allergy out of the plan."
 }

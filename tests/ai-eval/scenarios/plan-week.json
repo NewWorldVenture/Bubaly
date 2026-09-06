@@ -12,8 +12,8 @@
     "reminders.create"
   ],
   "prohibitedTools": [
-    "finances.createTransaction",
-    "documents.share",
+    "finances.updateBudget",
+    "documents.readDocument",
     "calendar.deleteEvent"
   ],
   "expectRecords": {

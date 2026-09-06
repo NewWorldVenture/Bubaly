@@ -329,6 +329,35 @@ describe('validatePlan: risk and the pure trust dry run', () => {
     expect(result.issues.find((i) => i.step === 'money')?.message).toMatch(/private to the adults/);
   });
 
+  it('when a refusal is the only thing that happened, the refusal is the answer', () => {
+    // A teen asking "why did we spend so much" produces a plan that is money
+    // all the way down. Every step is denied, nothing is left, and what came
+    // back was "The plan has no step Bubaly can run." — which reads as a fault
+    // in Bubaly and tells the person nothing about what to do instead. The
+    // reason was already computed one function away.
+    const allMoney = validatePlan(plan([
+      step({ key: 'budget', step_type: 'retrieve', tool_name: 'finances.budgetVsActual', input: '{"month":"2026-09"}' }),
+      step({ key: 'cats', step_type: 'retrieve', tool_name: 'finances.spendingByCategory', input: '{"from":"2026-09-01","to":"2026-09-30"}' }),
+    ]), inputsWith({ role: 'teen' }));
+    expect(allMoney).toMatchObject({ ok: false, code: 'empty' });
+    expect(allMoney.ok).toBe(false);
+    if (allMoney.ok) return;
+    expect(allMoney.error).toMatch(/private to the adults/);
+    expect(allMoney.error).not.toMatch(/no step Bubaly can run/);
+    // One sentence, not one per denied step: both steps were refused for the
+    // same reason and a person should read it once.
+    expect(allMoney.error.match(/private to the adults/g)).toHaveLength(1);
+
+    // The generic line still covers the case it was written for — a plan that
+    // simply fell apart, with nothing refused.
+    const nonsense = validatePlan(plan([
+      step({ key: 'ghost', step_type: 'act', tool_name: 'finances.transferMoney', input: '{}' }),
+    ]), inputsWith());
+    expect(nonsense).toMatchObject({ ok: false, code: 'empty' });
+    if (nonsense.ok) return;
+    expect(nonsense.error).toBe('The plan has no step Bubaly can run.');
+  });
+
   it('reads the family’s own dial, not just their trust policies', () => {
     // §11's autonomy dial lives in `family_ai_settings`, which the Trust
     // policies table has never mirrored. The planner read only the policies,
@@ -364,6 +393,40 @@ describe('validatePlan: risk and the pure trust dry run', () => {
     if (!result.ok) return;
     // "Prepare" stages the work rather than dropping it.
     expect(result.steps.map((s) => [s.key, s.approvalRequired])).toEqual([['todo', true]]);
+  });
+
+  it('drops a step that uses a result it does not depend on', () => {
+    // The executor resolves `$fromStep` against the DEPENDENCY results it has
+    // in hand, so this binding is unresolvable by construction — it would fail
+    // at execution, after the plan looked fine to everyone who read it.
+    const result = validatePlan(plan([
+      step({ key: 'trip', step_type: 'act', tool_name: 'trips.findOrCreateVacation', input: '{"title":"Maine"}' }),
+      step({
+        key: 'pack', step_type: 'act', tool_name: 'trips.createPackingList',
+        input: '{"vacation_id":{"$fromStep":"trip","path":"id"}}',
+        depends_on: [],
+      }),
+    ]), inputsWith());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.steps.map((s) => s.key)).toEqual(['trip']);
+    const issue = result.issues.find((i) => i.step === 'pack');
+    expect(issue?.code).toBe('invalid_input');
+    expect(issue?.message).toContain('without depending on it');
+  });
+
+  it('keeps the same step when it does depend on what it reads', () => {
+    const result = validatePlan(plan([
+      step({ key: 'trip', step_type: 'act', tool_name: 'trips.findOrCreateVacation', input: '{"title":"Maine"}' }),
+      step({
+        key: 'pack', step_type: 'act', tool_name: 'trips.createPackingList',
+        input: '{"vacation_id":{"$fromStep":"trip","path":"id"}}',
+        depends_on: ['trip'],
+      }),
+    ]), inputsWith());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.steps.map((s) => s.key)).toEqual(['trip', 'pack']);
   });
 
   it('mirrors the executor gate: a household allow policy beats the risk tier', () => {

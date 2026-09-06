@@ -14,7 +14,7 @@
     "tasks.createTodo",
     "reminders.create",
     "meals.planWeek",
-    "finances.createTransaction"
+    "finances.updateBudget"
   ],
   "expectRecords": {
     "notifications": 1

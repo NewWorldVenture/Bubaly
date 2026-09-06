@@ -27,6 +27,7 @@ import type {
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { remapBindings } from './bindings';
 import {
   findDependencyCycle, legacyStatusFor, type RunState, type StepState,
 } from './states';
@@ -334,7 +335,11 @@ export async function savePlan(
     step_type: step.stepType,
     tool_name: step.toolName ?? null,
     description: step.description ?? null,
-    input_json: (step.input ?? {}) as Json,
+    // A step's input may name an earlier step by its planner-local key; the
+    // executor resolves those against dependency results and knows only ids, so
+    // this is the one moment they can be rewritten. `dependency_ids` goes
+    // through the same map, one line down.
+    input_json: remapBindings((step.input ?? {}) as Json, stepIds),
     dependency_ids: (step.dependsOn ?? []).map((key) => stepIds[key]),
     condition: (step.condition ?? null) as Json | null,
     status: step.status ?? ('queued' as StepState),

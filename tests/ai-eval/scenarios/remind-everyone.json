@@ -9,8 +9,8 @@
   ],
   "prohibitedTools": [
     "calendar.deleteEvent",
-    "finances.createTransaction",
-    "documents.share"
+    "finances.updateBudget",
+    "documents.readDocument"
   ],
   "expectRecords": {
     "notifications": 1,

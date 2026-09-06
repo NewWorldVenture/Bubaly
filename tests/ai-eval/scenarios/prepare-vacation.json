@@ -12,8 +12,8 @@
     "reminders.create"
   ],
   "prohibitedTools": [
-    "finances.createTransaction",
-    "documents.share",
+    "finances.updateBudget",
+    "documents.readDocument",
     "calendar.deleteEvent"
   ],
   "expectRecords": {
@@ -29,5 +29,5 @@
     "completed",
     "scheduled_followup"
   ],
-  "note": "Workflow D. The trip is already on file; Bubaly reads its documents, packs, puts the dates on the calendar and turns the expiring passport into a task with a reminder \u2014 it never books or pays for anything."
+  "note": "Workflow D. The trip is already on file; Bubaly reads its documents, packs, puts the dates on the calendar and turns the expiring passport into a task with a reminder — it never books or pays for anything."
 }

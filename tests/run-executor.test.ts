@@ -302,6 +302,66 @@ describe('work that never finished', () => {
   });
 });
 
+describe('a step using what an earlier step produced', () => {
+  it('passes the real id to the tool, not the marker', async () => {
+    const fake = makeFake({
+      steps: [
+        { id: 's1', description: 'Create the trip', tool_name: 'trips.findOrCreateVacation' },
+        { id: 's2', description: 'Build the packing list', tool_name: 'trips.createPackingList',
+          dependency_ids: ['s1'], input_json: { vacation_id: { $fromStep: 's1', path: 'id' }, member: 'Maya' } },
+      ],
+      tool: (call) => ({ status: 'ok', data: { id: call.opts.stepId === 's1' ? 'trip-9' : 'list-1' }, summary: 'done', toolCallId: 'tc' }),
+    });
+
+    await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    const second = fake.calls.find((c) => c.opts.stepId === 's2');
+    expect(second?.args).toEqual({ vacation_id: 'trip-9', member: 'Maya' });
+  });
+
+  it('fails the step rather than calling a tool with a hole in it', async () => {
+    // Passing an unresolved reference to a database is how a run writes the
+    // wrong row — or no row — and still reports success.
+    const fake = makeFake({
+      steps: [
+        { id: 's1', description: 'Create the trip' },
+        { id: 's2', description: 'Build the packing list', dependency_ids: ['s1'],
+          input_json: { vacation_id: { $fromStep: 's1', path: 'nope' } } },
+      ],
+      tool: () => ({ status: 'ok', data: { id: 'trip-9' }, summary: 'done', toolCallId: 'tc' }),
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(fake.step('s2').status).toBe('failed');
+    expect(String(fake.step('s2').error)).toContain('was not in what the step it depends on produced');
+    expect(result.status).toBe('partially_completed');
+  });
+
+  it('lets a verify step name the rows this run wrote', async () => {
+    // The whole point: `records_exist` on ids this run produced, instead of a
+    // family-wide count that last week's rows already satisfy.
+    let seen: unknown = null;
+    const fake = makeFake({
+      steps: [
+        { id: 's1', description: 'Add the travel dates', tool_name: 'calendar.createEvent' },
+        { id: 'v1', step_type: 'verify', tool_name: null, dependency_ids: ['s1'],
+          input_json: { checks: [{ kind: 'records_exist', table: 'calendar_events', ids: [{ $fromStep: 's1', path: 'id' }] }] } },
+      ],
+      // A real uuid, because `records_exist` requires one — which is the
+      // schema refusing to check something it cannot address.
+      tool: () => ({ status: 'ok', data: { id: '11111111-1111-4111-8111-111111111111' }, summary: 'done', toolCallId: 'tc' }),
+      verify: async (_scope, spec) => { seen = spec; return ok({ verified: true, detail: 'All 1 records are there.', checks: [] }); },
+    });
+
+    await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(seen).toEqual({ checks: [{ kind: 'records_exist', table: 'calendar_events', ids: ['11111111-1111-4111-8111-111111111111'] }] });
+    expect(fake.step('v1').status).toBe('completed');
+  });
+});
+
 describe('approvals', () => {
   it('parks the run instead of failing it, and does not touch the household', async () => {
     const fake = makeFake({

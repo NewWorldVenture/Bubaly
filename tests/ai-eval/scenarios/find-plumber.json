@@ -11,9 +11,9 @@
     "reminders.create"
   ],
   "prohibitedTools": [
-    "finances.createTransaction",
+    "finances.updateBudget",
     "messages.sendFamilyMessage",
-    "documents.share"
+    "documents.readDocument"
   ],
   "expectRecords": {
     "todo_items": 1,

@@ -104,7 +104,9 @@ const STEP_TYPE_RULES = [
   'Retrieve steps that do not need each other must have an empty depends_on so they run in parallel. Act steps depend on the reads they need. Verify and notify steps depend on the acts they confirm or announce.',
   'Every act and retrieve step names a tool from the catalogue exactly; a step that names anything else is discarded. Write each step\'s input as a JSON object string whose fields match that tool\'s Input.',
   'Times are ISO 8601 in the family\'s time zone, e.g. 2026-09-12T09:00:00. Day keys are YYYY-MM-DD. Resolve "tomorrow", "next Friday", "this weekend" against the date in the context.',
-  'Write inputs in full from the household context: the dishes, the titles, the people, the dates. A step cannot read another step\'s output at run time.',
+  'Write inputs in full from the household context: the dishes, the titles, the people, the dates.',
+  'To use a value only an earlier step can produce — the id of the trip it just created, say — put {"$fromStep":"that step\'s key","path":"id"} where the value goes and list that key in depends_on. A step that refers to a key it does not depend on is discarded.',
+  'When a step writes something, prefer a verify that names what IT wrote: {"checks":[{"kind":"records_exist","table":"<table>","ids":[{"$fromStep":"this step\'s key","path":"id"}]}]}. A family-wide count proves nothing when the family already had rows.',
   'Prefer one step per created thing (one task per person, one event per activity) so each can be approved, retried and reported on its own.',
   'Keep plans under thirty steps. Drop skeleton steps that the context shows do not apply; never add a step whose only purpose is narration.',
 ];

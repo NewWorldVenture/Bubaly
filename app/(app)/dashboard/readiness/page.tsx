@@ -80,11 +80,16 @@ export default async function ReadinessPage() {
     const { count: n, error } = await q; return error ? 0 : (n ?? 0);
   };
   const [
-    tomorrowEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
+    tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
     supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
       .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
+    // The week, for the card that claims to know about the week. It used to be
+    // told `conflictsWeek: 0` as a literal, so it could never report a clash.
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+      .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
+      .order('starts_at').limit(200),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
     cnt(supabase.from('prep_plan_steps').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('due_date', todayStr)),
     cnt(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', weekEndStr)),
@@ -94,26 +99,32 @@ export default async function ReadinessPage() {
   ]);
   const tEvents = tomorrowEventsRes.data ?? [];
   const HOUR = 3_600_000;
-  const timed = tEvents.filter((e) => !e.all_day).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  let tomorrowConflicts = 0;
-  for (let i = 0; i < timed.length; i++) {
-    const aS = new Date(timed[i].starts_at).getTime();
-    const aE = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aS + HOUR;
-    for (let j = i + 1; j < timed.length; j++) {
-      const bS = new Date(timed[j].starts_at).getTime();
-      if (bS >= aE) break;
-      const bE = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bS + HOUR;
-      if (bS < aE && aS < bE) tomorrowConflicts++;
-    }
+  const tomorrowConflicts = countOverlaps(tEvents.filter((e) => !e.all_day), HOUR);
+  // Same overlap rule as tomorrow's, over the week — and who is carrying the
+  // day it lands on. Both were hardcoded zeros while the rows sat ten lines up,
+  // so the week card could never say "two clashes" and the month card could
+  // never name an overloaded person.
+  const weekEvents = (weekEventsRes.data ?? []).filter((e) => !e.all_day);
+  const conflictsWeek = countOverlaps(weekEvents, HOUR);
+  const perMember = new Map<string, number>();
+  for (const e of weekEvents) {
+    if (!e.assignee_id) continue;
+    perMember.set(e.assignee_id, (perMember.get(e.assignee_id) ?? 0) + 1);
   }
+  const loads = [...perMember.values()];
+  const averageLoad = loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
+  // "Overloaded" is relative to this family, not an absolute: half again the
+  // household average, and at least four things, so a quiet week names nobody.
+  const overloadedMembers = loads.filter((n) => n >= 4 && n > averageLoad * 1.5).length;
+
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
   const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
     tomorrowConflicts, tomorrowUnassigned: tEvents.filter((e) => !e.assignee_id).length,
     dinnerPlannedTomorrow: dinnerTomorrowRes > 0,
-    conflictsWeek: 0, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
-    expiringDocsMonth, overloadedMembers: 0, upcomingTripsMonth, openPrepPlans,
+    conflictsWeek, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
+    expiringDocsMonth, overloadedMembers, upcomingTripsMonth, openPrepPlans,
   };
   const horizonCards = assessReadiness(signals);
 
@@ -173,4 +184,26 @@ export default async function ReadinessPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Overlapping timed events, counted once per pair.
+ *
+ * An event with no end is treated as an hour long, which is what the rest of
+ * the product assumes. Sorted first so the inner loop can stop early.
+ */
+function countOverlaps(events: { starts_at: string; ends_at: string | null }[], defaultMs: number): number {
+  const timed = [...events].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  let count = 0;
+  for (let i = 0; i < timed.length; i += 1) {
+    const aStart = new Date(timed[i].starts_at).getTime();
+    const aEnd = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aStart + defaultMs;
+    for (let j = i + 1; j < timed.length; j += 1) {
+      const bStart = new Date(timed[j].starts_at).getTime();
+      if (bStart >= aEnd) break;
+      const bEnd = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bStart + defaultMs;
+      if (bStart < aEnd && aStart < bEnd) count += 1;
+    }
+  }
+  return count;
 }

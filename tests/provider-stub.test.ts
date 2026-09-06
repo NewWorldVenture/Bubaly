@@ -32,7 +32,7 @@ const { resolveProvider, OpenAIProvider } = await import('@/lib/ai/provider');
 afterEach(() => vi.unstubAllEnvs());
 
 const SCRIPT_DIR = 'tests/ai-eval/scripts';
-const EXPECTED_SCRIPTS = ['answer_question', 'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'prompt_injection', 'remind_everyone', 'spending_review'];
+const EXPECTED_SCRIPTS = ['answer_question', 'cancel_practice', 'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'prompt_injection', 'remind_everyone', 'spending_review'];
 
 describe('the guard', () => {
   it('is off unless AI_PROVIDER_STUB=1', () => {
@@ -177,7 +177,10 @@ describe('script selection', () => {
 });
 
 describe('the shipped scripts', () => {
-  it('include every one the eval harness relies on — one script per scenario', async () => {
+  // Not one script per scenario: two scenarios can put the same question to
+  // the same script and differ only in who is asking. What the harness proves
+  // is coverage in both directions — see `tests/ai-eval/runner.test.ts`.
+  it('include every one the eval harness relies on', async () => {
     const scripts = await loadScripts(SCRIPT_DIR);
     expect(scripts.map((s) => s.id).sort()).toEqual(EXPECTED_SCRIPTS);
     expect(scripts.filter((s) => s.match?.fallback)).toHaveLength(1);
