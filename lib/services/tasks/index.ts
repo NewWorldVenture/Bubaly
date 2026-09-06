@@ -303,6 +303,8 @@ export type CreateChoreInput = {
   recurrence?: RecurrenceFreq;
   dueAt?: string | null;
   requiresApproval?: boolean;
+  /** The emoji the chores board shows. Nullable in 0043; omitted meant losing it. */
+  icon?: string | null;
   /** When set, the chore is created and immediately assigned in one call. */
   assigneeId?: string | null;
 };
@@ -341,6 +343,7 @@ export async function createChore(
       recurrence: input.recurrence ?? 'none',
       due_at: input.dueAt ?? null,
       requires_approval: input.requiresApproval ?? true,
+      ...(input.icon !== undefined ? { icon: input.icon } : {}),
       // chores.created_by references auth.users (0002), unlike the todo tables.
       created_by: scope.userId,
     })
@@ -456,6 +459,70 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
   }
   if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
   return ok(data);
+}
+
+/**
+ * The statuses a MEMBER drives directly: picking a chore up, and putting it back.
+ *
+ * Deliberately excludes the other three. `submitted` belongs to
+ * `completeChoreAssignment`, which reads the chore's `requires_approval` and
+ * settles on `done` or `submitted` accordingly — a distinction the module's own
+ * status setter did not make, so a chore configured to need no approval still
+ * sat waiting for a parent who had nothing to do. And `approved`/`rejected` are
+ * manager decisions: migration 0223 puts a trigger on exactly those two, so a
+ * child cannot forge the completion of their own chore. This function must never
+ * grow them — the vocabulary here is the same one 0223 calls member-allowed.
+ */
+export async function setChoreProgress(
+  scope: ServiceScope,
+  assignmentId: string,
+  status: 'todo' | 'in_progress',
+): Promise<ServiceResult<ChoreAssignment>> {
+  if (status !== 'todo' && status !== 'in_progress') {
+    return fail('That is not a status a member can set.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  const update: Updatable<'chore_assignments'> = { status };
+  // Putting a chore back to "to do" clears the trail of it having been finished,
+  // so the board does not show it as awaiting a decision that is no longer due.
+  if (status === 'todo') {
+    update.submitted_at = null;
+    update.approved_at = null;
+  }
+
+  const { data, error } = await scope.db
+    .from('chore_assignments')
+    .update(update)
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:tasks] chore progress failed', error);
+    return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  return ok(data);
+}
+
+/** Remove an assignment. The chore itself survives — it may be assigned to others. */
+export async function deleteChoreAssignment(
+  scope: ServiceScope,
+  assignmentId: string,
+): Promise<ServiceResult<{ id: string }>> {
+  const { data, error } = await scope.db
+    .from('chore_assignments')
+    .delete()
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:tasks] chore assignment delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  return ok({ id: data.id });
 }
 
 /** Open assignments (not yet done or approved), soonest due first. */
