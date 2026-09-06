@@ -171,6 +171,7 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
     return fail(describeDbError(error, 'Could not complete that reminder.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
   return ok(data);
 }
 
@@ -218,6 +219,16 @@ export async function snoozeReminder(scope: ServiceScope, reminderId: string, mi
     return fail(describeDbError(error, 'Could not snooze that reminder.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'reminders',
+    action: 'update',
+    title: `Snoozed "${data.title}" for ${mins} minutes`,
+    detail: until,
+    href: '/dashboard/reminders',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
   return ok(data);
 }
 

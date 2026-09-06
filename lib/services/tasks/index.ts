@@ -151,6 +151,15 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
     return fail(describeDbError(error, 'Could not update that task.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'tasks',
+    action: 'update',
+    title: done ? `Ticked off "${data.title}"` : `Put "${data.title}" back on the list`,
+    href: '/dashboard/todos',
+    memberId: data.assigned_to_id,
+    resourceId: data.id,
+  });
   return ok(data);
 }
 
@@ -310,6 +319,27 @@ export type CreateChoreInput = {
   /** When set, the chore is created and immediately assigned in one call. */
   assigneeId?: string | null;
 };
+
+/**
+ * The chore's name, for a trail line about one of its assignments.
+ *
+ * `chore_assignments` carries no title, so the two functions that change an
+ * assignment without touching `chores` need this one extra read. It is a
+ * primary-key lookup and it runs AFTER the write, so it cannot delay or fail the
+ * change it describes — a trail entry that says "a chore" is worse than one that
+ * names it, and both are better than losing the write.
+ */
+async function choreTitle(scope: ServiceScope, choreId: string | null): Promise<string> {
+  if (!choreId) return 'a chore';
+  const { data, error } = await scope.db
+    .from('chores')
+    .select('title')
+    .eq('id', choreId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (error) console.error('[service:tasks] chore title lookup failed', error);
+  return data?.title ?? 'a chore';
+}
 
 export type ChoreCreation = { chore: Chore; assignment: ChoreAssignment | null };
 
@@ -527,7 +557,7 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
-    .select('requires_approval')
+    .select('requires_approval, title')
     .eq('id', assignment.chore_id)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -549,6 +579,19 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  // The SETTLED status, not the requested one: a chore that needs no approval
+  // is done, and the trail must not say it is waiting for a parent.
+  await recordActivitySafely(scope, {
+    agent: 'chores',
+    action: 'update',
+    title: status === 'done'
+      ? `Finished "${chore?.title ?? 'a chore'}"`
+      : `Submitted "${chore?.title ?? 'a chore'}" for approval`,
+    href: '/dashboard/chores',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
   return ok(data);
 }
 
@@ -593,6 +636,16 @@ export async function setChoreProgress(
     return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  const title = await choreTitle(scope, data.chore_id);
+  await recordActivitySafely(scope, {
+    agent: 'chores',
+    action: 'update',
+    title: status === 'in_progress' ? `Started "${title}"` : `Put "${title}" back to do`,
+    href: '/dashboard/chores',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
   return ok(data);
 }
 
@@ -601,18 +654,29 @@ export async function deleteChoreAssignment(
   scope: ServiceScope,
   assignmentId: string,
 ): Promise<ServiceResult<{ id: string }>> {
+  // `chore_id` comes back with the deleted row, so naming it on the trail costs
+  // no extra round trip here — the row is gone by the time we could ask again.
   const { data, error } = await scope.db
     .from('chore_assignments')
     .delete()
     .eq('id', assignmentId)
     .eq('family_id', scope.familyId)
-    .select('id')
+    .select('id, chore_id, member_id')
     .maybeSingle();
   if (error) {
     console.error('[service:tasks] chore assignment delete failed', error);
     return fail(describeDbError(error, 'Could not remove that chore.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'chores',
+    action: 'delete',
+    title: `Removed "${await choreTitle(scope, data.chore_id)}" from the chore board`,
+    href: '/dashboard/chores',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
   return ok({ id: data.id });
 }
 

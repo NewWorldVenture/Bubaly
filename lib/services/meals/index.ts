@@ -447,13 +447,23 @@ export async function removeSlot(scope: ServiceScope, planId: string): Promise<S
     .delete()
     .eq('id', planId)
     .eq('family_id', scope.familyId)
-    .select('id')
+    // The slot it occupied, back with the deleted row: the trail says WHICH
+    // dinner was cleared, which is the only part a family would recognise.
+    .select('id, plan_date, meal_type')
     .maybeSingle();
   if (error) {
     console.error('[service:meals] remove slot failed', error);
     return fail(describeDbError(error, 'Could not clear that meal.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That planned meal could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'meal_planner',
+    action: 'delete',
+    title: `Cleared the ${data.meal_type} planned for ${data.plan_date}`,
+    href: '/dashboard/meals',
+    resourceId: data.id,
+  });
   return ok({ id: data.id });
 }
 
