@@ -15,6 +15,7 @@ import { ITEM_KINDS, DAY_PARTS, dollars, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type Day = Tables<'vacation_itinerary_days'>;
@@ -23,6 +24,7 @@ type Item = Tables<'vacation_itinerary_items'>;
 const blankItem = (day_id: string, day_part: string) => ({ id: '', day_id, day_part, kind: 'activity', title: '', location: '', start_time: '', end_time: '', cost: '', booked: false, notes: '' });
 
 export function TripItinerary({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -115,15 +117,15 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarRange className="h-5 w-5 text-brand-text" /> Daily itinerary</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarRange className="h-5 w-5 text-brand-text" /> {t('tripItinerary.dailyItinerary')}</h2>
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={generateDays} loading={busy}><Wand2 className="h-4 w-4" /> Build days from dates</Button>
+          <Button size="sm" variant="secondary" onClick={generateDays} loading={busy}><Wand2 className="h-4 w-4" /> {t('tripItinerary.buildDaysFromDates')}</Button>
         </div>
       </div>
 
       {conflicts.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><AlertTriangle className="h-3.5 w-3.5" /> {conflicts.length} potential conflict{conflicts.length > 1 ? 's' : ''}</p>
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><AlertTriangle className="h-3.5 w-3.5" /> {conflicts.length} {t('tripItinerary.potentialConflict')}{conflicts.length > 1 ? 's' : ''}</p>
           <ul className="space-y-1 text-sm">
             {conflicts.slice(0, 5).map((c) => <li key={c.id}><span className="font-medium">{c.title}:</span> <span className="text-muted">{c.detail}</span></li>)}
           </ul>
@@ -131,7 +133,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {sortedDays.length === 0 ? (
-        <EmptyState icon={CalendarRange} title="No days planned yet" description="Set trip dates then click “Build days from dates”, or add days as you go." />
+        <EmptyState icon={CalendarRange} title={t('tripItinerary.noDaysPlannedYet')} description="Set trip dates then click “Build days from dates”, or add days as you go." />
       ) : (
         <div className="space-y-4">
           {sortedDays.map((day, i) => (
@@ -177,23 +179,23 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit item' : 'Add itinerary item'}>
           <form onSubmit={saveItem} className="space-y-3">
-            <Field label="Title" required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Magic Kingdom" required />}</Field>
+            <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Magic Kingdom" required />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Type">{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-              <Field label="Time of day">{(id) => <Select id={id} value={form.day_part} onChange={(e) => setForm({ ...form, day_part: e.target.value })}>{DAY_PARTS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>
+              <Field label={t('tripItinerary.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+              <Field label={t('tripItinerary.timeOfDay')}>{(id) => <Select id={id} value={form.day_part} onChange={(e) => setForm({ ...form, day_part: e.target.value })}>{DAY_PARTS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Start time">{(id) => <Input id={id} type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />}</Field>
-              <Field label="End time">{(id) => <Input id={id} type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />}</Field>
+              <Field label={t('tripItinerary.startTime')}>{(id) => <Input id={id} type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />}</Field>
+              <Field label={t('tripItinerary.endTime')}>{(id) => <Input id={id} type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Location">{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
-              <Field label="Cost ($)">{(id) => <Input id={id} type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+              <Field label={t('tripItinerary.location')}>{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
+              <Field label={t('tripItinerary.cost')}>{(id) => <Input id={id} type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             </div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.booked} onChange={(e) => setForm({ ...form, booked: e.target.checked })} className="h-4 w-4 rounded border-border" /> Booked</label>
-            <Field label="Notes">{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.booked} onChange={(e) => setForm({ ...form, booked: e.target.checked })} className="h-4 w-4 rounded border-border" /> {t('tripItinerary.booked')}</label>
+            <Field label={t('tripItinerary.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('tripItinerary.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>

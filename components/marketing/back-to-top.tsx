@@ -14,8 +14,10 @@ import { ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { readLocalConsent, detectGPC } from '@/lib/marketing/visitor';
 import { shouldShowBanner } from '@/lib/marketing/consent-ui';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function BackToTop({ threshold = 400 }: { threshold?: number }) {
+  const t = useTranslations();
   const [visible, setVisible] = useState(false);
   const [raised, setRaised] = useState(false); // lift above the cookie banner
 
@@ -51,8 +53,8 @@ export function BackToTop({ threshold = 400 }: { threshold?: number }) {
     <button
       type="button"
       onClick={toTop}
-      aria-label="Back to top"
-      title="Back to top"
+      aria-label={t('backToTop.backToTop')}
+      title={t('backToTop.backToTop')}
       tabIndex={visible ? 0 : -1}
       aria-hidden={!visible}
       className={cn(

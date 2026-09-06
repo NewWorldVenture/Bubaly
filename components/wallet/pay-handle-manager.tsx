@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { useRouter } from 'next/navigation';
 import { normalizeHandle, handleError, payHandleUrl } from '@/lib/wallet/pay-handle';
 import { claimPayHandleAction, releasePayHandleAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type PayHandleRow = { id: string; handle: string; childWalletId: string | null; childName: string | null };
 export type PayHandleChild = { id: string; name: string };
@@ -16,6 +17,7 @@ export type PayHandleChild = { id: string; name: string };
 export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: {
   handles: PayHandleRow[]; childOptions: PayHandleChild[]; canManage: boolean; baseUrl: string;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [target, setTarget] = useState<string>(''); // '' = family-level
@@ -58,7 +60,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
         <AtSign className="h-4 w-4 text-brand-text" />
         <h3 className="font-semibold">Pay-ID</h3>
       </div>
-      <p className="mb-3 text-xs text-muted">A short, memorable link relatives can use to send a gift — no long codes to copy.</p>
+      <p className="mb-3 text-xs text-muted">{t('payHandleManager.aShortMemorableLinkRelativesCan')}</p>
 
       {handles.length > 0 && (
         <div className="mb-3 space-y-2">
@@ -90,7 +92,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
           <div className="flex flex-wrap items-stretch gap-2">
             <select value={target} onChange={(e) => setTarget(e.target.value)}
               className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
-              <option value="">Whole family</option>
+              <option value="">{t('payHandleManager.wholeFamily')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <div className="flex min-w-[160px] flex-1 items-center rounded-lg border border-border bg-bg px-2">
@@ -101,7 +103,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
               />
             </div>
             <Button onClick={claim} loading={saving} disabled={!canSubmit}>
-              <Plus className="mr-1 h-4 w-4" /> Claim
+              <Plus className="mr-1 h-4 w-4" /> {t('payHandleManager.claim')}
             </Button>
           </div>
           {err && <p className="text-xs text-danger">{err}</p>}

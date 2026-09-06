@@ -70,9 +70,18 @@ function isCopy(text) {
   return /^[A-Z][a-z]{3,}$/.test(s);
 }
 
-/** The nearest enclosing function-like node, so the hook lands in the right
- *  component rather than at the top of the file. */
-function enclosingFunction(node) {
+/**
+ * The nearest enclosing function that a hook may legally live in — i.e. the
+ * component whose `t` binding this text will resolve against.
+ *
+ * Returns undefined when the text sits inside an ANONYMOUS render function, such
+ * as the `loading: () => (…)` passed to next/dynamic. Those really are
+ * components, but they have no declared name for insertHooks to match, so the
+ * text would be rewritten to call a `t` that is never declared — which is
+ * exactly the "Cannot find name 't'" this guards against. An edit with no
+ * hookable host is dropped rather than written.
+ */
+function hookableComponent(node, sf) {
   let current = node.parent;
   while (current) {
     if (
@@ -80,7 +89,7 @@ function enclosingFunction(node) {
       ts.isArrowFunction(current) ||
       ts.isFunctionExpression(current)
     ) {
-      return current;
+      return isComponent(current, sf) ? current : undefined;
     }
     current = current.parent;
   }
@@ -134,7 +143,8 @@ export function collect(file, namespace) {
     if (ts.isJsxText(node)) {
       const raw = node.getText();
       const text = raw.replace(/\s+/g, ' ').trim();
-      if (isCopy(text)) {
+      const host = hookableComponent(node, sf);
+      if (isCopy(text) && host) {
         // Preserve the original leading/trailing whitespace so JSX spacing
         // between adjacent elements is unchanged.
         const lead = raw.match(/^\s*/)?.[0] ?? '';
@@ -145,20 +155,21 @@ export function collect(file, namespace) {
           text,
           key: keyFor(namespace, text),
           replacement: (key) => `${lead}{${binding}('${key}')}${tail}`,
-          fn: enclosingFunction(node),
+          fn: host,
         });
       }
     } else if (ts.isJsxAttribute(node) && node.initializer && ts.isStringLiteral(node.initializer)) {
       const name = node.name.getText(sf);
       const text = node.initializer.text;
-      if (COPY_PROPS.has(name) && isCopy(text)) {
+      const propHost = hookableComponent(node, sf);
+      if (COPY_PROPS.has(name) && isCopy(text) && propHost) {
         edits.push({
           start: node.initializer.getStart(sf),
           end: node.initializer.getEnd(),
           text,
           key: keyFor(namespace, text),
           replacement: (key) => `{${binding}('${key}')}`,
-          fn: enclosingFunction(node),
+          fn: propHost,
         });
       }
     }

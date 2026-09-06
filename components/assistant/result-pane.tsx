@@ -13,6 +13,7 @@ import { CardSkeleton, ResultCardView } from '@/components/ai/cards';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { ResultCard } from '@/lib/ai/result-cards';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /** The subset of the module's message shape the pane needs. */
 export type ConversationMessage = {
@@ -65,6 +66,7 @@ export type ResultPaneProps = {
 };
 
 export function ResultPane({ messages, streaming = false, compact = false, canDecide, onAsk, highlightId, error, onRetry, className }: ResultPaneProps) {
+  const t = useTranslations();
   const groups = useMemo(() => groupTurnCards(messages), [messages]);
   const latestId = messages.length ? messages[messages.length - 1].id : null;
   const latestHasCards = groups.some((g) => g.messageId === latestId);
@@ -82,7 +84,7 @@ export function ResultPane({ messages, streaming = false, compact = false, canDe
     return (
       <EmptyState
         icon={LayoutList}
-        title="Nothing planned yet"
+        title={t('resultPane.nothingPlannedYet')}
         description="Ask Bubaly to plan dinners, sort out the weekend, check the budget or get a trip ready — the results show up here."
       />
     );

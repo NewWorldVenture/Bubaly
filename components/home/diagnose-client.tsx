@@ -8,10 +8,12 @@ import { Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { Button } from '@/components/ui/button';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Asset = Tables<'home_assets'>;
 
 export function DiagnoseClient({ assets }: { assets: Asset[] }) {
+  const t = useTranslations();
   const [assetId, setAssetId] = useState('');
   const [category, setCategory] = useState('');
   const [symptom, setSymptom] = useState('');
@@ -46,33 +48,33 @@ export function DiagnoseClient({ assets }: { assets: Asset[] }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Repair Help</h1>
-        <p className="text-sm text-muted">Describe what&apos;s wrong and get an AI triage: likely causes, safe DIY checks, and when to call a pro.</p>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('diagnoseClient.repairHelp')}</h1>
+        <p className="text-sm text-muted">{t('diagnoseClient.describeWhatAposSWrongAnd')}</p>
       </div>
 
       <Card>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Which item?">
+          <Field label={t('diagnoseClient.whichItem')}>
             <Select value={assetId} onChange={(e) => onPickAsset(e.target.value)}>
-              <option value="">— pick or describe below —</option>
+              <option value="">{t('diagnoseClient.pickOrDescribeBelow')}</option>
               {assets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           </Field>
-          <Field label="Category (if not listed)">
+          <Field label={t('diagnoseClient.categoryIfNotListed')}>
             <Select value={category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">—</option>
-              <option value="hvac">HVAC</option><option value="water_heater">Water Heater</option>
-              <option value="refrigerator">Refrigerator</option><option value="dishwasher">Dishwasher</option>
-              <option value="washer">Washer</option><option value="dryer">Dryer</option>
-              <option value="oven">Oven/Range</option><option value="roof">Roof</option>
-              <option value="garbage_disposal">Garbage Disposal</option><option value="other">Other</option>
+              <option value="hvac">HVAC</option><option value="water_heater">{t('diagnoseClient.waterHeater')}</option>
+              <option value="refrigerator">{t('diagnoseClient.refrigerator')}</option><option value="dishwasher">{t('diagnoseClient.dishwasher')}</option>
+              <option value="washer">{t('diagnoseClient.washer')}</option><option value="dryer">{t('diagnoseClient.dryer')}</option>
+              <option value="oven">Oven/Range</option><option value="roof">{t('diagnoseClient.roof')}</option>
+              <option value="garbage_disposal">{t('diagnoseClient.garbageDisposal')}</option><option value="other">{t('diagnoseClient.other')}</option>
             </Select>
           </Field>
         </div>
         <Field label="What's happening?">
           <Textarea rows={4} value={symptom} onChange={(e) => setSymptom(e.target.value)} placeholder="e.g. The dishwasher won't drain and there's standing water at the bottom after every cycle." />
         </Field>
-        <Button onClick={run} loading={busy} disabled={!symptom.trim()}><Stethoscope className="h-4 w-4" /> Diagnose</Button>
+        <Button onClick={run} loading={busy} disabled={!symptom.trim()}><Stethoscope className="h-4 w-4" /> {t('diagnoseClient.diagnose')}</Button>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Card>
 
@@ -80,12 +82,12 @@ export function DiagnoseClient({ assets }: { assets: Asset[] }) {
         <Card>
           <p className="whitespace-pre-wrap text-sm">{result.text}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
-            <span className="inline-flex items-center gap-1.5 text-sm"><Wrench className="h-4 w-4 text-brand-text" /> Recommended pro: <strong>{result.tradeLabel}</strong></span>
+            <span className="inline-flex items-center gap-1.5 text-sm"><Wrench className="h-4 w-4 text-brand-text" /> {t('diagnoseClient.recommendedPro')} <strong>{result.tradeLabel}</strong></span>
             <Link href={`/dashboard/home/pros?trade=${result.trade}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg">
-              Find a {result.tradeLabel} pro
+              {t('diagnoseClient.findA')} {result.tradeLabel} pro
             </Link>
           </div>
-          <p className="mt-2 inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> AI guidance for triage only — for gas, high-voltage, or structural issues, call a licensed professional.</p>
+          <p className="mt-2 inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {t('diagnoseClient.aiGuidanceForTriageOnlyFor')}</p>
         </Card>
       )}
     </div>

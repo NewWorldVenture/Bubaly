@@ -4,8 +4,10 @@
 // leaves the device). Backed by the `qrcode` library's SVG string output.
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function QrCode({ value, size = 220, className }: { value: string; size?: number; className?: string }) {
+  const t = useTranslations();
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -18,7 +20,7 @@ export function QrCode({ value, size = 220, className }: { value: string; size?:
   }, [value, size]);
 
   if (failed) {
-    return <div className="grid place-items-center rounded-xl bg-surface text-xs text-muted" style={{ width: size, height: size }}>QR unavailable</div>;
+    return <div className="grid place-items-center rounded-xl bg-surface text-xs text-muted" style={{ width: size, height: size }}>{t('qrCode.qrUnavailable')}</div>;
   }
   if (!svg) {
     return <div className="animate-pulse rounded-xl bg-surface" style={{ width: size, height: size }} />;

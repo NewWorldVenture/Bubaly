@@ -15,6 +15,7 @@ import {
 import { adminNoteKindMeta, badgeText, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ICONS: Record<string, typeof Bell> = {
   feedback_new: MessageSquare,
@@ -40,6 +41,7 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
   notifications: AdminNotificationRow[];
   pendingInviteCount: number;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -89,11 +91,11 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
       {open && (
         <div className="absolute right-0 top-full z-30 mt-2 w-80 overflow-hidden rounded-xl popover-surface shadow-glass animate-fade-in sm:w-96">
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-            <p className="text-sm font-bold">Notifications</p>
+            <p className="text-sm font-bold">{t('adminNotificationBell.notifications')}</p>
             {unread > 0 && (
               <button type="button" onClick={markAll} disabled={pending}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline disabled:opacity-50">
-                <Check className="h-3.5 w-3.5" /> Mark all read
+                <Check className="h-3.5 w-3.5" /> {t('adminNotificationBell.markAllRead')}
               </button>
             )}
           </div>
@@ -107,14 +109,14 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
                 className="flex items-start gap-3 border-b border-border/40 bg-brand/5 px-4 py-3 transition hover:bg-elevated">
                 <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><UserPlus className="h-4 w-4" /></span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-fg">{pendingInviteCount} pending invite{pendingInviteCount === 1 ? '' : 's'}</p>
-                  <p className="text-xs text-muted">Waiting for families to accept — review them.</p>
+                  <p className="text-sm font-semibold text-fg">{pendingInviteCount} {t('adminNotificationBell.pendingInvite')}{pendingInviteCount === 1 ? '' : 's'}</p>
+                  <p className="text-xs text-muted">{t('adminNotificationBell.waitingForFamiliesToAcceptReview')}</p>
                 </div>
               </Link>
             )}
 
             {notifications.length === 0 && pendingInviteCount === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted">You’re all caught up. 🎉</p>
+              <p className="px-4 py-8 text-center text-sm text-muted">{t('adminNotificationBell.youreAllCaughtUp')}</p>
             ) : (
               notifications.map((n) => {
                 const Icon = ICONS[n.kind] ?? (n.kind === 'feedback_new' ? Bug : Info);
@@ -143,7 +145,7 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
 
           <Link href="/admin/notifications" onClick={() => setOpen(false)}
             className="block border-t border-border/60 px-4 py-2.5 text-center text-xs font-semibold text-brand-text hover:bg-elevated">
-            See all notifications
+            {t('adminNotificationBell.seeAllNotifications')}
           </Link>
         </div>
       )}

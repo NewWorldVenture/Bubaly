@@ -14,6 +14,7 @@ import {
   type FeedbackSurface,
   type FeedbackSignal,
 } from '@/app/(app)/dashboard/ai-feedback-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Props = {
   explanation: Explanation;
@@ -30,6 +31,7 @@ type Props = {
 };
 
 export function WhyThis({ explanation, surface, refId, refKind, hideFeedback, className, compact }: Props) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [voted, setVoted] = useState<FeedbackSignal | null>(null);
   const [pending, startTransition] = useTransition();
@@ -55,7 +57,7 @@ export function WhyThis({ explanation, surface, refId, refKind, hideFeedback, cl
         className="inline-flex items-center gap-1 rounded-full text-muted transition hover:text-fg"
       >
         <HelpCircle className="h-3.5 w-3.5" />
-        {!compact && <span className="font-medium">Why this?</span>}
+        {!compact && <span className="font-medium">{t('whyThis.whyThis')}</span>}
         <ChevronDown className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} />
       </button>
 
@@ -85,21 +87,21 @@ export function WhyThis({ explanation, surface, refId, refKind, hideFeedback, cl
             <div className="flex items-center gap-2 border-t border-border pt-2">
               {voted ? (
                 <span className="inline-flex items-center gap-1 text-[11px] text-success">
-                  <Check className="h-3.5 w-3.5" /> Thanks — Bubaly will use that.
+                  <Check className="h-3.5 w-3.5" /> {t('whyThis.thanksBubalyWillUseThat')}
                 </span>
               ) : (
                 <>
-                  <span className="text-[11px] text-muted">Was this helpful?</span>
+                  <span className="text-[11px] text-muted">{t('whyThis.wasThisHelpful')}</span>
                   <button
                     type="button" onClick={() => send('helpful')} disabled={pending}
-                    aria-label="Helpful"
+                    aria-label={t('whyThis.helpful')}
                     className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[11px] transition hover:border-success/50 hover:text-success"
                   >
                     <ThumbsUp className="h-3.5 w-3.5" /> Yes
                   </button>
                   <button
                     type="button" onClick={() => send('not_helpful')} disabled={pending}
-                    aria-label="Not helpful"
+                    aria-label={t('whyThis.notHelpful')}
                     className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[11px] transition hover:border-danger/50 hover:text-danger"
                   >
                     <ThumbsDown className="h-3.5 w-3.5" /> No

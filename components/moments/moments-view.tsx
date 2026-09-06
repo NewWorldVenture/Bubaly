@@ -33,6 +33,7 @@ import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
   removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -50,6 +51,7 @@ const CAT_LABEL: Record<MomentCategory, string> = {
 };
 
 export function MomentsView() {
+  const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -141,7 +143,7 @@ export function MomentsView() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Moments"
+        title={t('moments.moments')}
         description="Your next events, already prepped. Bubaly lines up everything each one needs — you just tap."
       />
 
@@ -149,7 +151,7 @@ export function MomentsView() {
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
           <span className="rounded-full bg-elevated px-2.5 py-1 text-muted">{summary.total} upcoming</span>
           {summary.needPrep > 0 && (
-            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-brand-text">{summary.needPrep} need prep</span>
+            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-brand-text">{summary.needPrep} {t('moments.needPrep')}</span>
           )}
           {summary.ready > 0 && (
             <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-500">{summary.ready} ready</span>
@@ -163,9 +165,9 @@ export function MomentsView() {
       {loading ? <SkeletonList /> : moments.length === 0 ? (
         <EmptyState
           icon={Sparkles}
-          title="Nothing on the horizon"
+          title={t('moments.nothingOnTheHorizon')}
           description="When your family has upcoming events, Bubaly will assemble the prep for each one here."
-          action={<Link href="/dashboard/calendar" className="btn-cta">Open Calendar</Link>}
+          action={<Link href="/dashboard/calendar" className="btn-cta">{t('moments.openCalendar')}</Link>}
         />
       ) : (
         <div className="space-y-6">

@@ -6,6 +6,7 @@ import { disconnectAccountAction } from '@/app/(app)/dashboard/social/actions';
 import { PlatformDot } from './platform';
 import { Badge } from '@/components/ui/badge';
 import type { SocialPlatform } from '@/lib/social/capabilities';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const STATUS_TONE: Record<string, 'success' | 'neutral' | 'danger' | 'warning'> = {
   connected: 'success', pending: 'warning', requires_setup: 'neutral',
@@ -17,6 +18,7 @@ export function AccountRow({
 }: {
   id: string; platform: SocialPlatform; name: string; status: string; lastError: string | null; lastSyncedAt: string | null;
 }) {
+  const t = useTranslations();
   const [pending, start] = useTransition();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
@@ -34,7 +36,7 @@ export function AccountRow({
         onClick={() => start(async () => { await disconnectAccountAction(id); })}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2 text-xs text-muted hover:text-danger disabled:opacity-60"
       >
-        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />} Disconnect
+        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />} {t('accountRow.disconnect')}
       </button>
     </div>
   );

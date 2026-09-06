@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
 import { expandEvents } from '@/lib/calendar/recurrence';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const WEEKS = 8;
 const LEVEL_CLS = [
@@ -25,6 +26,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
  * is forward-looking; this needs history).
  */
 export function BusynessHeatmap({ familyId }: { familyId: string }) {
+  const t = useTranslations();
   const [rows, setRows] = useState<Tables<'calendar_events'>[]>([]);
   const [open, setOpen] = useState(true);
 
@@ -57,7 +59,7 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <button onClick={() => setOpen(v => !v)} className="flex w-full items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm font-bold">
-          <Flame className="h-4 w-4 text-brand-text" /> Busyness — last {WEEKS} weeks
+          <Flame className="h-4 w-4 text-brand-text" /> {t('busynessHeatmap.busynessLast')} {WEEKS} weeks
         </span>
         <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', open && 'rotate-180')} />
       </button>
