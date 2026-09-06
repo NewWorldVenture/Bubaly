@@ -114,6 +114,8 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/(app)/dashboard/contacts/[id]/actions.ts', "feature: 'contacts.reconnect'"],
       ['app/(app)/dashboard/paperwork/actions.ts', "feature: 'paperwork.draft-reply'"],
       ['app/(app)/marketplace/assistant-actions.ts', "feature: 'marketplace.assistant'"],
+      ['app/api/ai/import/route.ts', "feature: 'import.extract'"],
+      ['app/api/vacations/ai/route.ts', "feature: 'vacations.build'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -307,20 +309,36 @@ describe('what is deliberately NOT adopted', () => {
     expect(src).toContain('createServiceClient()');
   });
 
-  it('counts the provider factory, which will never adopt, so the floor is 1', () => {
-    // `resolveProviderForTask` builds an OpenAIProvider and hands it back; it
-    // never calls one. There is no request to observe here and no scope to
-    // observe it with — the caller that asked for the provider is the surface.
+  it('the floor is 3, and it is these three', () => {
+    // A correction. This assertion used to say "the floor is 1" and named only
+    // `lib/ai/routing.ts`, because the gift route was documented as
+    // deliberately-not-adopted in its own test and never counted toward the
+    // floor here — even though it obtains a provider and has always been in
+    // SILENT. The floor was 2 the day that sentence was written, and it is 3
+    // now. Naming all three in one place is what stops the arithmetic drifting
+    // again.
     //
-    // It stays in the count anyway. Excluding it would mean teaching the scanner
-    // a judgement call, and a scanner that makes judgement calls is one that can
-    // be argued into excluding a real surface. The floor of the ceiling is 1,
-    // not 0, and that is written down rather than discovered by whoever gets
-    // there.
-    const src = readFileSync('lib/ai/routing.ts', 'utf8');
-    expect(src).toContain('return new OpenAIProvider(');
-    expect(src).not.toContain('.complete(');
-    expect([...SILENT]).toContain('lib/ai/routing.ts');
+    // None of them is excluded from the count. Excluding any would mean teaching
+    // the scanner a judgement call, and a scanner that makes judgement calls is
+    // one that can be argued into excluding a real surface.
+    const floor = [
+      // The provider factory: builds an OpenAIProvider and hands it back
+      // without ever calling one. No request to observe, no scope to observe it
+      // with — the caller that asked for the provider is the surface.
+      'lib/ai/routing.ts',
+      // Unauthenticated by design: a giver following a gift link is not signed
+      // in, so there is no user scope to build one from.
+      'app/api/ai/gift/route.ts',
+      // Authenticates as a super admin and never resolves a family at all — it
+      // answers "does the configured key work?".
+      'app/(app)/admin/ai/actions.ts',
+    ];
+    for (const file of floor) expect([...SILENT], `${file} is part of the floor`).toContain(file);
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('return new OpenAIProvider(');
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
+    // The ceiling can never go below this, so a future tranche that claims to
+    // have finished §33 has to reckon with these three by name.
+    expect(floor).toHaveLength(3);
   });
 });
 
@@ -335,7 +353,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
     // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
-    // then 11, then 8.
+    // then 11, then 8, then 6.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -343,7 +361,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 8;
+    const CEILING = 6;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +

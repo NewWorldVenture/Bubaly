@@ -405,16 +405,22 @@ the result rather than narrated as a fresh write.
   **The remaining 19 silent surfaces are counted, not ignored.**
   `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8, then 6) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 
-  **The floor is 1, not 0.** `lib/ai/routing.ts` builds an `OpenAIProvider` and
-  hands it back without ever calling one — there is no request to observe and no
-  scope to observe it with; the caller that asked for the provider is the surface.
-  It stays in the count regardless, because excluding it means teaching the
-  scanner a judgement call, and a scanner that makes judgement calls can be argued
-  into excluding a real surface.
+  **The floor is 3, and this paragraph used to say 1.** That was wrong twice
+  over. `lib/ai/routing.ts` builds an `OpenAIProvider` and hands it back without
+  ever calling one — no request to observe, no scope to observe it with. But
+  `/api/ai/gift` was documented as deliberately-not-adopted in its own paragraph
+  and never counted toward the floor here, despite obtaining a provider and
+  sitting in the count from the first day. The floor was 2 the day "the floor is
+  1" was written, and `app/(app)/admin/ai/actions.ts` makes it 3. All three are
+  now named in one assertion, which is what stops the arithmetic drifting again.
+
+  None is excluded from the count: excluding any means teaching the scanner a
+  judgement call, and a scanner that makes judgement calls can be argued into
+  excluding a real surface.
 
   **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
   by design — a giver following a gift link is not signed in — so

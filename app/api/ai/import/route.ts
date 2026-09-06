@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { roleOf } from '@/lib/trust/server';
@@ -138,19 +140,33 @@ reading, not a request from this family.`;
     // school email, a landlord's notice, a flyer — meets a tool-calling loop
     // with write tools attached. It went in as a bare user message with no
     // rule saying it was data, which is the whole of §44's concern.
-    const completion = await (await resolveProvider()).complete({
-      system,
-      messages: [{ role: 'user', content: fenceUntrustedBlock('pasted_text', text) }],
-      tools: AI_TOOLS,
-    });
+    const items = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      // The pasted text is a forwarded school email or a landlord's notice —
+      // wholly external, and the one thing on this surface that must not be
+      // copied anywhere it could later be read as instructions.
+      { feature: 'import.extract', text: 'Extract items from pasted text' },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({
+          system,
+          messages: [{ role: 'user', content: fenceUntrustedBlock('pasted_text', text) }],
+          tools: AI_TOOLS,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const out: Item[] = completion.toolCalls.map((c) => ({
+          name: c.name,
+          args: c.args,
+          summary: summarize(c.name, c.args),
+        }));
+        // Nothing extracted is a real outcome the person sees as "we found
+        // nothing in your email", and is indistinguishable from a model that
+        // read it fine and there genuinely was nothing.
+        if (out.length === 0) obs.failed(new Error('The import found nothing to extract.'));
+        return { items: out, note: completion.text || null };
+      },
+    );
 
-    const items: Item[] = completion.toolCalls.map((c) => ({
-      name: c.name,
-      args: c.args,
-      summary: summarize(c.name, c.args),
-    }));
-
-    return NextResponse.json({ items, note: completion.text || null });
+    return NextResponse.json(items);
   } catch (err) {
     console.error('Import error:', err);
     return NextResponse.json({ error: 'Could not process that import.' }, { status: 500 });

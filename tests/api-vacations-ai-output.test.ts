@@ -72,7 +72,20 @@ beforeEach(() => {
   mocks.filters = [];
   mocks.failTable = null;
   mocks.trip = { id: 'trip-1', family_id: 'family-1', title: 'Family break', destination: 'Boston', kind: 'domestic', start_date: '2026-10-01', end_date: '2026-10-03', is_international: false, budget_cents: null };
-  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1' } });
+  // `role`, `family` and `member` are what `scopeFromUserContext` reads to build
+  // the scope the route now opens its `ai_requests` row through. All three are
+  // required fields on `FamilyMembership`, so production always has them; this
+  // stub was simply thinner than the type. Without them the scope build throws
+  // INSIDE the route's try, and every case below — success included — comes back
+  // as the catch's 502.
+  mocks.requireUserContext.mockResolvedValue({
+    user: { id: 'user-1' },
+    active: {
+      familyId: 'family-1', role: 'parent',
+      family: { name: 'Family One', timezone: 'America/Chicago' },
+      member: { id: 'member-1' },
+    },
+  });
   mocks.createServer.mockResolvedValue({ from });
   mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
   mocks.resolveProvider.mockResolvedValue({ complete: mocks.complete });
@@ -87,6 +100,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+/**
+ * The writes that would change the family's trip.
+ *
+ * The route now also opens an `ai_requests` row, which is the assistant's own
+ * bookkeeping about the attempt and not trip data — the same class as
+ * `ai_messages` elsewhere. Filtering it out here keeps the assertion saying what
+ * it always meant: an invalid plan touches NOTHING the family would see.
+ * Widening this set is deliberate; anything not named still fails the test.
+ */
+const OWN_BOOKKEEPING = new Set(['ai_requests']);
+const builderWrites = () => mocks.writes.filter((w) => !OWN_BOOKKEEPING.has(w.table));
 
 describe('vacation builder validates before persistence', () => {
   const invalid: [string, string][] = [
@@ -120,7 +145,7 @@ describe('vacation builder validates before persistence', () => {
     const response = await POST(request());
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: 'AI builder returned an invalid trip plan. Please try again.' });
-    expect(mocks.writes).toEqual([]);
+    expect(builderWrites()).toEqual([]);
     expect(mocks.suggestPacking).not.toHaveBeenCalled();
   });
 
@@ -155,14 +180,14 @@ describe('vacation builder validates before persistence', () => {
   it('preserves optional sections and rule-based packing for an empty object plan', async () => {
     mocks.complete.mockResolvedValue({ text: '{}' });
     expect(await (await POST(request())).json()).toEqual({ ok: true, added: { activities: 0, items: 0, budget: 0, packing: 1 } });
-    expect(mocks.writes.map((w) => w.table)).toEqual(['vacation_packing_lists', 'vacation_packing_items']);
+    expect(builderWrites().map((w) => w.table)).toEqual(['vacation_packing_lists', 'vacation_packing_items']);
   });
 
   it('rejects itinerary entries on an undated trip before any activity write', async () => {
     mocks.trip.start_date = null;
     mocks.trip.end_date = null;
     expect((await POST(request())).status).toBe(502);
-    expect(mocks.writes).toEqual([]);
+    expect(builderWrites()).toEqual([]);
   });
 
   it('still allows an undated activity-only plan with omitted cost', async () => {
@@ -189,14 +214,14 @@ describe('vacation builder validates before persistence', () => {
     const response = await POST(request());
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: 'AI builder is temporarily unavailable.' });
-    expect(mocks.writes).toEqual([]);
+    expect(builderWrites()).toEqual([]);
   });
 
   it('preserves authentication before provider calls or writes', async () => {
     mocks.requireUserContext.mockRejectedValue(new Error('Unauthorized'));
     expect((await POST(request())).status).toBe(401);
     expect(mocks.complete).not.toHaveBeenCalled();
-    expect(mocks.writes).toEqual([]);
+    expect(builderWrites()).toEqual([]);
   });
 
   it('preserves rate limiting before provider calls or writes', async () => {
@@ -205,6 +230,6 @@ describe('vacation builder validates before persistence', () => {
     expect(response.status).toBe(429);
     expect(response.headers.get('Retry-After')).toBe('30');
     expect(mocks.complete).not.toHaveBeenCalled();
-    expect(mocks.writes).toEqual([]);
+    expect(builderWrites()).toEqual([]);
   });
 });
