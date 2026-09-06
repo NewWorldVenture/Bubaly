@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { navigatePublicHome } from './helpers/public-home-navigation';
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+  await navigatePublicHome(page);
   const rejectCookies = page.getByRole('button', { name: 'Reject non-essential', exact: true });
   if (await rejectCookies.isVisible()) await rejectCookies.click();
 });

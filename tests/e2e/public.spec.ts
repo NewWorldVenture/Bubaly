@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { PUBLIC_ROUTES } from './public-routes';
+import { navigatePublicHome } from './helpers/public-home-navigation';
 
 // Public marketing + auth routes must render without a database or session.
 test.describe('public routes render', () => {
@@ -15,7 +16,7 @@ test.describe('public routes render', () => {
 });
 
 test('homepage shows primary CTA and the theme toggle', async ({ page }) => {
-  await page.goto('/');
+  await navigatePublicHome(page);
   await expect(page.getByRole('link', { name: /get started/i }).first()).toBeVisible();
   // Task 3: dark/light toggle is present on the homepage.
   await expect(page.getByRole('button', { name: /switch to (light|dark) mode/i })).toBeVisible();
