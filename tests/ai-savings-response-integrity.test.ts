@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   resolveProvider: vi.fn(),
   complete: vi.fn(),
   used: vi.fn(),
+  failed: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
@@ -18,7 +19,7 @@ vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (
     _scope: unknown,
     _meta: unknown,
-    run: (obs: { used: typeof mocks.used }) => Promise<unknown>,
+    run: (obs: { used: typeof mocks.used; failed: typeof mocks.failed }) => Promise<unknown>,
   ) => run(mocks),
 }));
 vi.mock('@/lib/finance/subscriptions', () => ({
