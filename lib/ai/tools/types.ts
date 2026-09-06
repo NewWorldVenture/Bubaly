@@ -20,6 +20,7 @@
 // resolved into the OUTPUT by `execute`, which does have the scope, and the
 // summary only composes strings. `describeWhen` below is that resolver.
 import type { ZodType } from 'zod';
+import type { TrailAction } from '@/lib/activity/trail';
 import type { ServiceResult, ServiceScope } from '@/lib/services/types';
 import type { Capability, TrustDomain } from '@/lib/trust/engine';
 
@@ -81,6 +82,14 @@ export type ToolDefinition<I = unknown, O = unknown> = {
    * same feed. Everything else defaults to `'executor'`.
    */
   activityFrom?: 'service' | 'executor';
+  /**
+   * The verb the household trail records for this call, when `capability`
+   * cannot say it. `create`/`edit`/`delete` map straight onto a trail verb;
+   * `automate` does not — `routines.create` and `routines.pause` share it and
+   * mean opposite things — so an `automate` tool that writes must name its own.
+   * A write tool that resolves to no verb is a test failure, not a default.
+   */
+  trailAction?: TrailAction;
   /**
    * The row this call created or changed, for `ai_tool_calls.resource_table` /
    * `resource_id` — what makes a ledger entry point at the thing it produced.

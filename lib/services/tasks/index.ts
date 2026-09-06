@@ -128,6 +128,7 @@ export async function createTodo(scope: ServiceScope, input: CreateTodoInput): P
 
       await recordActivitySafely(scope, {
         agent: 'tasks',
+        action: 'create',
         title: `Added the task "${title}"`,
         href: '/dashboard/todos',
         memberId: assigneeId ?? null,
@@ -234,6 +235,7 @@ export async function updateTodo(scope: ServiceScope, todoId: string, patch: Upd
 
   await recordActivitySafely(scope, {
     agent: 'tasks',
+    action: 'update',
     title: `Updated the task "${data.title}"`,
     href: '/dashboard/todos',
     memberId: data.assigned_to_id,
@@ -255,7 +257,7 @@ export async function deleteTodo(scope: ServiceScope, todoId: string): Promise<S
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
 
-  await recordActivitySafely(scope, { agent: 'tasks', title: `Removed the task "${data.title}"`, href: '/dashboard/todos' });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'tasks', title: `Removed the task "${data.title}"`, href: '/dashboard/todos' });
   return ok({ id: data.id, title: data.title });
 }
 
@@ -367,6 +369,7 @@ export async function createChore(
 
   await recordActivitySafely(scope, {
     agent: 'chores',
+    action: 'create',
     title: `Added the chore "${title}"`,
     href: '/dashboard/chores',
     memberId: input.assigneeId ?? null,

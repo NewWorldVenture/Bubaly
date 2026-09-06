@@ -294,7 +294,7 @@ async function rememberConfirmed(
       console.error('[service:memory] fact update failed', error);
       return fail(describeDbError(error, 'Could not update that memory.'), { code: SERVICE_CODES.db });
     }
-    await recordActivitySafely(scope, { agent: 'memory', title: `Updated what I remember about ${input.key}`, href: '/dashboard/knowledge', memberId: input.memberId });
+    await recordActivitySafely(scope, { action: 'update', agent: 'memory', title: `Updated what I remember about ${input.key}`, href: '/dashboard/knowledge', memberId: input.memberId });
     return ok({ kind: 'fact', fact: data, updated: true });
   }
 
@@ -322,7 +322,7 @@ async function rememberConfirmed(
     console.error('[service:memory] fact insert failed', error);
     return fail(describeDbError(error, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { agent: 'memory', title: `Remembered ${input.key}: ${input.content}`, href: '/dashboard/knowledge', memberId: input.memberId });
+  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}: ${input.content}`, href: '/dashboard/knowledge', memberId: input.memberId });
   return ok({ kind: 'fact', fact: data, updated: false });
 }
 
@@ -524,7 +524,7 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(describeDbError(updateError, 'Could not confirm that memory.'), { code: SERVICE_CODES.db });
   }
 
-  await recordActivitySafely(scope, { agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ fact, alreadyAccepted: false });
 }
 
@@ -577,7 +577,7 @@ export async function forgetFact(
     console.error('[service:memory] fact delete failed', error);
     return fail(describeDbError(error, 'Could not forget that.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { agent: 'memory', title: `Forgot ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Forgot ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ kind: 'fact', label: fact.label });
 }
 
@@ -615,6 +615,6 @@ export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<
   }
 
   const counts = { facts: (facts ?? []).length, suggestions: (suggestions ?? []).length };
-  await recordActivitySafely(scope, { agent: 'memory', title: `Cleared ${counts.facts + counts.suggestions} things Bubaly had learned`, href: '/dashboard/knowledge' });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Cleared ${counts.facts + counts.suggestions} things Bubaly had learned`, href: '/dashboard/knowledge' });
   return ok(counts);
 }

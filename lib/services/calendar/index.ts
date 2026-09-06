@@ -121,6 +121,7 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
 
       await recordActivitySafely(scope, {
         agent: 'calendar',
+        action: 'create',
         title: `Added "${title}" to the calendar`,
         detail: new Date(startsAt).toISOString(),
         href: '/dashboard/calendar',
@@ -214,6 +215,7 @@ export async function createEvents(
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
+    action: 'create',
     title: data.length === 1 ? `Added "${data[0]!.title}" to the calendar` : `Added ${data.length} events to the calendar`,
     detail: data.map((e) => e.title).join(', ').slice(0, 500),
     href: '/dashboard/calendar',
@@ -311,6 +313,7 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
+    action: 'update',
     title: `Updated "${data.title}"`,
     href: '/dashboard/calendar',
     memberId: data.assignee_id,
@@ -333,7 +336,7 @@ export async function deleteEvent(scope: ServiceScope, eventId: string): Promise
   }
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
 
-  await recordActivitySafely(scope, { agent: 'calendar', title: `Removed "${data.title}" from the calendar`, href: '/dashboard/calendar' });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'calendar', title: `Removed "${data.title}" from the calendar`, href: '/dashboard/calendar' });
   return ok({ id: data.id, title: data.title });
 }
 
@@ -747,6 +750,7 @@ export async function rsvpToEvent(scope: ServiceScope, input: RsvpInput): Promis
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
+    action: 'rsvp',
     title: `Replied "${RSVP_LABELS[status]}" to "${event.title}"`,
     detail: event.starts_at,
     href: '/dashboard/calendar',

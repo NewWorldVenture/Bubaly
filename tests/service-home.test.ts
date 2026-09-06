@@ -129,7 +129,9 @@ describe('contractors', () => {
     const { db, calls } = makeDb((call) => (call.kind === 'update' ? { data: { ...CONTRACTOR, phone: '555-0199' }, error: null } : { data: { id: 'c-1' }, error: null }));
     const res = await saveContractor(scopeWith(db), { name: 'bob pipes', phone: '555-0199' });
     expect(res).toMatchObject({ ok: true, data: { created: false } });
-    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+    // No SECOND contractor — narrowed to the table the claim is about, because
+    // the service also appends a household trail row, which is an insert too.
+    expect(calls.some((c) => c.kind === 'insert' && c.table === 'home_contractors')).toBe(false);
     expect(calls.find((c) => c.kind === 'update')?.filters).toMatchObject({ id: 'c-1', family_id: 'fam-1' });
   });
 

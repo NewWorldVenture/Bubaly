@@ -11,8 +11,7 @@ import {
   Plane, Cake, Inbox, ArrowRight, Check, X, CircleDot, Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { resolveActivityAction } from '@/app/(app)/dashboard/agents/actions';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatus } from '@/lib/agents/roster';
@@ -59,9 +58,8 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
 
   async function resolve(a: Activity, status: 'done' | 'dismissed') {
     setHidden((h) => new Set(h).add(a.id));
-    const sb = createClient();
-    const { error: err } = await sb.from('agent_activity').update({ status }).eq('id', a.id);
-    if (err) { toastError(describeDbError(err)); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
+    const res = await resolveActivityAction(a.id, status);
+    if (!res.ok) { toastError(res.error); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
     success(status === 'done' ? 'Marked done' : 'Dismissed');
   }
 

@@ -1,19 +1,27 @@
-// The durable record of what Bubaly did on the family's behalf — the feed the
-// Command Center and /dashboard/agents read.
+// Two records of one change, kept apart on purpose.
 //
-// Backed by `public.agent_activity` (migration 0127), which exists precisely
-// for this: "the persistent record of what each agent surfaces or does". That
-// scoping is why `recordActivity` is a no-op for `actorKind: 'member'`: a
-// parent adding a to-do in the UI is not agent activity, and logging it here
-// would bury the AI's work in manual noise. Manual edits are already
-// observable through the rows themselves.
+// `public.agent_activity` (0127) is BUBALY'S ledger — "the persistent record of
+// what each agent surfaces or does" — and /dashboard/agents renders it as the
+// agent roster's feed while `lib/metric/time-saved-server.ts` counts its `done`
+// rows as time the assistant saved. So it still takes nothing from a person
+// acting through the UI: a parent adding a to-do is not agent activity, and
+// writing it there would have Bubaly quietly taking credit for their work.
 //
-// Writes here are deliberately best-effort from a service's point of view: the
-// feed entry describes a household write that has already committed, so
-// failing the caller because the description could not be saved would trade a
-// real outcome for a cosmetic one. The failure is still logged and returned.
+// `public.audit_logs` (0002) is the HOUSEHOLD'S record — rendered at
+// /family/activity as "a running log of changes across your household" — and it
+// takes every committed write regardless of who made it, tagged with which.
+// That is the half that was missing: no domain service wrote to it at all, so
+// the page a family opens to see who changed what has been empty since it
+// shipped, and an event Bubaly added left a trace where the identical event a
+// parent added by hand left none.
+//
+// Writes here are deliberately best-effort from a service's point of view: both
+// entries describe a household write that has ALREADY COMMITTED, so failing the
+// caller because a description could not be saved would trade a real outcome
+// for a cosmetic one. Failures are logged.
 import 'server-only';
-import type { Tables } from '@/lib/database.types';
+import { type TrailAction } from '@/lib/activity/trail';
+import type { Json, Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -24,6 +32,16 @@ export type ActivityStatus = 'active' | 'done' | 'dismissed';
 export type RecordActivityInput = {
   /** The agent or domain that acted, e.g. 'scheduler', 'calendar', 'groceries'. */
   agent: string;
+  /**
+   * What was done to it, for the household trail — or `null` for something that
+   * changed nothing and so belongs only in Bubaly's own feed.
+   *
+   * Required rather than defaulted, and required even when it is `null`: a
+   * wrong verb on a page a family reads is worse than a compile error here, and
+   * "this changed nothing" is a claim worth making on purpose rather than by
+   * forgetting an argument.
+   */
+  action: TrailAction | null;
   /** One line a family member can read without context, e.g. "Added Dentist to the calendar". */
   title: string;
   kind?: ActivityKind;
@@ -32,26 +50,67 @@ export type RecordActivityInput = {
   href?: string | null;
   /** Who the entry is about; null means the whole family. */
   memberId?: string | null;
+  /** The row that changed, so the trail can point back at it. */
+  resourceId?: string | null;
   severity?: ActivitySeverity;
 };
 
 export type ActivityRow = Tables<'agent_activity'>;
 
 /**
- * Append one entry to the agent activity feed.
+ * Append the household trail entry for a committed write.
+ *
+ * Runs for EVERY actor — that is the whole point — and records which one, since
+ * Bubaly acts inside a person's session and `actor_id` alone cannot tell "Dad
+ * added it" from "Bubaly added it".
+ *
+ * Never throws and never changes the caller's outcome. The row it describes is
+ * already committed; losing the description must not undo the change.
+ *
+ * Returns whether a row was written, which is false both for a caller that
+ * changed nothing and for a failed insert. The two are distinguished in the log,
+ * not in the return: no caller does anything different with them.
+ */
+async function appendHouseholdTrail(scope: ServiceScope, input: RecordActivityInput, title: string): Promise<boolean> {
+  if (input.action === null) return false;
+
+  const { error } = await scope.db.from('audit_logs').insert({
+    family_id: scope.familyId,
+    // audit_logs.actor_id references auth.users; a cron actor has none.
+    actor_id: scope.userId,
+    action: input.action,
+    resource: input.agent,
+    resource_id: input.resourceId ?? null,
+    metadata: { actor: scope.actorKind, title } as Json,
+  });
+  if (error) {
+    console.error('[service:activity] household trail entry dropped', error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Record one committed change: always on the household trail, and on the agent
+ * feed only when Bubaly was the one acting.
  *
  * Returns `{ recorded: false }` (still `ok`) when the scope is a human acting
  * through the UI, so callers can write `await recordActivity(...)`
  * unconditionally without branching on actor kind at every call site.
+ * `trailed` reports the other half separately, because a person's change writes
+ * one row and Bubaly's writes two.
  */
 export async function recordActivity(
   scope: ServiceScope,
   input: RecordActivityInput,
-): Promise<ServiceResult<{ id: string | null; recorded: boolean }>> {
-  if (scope.actorKind === 'member') return ok({ id: null, recorded: false });
-
+): Promise<ServiceResult<{ id: string | null; recorded: boolean; trailed: boolean }>> {
   const title = input.title.trim();
   if (!title) return fail('Activity needs a title.', { code: SERVICE_CODES.invalidInput });
+
+  // Before the actor-kind branch, so the household record is complete even
+  // though the agent feed deliberately is not.
+  const trailed = await appendHouseholdTrail(scope, input, title);
+  if (scope.actorKind === 'member') return ok({ id: null, recorded: false, trailed });
 
   const { data, error } = await scope.db
     .from('agent_activity')
@@ -75,7 +134,7 @@ export async function recordActivity(
     console.error('[service:activity] record failed', error);
     return fail(describeDbError(error, 'Could not record that activity.'), { code: SERVICE_CODES.db });
   }
-  return ok({ id: data.id, recorded: true });
+  return ok({ id: data.id, recorded: true, trailed });
 }
 
 /**

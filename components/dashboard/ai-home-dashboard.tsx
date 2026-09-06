@@ -79,7 +79,6 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { count: openTodos },
     { data: members },
     { data: upcomingEvents },
-    { data: recentActivity },
     { data: autopilotOpen },
     { count: autopilotHandledCount },
     { count: unreadCommsCount },
@@ -124,8 +123,6 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .gte('starts_at', todayEnd.toISOString())
       .lte('starts_at', new Date(Date.now() + 7 * 86400000).toISOString())
       .order('starts_at').limit(5),
-    supabase.from('audit_logs').select('id, action, entity_type, created_at')
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(5),
     supabase.from('autopilot_suggestions')
       .select('id, title, detail, kind, urgency, confidence')
       .eq('family_id', familyId).eq('status', 'open')
