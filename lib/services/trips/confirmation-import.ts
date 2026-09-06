@@ -147,8 +147,9 @@ function matchesPreview(
     || !dbTimestamp.safeParse(preview.trip.updatedAt).success) return false;
   try {
     // h23 and explicit calendar/numerals keep midnight and early years unambiguous.
+    // The Gregorian calendar supplies the era; ISO 8601 can omit it even when requested.
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-      calendar: 'iso8601', numberingSystem: 'latn', timeZone: preview.trip.timezone,
+      calendar: 'gregory', numberingSystem: 'latn', timeZone: preview.trip.timezone,
       era: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
     }).formatToParts(new Date(input.fields.reservedAt)).map((part) => [part.type, part.value]));
