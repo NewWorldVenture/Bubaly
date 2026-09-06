@@ -48,17 +48,46 @@ family is right.
 | **70** | medium / M | CONTINUOUS CLOSED LOOP | When the week changes underneath a run — the plumber can't come Tuesday, or three of five dinners fail because the pantry is empty — Bubaly cannot rethink the rest of the plan. It marks those steps failed, reports "partially completed", and stops. A parent has to open the run page and hand-edit a step (or start the whole request again) to get the remaining work re-planned, which is exactly the seven-modules-by-hand work the product exists to remove. |
 | **14** | low / S | AI MEMORY | A family that is happy for Bubaly to remember meal preferences and clothing sizes but does not want it keeping notes about, say, their finances, their contacts, or one child's routines has exactly one lever: all memory or none. Turning it off to protect the one area they care about also stops Bubaly remembering that Tom doesn't eat mushrooms and that Saturday mornings are off-limits, so in practice they leave it on and Bubaly keeps learning in the area they wanted left alone. The two categories most families would name first (medical, account) are already protected, so what is lost is the family's ability to draw their own line rather than accept ours. |
 
+### One correction worth carrying
+
+**§30 is about the ledger, not the gate.** It is easy — I did it — to read "the chat
+assistant bypasses the plan path's machinery" as including the trust gate. It does not.
+`wrapToolsWithTrust` maps all eleven of the assistant's write tools in `TOOL_DOMAIN`
+(`lib/assistant/trust-wrapper.ts`) and routes each through `gateAiAction`, which
+resolves the legacy name through the registry and applies the tool's declared risk plus
+the family's settings and autonomy dial. So a child's chat write is gated today.
+
+What the chat path really lacks is the `ai_tool_calls` reservation, the
+already-succeeded probe and a stable idempotency key — which is exactly why the row
+above is titled IDEMPOTENCY and its impact is duplicates, not unauthorised writes.
+Fixing it by inventing a second gate helper would add a worse copy of one that already
+runs; delegating to `executeTool` is the shape that gets the ledger without a second
+gate. Design notes and the objections a review raised against them are in the tranche
+design run, and they are substantial: a client-supplied key is guessable across members
+unless the acting `memberId` is in it, `legacy-adapter.ts` calls `executeTool` with no
+options so ~27 registry write tools would stay undeduplicated, and delegation changes
+three visible behaviours (`createTodo` defaults the assignee to the acting member,
+`groceries.addItems` skips a duplicate instead of adding it, `reminders.snooze` refuses
+a backward move). None of that is a reason not to do it; all of it belongs in the PR
+that does.
+
 ### Closed since the sweep
 
-- **§21, the push half.** `dispatchPendingPushes` selected on `pushed_at` alone. The
-  in-app list (`listUnread`) and the email digest (`deliverNotificationEmails`) both
-  filter `send_at <= now`; push did not — and `listUnread`'s own docstring claimed the
-  deferral holds *"at read time as well as at push time."* It did not. That bites today
-  with no quiet-hours writer anywhere, because the AI's `notifications.notify` tool
-  exposes `send_at` as *"Earliest delivery"*: a notice scheduled for 8am tomorrow buzzed
-  the phone on the next two-hourly scan, tonight. Fixed by one `.lte('send_at', …)`,
-  proved by `tests/push-send-at-boundary.test.ts`. The §21 row above is what remains:
-  two stores, one reader, no writer, and `child_channels` unread.
+- **§21, the delivery half.** Four surfaces read `notifications` and they did not
+  agree on whether a scheduled notice is due. `deliverNotificationEmails` filtered
+  `send_at <= now`. `listUnread` filtered it and — as an adversarial review of the
+  §21 design pointed out, correcting an earlier claim here — **has no caller at all**
+  outside its own tests, so filtering there protected nobody. `dispatchPendingPushes`,
+  the notification bell and the notifications list all read without the filter.
+
+  That bites today with no quiet-hours writer anywhere, because `notify()` takes an
+  explicit `sendAt` and the AI's `notifications.notify` tool advertises it as
+  *"Earliest delivery, ISO 8601"*: a notice scheduled for 8am tomorrow buzzed the
+  phone on the next two-hourly scan and lit the badge, tonight. All three are fixed
+  with the same `.lte('send_at', …)`, pinned by `tests/push-send-at-boundary.test.ts`
+  and `tests/notification-due-surfaces.test.ts` — the second asserts all four surfaces
+  agree, so the next one added has to decide deliberately. The §21 row above is what
+  remains: two stores, no reader, no settings control, and `child_channels` unread.
 
 - **§57, the to-do FK and two misattributions.** `lib/assistant/tools.ts` wrote
   `created_by: ctx.userId` into `todo_lists` and `todo_items`, whose FKs point at
