@@ -22,8 +22,14 @@ describe('scheduled recovery failure contracts', () => {
   it('counts auction notification and provider audit failures', () => {
     const auctions = read('app/api/cron/close-auctions/route.ts');
     const providers = read('app/api/cron/provider-sync/route.ts');
-    expect(auctions).toContain('notificationError');
-    expect(auctions).toContain('failed++');
+    // The property is that a notification which did not go out is COUNTED, so
+    // the cron reports 502 rather than a clean run. It used to be pinned by the
+    // name of a local (`notificationError`), which broke when the route moved to
+    // notify() while still counting the failure — the code was right and the
+    // test was describing its old shape. Assert the counting instead.
+    expect(auctions).toMatch(/if \(notified\.some\(\(sent\) => !sent\)\) \{\s*\n\s*failed\+\+;/);
+    expect(auctions).toMatch(/if \(!sent\) \{\s*\n\s*failed\+\+;/);
+    expect(auctions).toContain('const ok = failed === 0;');
     expect(providers).toContain('auditFailed');
     expect(providers).toContain('const ok = failed === 0 && auditFailed === 0;');
   });

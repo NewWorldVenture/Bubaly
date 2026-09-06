@@ -9,6 +9,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
 
 type DB = SupabaseClient<Database>;
 
@@ -30,6 +33,12 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
 }
 
 export async function runAutopilotScan(supabase: DB, familyId: string, userId: string | null): Promise<AutopilotScanResult> {
+  // Built once, lazily: the scope read costs a query, and most scans produce no
+  // notification at all. Null means the family could not be read, and the
+  // notification is skipped rather than sent against a guessed timezone —
+  // quiet hours evaluated in the wrong zone hold a notice at six in the evening
+  // and let one through at two in the morning.
+  let notifyScope: ServiceScope | null = null;
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const in30 = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
@@ -270,17 +279,31 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     }
 
     // Ambient push/email for the things worth interrupting for.
+    //
+    // Through the notifications SERVICE, not a raw insert. The raw insert
+    // skipped quiet hours entirely, and this is the surface where that hurts
+    // most: `autopilot-scan` runs at 06:30 UTC, which is 23:30 for a family on
+    // US Pacific time. Bubaly's own unprompted suggestion was the thing most
+    // likely to light up a phone at half past eleven at night — the §21 story,
+    // arrived at from Bubaly's own initiative rather than a chore or a renewal.
+    // The service also brings the duplicate guard (a re-run of the scan no
+    // longer re-notifies) and skips managed profiles that have no login.
+    //
+    // NOT urgent: an autopilot suggestion is a courtesy. It is still delivered,
+    // just at the hour the family said they were willing to hear from Bubaly.
     if (d.urgency >= 2 || status === 'auto_executed') {
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        family_id: familyId,
-        user_id: null, // whole family; managers receive it via the delivery pipeline
-        type: 'system',
-        title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
-        body: d.detail,
-        related_type: 'autopilot_suggestions',
-        related_id: inserted.id,
-      });
-      if (!notifErr) notified++;
+      const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
+      if (scope) {
+        const sent = await notify(scope, {
+          recipients: 'family',
+          type: 'system',
+          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
+          body: d.detail,
+          relatedType: 'autopilot_suggestions',
+          relatedId: inserted.id,
+        });
+        if (sent.ok && sent.data.created > 0) notified++;
+      }
     }
   }
 

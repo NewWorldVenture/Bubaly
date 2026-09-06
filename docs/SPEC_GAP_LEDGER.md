@@ -27,7 +27,7 @@ family is right.
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
 | **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
-| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. |
+| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (Two of the three clauses are now stale: the quiet-hours setting IS read, and the raw-insert sites that bypassed it are down to one — `lib/server/notifications.ts`. What remains of this row is `child_channels`, that last generator, and the push channel itself.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
 | **30** | high / M | IDEMPOTENCY | A parent types "add soccer practice Saturday at 9" into Bubaly's chat, the phone loses signal mid-answer and the app re-sends — and the family now has two soccer practices on the calendar, the exact duplicate the concierge path is protected against. The same applies to a double-tapped send, a reloaded tab, or Bubaly's own retry of a chat write: nothing can tell an already-succeeded write from a new one, so the family cleans up duplicate chores, duplicate grocery lines and duplicate reminders by hand and stops trusting the assistant with anything that matters. |
@@ -112,6 +112,53 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§21, the five notifications that could still arrive at half past eleven.**
+  `notify()` is where a notification acquires the two things a family relies on —
+  the quiet-hours window and the unread-duplicate guard — and
+  `tests/notification-write-boundary.test.ts` already enumerated who bypassed it,
+  each with a reason. Five carried the same note: *"not urgent, should move"*.
+  They have moved.
+
+  **The crons matter more than their names suggest, because cron schedules are
+  in UTC and families are not.** `autopilot-scan` runs at 06:30 UTC, which is
+  **23:30 for a family on US Pacific time** — so Bubaly's own unprompted
+  suggestion was the single thing most likely to light up a phone at half past
+  eleven at night, and it wrote its row raw. `close-auctions` at 10:00 UTC is
+  late evening in New Zealand. This is the §21 story arrived at from Bubaly's own
+  initiative rather than from a chore or a renewal.
+
+  Converted: `lib/autopilot/scan.ts`, `app/gift/actions.ts`,
+  `app/(app)/dashboard/locator/actions.ts`,
+  `app/api/cron/close-auctions/route.ts`,
+  `app/api/cron/return-reminders/route.ts`. Each also gains the duplicate guard,
+  which for the crons is the difference between a re-run nudging a family twice
+  and not.
+
+  **The locator is marked `urgent`, departing from the note that had it down as
+  "not urgent".** Deferring it is the harm: the geofence alerts quiet hours would
+  actually hold are the night-time ones, and a child LEAVING the house at 2am is
+  precisely the alert a parent must not receive at 7am. Daytime arrivals fall
+  outside the window anyway, so marking it urgent costs a family nothing and
+  protects the one case that matters. It still gains the duplicate guard, which
+  is the real fix for a phone whose GPS jitters across a geofence edge.
+
+  **Both crons build one scope PER FAMILY.** They walk rows belonging to
+  different households, and a single scope would apply one family's quiet hours —
+  and one family's timezone — to everyone the cron touched. `systemScopeForFamily`
+  reads the real zone rather than defaulting, because a window evaluated in the
+  wrong zone holds a notice at six in the evening and lets one through at two in
+  the morning.
+
+  Two boundary tests went red for the right reason and were fixed rather than
+  bent: both pinned the property "a failed notification is counted, and the
+  dedupe stamp is not written for a notice nobody got" **by the name of a local
+  variable** (`notificationError`). The routes still do both; the tests were
+  describing their old shape. They now assert the counting and the stamping.
+
+  Still open in §21: `child_channels` is still saved and never consulted, the
+  push channel itself, and `lib/server/notifications.ts` — a batch generator that
+  assembles its own rows and is genuinely a different job.
 
 - **§30, one pending approval per request, however many times the phone sends
   it.** The smallest and most concrete piece of the row, and the one that
