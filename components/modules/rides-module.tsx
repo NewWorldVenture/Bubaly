@@ -20,7 +20,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  groupByDate, driverConflicts, upcomingRides, needsDriverCount, shortTime,
+  groupByDate, assessDriverSchedule, upcomingRides, needsDriverCount, shortTime,
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
@@ -65,13 +65,16 @@ export function RidesModule() {
   const rideLikes = useMemo<RideLike[]>(() =>
     (rides ?? []).map((r) => ({
       id: r.id, title: r.title, ride_date: r.ride_date, pickup_time: r.pickup_time,
+      dropoff_time: r.dropoff_time,
       driver_id: r.driver_id, rider_ids: r.rider_ids, status: r.status,
     })), [rides]);
 
-  const conflicts = useMemo(() => driverConflicts(rideLikes), [rideLikes]);
   const tk = todayKey();
   const upcoming = useMemo(() => upcomingRides(rides ?? [], tk), [rides, tk]);
-  const needsDriver = needsDriverCount(rideLikes);
+  const visibleRideLikes = useMemo(() => showPast ? rideLikes : upcomingRides(rideLikes, tk), [showPast, rideLikes, tk]);
+  const timing = useMemo(() => assessDriverSchedule(visibleRideLikes), [visibleRideLikes]);
+  const conflicts = timing.conflicts;
+  const needsDriver = needsDriverCount(visibleRideLikes);
 
   const grouped = useMemo(
     () => groupByDate((showPast ? (rides ?? []) : upcoming) as RideLike[]),
@@ -155,7 +158,7 @@ export function RidesModule() {
       />
 
       {/* Alerts */}
-      {(conflicts.size > 0 || needsDriver > 0) && (
+      {(conflicts.size > 0 || timing.incompleteTiming.size > 0 || needsDriver > 0) && (
         <div className="flex flex-wrap gap-3 mb-5">
           {conflicts.size > 0 && (
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-300">
@@ -167,8 +170,18 @@ export function RidesModule() {
               <UserX className="h-4 w-4" /> {needsDriver} ride{needsDriver > 1 ? 's need' : ' needs'} a driver
             </div>
           )}
+          {timing.incompleteTiming.size > 0 && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-300">
+              <Clock className="h-4 w-4" /> {timing.incompleteTiming.size} ride{timing.incompleteTiming.size > 1 ? 's have' : ' has'} incomplete timing. Review pickup and same-day drop-off times.
+            </div>
+          )}
         </div>
       )}
+
+      <p className="mb-4 text-xs text-muted">
+        Checks compare recorded pickup and drop-off times only. Travel between rides is not assessed.
+        Missing, invalid, or overnight times cannot establish a clear schedule.
+      </p>
 
       <div className="flex items-center gap-1.5 mb-4">
         <button onClick={() => setShowPast(false)}
@@ -208,6 +221,7 @@ export function RidesModule() {
                                 {RIDE_STATUS_LABELS[r.status]}
                               </span>
                               {conflicted && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">Conflict</span>}
+                              {timing.incompleteTiming.has(r.id) && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">Timing incomplete</span>}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                               {r.pickup_time && <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{shortTime(r.pickup_time)}{r.dropoff_time ? `–${shortTime(r.dropoff_time)}` : ''}</span>}
