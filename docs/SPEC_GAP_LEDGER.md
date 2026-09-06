@@ -38,7 +38,7 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 19 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: the admin view over runs now exists at `/admin/ai-activity`, and `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 19 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
@@ -290,6 +290,47 @@ the result rather than narrated as a fresh write.
   bookkeeping, so the set was widened deliberately and the assertion strengthened
   to also name the actual attack (no `calendar_events` write of any kind).
 
+  **The ledger is now readable, which is the half the gap row actually names.**
+  §33's complaint is not "the rows are missing" — it is *"a family writes in that
+  'Bubaly stopped doing my Sunday meal plan' and NOBODY CAN ANSWER THEM."* Until
+  `/admin/ai-activity`, no application code selected from `ai_requests` at all
+  except `loadRunDetail`, which needs a run. The twelve feature surfaces have no
+  run, so four tranches of careful recording were **write-only**: everything
+  above this paragraph was invisible to the person answering the ticket.
+
+  The page shows, across all families: surface, status, model, token total,
+  latency, error, and the request text — filterable by status, feature and
+  family, with a 24-hour strip counting failures and in-flight rows. It is behind
+  `app/(app)/admin/layout.tsx`, which redirects a non-super-admin before any
+  child renders.
+
+  Three decisions worth recording:
+
+  - **The query is in `lib/ai/activity.ts`, not in the page.** The runner is
+    `environment: 'node'` and cannot render a server component, so a page that
+    holds its own filtering is a page whose filtering is never tested. Twenty
+    tests pin it; the page has five guard assertions on top.
+  - **PostgreSQL filters and counts, JavaScript does not.** The neighbouring
+    audit-logs page fetches 500 rows and filters in memory. Copied here, "show me
+    every failure" would silently mean "every failure inside the last 500 rows",
+    on a table that grows by a row per AI call. `count: 'exact'` plus `range`
+    instead.
+  - **`request_text` is shown, and only here.** Support answering a ticket needs
+    the message that failed, and the same text already lives in `ai_messages`.
+    Most surfaces store a safe label ("Analyse a note", "Resolve a calendar
+    clash"); the chat assistant and the chef store the person's own words. The
+    search box deliberately does NOT search that column — it is for diagnosing a
+    surface, not for trawling what families typed.
+
+  One real bug came out of writing it: validating the status filter against
+  `RUN_STATES` is wrong. That constant is `AiRunLifecycleState[]` and includes
+  `paused` — a person pausing a RUN, which no request row ever carries — so
+  `?status=paused` would have reached a query that can never match, and the
+  console would have shown an empty table reading as "Bubaly did nothing" rather
+  than "that is not a status". The compiler caught the unsound type predicate;
+  `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
+  both halves.
+
   **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
   (the common case), "never throws" (the chat assistant) and "answers 200 with a
   flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
@@ -342,8 +383,9 @@ the result rather than narrated as a fresh write.
   not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
   500. Expect the same in the remaining 32: the stub is thinner than the type.
 
-  Still open in §33: the other 19 surfaces, and the admin view over runs, which
-  this does not touch. Note that `app/api/ai/route.ts` is not among them and is
+  Still open in §33: the other 19 surfaces. The admin view over runs is now
+  built; what it cannot show is a surface that never opened a row, which is what
+  the ceiling counts. Note that `app/api/ai/route.ts` is not among them and is
   not silent either — it holds the scope, the engine holds the provider, and the
   scanner counts the file that obtains one. For a route/helper pair like that,
   adoption in either closes both.
