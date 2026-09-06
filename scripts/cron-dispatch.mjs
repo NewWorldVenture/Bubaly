@@ -53,11 +53,6 @@ export const SCHEDULES = {
   // its own quarter hour, and the worker files requests rather than executing
   // them, so a tick is cheap.
   '/api/cron/family-routines': '*/15 * * * *',
-  // The brief is delivered at 7am in the FAMILY's zone, so the route has to be
-  // asked once an hour — every hour is somebody's 7am. Vercel's Hobby plan
-  // allows only daily crons, so vercel.json carries a daily entry and the real
-  // cadence lives here.
-  '/api/cron/daily-brief': '0 * * * *',
 };
 
 /** The workflow ticks on this cadence; a route is due if any minute in (prev tick, now] matches. */

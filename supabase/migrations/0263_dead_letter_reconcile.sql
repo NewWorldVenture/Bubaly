@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0261_dead_letter_reconcile.sql — when a run is abandoned, everything that
+-- 0263_dead_letter_reconcile.sql — when a run is abandoned, everything that
 -- described it says so.
 -- ----------------------------------------------------------------------------
 -- `claim_ai_runs` recovers runs whose lease expired: back to `ready`, or to

@@ -1,4 +1,4 @@
--- Behavioural proof for 0261: a dead-lettered run leaves nothing claiming to
+-- Behavioural proof for 0263: a dead-lettered run leaves nothing claiming to
 -- be in progress.
 do $$
 declare
@@ -41,5 +41,5 @@ begin
   select count(*) into n from public.ai_run_events where run_id = rid and event_type = 'run_failed';
   if n <> 1 then raise exception 'expected one run_failed event, found %', n; end if;
 
-  raise notice '0261 dead-letter reconcile: OK';
+  raise notice '0263 dead-letter reconcile: OK';
 end $$;

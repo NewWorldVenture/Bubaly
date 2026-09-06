@@ -8,17 +8,17 @@ import { describe, expect, it } from 'vitest';
 //
 // Four tables around it kept the family-wide rule, and an ordinary session
 // reads them directly — most sharply `ai_plan_steps.input_json`, which is the
-// verbatim tool arguments. 0262 gives the database the boundary the AI layer
+// verbatim tool arguments. 0264 gives the database the boundary the AI layer
 // was enforcing alone.
 //
 // The behavioural proof is docs/audit/ai-surface-role-privacy-check.sql, which
 // runs as a real `authenticated` session under RLS and fails on the old
 // policies. This locks the shape.
-const raw = readFileSync('supabase/migrations/0262_ai_surface_role_privacy.sql', 'utf8');
+const raw = readFileSync('supabase/migrations/0264_ai_surface_role_privacy.sql', 'utf8');
 const sql = raw.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
 const proof = readFileSync('docs/audit/ai-surface-role-privacy-check.sql', 'utf8');
 
-describe('0262 AI-surface role privacy', () => {
+describe('0264 AI-surface role privacy', () => {
   it('narrows the plan ledger to the requester or a manager', () => {
     for (const table of ['ai_plans', 'ai_plan_steps', 'ai_run_events']) {
       const policy = sql.slice(sql.indexOf(`create policy ${table}_select`));
@@ -45,12 +45,13 @@ describe('0262 AI-surface role privacy', () => {
     }
   });
 
-  it('leaves the brief readable by the family and writable only by the server', () => {
-    expect(sql).toContain('drop policy if exists home_briefs_insert on public.home_briefs');
-    expect(sql).toContain('drop policy if exists home_briefs_update on public.home_briefs');
-    expect(sql).not.toMatch(/create policy home_briefs_(insert|update)/);
-    // The read is untouched: a brief is for the whole family.
-    expect(sql).not.toContain('drop policy if exists home_briefs_select');
+  it('leaves home_briefs entirely to 0262, which is stronger', () => {
+    // 0262 quarantines that table outright — a restrictive deny-all, because a
+    // saved snapshot mixes sources whose access cannot be revalidated later.
+    // Touching its policies here would only weaken that by adding a permissive
+    // one alongside.
+    expect(sql).not.toMatch(/policy .*home_briefs/);
+    expect(raw).toContain('0262 quarantines that table outright');
   });
 
   it('ships a proof that reads as a child and as a parent, not just as postgres', () => {
@@ -68,18 +69,7 @@ describe('0262 AI-surface role privacy', () => {
   });
 });
 
-describe('the code agrees with 0262', () => {
-  it('writes the brief with the server’s client, not the reader’s', () => {
-    const store = readFileSync('lib/briefing/store.ts', 'utf8');
-    // Both writers — saveBrief and markDelivered. loadBrief still reads with
-    // the caller's client, because the brief is for the whole family to read.
-    expect((store.match(/await serverWriter\(scope\.db\)/g) ?? []).length).toBe(2);
-    for (const fn of ['saveBrief', 'markDelivered']) {
-      const body = store.slice(store.indexOf(`export async function ${fn}`));
-      expect(body.slice(0, body.indexOf('.from(')), fn).toContain('serverWriter(scope.db)');
-    }
-  });
-
+describe('the code agrees with 0264', () => {
   it('keeps the sensitive insight kinds to the adults', () => {
     const insights = readFileSync('lib/ai/insights.ts', 'utf8');
     const set = insights.slice(insights.indexOf('MANAGER_ONLY_INSIGHTS'));

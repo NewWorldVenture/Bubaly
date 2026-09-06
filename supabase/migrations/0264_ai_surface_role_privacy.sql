@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0262_ai_surface_role_privacy.sql — the role boundary the AI layer enforces
+-- 0264_ai_surface_role_privacy.sql — the role boundary the AI layer enforces
 -- now exists in the database too.
 -- ----------------------------------------------------------------------------
 -- Bubaly is careful: `riskToDecision`'s view rule refuses to read a family's
@@ -25,10 +25,11 @@
 --      and the memory panel); the table itself is family-wide, and a browser
 --      client can read it directly.
 --
---   4. home_briefs let any member INSERT and UPDATE. 0258 made it a delivery
---      ledger — `delivered_at` is a compare-and-set that decides whether a
---      family gets their morning brief once or twice — and every writer is
---      server code.
+-- home_briefs had the same shape of problem and is NOT handled here: main's own
+-- 0262 quarantines that table outright (a restrictive deny-all, because a saved
+-- snapshot mixes sources whose access cannot be revalidated later). That is
+-- strictly stronger than the narrowing this file would have applied, so this
+-- migration leaves it alone.
 --
 -- What this does NOT touch: the finance and document tables themselves. Their
 -- 0006/0109 policies are also role-blind — `financial_accounts`, `transactions`,
@@ -132,7 +133,3 @@ create policy family_facts_delete on public.family_facts
     and (category not in ('medical', 'account') or public.can_manage_family(family_id))
   );
 
--- ─── 4. home_briefs: read by the family, written by the server ──────────────
-drop policy if exists home_briefs_insert on public.home_briefs;
-drop policy if exists home_briefs_update on public.home_briefs;
--- SELECT is unchanged: the brief is for the whole family to read.

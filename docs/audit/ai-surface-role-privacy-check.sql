@@ -1,4 +1,4 @@
--- Behavioural proof for 0262, run as a real `authenticated` session under RLS.
+-- Behavioural proof for 0264, run as a real `authenticated` session under RLS.
 --
 -- Bubaly's AI layer refuses to read a family's medical detail or finances to a
 -- child. This asserts the database refuses too — for the plan ledger (whose
@@ -77,5 +77,5 @@ begin
   values (fam, 'fine', 'schedule', 'ai_request', '{"prompt": "plan our meals"}'::jsonb);
 
   reset role;
-  raise notice '0262 AI-surface role privacy: OK';
+  raise notice '0264 AI-surface role privacy: OK';
 end $$;

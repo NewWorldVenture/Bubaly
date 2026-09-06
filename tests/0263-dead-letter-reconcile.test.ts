@@ -11,11 +11,11 @@ import { describe, expect, it } from 'vitest';
 // The behavioural proof is docs/audit/dead-letter-reconcile-check.sql, which
 // runs the real function against a real Postgres. This locks the shape so the
 // four writes cannot be dropped by a later edit of the function.
-const raw = readFileSync('supabase/migrations/0261_dead_letter_reconcile.sql', 'utf8');
+const raw = readFileSync('supabase/migrations/0263_dead_letter_reconcile.sql', 'utf8');
 const sql = raw.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
 const proof = readFileSync('docs/audit/dead-letter-reconcile-check.sql', 'utf8');
 
-describe('0261 dead-letter reconcile', () => {
+describe('0263 dead-letter reconcile', () => {
   it('rewrites the one function that notices a dead worker', () => {
     expect(sql).toContain('create or replace function public.claim_ai_runs(p_limit integer default 10, p_lease_seconds integer default 120)');
   });
