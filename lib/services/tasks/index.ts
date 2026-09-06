@@ -16,7 +16,7 @@ import 'server-only';
 import type { Priority, RecurrenceFreq, TaskStatus, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, withIdempotency } from '../idempotency';
+import { keyedProbe, withIdempotency, type IdempotencyProbe } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type TodoList = Tables<'todo_lists'>;
@@ -311,6 +311,50 @@ export type CreateChoreInput = {
   assigneeId?: string | null;
 };
 
+export type ChoreCreation = { chore: Chore; assignment: ChoreAssignment | null };
+
+/**
+ * "Has this exact create already run?" — answered through the ASSIGNMENT.
+ *
+ * `chores` is not one of 0256's keyed tables, so the chore row cannot answer
+ * for itself. `chore_assignments` is, and a keyed create always writes one, so
+ * finding the assignment identifies the chore behind it. This is the reason the
+ * whole two-row create is wrapped rather than just the assignment: keying the
+ * assignment alone would let a second chore row be written and then hand back
+ * the FIRST assignment, leaving a chore nobody is assigned to.
+ *
+ * A chore created with no assignee has no keyed row to find, so it cannot be
+ * deduplicated and this returns null every time. The board always assigns (it
+ * refuses to submit without a member), so that case is the assistant's
+ * `tasks.createChore` with no assignee named — recorded rather than papered
+ * over, because deduplicating it needs `chores` to carry a key of its own.
+ */
+function findChoreCreation(scope: ServiceScope, assigneeId: string | null | undefined): IdempotencyProbe<ChoreCreation> {
+  const probeAssignment = keyedProbe(scope, 'chore_assignments', 'chore');
+  return async (key: string) => {
+    if (!assigneeId) return ok(null);
+
+    const found = await probeAssignment(key);
+    if (!found.ok) return found;
+    if (!found.data) return ok(null);
+
+    const { data: chore, error } = await scope.db
+      .from('chores')
+      .select('*')
+      .eq('id', found.data.chore_id)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (error) {
+      console.error('[service:tasks] chore lookup for duplicate probe failed', error);
+      return fail(describeDbError(error, 'Could not check for a duplicate chore.'), { code: SERVICE_CODES.db });
+    }
+    // The assignment exists but its chore does not: not a duplicate we can hand
+    // back, so let the create run rather than returning half an answer.
+    if (!chore) return ok(null);
+    return ok({ chore, assignment: found.data });
+  };
+}
+
 /**
  * Create a chore, optionally assigning it in the same call.
  *
@@ -318,11 +362,21 @@ export type CreateChoreInput = {
  * assigned to is invisible on every board that lists work by person, so
  * leaving the orphan behind would look to the family like nothing happened
  * while quietly accumulating rows.
+ *
+ * That rollback is also what makes the create safe to deduplicate as a UNIT.
+ * Two simultaneous taps both find nothing, both insert a chore, and 0256's
+ * partial unique index refuses the second assignment — which fails
+ * `assignChore`, which rolls that chore back, and `withIdempotency` then
+ * re-probes and hands back the row the winner wrote. The loser leaves nothing
+ * behind, which is exactly what keying the assignment ALONE could not achieve.
+ *
+ * DEPLOY COUPLING: the probe half works today; the race half needs 0256's index,
+ * which is still pending in production (docs/PENDING_PROD_MIGRATIONS.md).
  */
 export async function createChore(
   scope: ServiceScope,
   input: CreateChoreInput,
-): Promise<ServiceResult<{ chore: Chore; assignment: ChoreAssignment | null }>> {
+): Promise<ServiceResult<ChoreCreation>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
   // Points are a reward a child earns. A negative one would take points away
@@ -334,53 +388,86 @@ export async function createChore(
     return fail('A chore cannot be worth negative points.', { code: SERVICE_CODES.invalidInput });
   }
 
-  const { data: chore, error } = await scope.db
-    .from('chores')
-    .insert({
-      family_id: scope.familyId,
-      title,
-      description: input.description?.trim() || null,
-      points: input.points ?? 10,
-      priority: input.priority ?? 'medium',
-      recurrence: input.recurrence ?? 'none',
-      due_at: input.dueAt ?? null,
-      requires_approval: input.requiresApproval ?? true,
-      ...(input.icon !== undefined ? { icon: input.icon } : {}),
-      // chores.created_by references auth.users (0002), unlike the todo tables.
-      created_by: scope.userId,
-    })
-    .select('*')
-    .single();
-  if (error || !chore) {
-    console.error('[service:tasks] chore create failed', error);
-    return fail(describeDbError(error, 'Could not add that chore.'), { code: SERVICE_CODES.db });
-  }
+  return withIdempotency(
+    scope,
+    {
+      operation: 'tasks.createChore',
+      // Only reached on the ASSISTANT's path. A browser Add supplies
+      // `scope.idempotencyKey` directly and `scopeKey` returns it verbatim, so
+      // these are unused there; the executor leaves `idempotencyKey` null while
+      // setting run/step/request, and then the key is composed from these.
+      //
+      // Assignee and due date belong in it because two children given the same
+      // chore on the same day are two chores, not one, and must not answer for
+      // each other.
+      input: { title, assigneeId: input.assigneeId ?? null, dueAt: input.dueAt ?? null },
+      find: findChoreCreation(scope, input.assigneeId),
+    },
+    async (key) => {
+      const { data: chore, error } = await scope.db
+        .from('chores')
+        .insert({
+          family_id: scope.familyId,
+          title,
+          description: input.description?.trim() || null,
+          points: input.points ?? 10,
+          priority: input.priority ?? 'medium',
+          recurrence: input.recurrence ?? 'none',
+          due_at: input.dueAt ?? null,
+          requires_approval: input.requiresApproval ?? true,
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+          // chores.created_by references auth.users (0002), unlike the todo tables.
+          created_by: scope.userId,
+        })
+        .select('*')
+        .single();
+      if (error || !chore) {
+        console.error('[service:tasks] chore create failed', error);
+        return fail(describeDbError(error, 'Could not add that chore.'), { code: SERVICE_CODES.db });
+      }
 
-  let assignment: ChoreAssignment | null = null;
-  if (input.assigneeId) {
-    const assigned = await assignChore(scope, { choreId: chore.id, memberId: input.assigneeId, dueAt: input.dueAt ?? null });
-    if (!assigned.ok) {
-      const { error: rollbackError } = await scope.db.from('chores').delete().eq('id', chore.id).eq('family_id', scope.familyId);
-      if (rollbackError) console.error('[service:tasks] chore rollback failed', rollbackError);
-      return assigned;
-    }
-    assignment = assigned.data;
-  }
+      let assignment: ChoreAssignment | null = null;
+      if (input.assigneeId) {
+        const assigned = await assignChore(scope, {
+          choreId: chore.id,
+          memberId: input.assigneeId,
+          dueAt: input.dueAt ?? null,
+          idempotencyKey: key,
+        });
+        if (!assigned.ok) {
+          // Covers the lost race as well as a genuine failure: either way this
+          // chore has no assignment, and `withIdempotency` re-probes next.
+          const { error: rollbackError } = await scope.db.from('chores').delete().eq('id', chore.id).eq('family_id', scope.familyId);
+          if (rollbackError) console.error('[service:tasks] chore rollback failed', rollbackError);
+          return assigned;
+        }
+        assignment = assigned.data;
+      }
 
-  await recordActivitySafely(scope, {
-    agent: 'chores',
-    action: 'create',
-    title: `Added the chore "${title}"`,
-    href: '/dashboard/chores',
-    memberId: input.assigneeId ?? null,
-  });
-  return ok({ chore, assignment });
+      await recordActivitySafely(scope, {
+        agent: 'chores',
+        action: 'create',
+        title: `Added the chore "${title}"`,
+        href: '/dashboard/chores',
+        memberId: input.assigneeId ?? null,
+        resourceId: chore.id,
+      });
+      return ok({ chore, assignment });
+    },
+  );
 }
 
-/** `memberId` is a `family_members.id`; `chore_assignments.member_id` is NOT NULL. */
+/**
+ * `memberId` is a `family_members.id`; `chore_assignments.member_id` is NOT NULL.
+ *
+ * `idempotencyKey` is supplied by `createChore`, which deduplicates the chore and
+ * its assignment as one unit. This function does not probe on it: writing the key
+ * is what lets 0256's partial unique index refuse a second identical create, and
+ * the caller that owns the pair is the one that can recover from losing.
+ */
 export async function assignChore(
   scope: ServiceScope,
-  input: { choreId: string; memberId: string; dueAt?: string | null },
+  input: { choreId: string; memberId: string; dueAt?: string | null; idempotencyKey?: string | null },
 ): Promise<ServiceResult<ChoreAssignment>> {
   if (!input.memberId) return fail('A chore has to be assigned to someone.', { code: SERVICE_CODES.invalidInput });
 
@@ -406,6 +493,7 @@ export async function assignChore(
       member_id: input.memberId,
       status: 'todo',
       due_at: input.dueAt ?? chore.due_at ?? null,
+      ...(input.idempotencyKey ? { idempotency_key: input.idempotencyKey } : {}),
     })
     .select('*')
     .single();

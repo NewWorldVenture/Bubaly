@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -11,6 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -708,6 +709,11 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // One id per open modal, so a retry after a failed save is the SAME chore and
+  // a second Add (a new modal) is a different one. The modal is mounted only
+  // while `addOpen`, so closing and reopening mints a fresh id.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -734,7 +740,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
       // rolled back on `id` alone.
       const result = await createChoreAction({
         title, description, points, priority, recurrence, icon,
-        dueAt: due_at, assigneeId: memberId,
+        dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
       });
       if (!result.ok) { toastError(result.error); return; }
       onSaved();
