@@ -239,6 +239,25 @@ describe('recallFacts', () => {
 });
 
 describe('listMemories', () => {
+  const reviewFacts = [
+    FACT(),
+    FACT({ id: 'fact-expired', expires_at: '2026-09-04T00:00:00.000Z' }),
+    FACT({ id: 'fact-medical', category: 'medical', label: 'Care detail', value: 'peanuts' }),
+    FACT({ id: 'fact-account', category: 'account', label: 'Streaming', value: 'family@example.com' }),
+    FACT({ id: 'fact-sensitive-label', label: 'Wifi password', value: 'hunter2' }),
+    FACT({ id: 'fact-sensitive-value', label: 'Wifi', value: 'password is hunter2' }),
+    FACT({ id: 'fact-sensitive-expired', category: 'medical', expires_at: '2026-09-04T00:00:00.000Z' }),
+  ];
+  const reviewSuggestions = [
+    SUGGESTION(),
+    SUGGESTION({ id: 'sug-expired', expires_at: '2026-09-04T00:00:00.000Z' }),
+    SUGGESTION({ id: 'sug-medical', category: 'medical', label: 'Care detail', value: 'peanuts' }),
+    SUGGESTION({ id: 'sug-account', category: 'account', label: 'Streaming', value: 'family@example.com' }),
+    SUGGESTION({ id: 'sug-sensitive-label', label: 'Wifi password', value: 'hunter2' }),
+    SUGGESTION({ id: 'sug-sensitive-value', label: 'Wifi', value: 'password is hunter2' }),
+    SUGGESTION({ id: 'sug-sensitive-expired', category: 'medical', expires_at: '2026-09-04T00:00:00.000Z' }),
+  ];
+
   it('returns confirmed facts alongside only the still-suggested inbox cards', async () => {
     const { db, calls } = makeDb((call) => (call.table === 'family_facts'
       ? { data: [FACT()], error: null }
@@ -247,6 +266,36 @@ describe('listMemories', () => {
     expect(res.ok && res.data.facts.length === 1 && res.data.pending.length === 1).toBe(true);
     const inbox = calls.find((c) => c.table === 'family_playbook_suggestions');
     expect(inbox?.filters).toMatchObject({ family_id: 'fam-1', status: 'suggested' });
+  });
+
+  it.each(['child', 'teen'] as const)('hides sensitive facts and suggestions from a %s, including their own memories', async (role) => {
+    for (const memberId of [undefined, 'member-2']) {
+      const { db, calls } = makeDb((call) => ({
+        data: call.table === 'family_facts' ? reviewFacts : reviewSuggestions,
+        error: null,
+      }));
+      const res = await listMemories(scopeWith(db, { role, memberId: 'member-2' }), { memberId });
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.data.facts.map((fact) => fact.id)).toEqual(['fact-1', 'fact-expired']);
+      expect(res.data.pending.map((suggestion) => suggestion.id)).toEqual(['sug-1', 'sug-expired']);
+      for (const call of calls) {
+        expect(call.filters.family_id).toBe('fam-1');
+        if (memberId) expect(call.filters.member_id).toBe(memberId);
+      }
+      expect(calls.find((call) => call.table === 'family_playbook_suggestions')?.filters.status).toBe('suggested');
+    }
+  });
+
+  it.each(['parent', 'adult', 'system'] as const)('preserves sensitive and expired memories for %s review', async (role) => {
+    const { db } = makeDb((call) => ({
+      data: call.table === 'family_facts' ? reviewFacts : reviewSuggestions,
+      error: null,
+    }));
+    const res = await listMemories(scopeWith(db, { role }));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data).toEqual({ facts: reviewFacts, pending: reviewSuggestions });
   });
 });
 
