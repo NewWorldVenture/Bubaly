@@ -7,8 +7,14 @@
 // something they did not ask for. So every step here is a read, and the one
 // write is the notification that delivers it.
 //
-// The composition of what the brief SAYS lives in `lib/briefing/build.ts`, so
-// the planned version and the cron-delivered version tell the same story.
+// There are TWO briefs, and this is the one a person asks for. The other —
+// `lib/briefing/build.ts` — is deterministic, is what `/api/ai/briefing` files
+// and what `/api/cron/daily-brief` delivers at 7am in the family's own zone,
+// and needs no model at all. This template plans the narrated version: the same
+// day, told rather than tabulated.
+//
+// This comment used to claim the two shared a composition. Nothing under
+// `lib/ai/` imports `lib/briefing/build.ts`, and they never did.
 import { localTime, shiftDay, type WorkflowTemplate } from './index';
 
 export const dailyBriefTemplate: WorkflowTemplate = {

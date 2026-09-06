@@ -9,6 +9,7 @@ import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { tripNights, dateRange } from '@/lib/vacations/dates';
+import { parseVacationAIOutput, type VacationAIPlan } from '@/lib/vacations/ai-output';
 
 export const runtime = 'nodejs';
 
@@ -110,19 +111,21 @@ export async function POST(req: NextRequest) {
 
   // ---------- BUILD (AI vacation builder) ----------
   if (action === 'build') {
+    const range = trip.start_date && trip.end_date ? dateRange(trip.start_date, trip.end_date) : [];
     const system = `You are an expert family travel agent. Produce a realistic, family-friendly plan as STRICT JSON only (no prose, no markdown). Schema:
 {"activities":[{"name":string,"category":string,"location":string,"family_friendly":boolean,"cost":number}],
 "itinerary":[{"day":number,"day_part":"morning"|"afternoon"|"evening","title":string,"kind":"activity"|"meal"|"travel"|"reservation"|"free_time"}],
 "budget":[{"category":"flights"|"lodging"|"transportation"|"activities"|"food"|"shopping"|"insurance"|"fees"|"misc","planned":number}]}
-Costs/planned are whole US dollars. Keep itinerary within the trip's day count. Balance activities with downtime for kids.`;
+Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${range.length}; if there are no dated days, return an empty itinerary. Use at most 30 activities, 60 itinerary items, and 9 budget entries. These are suggestions and cost estimates, not verified prices, availability, or bookings. Balance activities with downtime for kids.`;
     const user = `Trip: ${trip.title}. Destination: ${trip.destination ?? 'unspecified'}. Type: ${trip.kind}. Nights: ${nights}. Travelers: ${m.length} (${hasChildren ? 'includes children' : 'adults'}). Budget: ${trip.budget_cents ? `$${trip.budget_cents / 100}` : 'flexible'}. ${body.prompt ? `Preferences: ${body.prompt}` : ''}`;
 
-    let plan: { activities?: { name: string; category?: string; location?: string; family_friendly?: boolean; cost?: number }[]; itinerary?: { day: number; day_part: string; title: string; kind: string }[]; budget?: { category: string; planned: number }[] };
+    let plan: VacationAIPlan;
     try {
       const provider = await resolveProvider();
       const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
-      const jsonText = completion.text.slice(completion.text.indexOf('{'), completion.text.lastIndexOf('}') + 1);
-      plan = JSON.parse(jsonText);
+      const validated = parseVacationAIOutput(completion.text, range.length);
+      if (!validated) return NextResponse.json({ error: 'AI builder returned an invalid trip plan. Please try again.' }, { status: 502 });
+      plan = validated;
     } catch (err) {
       console.error('Vacation build error:', err);
       return NextResponse.json({ error: 'AI builder is temporarily unavailable.' }, { status: 502 });
@@ -174,16 +177,15 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
     };
 
     // activities
-    if (Array.isArray(plan.activities) && plan.activities.length) {
-      const rows = plan.activities.slice(0, 30).map((x) => ({ family_id: familyId, vacation_id: vacationId, name: String(x.name).slice(0, 200), category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost ? Math.round(x.cost * 100) : null, created_by: ctx!.user.id }));
+    if (plan.activities.length) {
+      const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), created_by: ctx!.user.id }));
       const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
       if (data) createdActivityIds.push(...data.map((row) => row.id));
       if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Activity insert returned an incomplete result.'));
       added.activities = rows.length;
     }
     // itinerary — ensure days exist, map day number -> day_id
-    if (Array.isArray(plan.itinerary) && plan.itinerary.length && trip.start_date && trip.end_date) {
-      const range = dateRange(trip.start_date, trip.end_date);
+    if (plan.itinerary.length) {
       const existing = new Map((days.data ?? []).map((d) => [d.day_date, d.id]));
       const toCreate = range.filter((d) => !existing.has(d)).map((d) => ({ family_id: familyId, vacation_id: vacationId, day_date: d, created_by: ctx!.user.id }));
       if (toCreate.length) {
@@ -196,14 +198,12 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
       }
       const dayIds = range.map((d) => existing.get(d)).filter(Boolean) as string[];
       if (dayIds.length !== range.length) return buildFailure('Could not save the generated trip plan.', new Error('Itinerary days could not be resolved.'));
-      const validParts = new Set(['morning', 'afternoon', 'evening', 'all_day']);
-      const validKinds = new Set(['activity', 'meal', 'travel', 'reservation', 'free_time', 'note', 'reminder']);
-      const rows = plan.itinerary.slice(0, 60).map((x) => ({
+      const rows = plan.itinerary.map((x) => ({
         family_id: familyId, vacation_id: vacationId,
-        day_id: dayIds[Math.max(0, Math.min(dayIds.length - 1, (x.day || 1) - 1))] ?? null,
-        day_part: (validParts.has(x.day_part) ? x.day_part : 'morning') as never,
-        kind: (validKinds.has(x.kind) ? x.kind : 'activity') as never,
-        title: String(x.title).slice(0, 200), created_by: ctx!.user.id,
+        day_id: dayIds[x.day - 1],
+        day_part: x.day_part,
+        kind: x.kind,
+        title: x.title, created_by: ctx!.user.id,
       })).filter((x) => x.day_id);
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
@@ -213,9 +213,8 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
       }
     }
     // budget
-    if (Array.isArray(plan.budget) && plan.budget.length) {
-      const validCats = new Set(['flights', 'lodging', 'transportation', 'activities', 'food', 'shopping', 'insurance', 'fees', 'misc']);
-      const rows = [...new Map(plan.budget.filter((x) => validCats.has(x.category)).map((x) => [x.category, { family_id: familyId, vacation_id: vacationId, category: x.category as never, planned_cents: Math.max(0, Math.round((x.planned || 0) * 100)), created_by: ctx!.user.id }])).values()];
+    if (plan.budget.length) {
+      const rows = [...new Map(plan.budget.map((x) => [x.category, { family_id: familyId, vacation_id: vacationId, category: x.category, planned_cents: Math.round(x.planned * 100), created_by: ctx!.user.id }])).values()];
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category');
         for (const row of data ?? []) {

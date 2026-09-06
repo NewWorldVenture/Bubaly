@@ -116,6 +116,26 @@ const q = (data: InsightData) =>
     ? `\n\nThe family specifically asks: ${(data.params.question as string).trim()}`
     : '';
 
+/**
+ * Insight kinds whose data a child or teen has no business reading through a
+ * model — the same areas `ROLE_DEFAULTS.sensitiveDomains` already carves out
+ * for teens and children (medical, finances, banking, insurance, documents),
+ * plus the household's private correspondence and settings.
+ *
+ * The route used to have no role check at all: `requireUserContext()` plus RLS
+ * was the whole guard, and RLS on these tables is family-wide. So a child's
+ * session could ask for a summary of the family's medications, messages and
+ * documents and get one, phrased helpfully.
+ */
+export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKind>([
+  'medications', 'care', 'documents', 'expenses', 'billing', 'subscriptions',
+  'renewals', 'messages', 'notifications', 'settings',
+]);
+
+// The §44 data-not-instruction rule is appended by the route, not here: this
+// module is imported by a CLIENT component (components/ai/ai-insight.tsx), and
+// lib/ai/safety/untrusted reaches node:crypto. Keeping this file free of server
+// imports is what its header promises, and webpack enforces.
 const SHARED_RULES =
   'Use ONLY the household data provided — never invent items, names, dates, or amounts. ' +
   'If there is too little data to be useful, say so briefly and suggest what to add. ' +
