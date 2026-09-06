@@ -5,8 +5,6 @@
 // system + user prompt. Keeping this pure (no Supabase, no fetch) makes every prompt
 // unit-testable: given data, assert the prompt carries the right facts.
 
-import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
-
 export type InsightKind =
   | 'chores'
   | 'calendar'
@@ -134,8 +132,11 @@ export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKi
   'renewals', 'messages', 'notifications', 'settings',
 ]);
 
+// The §44 data-not-instruction rule is appended by the route, not here: this
+// module is imported by a CLIENT component (components/ai/ai-insight.tsx), and
+// lib/ai/safety/untrusted reaches node:crypto. Keeping this file free of server
+// imports is what its header promises, and webpack enforces.
 const SHARED_RULES =
-  `${UNTRUSTED_CONTENT_RULE} ` +
   'Use ONLY the household data provided — never invent items, names, dates, or amounts. ' +
   'If there is too little data to be useful, say so briefly and suggest what to add. ' +
   'Be concrete, warm, and concise. Prefer short plain-text sections and tight bullet lists over long paragraphs.';

@@ -93,7 +93,10 @@ describe('the code agrees with 0262', () => {
   it('fences the household rows it hands the model, and says they are data', () => {
     const route = readFileSync('app/api/ai/insights/route.ts', 'utf8');
     expect(route).toContain('fenceUntrustedBlock(`insight_${kind}`');
+    // Appended by the route, not by the prompt registry: that module is
+    // imported by a client component and the fence reaches node:crypto.
+    expect(route).toContain('`${def.system}\\n\\n${UNTRUSTED_CONTENT_RULE}`');
     const insights = readFileSync('lib/ai/insights.ts', 'utf8');
-    expect(insights).toContain('${UNTRUSTED_CONTENT_RULE}');
+    expect(insights).not.toContain("from '@/lib/ai/safety/untrusted'");
   });
 });

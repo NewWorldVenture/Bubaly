@@ -4,7 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { isManager } from '@/lib/constants/roles';
-import { fenceUntrustedBlock } from '@/lib/ai/safety/untrusted';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -84,7 +84,10 @@ export async function POST(req: Request) {
   try {
     const provider = await resolveProvider();
     const completion = await provider.complete({
-      system: def.system,
+      // The rule lives with the fence, and is appended here rather than inside
+      // `lib/ai/insights.ts` — that module is imported by a client component,
+      // and the fence reaches `node:crypto`.
+      system: `${def.system}\n\n${UNTRUSTED_CONTENT_RULE}`,
       // The whole user turn is household rows — titles, notes, message bodies,
       // document names — assembled by the prompt registry. Every one of them is
       // §44 content, so the whole body goes inside one fence rather than
