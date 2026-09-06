@@ -27,7 +27,7 @@ family is right.
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
 | **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
-| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (Two of the three clauses are now stale: the quiet-hours setting IS read, and the raw-insert sites that bypassed it are down to one — `lib/server/notifications.ts`. What remains of this row is `child_channels`, that last generator, and the push channel itself.) |
+| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, the raw-insert sites that bypassed it are down to one (`lib/server/notifications.ts`), and `child_channels` IS consulted — at delivery, by both push and email. What remains is that last generator, and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
 | **30** | high / M | IDEMPOTENCY | A parent types "add soccer practice Saturday at 9" into Bubaly's chat, the phone loses signal mid-answer and the app re-sends — and the family now has two soccer practices on the calendar, the exact duplicate the concierge path is protected against. The same applies to a double-tapped send, a reloaded tab, or Bubaly's own retry of a chat write: nothing can tell an already-succeeded write from a new one, so the family cleans up duplicate chores, duplicate grocery lines and duplicate reminders by hand and stops trusting the assistant with anything that matters. |
@@ -112,6 +112,47 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§21, "how Bubaly may reach a child directly" was a setting that did
+  nothing.** `0257` documents `family_ai_settings.child_channels` as
+  `{"push": true, "email": false}` — how Bubaly may reach a child directly. It
+  was written by the settings service and read into `AISettings.childChannels`,
+  and then consulted by **nothing**: five references in the whole repository, not
+  one of them a decision. A family that switched a channel off was told nothing
+  and silenced nothing.
+
+  **Enforced at DELIVERY, not in `notify()`.** The setting says how Bubaly may
+  REACH a child, not what a child may be told: turning push off should stop the
+  phone buzzing, not erase the notice from the in-app list the child opens
+  themselves. So `childrenBlockedOn` filters in `dispatchPendingPushes` and in
+  `deliverNotificationEmails`.
+
+  **The whole-family fan-out is the case that mattered.** A notification with
+  `user_id` null fans out to every active member, so filtering only the addressed
+  case would still have reached a child by the widest path — and the one a family
+  notices most. The candidate set is built from both shapes before the filter
+  runs, and `pushed_at` is still stamped when everyone is filtered out, or the
+  notification would be reconsidered on every cron run forever. On the email side
+  the block folds into the same skip set as the per-user toggle, so a withheld
+  email is resolved into `sent_at` rather than retried.
+
+  **Absent means allowed**, the rule `settingsFromRow` already applies to
+  `enabled`: the column defaults to `{}` and only an explicit `false` is a
+  decision. Otherwise every family that has never opened the setting would go
+  dark. **A failed read delivers** rather than failing closed — this governs
+  which channel a notice takes, not whether a child may be told something, and
+  quiet hours and the trust gate are the boundaries that fail closed.
+
+  **Scope is the `child` role**, which is what `0257` says. Teens hold their own
+  logins and are not what a parent is limiting here; widening it would be a
+  product decision rather than a reading of the contract.
+
+  **What is still missing, and is the user's call: there is no UI.** No component
+  in the repository reads or writes `childChannels`, so a parent cannot set this
+  today — only the settings service can, through an API call. Enforcement makes
+  the stored setting truthful and is a prerequisite either way; the control that
+  lets a family use it is a product decision about the Settings → Bubaly AI page,
+  not something to invent here.
 
 - **§21, the five notifications that could still arrive at half past eleven.**
   `notify()` is where a notification acquires the two things a family relies on —
