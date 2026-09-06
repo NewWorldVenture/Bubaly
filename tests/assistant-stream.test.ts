@@ -113,6 +113,16 @@ function prepared(events: StreamEvent[]): PreparedAssistantTurn {
     intent: { intent: 'plan_meals', confidence: 1, entities: {}, source: 'fast_path' },
     context: { header: { currency: 'USD' } } as unknown as ContextBundle,
     cardContext: { members: { m1: 'Sam' }, currency: 'USD' },
+    // The stream opens an `ai_requests` row through this scope. Its `db` is the
+    // same stub the rest of the turn uses, which has no `insert().select()`
+    // chain — so the row fails to open, `withAiRequest` logs and carries on with
+    // a null request id, and every assertion below is about the SSE wire exactly
+    // as before. That is the wrapper's central promise (bookkeeping never fails
+    // the family's work) being exercised rather than mocked away.
+    scope: {
+      db: undefined as never, familyId: 'fam-1', userId: 'user-1', memberId: 'm1',
+      role: 'parent', actorKind: 'ai', tz: 'America/Chicago',
+    },
   };
 }
 
