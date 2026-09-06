@@ -5,6 +5,7 @@ import { PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -40,8 +41,8 @@ export function BudgetsView() {
 
   async function remove(id: string) {
     if (!confirm('Delete this budget?')) return;
-    const { error } = await createClient().from('budgets').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    const res = await deleteBudgetAction(id);
+    if (!res.ok) toastError(res.error); else success('Deleted');
   }
 
   return (
@@ -97,11 +98,12 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
     e.preventDefault();
     if (!v.amount) return toastError('Add an amount');
     setSaving(true);
-    const { error } = await createClient().from('budgets').insert({
-      family_id: familyId, category: v.category, amount: Math.abs(parseFloat(v.amount) || 0), period: v.period as Period, created_by: userId,
-    });
+    // SETS the category's budget rather than inserting another row: the raw
+    // insert let a family end up with two Groceries budgets, each reporting the
+    // other's spend as unbudgeted.
+    const res = await setBudgetAction(v.category, Math.abs(parseFloat(v.amount) || 0), v.period as Period);
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (!res.ok) return toastError(res.error);
     success('Budget added');
     onClose();
   }

@@ -28,6 +28,10 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import {
+  createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
+  deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
+} from '@/app/(app)/dashboard/billing/actions';
 import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -304,13 +308,12 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     const parsedAmount = parseFloat(amount);
     const finalAmount = type === 'expense' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
     const supabase = createClient();
-    const { error } = await supabase.from('transactions').insert({
-      family_id: familyId, created_by: userId,
+    const res = await createTransactionAction({
       name: name.trim(), amount: finalAmount, category, date, type,
-      account_id: accountId || null, notes: null,
+      accountId: accountId || null, notes: null,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Transaction added');
     reset(); onClose(); onDone();
   }
@@ -364,12 +367,9 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
     if (!amount) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('budgets').insert({
-      family_id: familyId, created_by: userId,
-      category, amount: parseFloat(amount), period,
-    });
+    const res = await setBudgetAction(category, parseFloat(amount), period);
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Budget added');
     reset(); onClose(); onDone();
   }
@@ -479,14 +479,13 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
     if (!name.trim() || !targetAmount) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('savings_goals').insert({
-      family_id: familyId, created_by: userId,
-      name: name.trim(), target_amount: parseFloat(targetAmount),
-      current_amount: parseFloat(currentAmount) || 0,
-      target_date: targetDate || null, emoji,
+    const res = await createSavingsGoalAction({
+      name: name.trim(), targetAmount: parseFloat(targetAmount),
+      currentAmount: parseFloat(currentAmount) || 0,
+      targetDate: targetDate || null, emoji,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Savings goal added');
     reset(); onClose(); onDone();
   }
@@ -802,17 +801,15 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteTransactionAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Transaction removed');
     void refreshTransactions();
   }
 
   async function deleteBudget(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('budgets').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteBudgetAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Budget removed');
     void refreshBudgets();
   }
@@ -834,9 +831,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteGoal(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteSavingsGoalAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Goal removed');
     void refreshGoals();
   }
