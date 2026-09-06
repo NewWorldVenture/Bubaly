@@ -316,6 +316,8 @@ export const financeTools: ToolDefinition[] = [
     output: z.object({
       id: z.string(), name: z.string(), amount: z.number(),
       type: z.enum(['income', 'expense', 'transfer']), date: z.string(), merchant: z.string().nullable(),
+      replayed: z.boolean().optional(),
+      record_state: z.enum(['unchanged', 'edited', 'deleted']).optional(),
     }),
     // NO natural key, deliberately. `resolveIdempotencyKey` only consults this
     // when the caller supplies none, and the run executor always supplies a
@@ -324,7 +326,16 @@ export const financeTools: ToolDefinition[] = [
     // rows; see `createTransaction`'s header on why a merchant+amount+date key
     // would silently delete the second one.
     idempotencyFrom: () => null,
-    summarize: (_input, output) => `Recorded ${formatDollars(toCents(output.amount))}${output.merchant ? ` at ${output.merchant}` : ''} on ${output.date}`,
+    summarize: (_input, output) => {
+      const recorded = `${formatDollars(toCents(output.amount))}${output.merchant ? ` at ${output.merchant}` : ''} on ${output.date}`;
+      if (output.replayed) {
+        const change = output.record_state === 'deleted'
+          ? ' The transaction was later deleted.'
+          : output.record_state === 'edited' ? ' The transaction was later edited.' : '';
+        return `Previously recorded ${recorded}.${change} No new transaction was added.`;
+      }
+      return `Recorded ${recorded}`;
+    },
     consequences: (input) => {
       const amount = Number.isFinite(input.amount) ? formatDollars(toCents(input.amount)) : 'the amount';
       const merchant = input.merchant ? ` at ${input.merchant}` : '';
@@ -352,7 +363,10 @@ export const financeTools: ToolDefinition[] = [
       });
       if (!res.ok) return res;
       const t = res.data;
-      return ok({ id: t.id, name: t.name, amount: Number(t.amount), type: t.type, date: t.date, merchant: t.merchant });
+      return ok({
+        id: t.id, name: t.name, amount: Number(t.amount), type: t.type, date: t.date, merchant: t.merchant,
+        ...(t.operation ? { replayed: t.operation.replayed, record_state: t.operation.recordState } : {}),
+      });
     },
   }),
   defineTool({
