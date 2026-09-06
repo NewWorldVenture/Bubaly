@@ -2,8 +2,9 @@
 // Presentational: the server page rolls live signals through the pure engine
 // (lib/readiness/assess.ts) and passes the cards here. No client state needed.
 import Link from 'next/link';
-import { ShieldCheck, AlertTriangle, CircleCheck, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CircleCheck, Check, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
+import { HandleItButton } from '@/components/modules/handle-it-button';
 import { cn } from '@/lib/utils/cn';
 import type { ReadinessCard, ReadinessStatus } from '@/lib/readiness/assess';
 
@@ -36,8 +37,10 @@ export function ReadinessModule({ cards, overall }: { cards: ReadinessCard[]; ov
   );
 }
 
-/** The forward-looking horizon section (no page header) — embeddable on the
- *  existing Family Readiness page beneath its current-state gauge. */
+/** The forward-looking horizon section (no page header) — §51's readiness, and
+ *  the headline of the Family Readiness page. It used to sit beneath a second,
+ *  larger ring computed from household activity under the same word; that one
+ *  is now below, named for what it measures. */
 export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; overall: { score: number; status: ReadinessStatus } }) {
   const O = STATUS[overall.status];
   return (
@@ -67,8 +70,24 @@ export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; 
                 </span>
               </div>
               <p className="mb-3 text-sm text-muted">{card.headline}</p>
-              {card.gaps.length > 0 ? (
-                <ul className="mt-auto space-y-1.5">
+
+              {/* §51's two lists. "Ready ✓" first, because a family that has
+                  most of the week handled should see that before the gaps —
+                  the card used to show only what was wrong, which made a good
+                  week look like a shorter list of failures. */}
+              {card.ready.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {card.ready.map((r, i) => (
+                    <li key={i} className="flex items-center gap-2 px-1 text-sm text-emerald-300">
+                      <Check className="size-3.5 shrink-0" aria-hidden />
+                      <span className="text-muted">{r.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {card.gaps.length > 0 && (
+                <ul className="space-y-1.5">
                   {card.gaps.map((g, i) => (
                     <li key={i}>
                       <Link href={g.href} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted/5">
@@ -81,11 +100,17 @@ export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; 
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <div className="mt-auto flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-300">
-                  <ShieldCheck className="size-4" /> Nothing to close.
-                </div>
               )}
+
+              {/* The card's whole point is that a person does not have to do
+                  the closing themselves. The sentence names the gaps, so the
+                  planner has something to work from. */}
+              <div className="mt-auto pt-3">
+                <HandleItButton
+                  request={card.handleIt}
+                  label={card.gaps.length > 0 ? 'Let Bubaly handle it' : 'Anything I am missing?'}
+                />
+              </div>
             </div>
           );
         })}

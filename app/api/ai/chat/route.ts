@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const provider = await resolveProvider();
-    const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows, tz });
+    const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, memberId: ctx.active.member?.id ?? null, members: memberRows, tz });
     const tools = wrapToolsWithTrust(rawTools, supabase, familyId, ctx.active.role);
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,

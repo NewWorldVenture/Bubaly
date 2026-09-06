@@ -48,7 +48,11 @@ export function NotificationsModule() {
     familyId,
     deps: [familyId, userId],
     fetcher: (supabase) =>
+      // Due only, matching the bell: a notice scheduled for tomorrow morning is
+      // not something to read tonight. Ordering stays on `created_at` so the
+      // list still reads newest-first as it always has.
       supabase.from('notifications').select('*').eq('family_id', familyId)
+        .lte('send_at', new Date().toISOString())
         .or(`user_id.eq.${userId},user_id.is.null`)
         .order('created_at', { ascending: false })
         .limit(100),

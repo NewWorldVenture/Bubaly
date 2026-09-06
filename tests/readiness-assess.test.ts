@@ -176,3 +176,188 @@ describe('accessible calendar and roster coverage', () => {
     expect(cards.every((card) => card.status === 'at_risk')).toBe(true);
   });
 });
+
+
+// ─── §51's other half: what is handled, and doing something about it ────────
+
+describe("§51's Ready ✓ list", () => {
+  it('says what is handled, not only what is not', () => {
+    // The card used to carry gaps and nothing else, so a family with the week
+    // under control read "Nothing to close." — a shorter list of failures
+    // rather than an answer to "are we ready?".
+    const [tomorrow, week, month] = assessReadiness(sig());
+    expect(tomorrow.ready.map((r) => r.label)).toEqual([
+      'Calendar is clear', 'Everything has an owner', "Tomorrow's dinner is planned",
+    ]);
+    expect(week.ready.map((r) => r.label)).toContain('No clashes this week');
+    expect(month.ready.map((r) => r.label)).toContain('Documents are current');
+    for (const card of [tomorrow, week, month]) {
+      for (const check of card.ready) expect(check.href).toMatch(/^\/dashboard\//);
+    }
+  });
+
+  it('drops a check from the ✓ column the moment it fails', () => {
+    const [tomorrow] = assessReadiness(sig({ tomorrowConflicts: 1 }));
+    expect(tomorrow.ready.map((r) => r.label)).not.toContain('Calendar is clear');
+    expect(tomorrow.gaps.map((g) => g.label)).toContain('1 schedule clash tomorrow');
+    expect(tomorrow.ready.map((r) => r.label)).toContain("Tomorrow's dinner is planned");
+  });
+
+  it('does not dress an absence up as an accomplishment', () => {
+    // "No bills due this week" and "no trips to prep" are nothing happening,
+    // not something the family did.
+    const [, week, month] = assessReadiness(sig());
+    expect(week.ready.map((r) => r.label).join(' ')).not.toMatch(/bill/i);
+    expect(month.ready.map((r) => r.label).join(' ')).not.toMatch(/trip|prep plan/i);
+  });
+
+  it('calls the week of dinners planned only when it actually is', () => {
+    expect(assessReadiness(sig({ unplannedDinnersWeek: 0 }))[1].ready.map((r) => r.label))
+      .toContain('The week of dinners is planned');
+    // Two unplanned dinners is below the gap threshold and above nothing: it
+    // belongs on neither list rather than being called planned.
+    const partial = assessReadiness(sig({ unplannedDinnersWeek: 2 }))[1];
+    expect(partial.ready.map((r) => r.label)).not.toContain('The week of dinners is planned');
+    expect(partial.gaps.map((g) => g.label).join(' ')).not.toMatch(/dinner/i);
+  });
+});
+
+describe('a ✓ is a claim, so it needs complete evidence', () => {
+  it('does not call a check passed when the read that would prove it failed', () => {
+    // Every signal arrives from a read that returns 0 on failure. That was
+    // harmless while the card only listed gaps; the moment a zero became
+    // "Documents are current" it stopped being harmless.
+    const [, , month] = assessReadiness(sig({ coverage: { documents: 'unknown' } }));
+    expect(month.ready.map((r) => r.label)).not.toContain('Documents are current');
+    expect(month.gaps.map((g) => g.label).join(' ')).toMatch(/Documents could not be read/);
+    expect(month.status).toBe('at_risk');
+  });
+
+  it('will not certify a source it only read part of, but still reports the floor', () => {
+    const [, week] = assessReadiness(sig({ conflictsWeek: 1, weekCalendarCoverage: 'partial' }));
+    expect(week.gaps.map((g) => g.label)).toContain('At least 1 clash this week');
+    expect(week.ready.map((r) => r.label)).not.toContain('No clashes this week');
+  });
+
+  it('offers no ✓ for a partial read that found nothing', () => {
+    // Nothing found in half a week is not "no clashes this week".
+    const [, week] = assessReadiness(sig({ conflictsWeek: 0, weekCalendarCoverage: 'partial' }));
+    expect(week.ready.map((r) => r.label)).not.toContain('No clashes this week');
+  });
+
+  it('reports one unknown per missing source, not one per rule that used it', () => {
+    // Two tomorrow rules rest on the same calendar read; a person can only do
+    // one thing about it.
+    const [tomorrow] = assessReadiness(sig({ tomorrowCalendarCoverage: 'unknown' }));
+    expect(tomorrow.gaps.filter((g) => g.label.includes('could not be read'))).toHaveLength(1);
+  });
+
+  it('cannot work out the workload when the week it is measured over is missing', () => {
+    const [, , month] = assessReadiness(sig({ weekCalendarCoverage: 'unknown' }));
+    expect(month.ready.map((r) => r.label)).not.toContain('The load is spread evenly');
+    expect(month.gaps.map((g) => g.label).join(' ')).toMatch(/Workload balance is unknown/);
+  });
+
+  it('leaves a household whose reads all succeeded exactly as it was', () => {
+    expect(assessReadiness(sig())).toEqual(assessReadiness(sig({ coverage: {} })));
+    expect(overallReadiness(assessReadiness(sig()))).toEqual({ score: 100, status: 'ready' });
+  });
+});
+
+describe("§51's [Let Bubaly Handle It]", () => {
+  it('hands Bubaly the gaps, not just the horizon', () => {
+    // "Get us ready for tomorrow" gives the planner nothing to work from.
+    const [tomorrow] = assessReadiness(sig({ tomorrowConflicts: 1, dinnerPlannedTomorrow: false }));
+    expect(tomorrow.handleIt).toBe(
+      "Help me get ready for tomorrow: 1 schedule clash tomorrow and tomorrow's dinner isn't planned.",
+    );
+  });
+
+  it('asks rather than asserts when there is nothing to close', () => {
+    expect(assessReadiness(sig())[0].handleIt).toBe('Is there anything I should be doing about tomorrow?');
+  });
+
+  it('reads a single gap as a sentence, not a list of one', () => {
+    expect(assessReadiness(sig({ dinnerPlannedTomorrow: false }))[0].handleIt)
+      .toBe("Help me get ready for tomorrow: tomorrow's dinner isn't planned.");
+  });
+});
+
+// ─── The other readiness numbers, and which of them may differ ──────────────
+
+import { readFileSync } from 'node:fs';
+import { mostLoaded } from '@/lib/operating-index/score';
+
+describe('the overload rule the readiness month card leans on', () => {
+  const load = (memberId: string, upcoming: number) => ({ memberId, name: memberId, upcoming, openTasks: 0 });
+
+  it('names the one person carrying the week when the others carry nothing', () => {
+    expect(mostLoaded([load('a', 8), load('b', 0), load('c', 0)])?.memberId).toBe('a');
+  });
+
+  it('names nobody when the week is quiet for everyone', () => {
+    expect(mostLoaded([load('a', 0), load('b', 0), load('c', 0)])).toBeNull();
+  });
+
+  it('names nobody when the work is shared out', () => {
+    expect(mostLoaded([load('a', 4), load('b', 3), load('c', 3)])).toBeNull();
+  });
+});
+
+describe('the readiness page answers once, and with the rules its links point at', () => {
+  const page = readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
+  const source = readFileSync('lib/readiness/calendar-source.ts', 'utf8');
+
+  it('answers "are we ready?" with one number, above the activity score', () => {
+    // The page carried two 0–100 scores under the word readiness: the §51
+    // horizon assessment and `lib/readiness/score.ts`'s activity score, whose
+    // bands ("Looking good") and statuses ("Not ready") disagree by
+    // construction. §51 asks for one indicator.
+    const readiness = page.indexOf('<ReadinessHorizons');
+    const activity = page.indexOf('How much your family is running through Bubaly');
+    expect(readiness).toBeGreaterThan(-1);
+    expect(activity).toBeGreaterThan(-1);
+    expect(readiness).toBeLessThan(activity);
+    expect(page).not.toContain("What&apos;s driving your score");
+  });
+
+  it('counts clashes with the rule the page it links to runs', () => {
+    // The gap reads "2 clashes this week" and links to /dashboard/conflicts,
+    // which runs `lib/family/conflicts.ts detectConflicts`. A private copy of
+    // that sweep could disagree with the page it points at.
+    expect(source).toContain("from '@/lib/family/conflicts'");
+    expect(source).not.toMatch(/for \(let i = 0; i < timed\.length/);
+  });
+
+  it('decides who is overloaded with the rule the page it links to runs', () => {
+    // The month gap links to the Family Operating Index; deciding it with a
+    // second threshold could send a person to a page that names nobody.
+    expect(source).toContain("import { mostLoaded } from '@/lib/operating-index/score'");
+    expect(source).not.toMatch(/load >= 4 && load > average \* 1\.5/);
+  });
+
+  it('tells the assessor which of the other sources it actually read', () => {
+    expect(page).toContain('const readCoverage: Partial<Record<Evidence, ReadinessCoverage>> = {};');
+    expect(page).toContain("if (!expiringDocsMonth.known) readCoverage.documents = 'unknown';");
+    expect(page).toContain('coverage: readCoverage,');
+    // What `known` MEANS is not asserted here, on purpose. A source-string
+    // assertion pins whatever the line currently says — this one used to pin
+    // `n ?? 0`, and so quietly held the null-count bug in place while looking
+    // like coverage of it. The rule (an absent count is not a confirmed zero)
+    // is proved through the rendered page in
+    // tests/readiness-page-coverage.test.ts, where it can actually fail.
+  });
+
+  it('does not pay for a count nothing reads', () => {
+    // `groceryActive` was fetched, error-checked, passed to `computeReadiness`
+    // and never referenced by the formula.
+    expect(page).not.toMatch(/grocery/i);
+  });
+});
+
+describe('the readiness numbers that are deliberately separate', () => {
+  it('each says which question it answers in its own header', () => {
+    expect(readFileSync('lib/readiness/score.ts', 'utf8')).toMatch(/NOT §51's readiness/);
+    expect(readFileSync('lib/readiness/assess.ts', 'utf8')).toMatch(/§51's signature/);
+  });
+});

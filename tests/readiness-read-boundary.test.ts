@@ -14,8 +14,12 @@ describe('readiness score read boundary', () => {
     expect(page).toContain('remindersOverdueRes.error');
     expect(page).toContain('mealsRes.error');
     expect(page).toContain('eventsUpcomingRes.error');
-    expect(page).toContain('groceryActiveRes.error');
     expect(page).toContain('activeMembersRes.error');
+    // No grocery read to guard: the count was fetched, passed into
+    // `computeReadiness` and never referenced by the formula, so it was a
+    // Supabase query per render for nothing. Both the query and the input
+    // field are gone.
+    expect(page).not.toMatch(/grocery/i);
     expect(page).toContain('].find(Boolean);');
   });
 

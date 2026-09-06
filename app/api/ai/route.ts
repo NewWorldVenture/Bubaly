@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
     const { supabase, ctx } = authed;
     const scope = { familyId: ctx.active.familyId, userId: ctx.user.id };
     const tools = mergeToolSets(
-      buildAssistantTools(supabase, { ...scope, members: [], tz: ctx.active.family.timezone || 'UTC' }),
+      // Listing only: this GET reports tool names and descriptions and never
+      // executes one, so an empty roster and no acting member are correct here.
+      buildAssistantTools(supabase, { ...scope, memberId: null, members: [], tz: ctx.active.family.timezone || 'UTC' }),
       buildActionTools({ supabase, ...scope }),
     ).map((t) => ({ name: t.name, description: t.description }));
     return NextResponse.json({

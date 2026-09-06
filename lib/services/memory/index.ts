@@ -42,6 +42,7 @@ import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memo
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { getAISettings } from '../ai-settings';
+import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyFact = Tables<'family_facts'>;
@@ -164,10 +165,22 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
     }
   }
 
-  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: normalizeExpiry(input.expiresAt) });
+  // Read the deadline once, before either lane, so a malformed one is refused
+  // rather than quietly turned into "remember this forever".
+  const expiry = readExpiry(input.expiresAt);
+  if (!expiry.ok) {
+    return fail('That expiry date could not be read, so Bubaly has not saved the memory. Give a real date as 2026-09-30, or a time with its zone as 2026-09-30T17:00:00Z.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (fromPerson) return rememberConfirmed(scope, { category, key, content, memberId: input.memberId ?? null, note: input.note ?? null, pinned: input.pinned ?? false, expiresAt: expiry.at });
   return rememberUnconfirmed(scope, {
     category, key, content, memberId: input.memberId ?? null, source: input.source,
     confidence: clampConfidence(input.confidence), evidence: input.note ?? null,
+    // The inbox is where the time-bound facts mostly land — Bubaly noticing
+    // "swim class on Thursdays" is exactly the kind of thing that stops being
+    // true. Dropping the deadline here meant accepting the card made it
+    // permanent (0268).
+    expiresAt: expiry.at,
   });
 }
 
@@ -176,11 +189,62 @@ function clampConfidence(value: number | null | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value as number)));
 }
 
-/** An expiry Bubaly or a person offered, or null. An unparseable date is no expiry, never a past one. */
-function normalizeExpiry(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const at = Date.parse(value);
-  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+/**
+ * An expiry Bubaly or a person offered.
+ *
+ * Absent is the honest "no shelf life" — null, undefined and a blank string all
+ * mean the caller named no deadline, and the fact is kept until someone forgets
+ * it. But a caller who WROTE something and got it wrong asked for a bound, and
+ * silently returning null hands them permanence instead: the one outcome they
+ * did not ask for, with no signal.
+ *
+ * `Date.parse` alone is not enough to tell those apart, because it accepts two
+ * kinds of input that are worse than a rejection:
+ *
+ *   '2026-02-30'           -> 2026-03-02T00:00:00Z   a date that does not exist,
+ *                                                    silently rolled forward
+ *   '2026-09-06T08:00:00'  -> depends on process.env.TZ
+ *
+ * The first stores a deadline the caller did not name. The second makes the
+ * stored instant a property of which machine ran the write, which is not
+ * something an expiry may depend on. So only two forms are accepted, and both
+ * mean exactly one instant no matter where they are read:
+ *
+ *   YYYY-MM-DD                    midnight UTC on that day, per the ECMAScript
+ *                                 date-only rule; the calendar date is checked
+ *                                 by round-trip so 2026-02-30 is refused
+ *   YYYY-MM-DDTHH:MM[:SS[.sss]]Z  or the same with an explicit ±HH:MM offset
+ *
+ * A zoneless datetime is refused rather than guessed. The family's own zone
+ * would be the better guess than the server's, but "better guess" is still a
+ * guess about when something stops being true, and the caller can say what they
+ * mean in one more character.
+ *
+ * Reported as `{ ok: false }` rather than thrown, because every caller here is
+ * already a `ServiceResult` path and this is a message a person can act on.
+ */
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ZONED_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/** True when y-m-d is a real calendar date — `Date.parse` rolls 2026-02-30 into March instead of refusing it. */
+function isRealCalendarDate(year: number, month: number, day: number): boolean {
+  const at = Date.UTC(year, month - 1, day);
+  if (!Number.isFinite(at)) return false;
+  const back = new Date(at);
+  return back.getUTCFullYear() === year && back.getUTCMonth() === month - 1 && back.getUTCDate() === day;
+}
+
+function readExpiry(value: string | null | undefined): { ok: true; at: string | null } | { ok: false } {
+  if (value === null || value === undefined) return { ok: true, at: null };
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, at: null };
+
+  const shape = DATE_ONLY.exec(trimmed) ?? ZONED_DATETIME.exec(trimmed);
+  if (!shape) return { ok: false };
+  if (!isRealCalendarDate(Number(shape[1]), Number(shape[2]), Number(shape[3]))) return { ok: false };
+
+  const at = Date.parse(trimmed);
+  return Number.isFinite(at) ? { ok: true, at: new Date(at).toISOString() } : { ok: false };
 }
 
 async function rememberConfirmed(
@@ -212,8 +276,14 @@ async function rememberConfirmed(
         // inferred is correcting it, not claiming to have said it first — and
         // under the old notes-prefix scheme this very write was what erased
         // the provenance and hid the row from "clear what Bubaly learned".
-        // A restated fact does keep its expiry: the value is fresh again.
-        expires_at: null,
+        //
+        // The expiry is whatever the restatement said. Writing `null` here
+        // unconditionally — as this did — threw away a deadline the caller had
+        // just supplied, so "remember the swim class runs until December" made
+        // it permanent. No deadline given still means no deadline: restating a
+        // value is saying it is true now, not that it expires when the old one
+        // did.
+        expires_at: input.expiresAt,
       })
       .eq('id', existing.id)
       .eq('family_id', scope.familyId)
@@ -266,7 +336,7 @@ export function memorySignature(input: { memberId: string | null; category: stri
 
 async function rememberUnconfirmed(
   scope: ServiceScope,
-  input: { category: FactCategory; key: string; content: string; memberId: string | null; source: MemorySource; confidence: number; evidence: string | null },
+  input: { category: FactCategory; key: string; content: string; memberId: string | null; source: MemorySource; confidence: number; evidence: string | null; expiresAt: string | null },
 ): Promise<ServiceResult<RememberResult>> {
   const signature = memorySignature(input);
   const { data: existing, error: probeError } = await scope.db
@@ -293,6 +363,7 @@ async function rememberUnconfirmed(
       value: input.content,
       evidence,
       confidence: input.confidence,
+      expires_at: input.expiresAt,
       signature,
       status: 'suggested',
       created_by: scope.userId,
@@ -394,6 +465,15 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return ok({ fact: fact ?? null, alreadyAccepted: true });
   }
 
+  // A card whose own deadline has already passed cannot be accepted into a
+  // fact, because the fact would be born invisible: `isExpiredFact` filters it
+  // out of every read, so the parent presses Confirm and nothing appears. That
+  // is the inbox lying about what the button did. Say so instead — the card
+  // stays open, and dismissing it is the honest action left.
+  if (suggestion.expires_at && isExpiredFact({ expires_at: suggestion.expires_at }, scopeNow(scope))) {
+    return fail('That one had already lapsed, so confirming it would save nothing. Dismiss it, or ask Bubaly again for something current.', { code: SERVICE_CODES.invalidInput });
+  }
+
   const { data: fact, error: insertError } = await scope.db
     .from('family_facts')
     .insert({
@@ -412,6 +492,9 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
       // How sure Bubaly was, which the move across used to discard at the one
       // moment a person is deciding whether to keep the belief.
       confidence: suggestion.confidence,
+      // And when it stops being true. A card offered as "until December" that
+      // became permanent on acceptance was the same discard, one field over.
+      expires_at: suggestion.expires_at ?? null,
       created_by: scope.userId,
     })
     .select('*')

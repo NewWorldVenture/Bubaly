@@ -76,6 +76,25 @@ function assertFinanceReader(scope: ServiceScope): ServiceResult<null> {
   return fail('Family finances are private to the adults in this family.', { code: SERVICE_CODES.denied });
 }
 
+/**
+ * The same rule for the two writes, which had no rule at all.
+ *
+ * Seven reads in this file assert `assertFinanceReader` and the two writes
+ * did not, which mattered because 0267's RLS cannot see them: the run executor
+ * writes with the SERVICE ROLE, so the database's new boundary is bypassed on
+ * exactly the path the AI takes. A teen asking Bubaly to set a budget was held
+ * by the trust engine's risk tier, and by nothing else if a household had ever
+ * saved a broad allow policy.
+ *
+ * `system` is allowed for the same reason it is on the read: a cron doing the
+ * household's own work has no person to ask, and the trust gate has already
+ * decided whether that work may happen.
+ */
+function assertFinanceWriter(scope: ServiceScope): ServiceResult<null> {
+  if (scope.role === 'system' || isManager(scope.role)) return ok(null);
+  return fail('Only a parent or another adult can change the family budget.', { code: SERVICE_CODES.denied });
+}
+
 // ── date windows ──────────────────────────────────────────────────────────────
 
 export type DateRange = { from: string; to: string };
@@ -632,6 +651,8 @@ export async function updateBudget(
   scope: ServiceScope,
   input: UpdateBudgetInput,
 ): Promise<ServiceResult<{ budget: BudgetRow; created: boolean; previousAmount: number | null }>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
   const category = input.category?.trim() ?? '';
   if (!category) return fail('A budget needs a category.', { code: SERVICE_CODES.invalidInput });
   if (!Number.isFinite(input.amount) || input.amount < 0) {
@@ -701,6 +722,8 @@ export type CreateSavingsGoalInput = {
 };
 
 export async function createSavingsGoal(scope: ServiceScope, input: CreateSavingsGoalInput): Promise<ServiceResult<SavingsGoalRow>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
   const name = input.name?.trim() ?? '';
   if (!name) return fail('A savings goal needs a name.', { code: SERVICE_CODES.invalidInput });
   if (!Number.isFinite(input.targetAmount) || input.targetAmount <= 0) {

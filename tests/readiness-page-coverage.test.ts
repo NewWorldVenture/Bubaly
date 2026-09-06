@@ -10,6 +10,12 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: mocks.resolveFamilyPlanLevel }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: ReactNode }) => createElement('a', { ...props, href }, children) }));
+// §51's [Let Bubaly handle it] is a client component inside the horizon cards,
+// so the static render needs the two hooks it reaches for. Neither is under
+// test here — this file is about what the page reads and what it therefore
+// claims; `tests/readiness-assess.test.ts` covers the button's own sentence.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), usePathname: () => '/dashboard/readiness' }));
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }) }));
 
 import ReadinessPage from '@/app/(app)/dashboard/readiness/page';
 
@@ -19,7 +25,9 @@ const result = <T,>(data: T[], count = data.length): Result<T> => ({ data, count
 let week: Result<CalendarReadinessEvent>;
 let tomorrow: Result<CalendarReadinessEvent>;
 let roster: Result<{ id: string }>;
-let counts: Record<string, number>;
+// `null` is a configured value, not an unset one: it stands for a count
+// query that came back with no count and no error.
+let counts: Record<string, number | null>;
 let queries: Query[];
 
 function from(table: string) {
@@ -35,7 +43,11 @@ function from(table: string) {
       if (table === 'family_members') reply = roster;
       else if (table === 'calendar_events' && !record.options?.head) reply = record.limit === 200 ? week : tomorrow;
       else if (table === 'meal_plans' && !record.options?.head) reply = result(Array.from({ length: 7 }, (_, i) => ({ plan_date: `2026-09-${String(6 + i).padStart(2, '0')}` })));
-      else reply = { data: null, count: counts[table] ?? (table === 'meal_plans' ? 1 : 0), error: null };
+      else reply = {
+        data: null,
+        count: Object.prototype.hasOwnProperty.call(counts, table) ? counts[table] : (table === 'meal_plans' ? 1 : 0),
+        error: null,
+      };
       return Promise.resolve(reply).then(resolve);
     },
   });
@@ -49,6 +61,22 @@ const event = (index: number, assignee = 'one'): CalendarReadinessEvent => ({
   id: `event-${index}`, starts_at: new Date(Date.UTC(2026, 8, 6, 8 + index * 2)).toISOString(),
   ends_at: null, all_day: false, assignee_id: assignee,
 });
+/**
+ * Where the "something could not be read" signal lives after the two readiness
+ * implementations merged.
+ *
+ * It used to grey the ACTIVITY ring to `?` / "Coverage incomplete". That ring
+ * is `lib/readiness/score.ts` — a different question ("how much is this family
+ * running through Bubaly") whose six inputs are all in `primaryError`, so the
+ * page hard-fails rather than render it from a source that failed. Greying it
+ * because the CALENDAR read failed said the activity number was untrustworthy
+ * when it demonstrably was not, and re-blurred the very line §51 asks the page
+ * to draw. The signal now sits with the readiness answer, which is what the
+ * coverage is actually about, and the horizon cards still name each missing
+ * source underneath.
+ */
+const COVERAGE_BANNER = 'Readiness is not confirmed while some of it could not be read';
+
 const render = async () => renderToStaticMarkup(await ReadinessPage());
 
 beforeEach(() => {
@@ -79,7 +107,7 @@ describe('readiness page source coverage', () => {
     week = result(Array.from({ length: 8 }, (_, i) => event(i)));
     const html = await render();
     expect(html).toContain('1 person carrying a heavy load in the visible calendar');
-    expect(html).not.toContain('Coverage incomplete');
+    expect(html).not.toContain(COVERAGE_BANNER);
     expect(html).not.toContain('Everything ahead looks handled.');
     const members = queries.find((query) => query.table === 'family_members')!;
     expect(members.selection).toBe('id');
@@ -91,7 +119,7 @@ describe('readiness page source coverage', () => {
   it('can report ready for a successful empty calendar and a complete known roster', async () => {
     const html = await render();
     expect(html).toContain('Everything ahead looks handled.');
-    expect(html).not.toContain('Coverage incomplete');
+    expect(html).not.toContain(COVERAGE_BANNER);
     const weekly = queries.find((query) => query.table === 'calendar_events' && query.limit === 200)!;
     expect(weekly.options).toEqual({ count: 'exact' });
     expect(weekly.filters).toContainEqual({ method: 'gte', key: 'starts_at', value: '2026-09-06T00:00:00Z' });
@@ -104,11 +132,57 @@ describe('readiness page source coverage', () => {
     const html = await render();
     expect(html).toContain('Weekly visible calendar could not be read');
     expect(html).toContain('Workload balance is unknown');
-    expect(html).toContain('Coverage incomplete');
+    expect(html).toContain(COVERAGE_BANNER);
     expect(html).toContain('2 bills due');
     expect(html).toContain('7 day(s) of meals planned');
     expect(html).not.toContain('Everything ahead looks handled.');
-    expect(html).not.toContain('On top of it');
+    // And the ACTIVITY score still reads normally, deliberately. Its six
+    // inputs are all in `primaryError`, so the page hard-fails rather than
+    // render it from a source that failed — a failed CALENDAR read says
+    // nothing about how much this family is running through Bubaly, and
+    // greying it would blur the very line §51 asks the page to draw.
+    expect(html).toContain('On top of it');
+  });
+
+  // A `head: true` count query carries its answer in the Content-Range header.
+  // When that header is missing or misparsed, supabase-js reports the count as
+  // null — or as something no count could be — with NO error to catch, so the
+  // old `n ?? 0` read it as a confirmed zero and the month card printed the ✓.
+  // "We could not count your documents" and "your documents are current" are
+  // opposite claims; only one of them is safe to invent.
+  it.each([null, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5])(
+    'does not turn invalid document count metadata into an all-clear (%s)',
+    async (count) => {
+      counts.documents = count;
+      const html = await render();
+      expect(html).not.toContain('Documents are current');
+      expect(html).toContain('Documents could not be read');
+      expect(html).toContain(COVERAGE_BANNER);
+      expect(html).not.toContain('Everything ahead looks handled.');
+      // The other month rules are untouched by a documents failure: workload is
+      // still known from the complete calendar and roster, and still says so.
+      expect(html).toContain('The load is spread evenly');
+    },
+  );
+
+  it('keeps a missing prep-plan count unknown rather than treating it as no active plans', async () => {
+    // The same hole one evidence kind over: "no prep plans in progress" and "we
+    // could not look" are not the same answer to give a family.
+    counts.prep_plans = null;
+    const html = await render();
+    expect(html).toContain('Prep plans could not be read');
+    expect(html).toContain(COVERAGE_BANNER);
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  it('still claims a genuine zero when the count really is zero', async () => {
+    // The guard must not swallow the honest answer it exists to protect. A real
+    // 0 is a read that succeeded, and the ✓ is earned.
+    counts.documents = 0;
+    const html = await render();
+    expect(html).toContain('Documents are current');
+    expect(html).not.toContain('Documents could not be read');
+    expect(html).not.toContain(COVERAGE_BANNER);
   });
 
   it('labels capped conflicts as a lower bound and does not claim exact workload', async () => {
@@ -124,7 +198,7 @@ describe('readiness page source coverage', () => {
   it('treats missing count metadata as incomplete even when no rows were returned', async () => {
     week.count = null;
     const html = await render();
-    expect(html).toContain('Coverage incomplete');
+    expect(html).toContain(COVERAGE_BANNER);
     expect(html).not.toContain('The week is under control.');
   });
 
@@ -133,7 +207,7 @@ describe('readiness page source coverage', () => {
     const html = await render();
     expect(html).toContain('visible calendar could not be read; conflicts and assignments are unknown');
     expect(html).not.toContain('You&#x27;re set for tomorrow.');
-    expect(html).toContain('Coverage incomplete');
+    expect(html).toContain(COVERAGE_BANNER);
   });
 
   it('retains the existing primary error boundary for a failed roster read', async () => {
@@ -148,7 +222,7 @@ describe('readiness page source coverage', () => {
     roster = result([{ id: 'one' }], 3);
     week = result(Array.from({ length: 8 }, (_, i) => event(i)));
     const html = await render();
-    expect(html).toContain('Coverage incomplete');
+    expect(html).toContain(COVERAGE_BANNER);
     expect(html).toContain('Workload balance is unknown');
     expect(html).not.toContain('carrying a heavy load');
   });

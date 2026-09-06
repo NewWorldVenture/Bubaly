@@ -279,3 +279,41 @@ describe('writes', () => {
     expect(calls[0].filters.family_id).toBe('fam-1');
   });
 });
+
+describe('who may change the household budget (0267)', () => {
+  // Seven reads in this service assert the reader gate and the two writes
+  // asserted nothing. That mattered because 0267's RLS cannot see them: the
+  // run executor writes with the SERVICE ROLE, so the database's new boundary
+  // is bypassed on exactly the path the AI takes.
+  const noWrite = { ok: false, code: 'denied' };
+
+  it.each(['teen', 'child', 'caregiver', 'guest'] as const)('refuses a %s setting a budget', async (role) => {
+    const { db, calls } = makeDb(() => ({ data: null, error: null }));
+    expect(await updateBudget(scopeWith(db, { role }), { category: 'Snacks', amount: 400 })).toMatchObject(noWrite);
+    expect(calls, 'a refusal that still touched the database is not a refusal').toHaveLength(0);
+  });
+
+  it.each(['teen', 'child'] as const)('refuses a %s opening a savings goal', async (role) => {
+    const { db, calls } = makeDb(() => ({ data: null, error: null }));
+    expect(await createSavingsGoal(scopeWith(db, { role }), { name: 'Bike', targetAmount: 300 })).toMatchObject(noWrite);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('says who can, rather than that something went wrong', async () => {
+    const { db } = makeDb(() => ({ data: null, error: null }));
+    const res = await updateBudget(scopeWith(db, { role: 'teen' }), { category: 'Snacks', amount: 400 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/parent or another adult/i);
+  });
+
+  it('still lets a cron do the household\'s own work', async () => {
+    // `system` has no person to ask, and the trust gate has already decided
+    // whether the work may happen — the same carve-out the read gate makes.
+    const { db, calls } = makeDb((call) => (call.kind === 'insert'
+      ? { data: { id: 'b-1', family_id: 'fam-1', category: 'Snacks', amount: 400, period: 'monthly' }, error: null }
+      : { data: null, error: null }));
+    const res = await updateBudget(scopeWith(db, { role: 'system', actorKind: 'system' }), { category: 'Snacks', amount: 400 });
+    expect(res.ok, 'a system actor was refused its own household work').toBe(true);
+    expect(calls.length).toBeGreaterThan(0);
+  });
+});

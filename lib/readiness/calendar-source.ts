@@ -1,3 +1,5 @@
+import { detectConflicts, type TimedEvent } from '@/lib/family/conflicts';
+import { mostLoaded } from '@/lib/operating-index/score';
 import type { ReadinessCoverage } from './assess';
 
 export type CalendarReadinessEvent = {
@@ -56,11 +58,20 @@ export function calendarReadiness(
     loads.set(event.assignee_id, load + 1);
   }
 
+  // THE RULE THE PAGE IT LINKS TO RUNS. The month gap sends a person to the
+  // Family Operating Index, so it answers with that page's own `mostLoaded`
+  // rather than a second threshold written here — otherwise a family can be
+  // told "1 person carrying a heavy load" and land somewhere naming nobody.
+  //
+  // Same rule, narrower input: the index feeds it events AND open tasks, this
+  // feeds it events alone. It can therefore name nobody where that page would,
+  // never the reverse, which is the safe direction for a gap whose whole job is
+  // to send someone there. It identifies at most one member, so this is 0 or 1.
   let overloadedMembers: number | null = null;
   if (workloadCoverage === 'complete') {
-    const values = [...loads.values()];
-    const average = values.reduce((sum, load) => sum + load, 0) / values.length;
-    overloadedMembers = values.filter((load) => load >= 4 && load > average * 1.5).length;
+    overloadedMembers = mostLoaded(
+      [...loads.entries()].map(([memberId, upcoming]) => ({ memberId, name: memberId, upcoming, openTasks: 0 })),
+    ) ? 1 : 0;
   }
   return {
     calendarCoverage,
@@ -71,19 +82,19 @@ export function calendarReadiness(
   };
 }
 
-/** One overlap rule for both windows; a missing end means one hour. */
+/**
+ * THE COUNT MUST MATCH THE PAGE IT SENDS YOU TO. The gap reads "2 clashes this
+ * week" and links to /dashboard/conflicts, which runs
+ * `lib/family/conflicts.ts detectConflicts`. A private copy of that sweep here
+ * could — and did — disagree with the page it points at about the same week.
+ *
+ * (The Family Operating Index deliberately uses the OTHER rule,
+ * `lib/home/conflicts.ts`: one PERSON double-booked. Two named rules, each used
+ * consistently, rather than a third written inline.)
+ */
 function countOverlaps(events: readonly CalendarReadinessEvent[]): number {
-  const timed = [...events].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  let count = 0;
-  for (let i = 0; i < timed.length; i += 1) {
-    const start = Date.parse(timed[i].starts_at);
-    const end = timed[i].ends_at ? Date.parse(timed[i].ends_at!) : start + 3_600_000;
-    for (let j = i + 1; j < timed.length; j += 1) {
-      const otherStart = Date.parse(timed[j].starts_at);
-      if (otherStart >= end) break;
-      const otherEnd = timed[j].ends_at ? Date.parse(timed[j].ends_at!) : otherStart + 3_600_000;
-      if (otherStart < end && start < otherEnd) count += 1;
-    }
-  }
-  return count;
+  return detectConflicts(events.map((e): TimedEvent => ({
+    id: e.id, title: '', starts_at: e.starts_at, ends_at: e.ends_at,
+    all_day: Boolean(e.all_day), assignee_id: e.assignee_id,
+  }))).length;
 }

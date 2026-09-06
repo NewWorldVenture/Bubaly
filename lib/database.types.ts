@@ -561,10 +561,12 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; notes?: string | null; is_pinned?: boolean; source?: string; confidence?: number | null; expires_at?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean; confidence: number | null; expires_at: string | null }>
       >;
+      // `expires_at` is 0268: a suggestion offered with a deadline keeps it
+      // through acceptance, rather than becoming a permanent fact.
       family_playbook_suggestions: T<
-        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; signature: string; status: string; fact_id: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; evidence?: string | null; confidence?: number; signature: string; status?: string; fact_id?: string | null; created_by?: string | null },
-        Partial<{ member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; status: string; fact_id: string | null }>
+        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; expires_at: string | null; signature: string; status: string; fact_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; evidence?: string | null; confidence?: number; expires_at?: string | null; signature: string; status?: string; fact_id?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; expires_at: string | null; status: string; fact_id: string | null }>
       >;
       family_model_dirty: T<
         { family_id: string; dirty: boolean; reason: string | null; marked_at: string; refreshed_at: string | null },
