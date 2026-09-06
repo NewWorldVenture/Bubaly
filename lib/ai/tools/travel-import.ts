@@ -3,8 +3,25 @@ import { defineTool } from './types';
 import { ok } from '@/lib/services/types';
 import { previewConfirmationImport } from '@/lib/services/trips/confirmation-import';
 import {
-  confirmationSourceSchema, confirmationFieldsSchema, confirmationResultSchema,
+  confirmationResultSchema, type ConfirmationSource, type ConfirmationFields,
 } from '@/lib/vacations/confirmation-import';
+
+// Providers need structural schemas without domain refinements. The service's
+// previewConfirmationImport still performs the complete strict domain parse.
+const confirmationSourceInputSchema = z.object({
+  title: z.string().min(1).max(160),
+  text: z.string().min(1).max(65536),
+}).strict() satisfies z.ZodType<ConfirmationSource>;
+
+const confirmationFieldsInputSchema = z.object({
+  name: z.string().min(1).max(200),
+  kind: z.string().min(1).max(40),
+  location: z.string().min(1).max(500).nullable(),
+  reservedAt: z.string(),
+  partySize: z.number().int().min(1).max(1000).nullable(),
+  confirmationCode: z.string().min(1).max(120).nullable(),
+  booked: z.boolean(),
+}).strict() satisfies z.ZodType<ConfirmationFields>;
 
 export const travelImportTools = [
   defineTool({
@@ -16,8 +33,8 @@ export const travelImportTools = [
     readOnly: true,
     input: z.object({
       vacationId: z.string().uuid(),
-      source: confirmationSourceSchema,
-      fields: confirmationFieldsSchema,
+      source: confirmationSourceInputSchema,
+      fields: confirmationFieldsInputSchema,
     }).strict(),
     output: z.object({
       result: confirmationResultSchema,
