@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import {
   Heart, Cake, Sparkles, Wine, Star, CalendarDays, Gift, Plus, Pencil, Trash2,
   ExternalLink, DollarSign, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
-import { suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
+import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 
@@ -56,7 +56,7 @@ const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(
 const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`);
 
 export function RelationshipModule() {
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
   const { data: dates, loading: dl, error: de } = useRealtimeQuery<RDate>({
@@ -75,7 +75,14 @@ export function RelationshipModule() {
     table: 'wishlist_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wishlist_items').select('*').eq('family_id', familyId),
   });
-  const profile = profileRows?.[0] ?? null;
+  const profile = profileRows?.find((row) => row.family_id === familyId) ?? null;
+  const digestMemberId = selfMember?.family_id === familyId ? selfMember.id : null;
+  const digestPartnerId = profile?.partner_member_id ?? null;
+  const digestPartnerName = profile?.partner_name ?? null;
+  const digestScope = useMemo(() => createRelationshipDigestRequestScope({
+    familyId, userId, memberId: digestMemberId,
+    partnerMemberId: digestPartnerId, partnerName: digestPartnerName,
+  }), [familyId, userId, digestMemberId, digestPartnerId, digestPartnerName]);
 
   const [dateModal, setDateModal] = useState(false);
   const [dateForm, setDateForm] = useState(blankDate);
@@ -84,8 +91,21 @@ export function RelationshipModule() {
   const [profileModal, setProfileModal] = useState(false);
   const [wishModal, setWishModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [digest, setDigest] = useState<RelationshipDigest | null>(null);
+  const [aiLoadingScope, setAiLoadingScope] = useState<typeof digestScope | null>(null);
+  const [digestResult, setDigestResult] = useState<{
+    scope: typeof digestScope;
+    request: ReturnType<typeof digestScope.begin>;
+    digest: RelationshipDigest;
+  } | null>(null);
+  const aiLoading = aiLoadingScope === digestScope;
+  // The render guard hides old history before context-change effects run.
+  const digest = digestResult && digestResult.scope === digestScope && digestScope.isCurrent(digestResult.request)
+    ? digestResult.digest : null;
+  useLayoutEffect(() => {
+    setDigestResult(null);
+    setAiLoadingScope(null);
+    return () => digestScope.invalidate();
+  }, [digestScope]);
   const [giftFilter, setGiftFilter] = useState<'all' | RelationshipGiftStatus>('all');
 
   const giftSummary = useMemo(() => summarizeGifts((gifts ?? []).map((g) => ({ status: g.status, price_cents: g.price_cents }))), [gifts]);
@@ -259,13 +279,25 @@ export function RelationshipModule() {
 
   // ── AI ──
   async function runAi() {
+    const request = digestScope.begin();
+    // Also guard the existing finally cleanup against a newer request.
+    function setAiLoading(loading: boolean) {
+      if (digestScope.isCurrent(request)) setAiLoadingScope(loading ? digestScope : null);
+    }
     setAiLoading(true);
     try {
-      const res = await fetch('/api/ai/relationship', { method: 'POST' });
+      const res = await fetch('/api/ai/relationship', { method: 'POST', signal: request.signal });
+      if (!digestScope.isCurrent(request)) return;
       const json = await res.json();
+      if (!digestScope.isCurrent(request)) return;
       if (!res.ok) { toastError(json.error ?? 'Could not generate suggestions.'); return; }
-      setDigest(json.digest as RelationshipDigest);
+      if (!digestScope.accepts(request, json.context)) {
+        toastError('Household or partner context changed. Please generate suggestions again.');
+        return;
+      }
+      setDigestResult({ scope: digestScope, request, digest: json.digest as RelationshipDigest });
     } catch {
+      if (!digestScope.isCurrent(request)) return;
       toastError('Network problem — please try again.');
     } finally {
       setAiLoading(false);
@@ -306,6 +338,28 @@ export function RelationshipModule() {
               )}
             </div>
           </div>
+          {digest.giftHistory && (
+            <div className="mt-4 rounded-xl border border-border bg-surface/50 p-3">
+              <p className="text-xs font-semibold">Recorded gift history</p>
+              <p className="mt-1 text-xs text-muted">{digest.giftHistory.summary}</p>
+              {digest.giftHistory.records.length > 0 && (
+                <details className="mt-2 text-xs text-muted">
+                  <summary className="cursor-pointer text-brand-text">View recorded outcomes</summary>
+                  <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                    {digest.giftHistory.records.map((record) => (
+                      <li key={record.id}>
+                        <span className="font-medium text-fg">{record.title}</span>
+                        {' - '}{record.status === 'given' ? 'Given' : 'Purchased'}
+                        {record.for_name ? ` for ${record.for_name}` : ''}
+                        {' - '}{record.matchedBy === 'member_id' ? 'recipient ID match' : 'recorded name match'}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2">Duplicate checks use wishlist IDs or gift titles ignoring case and whitespace. Different wording may still describe the same gift.</p>
+                </details>
+              )}
+            </div>
+          )}
           {digest.giftIdeas.length > 0 && (
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {digest.giftIdeas.map((idea, i) => (
