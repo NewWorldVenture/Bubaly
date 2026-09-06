@@ -49,6 +49,7 @@ import {
   type RunEventInput, type RunRow, type StepRow,
 } from './store';
 import { parseVerificationSpec, runVerification, type VerificationOutcome } from './verify';
+import { resolveBindings } from './bindings';
 
 type RunPatch = Database['public']['Tables']['family_automation_runs']['Update'];
 type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
@@ -797,6 +798,15 @@ async function runStep(
     }
   }
 
+  // Fill in what an earlier step produced. A plan can say "add the packing list
+  // to the trip you just created" and — the reason this exists — a verify step
+  // can name the rows this run actually wrote instead of counting the family's.
+  // A binding that cannot be resolved fails the step: passing a hole to a
+  // database is how a run writes the wrong row and still reports success.
+  const bound = resolveBindings(step.input_json as Json, depByIdResults);
+  if (!bound.ok) return failStep(port, run, step, bound.error, false);
+  const boundStep: StepSnapshot = { ...step, input_json: bound.value };
+
   await port.updateStep(run, step.id, { status: 'executing', started_at: new Date(port.now()).toISOString() });
   await port.appendEvent(run, {
     eventType: 'step_started', stepId: step.id, toolName: step.tool_name, message: `Started "${describeStep(step)}".`,
@@ -805,11 +815,11 @@ async function runStep(
   switch (step.step_type) {
     case 'act':
     case 'retrieve':
-      return runToolStep(port, scope, run, step, approvedPayload, deadline);
+      return runToolStep(port, scope, run, boundStep, approvedPayload, deadline);
     case 'verify':
-      return runVerifyStep(port, scope, run, step);
+      return runVerifyStep(port, scope, run, boundStep);
     case 'notify':
-      return runNotifyStep(port, scope, run, step);
+      return runNotifyStep(port, scope, run, boundStep);
     case 'followup':
       return runFollowupStep(port, run, step);
     case 'replan':

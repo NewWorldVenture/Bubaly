@@ -42,6 +42,7 @@ import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
 import { parseNotifyInput } from '@/lib/ai/runs/executor';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';
+import { bindingSources } from '@/lib/ai/runs/bindings';
 import { behaviorForDomain, type AISettings } from '@/lib/ai/family-settings';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { AiStepType } from '@/lib/database.types';
@@ -347,6 +348,24 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
     drafts.push(draft);
   }
 
+  // A step's input may name an earlier step's result (`$fromStep`). The executor
+  // resolves those against the DEPENDENCY results it has in hand, so a binding
+  // to a step this one does not depend on is unresolvable by construction — it
+  // would fail at execution, after the plan looked fine. Caught here, before
+  // the graph pass, so the cascade below drops whatever depended on it too.
+  for (let i = drafts.length - 1; i >= 0; i -= 1) {
+    const draft = drafts[i];
+    const missing = bindingSources(draft.input).filter((key) => !draft.dependsOn.includes(key));
+    if (!missing.length) continue;
+    drafts.splice(i, 1);
+    dropped.add(draft.key);
+    issues.push({
+      code: 'invalid_input',
+      step: draft.key,
+      message: `"${draft.key}" uses the result of ${missing.map((k) => `"${k}"`).join(', ')} without depending on it. List it in depends_on, or stop referring to it.`,
+    });
+  }
+
   // Pass 2: the graph. Unknown dependencies are removed; dependents of dropped
   // steps are dropped transitively (their precondition no longer exists).
   const keys = new Set(drafts.map((d) => d.key));
@@ -464,7 +483,15 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
         return null;
       }
       const conformed = conformNulls(tool.input, parsedInput.value);
-      const checked = tool.input.safeParse(conformed);
+      // A value the plan cannot know yet — the id of a row a later step will
+      // create — is written as a binding (`$fromStep`), which is an object
+      // where the tool wants a string. So a step carrying one cannot be checked
+      // against the tool's schema here, and is not: `executeTool` validates the
+      // RESOLVED input against that same schema before it does anything, which
+      // is the only moment the real value exists. What IS checked here is that
+      // every binding names a step this one depends on (below).
+      const hasBindings = bindingSources(conformed).length > 0;
+      const checked = hasBindings ? { success: true as const, data: conformed } : tool.input.safeParse(conformed);
       if (!checked.success) {
         issues.push({ code: 'invalid_input', step: key, message: `Step "${key}" (${tool.name}) has arguments the tool cannot use — ${issueSummary(checked.error)}.` });
         return null;

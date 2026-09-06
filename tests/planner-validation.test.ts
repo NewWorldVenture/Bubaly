@@ -366,6 +366,40 @@ describe('validatePlan: risk and the pure trust dry run', () => {
     expect(result.steps.map((s) => [s.key, s.approvalRequired])).toEqual([['todo', true]]);
   });
 
+  it('drops a step that uses a result it does not depend on', () => {
+    // The executor resolves `$fromStep` against the DEPENDENCY results it has
+    // in hand, so this binding is unresolvable by construction — it would fail
+    // at execution, after the plan looked fine to everyone who read it.
+    const result = validatePlan(plan([
+      step({ key: 'trip', step_type: 'act', tool_name: 'trips.findOrCreateVacation', input: '{"title":"Maine"}' }),
+      step({
+        key: 'pack', step_type: 'act', tool_name: 'trips.createPackingList',
+        input: '{"vacation_id":{"$fromStep":"trip","path":"id"}}',
+        depends_on: [],
+      }),
+    ]), inputsWith());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.steps.map((s) => s.key)).toEqual(['trip']);
+    const issue = result.issues.find((i) => i.step === 'pack');
+    expect(issue?.code).toBe('invalid_input');
+    expect(issue?.message).toContain('without depending on it');
+  });
+
+  it('keeps the same step when it does depend on what it reads', () => {
+    const result = validatePlan(plan([
+      step({ key: 'trip', step_type: 'act', tool_name: 'trips.findOrCreateVacation', input: '{"title":"Maine"}' }),
+      step({
+        key: 'pack', step_type: 'act', tool_name: 'trips.createPackingList',
+        input: '{"vacation_id":{"$fromStep":"trip","path":"id"}}',
+        depends_on: ['trip'],
+      }),
+    ]), inputsWith());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.steps.map((s) => s.key)).toEqual(['trip', 'pack']);
+  });
+
   it('mirrors the executor gate: a household allow policy beats the risk tier', () => {
     const tool = getTool('calendar.deleteEvent')!;
     const withoutPolicy = dryRunGate(tool, { event_id: 'x' }, inputsWith(), null);
