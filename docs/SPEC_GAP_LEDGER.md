@@ -27,7 +27,7 @@ family is right.
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
 | **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
-| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. |
+| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, EVERY site that bypassed it has the window — the batch generator keeps its own insert but takes `deliveryTimeFor` — and `child_channels` IS consulted, at delivery, by both push and email. What remains of this row is the push channel itself and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
 | **30** | high / M | IDEMPOTENCY | A parent types "add soccer practice Saturday at 9" into Bubaly's chat, the phone loses signal mid-answer and the app re-sends — and the family now has two soccer practices on the calendar, the exact duplicate the concierge path is protected against. The same applies to a double-tapped send, a reloaded tab, or Bubaly's own retry of a chat write: nothing can tell an already-succeeded write from a new one, so the family cleans up duplicate chores, duplicate grocery lines and duplicate reminders by hand and stops trusting the assistant with anything that matters. |
@@ -38,9 +38,8 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 23 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
-| **45** | medium / S | TESTING REQUIREMENTS | A family's rows are protected by policies nothing in CI ever tries to break. This repo has already lived the failure once (supabase/migrations/0118 exists because production tables had RLS on with their family policies missing, so pages silently returned zero rows). The next migration that adds a table without a policy, or drops one, ships without a red build — and a household either loses access to its own calendar and money or, worse, another family can read it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
 | **60** | medium / M | DEFINITION OF DONE FOR EVERY AI TOOL | A parent who asks twice in one conversation for milk on the list gets two milks, and the calendar event Bubaly just made from chat never appears in the family activity feed — so the other parent has no record that Bubaly, not a person, put it there. |
@@ -98,10 +97,10 @@ Three further findings from the same review, each verified against the code:
   `pending_approval` and `denied` at step 3, *before* the ledger reservation at
   step 4. Any PR claiming a resent chat message is deduplicated is false for every
   family that turned approvals on.
-- **A resent submission opens two `approval_requests` rows.** `openApprovalRequest`
-  is an unguarded INSERT and no migration puts a unique index on that table.
-  Approving both writes the resource twice — this, not the tool ledger, is where a
-  gated family's duplicate actually comes from.
+- ~~**A resent submission opens two `approval_requests` rows.**~~ **CLOSED by
+  0273** — see "one pending approval per request" below. It was exactly as
+  described: an unguarded INSERT with no unique index, and approving both cards
+  wrote the resource twice.
 - **`create_calendar_event` and `add_grocery_item` are in both `AI_TOOLS` and
   `TOOL_DOMAIN`**, and `action-tools.ts` never sets `skipTrust`. Deleting the
   hand-written set without also deleting the `lib/ai/actions.ts` bridge would
@@ -114,39 +113,620 @@ the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
 
-- **The registry path was looser than the hand-written one it replaces.** Two
-  data-integrity bugs found while designing §30's delegation, both live, both in
-  code the delegation would have leaned on.
+- **§21, the last writer that could still wake a house at 2am.**
+  `generateFamilyNotifications` was the final entry on the write-boundary
+  ratchet, carried for tranches with the note "needs its own tranche". It does
+  not route through `notify()` — and now, deliberately, it still does not.
 
-  **A recurring reminder with no time was stored and could never fire.**
-  `createReminder` refused a timeless non-location reminder only when
-  `recurrence === 'none'`, so "remind me every day to stretch" — which
-  `reminders.create` turns into `kind: 'recurring'` with no `remind_at` — slipped
-  past and wrote `remind_at` NULL. Every reader excludes it: `listDue` filters
-  `.not('remind_at','is',null)`, the notification cron
-  (`lib/server/notifications.ts`) filters the same, and `nextRemindAt` takes the
-  *current* `remind_at` as the point to count forward from, so the row can never
-  acquire one later. It appeared in the module with no time, never became
-  overdue, and never notified anyone.
+  **The exemption is justified rather than owed.** It assembles up to 150 rows
+  across events, reminders and medications, each type with its own dedupe read,
+  and inserts them in ONE batch. Pushing that through `notify()` would turn one
+  insert into 150 round trips on a cron, to re-solve duplicates the function
+  already handles. What it was actually missing was never dedupe: it was the
+  quiet-hours window.
 
-  A test had pinned the old behaviour — *"accepts a recurring reminder with no
-  explicit first time"* — asserting acceptance and never that the reminder could
-  fire. That is how it looked deliberate for so long, and is worth remembering:
-  a test that pins the write without pinning the effect makes a dud look like a
-  feature.
+  So it takes the window and keeps the batch. `deliveryTimeFor` is the decision
+  `notify()` already made, lifted out and exported, and the generator resolves it
+  ONCE for the whole batch — every row belongs to one family, so a per-row lookup
+  would be the same answer fetched 150 times. One definition of "when does this
+  land", because two would eventually disagree and the one that drifts is the one
+  nobody is testing.
 
-  **`createChore` had no floor on points.** The chat tool clamped with
-  `Math.max(0, …)`; the registry's schema was `z.number().int().nullish()`, so a
-  chore that TAKES points away for doing it was writable. Now refused at both the
-  service and the schema, rather than clamped — silently turning -5 into 0
-  answers a request nobody made. Zero still works, because a chore with no reward
-  is a real thing a family wants.
+  **"Does not call `notify()`" and "ignores quiet hours" turned out to be
+  different claims**, and only the second was ever the problem. The boundary test
+  caught this directly: removing the entry from `ALLOWED` made the list assert
+  something untrue, because the file IS still a raw-insert site. It stays listed,
+  with its reason rewritten from debt to exemption, and its actual behaviour
+  asserted in a block of its own.
 
-  Scope, stated exactly: `createReminder` has one caller,
-  `lib/ai/tools/reminders.ts`, so this closes the AI path. The reminders module
-  still inserts into `family_reminders` directly and can still store a timeless
-  reminder — that is the §7 row, not this one.
+  **A family that cannot be read is sent to, not held.** When the scope lookup
+  fails the zone is unknown, and a notice that arrives is recoverable where one
+  held for eight hours against a guessed clock is not.
 
+  Still open in §21: the push channel itself, and the fact that no UI exists for
+  a parent to set `child_channels` — a product decision, not a bug.
+
+- **§33 (in part), the two surfaces a family would actually ask about now leave a
+  record.** The row says a family writes in that "Bubaly stopped doing my Sunday
+  meal plan" and nobody can answer them. The cause was narrower than it looked:
+  `ai_requests` has had `model`, `prompt_tokens`, `completion_tokens`,
+  `latency_ms` and `error` from the start, and `recordModelCall` has always
+  filled them — **but only when handed a `requestId`, and only the concierge
+  planner ever opened a row.** Of ~50 model entrypoints, five carried one.
+
+  **It is a wrapper, not a convention, because the provider records nothing
+  itself.** `complete()` RETURNS usage and discards it, so adopting observability
+  by hand is four separate edits per route — open a row, time the call, record
+  the model and usage, close the row. Four steps by hand in forty places is four
+  steps done wrong in some of them. `withAiRequest(scope, {feature, text}, body)`
+  does all four.
+
+  **The record now says which model ANSWERED.** `AICompletion` carried usage but
+  not the model, so a caller could only report the constant it *intended* to use
+  — exactly the wrong answer after a fallback or a config change. The provider
+  now reports it, because the provider is the only thing that knows.
+
+  **Two surfaces, chosen because the row names them.** The daily brief swallows
+  provider errors by design (they can carry family context), so recording had to
+  happen *inside* the swallow or it would be erased. The chat assistant never
+  throws at all — it catches its own stream errors and falls back — so
+  `obs.failed(err, {partial})` is how a surface that handles its own errors still
+  leaves the evidence, and a stream that broke halfway settles as
+  `partially_completed` rather than as a clean completion.
+
+  **Bookkeeping never fails the family's work**: if the row cannot be opened the
+  body still runs with a null request id. Its own test caught this promise being
+  broken — the `executing` update had no `.catch()`, so a transient failure there
+  would have taken down the brief it was supposed to be observing.
+
+  **Twelve more surfaces followed** — the meal planner, insights, assist, the weekly
+  briefing, the health coach, the habit coach, savings, the journal prompt, and the
+  four home surfaces (repair diagnosis, find-a-pro, the maintenance forecast and
+  utility savings) — each named individually in the coverage test, because "fewer
+  silent surfaces" is not a property anyone can check while "the meal planner
+  records which model produced this week's plan" is.
+
+  **Four more closed a failure mode nothing was recording: the model answered
+  and the surface could not use the answer.** Notes assist, the relationship
+  digest, meal nutrition and the chef each ask for a shape — a summary, a
+  headline, JSON, a parseable plan — and each has a branch for "we got a reply
+  and could not read it". Two answer 502, one 422, and the chef silently keeps
+  its deterministic fallback. In every case the tokens were spent and the row,
+  had there been one, would have read `completed`.
+
+  They now call `obs.used` and THEN `obs.failed`, in that order, so the spend
+  lands on the row even though the turn failed. The coverage test asserts the
+  ordering by source position rather than the presence of both calls: a mutant
+  that charges the tokens only when the answer was usable — the natural way to
+  write it — passes a presence check and fails this one.
+
+  The chef is the sharpest case: `source: 'fallback'` is what a family sees when
+  the provider threw, when the reply would not parse, AND when no API key is
+  configured. Three causes, one indistinguishable outcome.
+
+  **Utility savings is the third surface that does not fit the pattern.** It
+  answers 200 whether or not the model ran: on a provider failure it drops the
+  narrative and returns its deterministic findings alone, flagged `aiUsed:
+  false`. That flag cannot distinguish "the model errored" from "no API key is
+  configured", which is precisely the §33 complaint — so the wrapper has to sit
+  INSIDE the try that swallows, and the test asserts the ordering rather than
+  just the presence of a call. The first version of that assertion sliced from
+  `withAiRequest(` to `obs.used(` and passed against a mutant that wrapped the
+  provider call in its own `try { ... } catch { return null }`, because the
+  swallow lands AFTER `obs.used`. The slice now runs to the `aiUsed = true` that
+  follows the wrapper, and the mutant fails.
+
+  **The ratchet was carrying the exact slack its own comment forbids.** The
+  scanner counted any file importing from `lib/ai/provider`. Nine of the 32 could
+  not obtain a provider at all: six import only a `ToolSpec` or `AIProviderConfig`
+  type (`lib/assistant/tools.ts`, `lib/assistant/trust-wrapper.ts`,
+  `lib/ai/action-tools.ts`, `lib/ai/tools/legacy-adapter.ts`, `lib/ai/settings.ts`,
+  `lib/ai/provider-stub.ts`), and three import only `describeAIError` /
+  `isAIConfigured` (`app/api/ai/route.ts`, `app/api/social/ai/route.ts`,
+  `app/(app)/dashboard/concierge/run-actions.ts`). Nine files' worth of room for a
+  new silent surface to slip in green.
+
+  It also missed a real one. The obvious forward regex —
+  `import\s+(type\s+)?\{[\s\S]*?\}\s+from '…provider'` — starts matching at the
+  FIRST `import {` in a file and lazily extends to the provider specifier,
+  swallowing every import in between. Any file whose first import happens to be
+  `import type {…}` reads as type-only regardless of what it takes from the
+  provider. That is how `lib/ai/assistant-engine.ts` — which imports
+  `resolveProvider` and calls `provider.runTools` in three places — was classified
+  as unable to reach a model. The scanner now finds each provider import by
+  scanning BACK from the specifier to the `import` that opens the statement, and
+  requires a value import of one of the four exports that actually yield a
+  provider (`resolveProvider`, `getProvider`, `providerFromConfig`,
+  `OpenAIProvider`).
+
+  Having been wrong in both directions, the scanner now has fixtures of its own:
+  nine files asserted absent by name with the reason, three asserted present, and
+  six direct unit checks on the classifier including the exact shape the forward
+  regex got wrong.
+
+  **The remaining 23 silent surfaces are counted, not ignored.**
+  `tests/ai-observability-coverage.test.ts` caps them at exactly 23 — not a round
+  number above it, because slack in a ratchet is room for new silent surfaces to
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions) — and
+  asserts the scanner finds something, so a broken scanner cannot satisfy the cap
+  vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
+
+  **The floor is 1, not 0.** `lib/ai/routing.ts` builds an `OpenAIProvider` and
+  hands it back without ever calling one — there is no request to observe and no
+  scope to observe it with; the caller that asked for the provider is the surface.
+  It stays in the count regardless, because excluding it means teaching the
+  scanner a judgement call, and a scanner that makes judgement calls can be argued
+  into excluding a real surface.
+
+  **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
+  by design — a giver following a gift link is not signed in — so
+  `scopeFromUserContext` has nothing to build from. It could be given a system
+  scope for the family that owns the link, but that would put a stranger's
+  request on the family's own `ai_requests` ledger, and whose AI budget a
+  gift-link visitor spends is a product decision rather than a mechanical
+  conversion. Recorded in the coverage test with that reason instead of guessed
+  at.
+
+  It is one of three surfaces so far that do not fit the pattern, alongside the
+  chat assistant which never throws and utility savings which answers 200 on
+  failure. The remaining 23 should be expected to contain more of them: "wrap the
+  provider call" is the common case, not the whole set.
+
+  **Adopting the wrapper widens what a route reads from its user context.**
+  `scopeFromUserContext` needs `ctx.active.role`, `ctx.active.family.timezone`
+  and `ctx.active.member.id`; a route that previously touched only `user.id` and
+  `active.familyId` now touches all of them. Both are required fields on
+  `FamilyMembership`, so production always has them — but a hand-rolled test stub
+  need not, and `tests/relationship-ai-gift-history.test.ts` had one that did
+  not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
+  500. Expect the same in the remaining 32: the stub is thinner than the type.
+
+  Still open in §33: the other 23 surfaces — `lib/ai/assistant-engine.ts` is the
+  largest, and was invisible until the scanner was fixed — and the admin view over
+  runs, which this does not touch.
+
+- **§21, "how Bubaly may reach a child directly" was a setting that did
+  nothing.** `0257` documents `family_ai_settings.child_channels` as
+  `{"push": true, "email": false}` — how Bubaly may reach a child directly. It
+  was written by the settings service and read into `AISettings.childChannels`,
+  and then consulted by **nothing**: five references in the whole repository, not
+  one of them a decision. A family that switched a channel off was told nothing
+  and silenced nothing.
+
+  **Enforced at DELIVERY, not in `notify()`.** The setting says how Bubaly may
+  REACH a child, not what a child may be told: turning push off should stop the
+  phone buzzing, not erase the notice from the in-app list the child opens
+  themselves. So `childrenBlockedOn` filters in `dispatchPendingPushes` and in
+  `deliverNotificationEmails`.
+
+  **The whole-family fan-out is the case that mattered.** A notification with
+  `user_id` null fans out to every active member, so filtering only the addressed
+  case would still have reached a child by the widest path — and the one a family
+  notices most. The candidate set is built from both shapes before the filter
+  runs, and `pushed_at` is still stamped when everyone is filtered out, or the
+  notification would be reconsidered on every cron run forever. On the email side
+  the block folds into the same skip set as the per-user toggle, so a withheld
+  email is resolved into `sent_at` rather than retried.
+
+  **Absent means allowed**, the rule `settingsFromRow` already applies to
+  `enabled`: the column defaults to `{}` and only an explicit `false` is a
+  decision. Otherwise every family that has never opened the setting would go
+  dark. **A failed read delivers** rather than failing closed — this governs
+  which channel a notice takes, not whether a child may be told something, and
+  quiet hours and the trust gate are the boundaries that fail closed.
+
+  **Scope is the `child` role**, which is what `0257` says. Teens hold their own
+  logins and are not what a parent is limiting here; widening it would be a
+  product decision rather than a reading of the contract.
+
+  **What is still missing, and is the user's call: there is no UI.** No component
+  in the repository reads or writes `childChannels`, so a parent cannot set this
+  today — only the settings service can, through an API call. Enforcement makes
+  the stored setting truthful and is a prerequisite either way; the control that
+  lets a family use it is a product decision about the Settings → Bubaly AI page,
+  not something to invent here.
+
+- **§21, the five notifications that could still arrive at half past eleven.**
+  `notify()` is where a notification acquires the two things a family relies on —
+  the quiet-hours window and the unread-duplicate guard — and
+  `tests/notification-write-boundary.test.ts` already enumerated who bypassed it,
+  each with a reason. Five carried the same note: *"not urgent, should move"*.
+  They have moved.
+
+  **The crons matter more than their names suggest, because cron schedules are
+  in UTC and families are not.** `autopilot-scan` runs at 06:30 UTC, which is
+  **23:30 for a family on US Pacific time** — so Bubaly's own unprompted
+  suggestion was the single thing most likely to light up a phone at half past
+  eleven at night, and it wrote its row raw. `close-auctions` at 10:00 UTC is
+  late evening in New Zealand. This is the §21 story arrived at from Bubaly's own
+  initiative rather than from a chore or a renewal.
+
+  Converted: `lib/autopilot/scan.ts`, `app/gift/actions.ts`,
+  `app/(app)/dashboard/locator/actions.ts`,
+  `app/api/cron/close-auctions/route.ts`,
+  `app/api/cron/return-reminders/route.ts`. Each also gains the duplicate guard,
+  which for the crons is the difference between a re-run nudging a family twice
+  and not.
+
+  **The locator is marked `urgent`, departing from the note that had it down as
+  "not urgent".** Deferring it is the harm: the geofence alerts quiet hours would
+  actually hold are the night-time ones, and a child LEAVING the house at 2am is
+  precisely the alert a parent must not receive at 7am. Daytime arrivals fall
+  outside the window anyway, so marking it urgent costs a family nothing and
+  protects the one case that matters. It still gains the duplicate guard, which
+  is the real fix for a phone whose GPS jitters across a geofence edge.
+
+  **Both crons build one scope PER FAMILY.** They walk rows belonging to
+  different households, and a single scope would apply one family's quiet hours —
+  and one family's timezone — to everyone the cron touched. `systemScopeForFamily`
+  reads the real zone rather than defaulting, because a window evaluated in the
+  wrong zone holds a notice at six in the evening and lets one through at two in
+  the morning.
+
+  Two boundary tests went red for the right reason and were fixed rather than
+  bent: both pinned the property "a failed notification is counted, and the
+  dedupe stamp is not written for a notice nobody got" **by the name of a local
+  variable** (`notificationError`). The routes still do both; the tests were
+  describing their old shape. They now assert the counting and the stamping.
+
+  Still open in §21: `child_channels` is still saved and never consulted, the
+  push channel itself, and `lib/server/notifications.ts` — a batch generator that
+  assembles its own rows and is genuinely a different job.
+
+- **§30, one pending approval per request, however many times the phone sends
+  it.** The smallest and most concrete piece of the row, and the one that
+  actually bites a family today. `openApprovalRequest` was an unguarded INSERT
+  and nothing on `approval_requests` stopped a second identical row, so a resend
+  — a flaky connection mid-answer, a double-tapped send, a reloaded tab, Bubaly's
+  own retry — filed **two pending approvals for one intent**. A parent sees two
+  cards that look like the same thing they wanted, approves both, and the
+  resource is written twice.
+
+  This is where a gated family's duplicate actually comes from, and it is the one
+  the tool ledger structurally cannot catch: `executeTool` returns
+  `pending_approval` at step 3, **before** the idempotency reservation at step 4.
+  For every family that turned approvals on, the protection §30 describes has
+  never been reached.
+
+  `0273` adds `dedupe_key` and a partial unique index. Both halves of the
+  predicate are load-bearing:
+
+  * `where status = 'pending'` — a decided request is history. Asking again for
+    something already approved is a new request and must be allowed, or a family
+    could never repeat anything they had once been granted.
+  * `where dedupe_key is not null` — every row that exists today has none, and a
+    caller supplying none keeps exactly the old behaviour instead of colliding
+    with every other keyless row in the family.
+
+  **The key is the ASK, not the engine's description of it.** Domain, capability,
+  who it is for, and the FULL payload — never a natural key, which is the trap
+  the earlier design review caught: a natural key cannot see the assignee, so
+  "give Emma and Jack each a chore due Friday" collapses two different chores
+  into one. Title, summary, reasoning and priority are excluded: they are how the
+  engine described the request, and letting them vary would let two identical
+  asks through. Payload keys are sorted before hashing, because `JSON.stringify`
+  preserves insertion order and two code paths can assemble the same arguments in
+  a different sequence.
+
+  **The duplicate is visible rather than narrated as a fresh write**, which the
+  design review named as a requirement. The lookup returns `alreadyPending`, and
+  chat says *"⏳ Already waiting for a parent's approval"* instead of claiming to
+  have sent a second one — telling a parent twice that something was sent is how
+  they come to believe two separate things are queued.
+
+  **The application check is a lookup, and a lookup loses a race.** The index is
+  what makes it correct: on 23505 the loser re-reads and returns the WINNER's id,
+  because a null there would tell a family "Bubaly could not send that for
+  approval" about a card already sitting in their inbox. The unit test for that
+  path was vacuous at first — the second call's own lookup found the row, so it
+  never reached the insert — and now blinds both pre-checks to reproduce the real
+  ordering; removing the recovery branch fails it.
+
+  Proven against real Postgres through the harness wired up in §45: 288
+  migrations apply, the index refuses a resend, allows a re-ask after approval,
+  does not cross families, and leaves keyless rows alone. That proof is now a
+  permanent probe (`docs/audit/approval-dedupe-check.sql`) which runs on every PR
+  and fails with the index dropped — a fake can tell you the application checks,
+  only the database can tell you the index exists and its predicate is right.
+
+  **There were TWO filers, not one.** The original finding named
+  `openApprovalRequest`; `lib/ai/tools/execute.ts` opens its own row when the
+  RISK TIER tightened an `allow` the engine had already permitted. Left keyless
+  it would have kept filing duplicate cards on the registry and concierge paths
+  while the chat path was fixed — half a guarantee, and undocumented. It now
+  computes the key with the same exported function, because two hashes of "the
+  same action" that disagree are worse than one: each path would dedupe against
+  itself and neither against the other. Its own test fake had answered a SELECT
+  exactly like an INSERT, so the new pre-check always hit and no card was ever
+  filed; the fake now models the real table, and a resend that reuses the pending
+  card is asserted behaviourally rather than by reading the source.
+
+  Still open in §30: the eight chat writes that shadow registry tools, whose
+  delegation the design review rejected on the composed-key grounds recorded
+  above.
+
+- **§45, the boundary probes now actually run.** The row said a family's rows are
+  protected by policies nothing in CI ever tries to break, and that was exactly
+  right — but not because the proofs were missing. `docs/audit/` already held
+  eight probes that provision a second tenant, act as a child, and assert under
+  `RAISE EXCEPTION` that cross-family reads and writes are refused. **Nothing ran
+  them.** `tests/rls-isolation-sweep.test.ts` reads the probe FILE and checks it
+  still contains its assertions: a guard on the guard, not a run. They executed
+  only when a person remembered to bring up `verify-pg.sh` by hand.
+
+  The blocker turned out to be one apt package. `0237` does `create extension
+  vector`, so the replay died there and took `0239` with it (`0239` deletes from
+  a table `0237` never created — one failure wearing two hats). With
+  `postgresql-16-pgvector` installed, **all 287 migrations apply, fail=0**, and
+  the whole bootstrap takes **16 seconds**. In CI that is
+  `pgvector/pgvector:pg16` as a service container, not stock `postgres:16`.
+
+  The `database` job replays every migration and then runs every probe. Three
+  properties it needed and did not have:
+
+  1. **A replay that fails, not one that reports.** `verify-pg.sh` counted
+     failures into `migration_fail=N` and exited 0 — a migration that does not
+     apply would have gone green. The bootstrap now exits non-zero and names the
+     files.
+  2. **One bootstrap, not two.** The shim/migrate/seed logic moved to
+     `docs/audit/pg-bootstrap.sh`, which both CI and the by-hand harness call. A
+     copy in the workflow would drift, and the drift is invisible: CI proves
+     something nobody can reproduce.
+  3. **Discovery by glob.** `run-probes.sh` globs `docs/audit/*-check.sql`, so a
+     probe added tomorrow is enforced tomorrow. A hand-kept list in the workflow
+     is a list someone forgets to add to. It also runs every probe before
+     failing, so a red build names all the broken boundaries rather than the
+     first.
+
+  **Two things were wrong with the probes themselves, and wiring them up unchanged
+  would have shipped a rubber stamp.**
+
+  **The read probe could pass on an empty table.** It asserted user B reads 0 rows
+  from ten family-A tables — without ever establishing that family A *has* rows.
+  `SEED_ALL` leaves `wallet_transactions` empty for the anchor family, so for the
+  highest-risk money table on the list — one `tests/rls-isolation-sweep.test.ts`
+  explicitly requires be covered — it read 0 because there was nothing to read.
+  It reported isolation it had never tested. Now it counts as the owner first and
+  fails outright if a named table is empty, and seeds one `wallet_transactions`
+  fixture so the money table has something to fail on.
+
+  **Nothing covered the other half of the 0118 failure.** Every probe looks for a
+  LEAK. A missing SELECT policy passes all of them, because default-deny is
+  precisely what they assert — drop `calendar_events_select` and the isolation
+  probe stays green (verified: exit 0) while the family's calendar goes blank.
+  That is the actual 0118 story: RLS on, family policies missing, pages silently
+  returning zero rows. `family-self-read-check.sql` asserts the opposite
+  direction, swept from the catalog rather than a hand-kept list: for every
+  family-scoped table where the owner can see anchor-family rows, that family's
+  own parent must see them too. **197 populated tables covered, no exceptions
+  needed**, and with `calendar_events_select` dropped it fails and names the
+  table.
+
+  Every claim above was checked against a running Postgres, and the guard test
+  was mutation-tested. Two of its assertions passed against mutants at first —
+  `toContain('pgvector/pgvector:pg16')` and `toContain('docs/audit/*-check.sql')`
+  both matched the explanatory COMMENT rather than the `image:` line and the
+  `probes=(...)` assignment, so the test was satisfied by its own documentation.
+  Now anchored to the code: renaming the job, swapping in stock `postgres:16`, and
+  replacing the glob with a hand-kept list each fail.
+
+- **An RSVP is a statement about a person, and only the app was enforcing that.**
+  Found while giving `calendar.rsvp` a home: `0047` shipped `event_rsvps` with
+  ONE policy for every verb —
+
+  ```sql
+  create policy "Members can manage event_rsvps" on public.event_rsvps
+    for all to authenticated
+    using (public.is_family_member(family_id))
+    with check (public.is_family_member(family_id));
+  ```
+
+  — no member predicate on either side. Any member of the household could INSERT
+  an `accepted` row carrying a **parent's** `member_id`, UPDATE a sibling's reply,
+  or DELETE one. And `event_rsvps_once UNIQUE (event_id, member_id)` makes the
+  write an upsert, so a second answer did not sit next to the first: it **replaced
+  it, silently**. A teen could mark a parent as coming to a thing they had
+  declined, and the calendar would show no trace of the earlier answer.
+
+  Nothing in the product does this. The event modal writes only `selfMemberId`,
+  and `rsvpToEvent` takes `member_id` from `scope.memberId` and never from a
+  caller's arguments — a discipline that exists because this code once used
+  `members[0]` as a lookup, so a teen saying "I'm going" answered as whoever
+  sorted first in the roster. But that app-level care was the ONLY thing between a
+  child and a reply in a parent's name; PostgREST is reachable with the same
+  anon key the browser holds. `0272` puts the rule where the next writer cannot
+  forget it: four per-verb policies, writes requiring
+  `is_self_member(member_id) or can_manage_family(family_id)`.
+
+  **The manager branch is load-bearing, not laxity.** `performApproved` runs under
+  the APPROVING parent's client while writing the ASKER's `member_id`
+  (`scopeForApprovedWork`), so a self-only rule would have broken the approval
+  path this migration exists to protect — and a parent answering for a
+  six-year-old with no login is a real thing families do.
+
+  Proven against real Postgres before shipping (PGlite; the migration applied
+  verbatim; acting as parent, teen and child under `set role authenticated`), and
+  the proof was itself wrong first: the insert cases shared one event with the
+  seeded parent reply, so "teen answers for the parent" passed on a duplicate-key
+  error rather than on RLS — green against a policy that did nothing. Split onto a
+  clean event, the mutant of `0272` that restates the `0047` bug fails two cases,
+  and `tests/rsvp-first-person-rls.test.ts` (9) pins the shape that made the real
+  outcomes true, including the drop of the `FOR ALL` policy — permissive policies
+  are OR'd, so leaving it would have made all four new ones decorative.
+
+  **`notes` and `goals` carry the same `is_family_member`-and-nothing-else shape
+  and are deliberately NOT changed.** A shared family notepad being collaboratively
+  editable is plausibly the intent; tightening it is a product decision, and
+  making one here wearing a security fix's clothes would be the wrong way to get
+  it. Recorded so someone can make it deliberately. `event_rsvps` is different in
+  kind: the row is a claim about a named person's intent, and the unique index
+  turns a second claim into an erasure of the first.
+
+- **An approval now remembers who asked, which closed four things at once.**
+  `gateAiAction` passes `actor.kind: 'ai_agent'`, so `openApprovalRequest` left
+  `requested_by_member_id` NULL on every AI-filed row: nothing on the row said
+  who the request was FOR. And `decideApproval` builds its scope from whoever is
+  DECIDING. Between them, an approved action was carried out as the parent who
+  released it:
+
+  1. a note the teen asked for was stamped `created_by` = the parent, and
+     `activity/page.tsx` renders `created_by` as who "added note" — so it read
+     *"Mum added note"*;
+  2. an RSVP would have been recorded for the parent and, since
+     `event_rsvps_once` makes the write an upsert, **replaced their own reply** —
+     which is why `rsvp_to_event` had no registry tool at all and sat in
+     `APPROVAL_CANNOT_REPLAY`;
+  3. **no approved write reached the family activity feed**, because
+     `recordActivity` returns early for `actorKind === 'member'`;
+  4. and a parent deciding an approval was only ever told "Bubaly" asked, never
+     who for.
+
+  `wrapToolsWithTrust` now takes the acting member and carries it through
+  `gateAiAction` to `requested_by_member_id`, and `scopeForApprovedWork` rebuilds
+  the replay scope from it: the asker's `memberId`/`userId`, and `actorKind: 'ai'`
+  because it IS Bubaly's work — a human released it, they did not type it. The
+  approval card reads "Bubaly, for Emma".
+
+  **Confined to `requested_by_kind === 'ai'`**, the same condition that already
+  decides `skipTrust`. A member-filed row keeps the decider's scope, because its
+  gate IS re-evaluated under the approver's authority and relabelling the actor
+  would change that evaluation rather than merely its attribution.
+
+  **The unknown-asker case clears `memberId` rather than falling back.** A row
+  filed before this existed has no asker, and inheriting the approver's is
+  exactly how an RSVP answers for the wrong person. Cleared, `rsvpToEvent`'s own
+  guard fires — *"Bubaly could not tell whose reply this is"* — and the tools
+  that do not need a member id are unaffected. Refusing something a parent
+  approved is bad; recording it against them is worse.
+
+  Blast radius checked rather than assumed: every reader of `scope.actorKind` was
+  inspected. The ledger row, run events, `ai_suggested`, `ai_generated` and the
+  finance `source` all become MORE accurate under `'ai'`; the memory
+  sensitive-content guard tightens; nothing loosens. And no table the AI writes
+  carries a `created_by = auth.uid()` predicate — `0004` applies that only to
+  `families` and `user_preferences` — so attributing `created_by` to the asker is
+  safe while the approver's session runs the insert.
+
+  With the blocker gone, **`calendar.rsvp` is back** and `APPROVAL_CANNOT_REPLAY`
+  is empty. The ratchet forced the decision: the test pinning "the replay runs as
+  the approver" went red the moment that stopped being true.
+
+
+- **§49, the overnight recap was a day stale, not merely evening-only.** The row
+  says a parent who opens the brief at 7am is shown nothing of what Bubaly did
+  overnight, because the recap only renders on the Evening tab while the tab
+  defaults to Morning. Both halves were true, and the second one was worse than
+  recorded.
+
+  `briefing/page.tsx` did not use the shared loader. It read
+  `family_operating_index` itself — `.order('as_of_date', { ascending: false })`
+  with `.limit(2)` — and diffed those two rows, with **no anchor to today at
+  all**. That table is written LAZILY, by `loadOperatingIndex`'s own upsert, and
+  its only other callers are the Command Center, the Operating Index page and the
+  reasoning engine. On a morning when nobody has opened one of those there is no
+  row for today, so the card diffed YESTERDAY against THE DAY BEFORE and titled
+  itself "Since yesterday". A day out of date, silently, on the one screen meant
+  to start the family's day.
+
+  The page now calls `loadOperatingIndex`, which computes today live, anchors the
+  prior read with `.lt('as_of_date', today)`, and persists today's row — so
+  opening the brief is what makes today's snapshot exist for every other surface,
+  instead of the brief being the one reading a stale pair. The page's own
+  `toView`/`summarizeChange` block is deleted: it was a second, worse copy of a
+  shared function.
+
+  **The two reads now run together.** The page awaited the index read and THEN
+  the reasoning context, so it paid both latencies in series. `Promise.allSettled`
+  — not `all` — keeps them parallel while keeping the two failures
+  distinguishable, because a family told the wrong thing about what broke is a
+  different bug.
+
+  **A test had made the staleness look deliberate**, the same way the recurring
+  reminder's did: `tests/briefing-read-boundary.test.ts` pinned the page by
+  SOURCE STRING, including the literal `const { data: foiSnaps, error: foiError }`
+  the fix deletes. The assertions described the shape of the code rather than what
+  a family gets, so the code and its test agreed with each other and both were
+  wrong. It now asserts delegation, and names the exact discarded shape so
+  reintroducing it fails.
+
+  `tests/operating-index-today-anchor.test.ts` is the behavioural half, and it did
+  not exist before: **nothing in the suite asserted the `.lt('as_of_date', today)`
+  anchor**, though every surface's recap rests on it. I checked it fires by
+  removing the anchor.
+
+  Still open in §49: the brief is reachable only from nav, the manifest shortcut
+  and a dashboard tile. Nothing surfaces it where a parent packing lunches
+  actually lands — that half is a product decision, not a bug, and is left for
+  someone to choose deliberately.
+
+
+- **§30, two of the three writes that had nowhere to land.** `add_note`,
+  `add_goal` and `rsvp_to_event` were gated in chat with no registry tool, so a
+  parent could grant the approval and read back *"Bubaly has no tool called
+  \"add_note\""*. `notes.create` and `goals.create` close two of them.
+
+  **What that does and does not buy, stated exactly.** It does NOT put a ledger
+  row under a chat write: `assistant-engine.ts` excludes `notes.create` from the
+  chat toolbox the moment `add_note` resolves — that exclusion is the whole
+  point — so the hand-written tool still writes raw SQL there. What now reaches
+  `executeTool`, with its `ai_tool_calls` row, its gate and its output
+  validation, is the APPROVAL REPLAY (which previously just failed) and MAGIC
+  IMPORT (`lib/ai/actions.ts`, which previously hand-rolled its own insert). The
+  chat path's own ledger gap is the shadowing, and it stays open.
+
+  **The chat toolbox does not change, and that is the load-bearing property.**
+  `assistant-engine.ts` excludes a registry tool when `getTool(flatName)`
+  resolves, and `mergeToolSets` dedupes on the WIRE name — where the registry's
+  is `notes_create`, a different string from `add_note` that it could never see
+  as the same tool. So the ALIAS is the entire mechanism. Drop one and the model
+  is offered both spellings of one capability: the flat name through
+  `wrapToolsWithTrust`, the underscored one skipping the wrapper and gated
+  inside `executeTool`, with only the second writing a ledger row.
+  `tests/assistant-toolbox-invariance.test.ts` reproduces the engine's own merge
+  and fails on exactly that.
+
+  **Risk is `medium` on purpose.** `ai-gate.ts` reads
+  `registryTool ? effectiveRisk(settings, tool) : 'medium'`, so these names were
+  taking the hard-coded fallback. Declaring `low` — which every other `tasks.*`
+  tool declares — would have quietly LOOSENED the chat gate for children.
+
+  **`rsvp_to_event` was designed, written, and then pulled.** An adversarial
+  review of the tranche caught what the design missed, and it is worth recording
+  because it is a property of the approval system rather than of the tool:
+  `decideApproval` builds its scope from the APPROVER (`scopeFromUserContext`),
+  and `openApprovalRequest` stores `requested_by_member_id: null` for every
+  AI-filed row — `gateAiAction` passes `actor.kind: 'ai_agent'`. **Nothing on the
+  row says who asked.** A registry RSVP tool taking `member_id` from
+  `scope.memberId` would therefore record the approving PARENT as attending, and
+  because `event_rsvps_once UNIQUE (event_id, member_id)` (0047) makes the write
+  an upsert, it would silently replace that parent's own earlier answer. Today's
+  honest refusal is better than a destroyed reply, so the entry stays in
+  `APPROVAL_CANNOT_REPLAY` with that as its reason, and a test pins the two
+  facts it depends on so the orphan can be removed the moment they change.
+
+  **The same flaw in a milder form is shipping, and is named rather than
+  hidden.** `notes.created_by` and `goals.created_by` also come from the scope,
+  so an approved note is attributed to the approver — `activity/page.tsx` renders
+  `created_by` as who "added note", and a teen's approved note will read
+  "Mum added note". Nothing is destroyed and the family gets the note they asked
+  for, which is why this ships where the RSVP does not.
+
+  **The prerequisite for both is one change: record the asker.**
+  `wrapToolsWithTrust` does not even receive the acting member id today. Plumbing
+  it through to `gateAiAction` and on to `requested_by_member_id`, then binding
+  the replay to it, fixes the attribution and unblocks the RSVP. Two things to
+  handle in that tranche, both found by the same review: `member_id` would be an
+  EDITABLE field on the approval card (`NON_EDITABLE_KEYS` does not list it), so
+  a manager could retarget a queued RSVP onto another member; and
+  `recordActivity` returns early when `scope.actorKind === 'member'`, so no
+  approved write gets an activity line at all — the feed entry these services
+  record is written on plan runs and skipped on every approval replay.
+
+  Also deleted: the `add_note`/`add_goal` branches in `lib/ai/actions.ts`,
+  unreachable once the tools registered.
+
+  Still open in §30: the eight chat writes that shadow registry tools which DO
+  exist, and whose delegation is the one rejected above.
 
 - **§21/§57, a gated chat action tells the truth.** Three separate ways the one
   screen a family talks to lied about what had happened, all of them live and

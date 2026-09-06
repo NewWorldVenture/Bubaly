@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { TRADES } from '@/lib/home/maintenance';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -51,8 +53,15 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
-    text = completion.text.trim();
+    text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'home.find-pro', text: `Hire ${tradeLabel}` },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text.trim();
+      },
+    );
   } catch (err) {
     console.error('Find-a-pro assistant error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });

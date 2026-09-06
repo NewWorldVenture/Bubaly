@@ -10,7 +10,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // regression can't let a tool write without a trust check.
 
 const evaluateTrust = vi.fn();
-const openedApprovals = vi.fn<(...args: unknown[]) => string | null>(() => 'appr-1');
+// `openApprovalRequest` returns { id, alreadyPending } since 0273 — a resent
+// message must be told its approval is already waiting rather than that a fresh
+// one was sent.
+type Opened = { id: string; alreadyPending: boolean } | null;
+const openedApprovals = vi.fn<(...args: unknown[]) => Opened>(() => ({ id: 'appr-1', alreadyPending: false }));
 vi.mock('@/lib/trust/server', () => ({
   evaluateTrust: (...args: unknown[]) => evaluateTrust(...args),
   // The wrapper files its own approval row when the risk tier tightens an
@@ -63,7 +67,7 @@ function wrapOne(name: string, role: string | null = 'child', supabase = fakeSup
 beforeEach(() => {
   evaluateTrust.mockReset();
   openedApprovals.mockReset();
-  openedApprovals.mockReturnValue('appr-1');
+  openedApprovals.mockReturnValue({ id: 'appr-1', alreadyPending: false });
 });
 
 describe('A-15 wrapToolsWithTrust gates every write tool', () => {
@@ -105,22 +109,20 @@ describe('A-15 wrapToolsWithTrust gates every write tool', () => {
     expect(approvalIdFromToolResult(res)).toBeNull();
   });
 
-  it('a gated tool the approval cannot replay says so in the approval line', async () => {
-    // add_note has no registry tool, so approving it would fail at replay. The
-    // family is told that up front rather than after a parent says yes.
+  it('drops the cannot-replay caveat from the tools whose approvals now execute', async () => {
+    // add_note used to say "a parent will need to add it by hand", because
+    // approving it failed at replay — nothing outside lib/assistant/tools.ts
+    // wrote `notes`. `notes.create` resolves that alias now, so the approval
+    // executes and the caveat would be a lie.
     evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-9' });
-    const { wrapped } = wrapOne('add_note', 'child');
-    const res = (await wrapped.execute({ body: 'Remember the bins' })) as { ok: boolean; summary: string };
-    expect(res).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
-    expect(res.summary).toMatch(/add it by hand/i);
+    for (const name of ['add_note', 'add_goal', 'add_chore', 'rsvp_to_event']) {
+      const { wrapped } = wrapOne(name, 'child');
+      const res = (await wrapped.execute({ body: 'x', title: 'x' })) as { ok: boolean; summary: string };
+      expect(res, name).toMatchObject({ ok: true, pending_approval: true, approval_id: 'appr-9' });
+      expect(res.summary, `${name} still warns about a replay that now works`).not.toMatch(/by hand/i);
+    }
   });
 
-  it('a gated tool the approval CAN replay carries no such caveat', async () => {
-    evaluateTrust.mockResolvedValue({ decision: { effect: 'require_approval', reason: 'needs a parent' }, approvalId: 'appr-2' });
-    const { wrapped } = wrapOne('add_chore', 'child');
-    const res = (await wrapped.execute({ title: 'Mow lawn' })) as { summary: string };
-    expect(res.summary).not.toMatch(/by hand/i);
-  });
 
   it('ALLOW: the underlying write executes with the original args', async () => {
     evaluateTrust.mockResolvedValue({ decision: { effect: 'allow', reason: 'ok' } });

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -104,10 +106,24 @@ export async function POST() {
       giftHistory,
     });
 
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 700 });
-    const digest = parseRelationshipDigest(completion.text || '', giftHistory);
-    if (!digest.headline && digest.prompts.length === 0 && digest.giftIdeas.length === 0) {
+    // No partner name on the row: who someone is buying a gift for is not
+    // something the request ledger needs to carry.
+    const digest = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'relationship.digest', text: 'Relationship suggestions' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 700 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseRelationshipDigest(completion.text || '', giftHistory);
+        if (!parsed.headline && parsed.prompts.length === 0 && parsed.giftIdeas.length === 0) {
+          obs.failed(new Error('The model returned no headline, prompts or gift ideas.'));
+          return null;
+        }
+        return parsed;
+      },
+    );
+    if (!digest) {
       return NextResponse.json({ error: 'Could not generate suggestions right now. Please try again.' }, { status: 502 });
     }
     // Best-effort metering record (never blocks the response).

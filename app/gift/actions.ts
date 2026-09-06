@@ -5,6 +5,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { clampGiftAmountCents } from '@/lib/wallet/gift';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { notify } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 
 type Result = { ok: boolean; error?: string };
 
@@ -53,12 +55,22 @@ export async function submitGiftPledgeAction(input: {
   });
   if (error) return { ok: false, error: 'Could not record your gift. Please try again.' };
 
-  // Let the family know a gift is waiting for approval.
-  await supabase.from('notifications').insert({
-    family_id: link.family_id, user_id: null, type: 'system',
-    title: `🎁 ${giverName} sent a gift`, body: 'Approve it in Family Wallet to add it to your child’s wallet.',
-    related_type: 'gift_payments', related_id: link.id,
-  });
+  // Let the family know a gift is waiting for approval — through the service,
+  // so it lands inside the hours the family agreed to hear from Bubaly and a
+  // retried submission does not notify twice. Not urgent: a gift sitting in the
+  // wallet at 3am is still there at 8am, and nothing about it needs a parent
+  // awake. A failure is best-effort as before; the gift is already recorded.
+  const scope = await systemScopeForFamily(supabase, link.family_id);
+  if (scope) {
+    await notify(scope, {
+      recipients: 'family',
+      type: 'system',
+      title: `🎁 ${giverName} sent a gift`,
+      body: 'Approve it in Family Wallet to add it to your child’s wallet.',
+      relatedType: 'gift_payments',
+      relatedId: link.id,
+    });
+  }
 
   return { ok: true };
 }

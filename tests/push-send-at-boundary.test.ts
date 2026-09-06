@@ -53,11 +53,23 @@ function familyDb(rows: Row[]) {
           update: () => ({ eq: (_c: string, id: string) => { stamped.push(id); return Promise.resolve({ error: null }); } }),
         };
       }
-      // family_members fan-out and push_subscriptions: nobody is subscribed, so
-      // sendPushToUsers has nothing to deliver and the counts stay at zero.
-      return {
-        select: () => ({ eq: () => ({ eq: () => Promise.resolve({ data: [], error: null }), then: (f: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(f) }), in: () => Promise.resolve({ data: [], error: null }) }),
-      };
+      // family_members fan-out, family_ai_settings (child_channels) and
+      // push_subscriptions: nobody is subscribed and no family has restricted a
+      // child's channels, so sendPushToUsers has nothing to deliver and the
+      // counts stay at zero.
+      //
+      // Self-chaining rather than a fixed two-deep shape: `childrenBlockedOn`
+      // filters with `.in(...).eq(...).eq(...)`, and a stub whose `in()` returned
+      // a Promise had nothing to chain onto. Every builder method returns the
+      // builder, and awaiting it yields no rows.
+      const empty: Record<string, unknown> = {};
+      Object.assign(empty, {
+        select: () => empty, eq: () => empty, in: () => empty, is: () => empty,
+        limit: () => empty, order: () => empty,
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        then: (f: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(f),
+      });
+      return empty;
     },
   } as unknown as SupabaseClient<Database>;
   return { db, stamped };

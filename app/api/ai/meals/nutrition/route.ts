@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { coerceNutrition, parseModelJSON, type Nutrition } from '@/lib/meals/nutrition';
 import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
@@ -111,18 +113,30 @@ export async function POST(req: Request) {
   }
 
   // Ask the model ---------------------------------------------------------
-  let text: string;
+  // The parse moved INSIDE the wrapper on purpose. A model that answers with
+  // prose instead of JSON costs the same tokens and leaves the family with the
+  // same "try again", but outside the wrapper it would settle the row
+  // `completed` — the one shape of failure this route actually produces.
+  let parsed: Record<string, unknown> | null;
   try {
-    const completion = await (await resolveProvider()).complete({
-      system: SYSTEM, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 600,
-    });
-    text = completion.text;
+    parsed = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'meals.nutrition', text: `Nutrition for a ${subjectType}` },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({
+          system: SYSTEM, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 600,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const out = parseModelJSON(completion.text);
+        if (!out) obs.failed(new Error('The nutrition estimate did not parse as JSON.'));
+        return out;
+      },
+    );
   } catch (err) {
     console.error('Meal nutrition generation error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
-  const parsed = parseModelJSON(text);
   if (!parsed) return NextResponse.json({ error: 'Could not read the nutrition estimate. Try again.' }, { status: 422 });
   const n: Nutrition = coerceNutrition(parsed);
   const summary = typeof parsed.summary === 'string' ? parsed.summary.slice(0, 280) : null;

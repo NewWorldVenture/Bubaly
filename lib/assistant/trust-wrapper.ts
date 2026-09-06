@@ -38,35 +38,40 @@ export const TOOL_DOMAIN: Record<string, string> = {
  * Gated tools whose approval a parent can grant and Bubaly then cannot carry
  * out on its own.
  *
- * `gateAiAction` stores `{name, args}` as the approval's payload, and
- * `approveRequest` replays it with `executeTool(scope, name, args)`
- * (lib/services/approvals/index.ts). `executeTool` resolves the name through
- * the tool registry, so a name the registry does not know is DENIED at replay
- * and the parent reads "Approved, but Bubaly could not finish it: Bubaly has
- * no tool called ...".
+ * `gateAiAction` stores `{name, args}` as the approval's payload and
+ * `approveRequest` replays it through `executeTool`, which resolves the name in
+ * the tool registry — so a name the registry does not know is denied at replay
+ * and the parent reads "Approved, but Bubaly could not finish it".
  *
- * These three are written nowhere but `lib/assistant/tools.ts` — there is no
- * `lib/services/notes`, no `lib/services/goals`, and nothing under
- * `lib/ai/tools/` touches `event_rsvps` — so there is no registry tool for the
- * replay to find. Until they have one, the family is TOLD that, in the
- * approval line itself, rather than discovering it after a parent has already
- * said yes.
+ * IT IS EMPTY. It held `add_note`, `add_goal` and `rsvp_to_event`. The first two
+ * left when `notes.create` and `goals.create` landed. `rsvp_to_event` stayed
+ * longer for a different reason — not a missing tool, but a missing FACT: the
+ * approval row did not record who asked, so an approved RSVP would have been
+ * carried out as the approving parent and upserted over their own reply. Now
+ * that `requested_by_member_id` is recorded and `scopeForApprovedWork` replays
+ * as the asker, `calendar.rsvp` is safe and the entry is gone.
  *
- * `tests/assistant-approval-replay.test.ts` fails in both directions: a new
- * gated tool with no registry equivalent has to be added here, and an entry
- * that gains one has to be removed.
+ * The list stays because the ratchet needs somewhere to put the next one.
+ * `tests/assistant-approval-replay.test.ts` fails in both directions — a newly
+ * gated tool with no registry equivalent has to be named here with a reason, and
+ * an entry that gains one has to be removed.
  */
-export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {
-  add_note: 'nothing outside lib/assistant/tools.ts writes `notes`',
-  add_goal: 'nothing outside lib/assistant/tools.ts writes `goals`',
-  rsvp_to_event: 'nothing under lib/ai/tools/ writes `event_rsvps`',
-};
+export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {};
 
 export function wrapToolsWithTrust(
   tools: ToolSpec[],
   supabase: DB,
   familyId: string,
   memberRole: string | null | undefined,
+  /**
+   * `family_members.id` of the person talking to Bubaly. It reaches the
+   * approval row as `requested_by_member_id`, which is what lets an approval
+   * granted hours later be carried out AS THEM rather than as the parent who
+   * released it. Optional so the two existing call sites can pass it
+   * independently; null is the honest value when the roster and the session
+   * disagree, and the replay then behaves exactly as it did before.
+   */
+  actingMemberId?: string | null,
 ): ToolSpec[] {
   const actorRole = roleOf(memberRole);
 
@@ -89,6 +94,7 @@ export function wrapToolsWithTrust(
           actorId: 'assistant',
           actorRole,
           agent: 'AI Assistant',
+          onBehalfOfMemberId: actingMemberId ?? null,
           title,
           // Payload stored so an approved request can be auto-executed later.
           payload: { name: tool.name, args },
@@ -116,9 +122,16 @@ export function wrapToolsWithTrust(
           const caveat = APPROVAL_CANNOT_REPLAY[tool.name]
             ? ' Once a parent approves it they will need to add it by hand — Bubaly cannot finish this one on its own yet.'
             : '';
+          // A resend does not file a second card (0273), so it must not claim to
+          // have sent one. Saying "sent for approval" twice is how a parent ends
+          // up believing two separate things are waiting, approves what looks
+          // like both, and gets the resource written twice.
+          const lead = outcome.alreadyPending
+            ? `⏳ Already waiting for a parent's approval — ${title}.`
+            : `⏳ Sent for parent approval — ${title}.`;
           return {
             ok: true,
-            summary: `⏳ Sent for parent approval — ${title}.${caveat}`,
+            summary: `${lead}${caveat}`,
             pending_approval: true,
             approval_id: outcome.approvalId,
           };

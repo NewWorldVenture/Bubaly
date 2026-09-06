@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -31,9 +33,20 @@ export async function POST() {
 
     try {
       const { system, user } = buildJournalPrompt(snippets);
-      const provider = await resolveProvider();
-      const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 60 });
-      const prompt = parseJournalPrompt(completion.text || '');
+      // Inside the try that falls through to the evergreen prompt, so a failure
+      // is recorded before it is swallowed — the same reason the daily brief
+      // wraps inside its own silent catch.
+      const text = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'journal.prompt', text: 'Journal prompt' },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 60 });
+          obs.used(completion.model ?? 'unknown', completion.usage);
+          return completion.text || '';
+        },
+      );
+      const prompt = parseJournalPrompt(text);
       if (prompt) return NextResponse.json({ prompt, source: 'ai' });
     } catch {
       // fall through to evergreen

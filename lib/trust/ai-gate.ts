@@ -30,6 +30,20 @@ export type AiGateRequest = {
   actorRole: TrustRole;
   /** Display name of the agent asking, for the approval row. */
   agent: string;
+  /**
+   * The `family_members.id` of the person Bubaly is acting FOR.
+   *
+   * The actor is the agent — `actor.kind` is `'ai_agent'` — which is why
+   * `openApprovalRequest` left `requested_by_member_id` null on every AI-filed
+   * row. Nothing on the row said who asked, so an approval granted hours later
+   * could only be replayed as the APPROVER: a note attributed to the parent who
+   * released it, and (before it was pulled) an RSVP answering for them.
+   *
+   * Null when the surface genuinely cannot tell — a cron, or a session whose
+   * roster row is missing. The replay then falls back to the approver, which is
+   * what it always did.
+   */
+  onBehalfOfMemberId?: string | null;
   title: string;
   payload: Record<string, unknown>;
   confidence?: number;
@@ -39,7 +53,17 @@ export type AiGateRequest = {
 export type AiGateOutcome =
   | { effect: 'allow' }
   | { effect: 'deny'; reason: string }
-  | { effect: 'require_approval'; reason: string; approvalId: string | null };
+  | {
+      effect: 'require_approval';
+      reason: string;
+      approvalId: string | null;
+      /**
+       * The approval was ALREADY waiting — this call filed nothing new. A resent
+       * chat message must say so rather than reporting a fresh send, or one
+       * intent reads as two cards in a parent's inbox (0273).
+       */
+      alreadyPending?: boolean;
+    };
 
 export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRequest): Promise<AiGateOutcome> {
   const settings = await readAISettings(supabase, familyId);
@@ -59,7 +83,8 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     payload: req.payload,
     context: { confidence: req.confidence ?? 0.85 },
   };
-  const { decision: engineDecision, approvalId: engineApprovalId } = await evaluateTrust(supabase, familyId, evaluateRequest);
+  const { decision: engineDecision, approvalId: engineApprovalId, alreadyPending: engineAlreadyPending }
+    = await evaluateTrust(supabase, familyId, evaluateRequest);
 
   // The registry knows this tool's declared risk under its legacy name (these
   // surfaces spell tools the old way, and every one is a registry alias), so
@@ -91,9 +116,22 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     // The engine files its own approval row; a tier that tightened an `allow`
     // into an approval has to file one too, or "sent for parent approval" names
     // nothing a parent can find.
-    const approvalId = engineApprovalId
-      ?? await openApprovalRequest(supabase, familyId, { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json> }, decision);
-    return { effect: 'require_approval', reason: decision.reason, approvalId: approvalId ?? null };
+    // A tier that tightened an `allow` files its own row; the engine's own
+    // `alreadyPending` carries through when it filed one.
+    const opened = engineApprovalId
+      ? null
+      : await openApprovalRequest(
+        supabase,
+        familyId,
+        { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json>, onBehalfOfMemberId: req.onBehalfOfMemberId ?? null },
+        decision,
+      );
+    return {
+      effect: 'require_approval',
+      reason: decision.reason,
+      approvalId: engineApprovalId ?? opened?.id ?? null,
+      alreadyPending: engineAlreadyPending || (opened?.alreadyPending ?? false),
+    };
   }
   return { effect: 'allow' };
 }

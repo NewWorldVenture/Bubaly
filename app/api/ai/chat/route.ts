@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -140,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     const provider = await resolveProvider();
     const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, memberId: ctx.active.member?.id ?? null, members: memberRows, tz });
-    const tools = wrapToolsWithTrust(rawTools, supabase, familyId, ctx.active.role);
+    const tools = wrapToolsWithTrust(rawTools, supabase, familyId, ctx.active.role, ctx.active.member?.id ?? null);
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
@@ -148,6 +150,15 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+        // §33: the chat assistant is the other surface the row names by name.
+        // It catches its own stream errors and falls back, so nothing ever
+        // reached a wrapper's catch — a turn the family watched break recorded
+        // nothing at all. `obs.failed` is how a surface that handles its own
+        // errors still leaves the evidence.
+        await withAiRequest(
+          scopeFromUserContext(ctx, supabase),
+          { feature: 'chat.assistant', text: message, kind: 'feature', conversationId },
+          async (obs) => {
         let content = '';
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
@@ -161,6 +172,10 @@ export async function POST(req: NextRequest) {
           }
         } catch (streamErr) {
           console.error('AI stream error:', streamErr);
+          // Recorded now, before the fallback: what broke FIRST is the diagnosis,
+          // and `partial` distinguishes "the stream died having said nothing"
+          // from "the family got half an answer".
+          obs.failed(streamErr, { partial: Boolean(content) });
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
@@ -171,6 +186,7 @@ export async function POST(req: NextRequest) {
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
             } catch (fallbackErr) {
               console.error('AI fallback error:', fallbackErr);
+              obs.failed(fallbackErr);
               send({ type: 'error', error: describeAIError(fallbackErr).message });
               controller.close();
               return;
@@ -213,8 +229,11 @@ export async function POST(req: NextRequest) {
           send({ type: 'error', error: describeActionError(persistenceError, 'I generated a response, but could not save this conversation.') });
         }
 
+        obs.used(provider.model, undefined);
         send({ type: 'done', content: assistantContent, persisted: !persistenceError });
         controller.close();
+          },
+        );
       },
     });
 

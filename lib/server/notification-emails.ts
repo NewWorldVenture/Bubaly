@@ -8,6 +8,7 @@ import { sendReactEmail, emailEnabled } from '@/lib/email';
 import { NotificationDigestEmail } from '@/lib/emails/notification-digest';
 import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
+import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -51,6 +52,15 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     return { sent: 0, failed: 1, skipped: 0 };
   }
   const emailOff = new Set((prefs ?? []).filter((p) => !p.email_enabled).map((p) => p.user_id));
+
+  // "How Bubaly may reach a child directly" (0257's `child_channels`) — stored,
+  // and until now consulted by nothing. The per-user toggle above is the
+  // RECIPIENT's own choice; this is the family's choice about its children, and
+  // a child has no reason to hold the parent's setting on their own row.
+  // Blocked recipients are resolved into `sent_at` below exactly like the
+  // per-user toggle, so a withheld email is settled rather than retried forever.
+  const childEmailOff = await childrenBlockedOn(supabase, 'email', userIds);
+  for (const id of childEmailOff) emailOff.add(id);
 
   // Resolve recipient emails + names. Mirrors the weekly-digest cron's approach.
   const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
