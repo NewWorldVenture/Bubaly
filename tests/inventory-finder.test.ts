@@ -56,6 +56,57 @@ describe('searchItems', () => {
     expect(searchItems(items, locations, '   ')).toEqual([]);
     expect(searchItems(items, locations, 'ski')[0].where).toBe('Garage › Shelf B › Box 3');
   });
+  it.each([
+    ['Where are the passports?', 'Passports'],
+    ['"Where are the passports?"', 'Passports'],
+    ['Where do we keep our passports?', 'Passports'],
+    ["WHERE'S MY SPARE HOUSE KEY?!", 'Spare house key'],
+    ['Where\u2019s the spare house key?', 'Spare house key'],
+    ['Where can I find the Giro helmet?', 'Ski helmet'],
+    ['Please find the ski helmet.', 'Ski helmet'],
+    ['Where is the ski helmet, please?', 'Ski helmet'],
+    ['Could you locate our passports?', 'Passports'],
+  ])('finds stored items for %s', (query, name) => {
+    expect(searchItems(items, locations, query).map((hit) => hit.item.name)).toEqual([name]);
+  });
+  it('keeps meaningful qualifiers and the existing relevance evidence', () => {
+    expect(searchItems(items, locations, 'Where is the red ski helmet?')).toEqual([]);
+    expect(searchItems(items, locations, 'Where are the passports unicorn?')).toEqual([]);
+    expect(searchItems(items, locations, 'Where is the passport drawer?'))
+      .toEqual(searchItems(items, locations, 'passport drawer'));
+    expect(searchItems(items, locations, 'Giro, helmet!').map((hit) => hit.item.name)).toEqual(['Ski helmet']);
+  });
+  it.each(['Where are the?', 'Where can I find?', 'Find my', 'Please locate the', '...?!', '   '])(
+    'does not return the catalog for an empty item question: %s', (query) => {
+      expect(searchItems(items, locations, query)).toEqual([]);
+    },
+  );
+  it('preserves literal names, model numbers and serial punctuation', () => {
+    const named = [
+      item({ name: 'IT guide' }),
+      item({ name: 'The Office DVD' }),
+      item({ name: 'Office cable', category: 'electronics' }),
+      item({ name: 'Programming guide', model: 'C++' }),
+      item({ name: 'Programming notes', model: 'C#' }),
+    ];
+    expect(searchItems(named, locations, 'IT').map((hit) => hit.item.name)).toEqual(['IT guide']);
+    expect(searchItems(named, locations, 'The Office').map((hit) => hit.item.name)).toEqual(['The Office DVD']);
+    expect(searchItems(named, locations, 'C++').map((hit) => hit.item.name)).toEqual(['Programming guide']);
+    expect(searchItems(named, locations, 'C#').map((hit) => hit.item.name)).toEqual(['Programming notes']);
+    expect(searchItems(items, locations, 'SN-4432?')[0].matched).toContain('serial');
+    expect(searchItems(items, locations, 'DCD771!')[0].matched).toContain('model');
+  });
+  it('uses the same Unicode normalization for stored fields and questions', () => {
+    const unicodeItems = [item({ name: '\uff30\uff41\uff53\uff53\uff50\uff4f\uff52\uff54\uff53' })];
+    expect(searchItems(unicodeItems, locations, 'Where are the passports?')[0].item).toBe(unicodeItems[0]);
+  });
+  it('never supplies absent records or invents a missing location', () => {
+    expect(searchItems([items[1]], locations, 'Where are the passports?')).toEqual([]);
+    expect(searchItems([], locations, 'Where are the passports?')).toEqual([]);
+    const unlocated = item({ name: 'Passports', location_id: 'missing' });
+    expect(searchItems([unlocated], locations, 'Where are the passports?')[0])
+      .toMatchObject({ item: unlocated, where: 'No location yet' });
+  });
 });
 
 describe('loans, warranties, value', () => {
