@@ -108,6 +108,9 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       ['app/api/recipes/suggest/route.ts', "feature: 'recipes.suggest'"],
       ['app/api/recipes/transform/route.ts', 'feature: `recipes.${actionId}`'],
       ['app/api/ai/trip/route.ts', "feature: 'travel.research'"],
+      ['app/api/ai/auto/accident/route.ts', "feature: 'auto.accident'"],
+      ['app/api/ai/invest/route.ts', "feature: 'invest.mentor'"],
+      ['app/api/behavior/insight/route.ts', "feature: 'behavior.insight'"],
     ] as const) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must open a request row`).toContain('withAiRequest(');
@@ -194,6 +197,19 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     expect(src).not.toContain('obs.failed(fallbackErr, { partial: true })');
   });
 
+  it('a canned sentence that reads like coaching is recorded as a failure', () => {
+    // The subtlest shape of all. When the parenting coach replies without JSON,
+    // `/api/behavior/insight` answers 200 with "Keep logging — patterns will
+    // sharpen over time." — a warm, plausible sentence a parent cannot tell from
+    // real coaching. The other empty-200 routes at least LOOK empty.
+    const src = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
+    // The canned line is chosen after the failure is recorded, not instead of it.
+    const failedAt = src.indexOf('obs.failed(');
+    const cannedAt = src.indexOf("insight ?? 'Keep logging");
+    expect(failedAt, 'the unusable reply must be recorded').toBeGreaterThan(-1);
+    expect(cannedAt, 'the canned line must still be what the parent sees').toBeGreaterThan(failedAt);
+  });
+
   it('a 200 carrying an empty answer is recorded as a failure too', () => {
     // The fourth shape of silence, after "throws", "never throws" and "answers
     // 200 with a flag". `/api/ai/resolve-conflict` splits the reply into lines
@@ -233,6 +249,8 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       'app/api/recipes/suggest/route.ts',
       'app/api/recipes/transform/route.ts',
       'app/api/ai/trip/route.ts',
+      'app/api/ai/invest/route.ts',
+      'app/api/behavior/insight/route.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
       const used = src.indexOf('obs.used(');
@@ -301,7 +319,8 @@ describe('the remaining silence is counted, not ignored', () => {
     // room for new silent surfaces to slip in green. Lower it every time a
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
-    // then 22 when the assistant engine adopted it, then 19, then 17, then 14.
+    // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
+    // then 11.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -309,7 +328,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 14;
+    const CEILING = 11;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +

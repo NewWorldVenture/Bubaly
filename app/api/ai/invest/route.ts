@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { portfolioValue, type Holding, type PriceMap } from '@/lib/invest/portfolio';
@@ -71,9 +73,18 @@ export async function POST(req: NextRequest) {
     }
 
     const { system, user } = buildInvestCoachPrompt({ childName, assetName, assetDescription, riskLevel, portfolioValueCents, holdingsCount });
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
-    const coaching = parseInvestCoach(completion.text || '');
+    const coaching = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'invest.mentor', text: 'Explain an investing concept' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
+        obs.used(provider.model, completion.usage);
+        const parsed = parseInvestCoach(completion.text || '');
+        if (!parsed.explainer) obs.failed(new Error('The mentor reply had no explainer.'));
+        return parsed;
+      },
+    );
     if (!coaching.explainer) return NextResponse.json({ error: 'Could not generate an explanation right now.' }, { status: 502 });
 
     await supabase.from('wallet_audit_logs').insert({

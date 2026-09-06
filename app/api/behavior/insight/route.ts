@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -48,21 +50,40 @@ export async function POST(req: NextRequest) {
     .join('\n');
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system: 'You are a warm, evidence-informed parenting coach. Be specific, supportive and non-judgmental. Reply ONLY as compact JSON: {"insight": string (2-3 sentences), "tips": string[] (exactly 3 short, concrete, encouraging tips)}. Never diagnose; if data shows concerns, frame them constructively.',
-      messages: [{
-        role: 'user',
-        content: `Behavior summary: ${summary.positive} positive, ${summary.concern} concern, ${summary.neutral} neutral (balance score ${summary.balanceScore}/100). Top categories: ${summary.topCategories.map((c) => `${c.category} (${c.count})`).join(', ') || 'none'}.\n\nRecent log:\n${recent}`,
-      }],
-      tools: [],
-      maxTokens: 500,
-    });
-    const match = completion.text.match(/\{[\s\S]*\}/);
-    const parsed = match ? JSON.parse(match[0]) : {};
-    const insight = typeof parsed.insight === 'string' ? parsed.insight : 'Keep logging — patterns will sharpen over time.';
-    const tips = Array.isArray(parsed.tips) ? parsed.tips.slice(0, 3).map(String) : [];
-    return NextResponse.json({ insight, tips });
+    // The sharpest silence on this list. Three ways a parent gets something that
+    // reads like a real answer:
+    //   - the model replies with no JSON at all, and `insight` becomes the canned
+    //     "Keep logging — patterns will sharpen over time.";
+    //   - JSON.parse throws on malformed braces, caught below;
+    //   - the provider throws, also caught below.
+    // The first is the worst, because it answers 200 with a warm sentence that
+    // is indistinguishable from coaching. Nothing recorded any of the three.
+    const result = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'behavior.insight', text: 'Parenting insight from behaviour logs' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system: 'You are a warm, evidence-informed parenting coach. Be specific, supportive and non-judgmental. Reply ONLY as compact JSON: {"insight": string (2-3 sentences), "tips": string[] (exactly 3 short, concrete, encouraging tips)}. Never diagnose; if data shows concerns, frame them constructively.',
+          messages: [{
+            role: 'user',
+            content: `Behavior summary: ${summary.positive} positive, ${summary.concern} concern, ${summary.neutral} neutral (balance score ${summary.balanceScore}/100). Top categories: ${summary.topCategories.map((c) => `${c.category} (${c.count})`).join(', ') || 'none'}.\n\nRecent log:\n${recent}`,
+          }],
+          tools: [],
+          maxTokens: 500,
+        });
+        obs.used(provider.model, completion.usage);
+        const match = completion.text.match(/\{[\s\S]*\}/);
+        const parsed = match ? JSON.parse(match[0]) : {};
+        const insight = typeof parsed.insight === 'string' ? parsed.insight : null;
+        if (insight === null) {
+          obs.failed(new Error('The coach replied without a usable insight; the canned line was shown instead.'));
+        }
+        const tips = Array.isArray(parsed.tips) ? parsed.tips.slice(0, 3).map(String) : [];
+        return { insight: insight ?? 'Keep logging — patterns will sharpen over time.', tips };
+      },
+    );
+    return NextResponse.json(result);
   } catch {
     // AI unconfigured or failed — return an honest, useful fallback from the data.
     const lead = summary.balanceScore >= 70

@@ -357,6 +357,20 @@ the result rather than narrated as a fresh write.
   `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
   both halves.
 
+  **The subtlest shape: a canned sentence that reads like the real thing.**
+  When the parenting coach at `/api/behavior/insight` replies without JSON, the
+  route answers 200 with *"Keep logging — patterns will sharpen over time."* — a
+  warm, plausible sentence a parent cannot distinguish from coaching. The other
+  empty-200 routes at least LOOK empty; this one looks like an answer. Three
+  paths reach it (no JSON in the reply, `JSON.parse` throwing on malformed
+  braces, the provider throwing) and none recorded anything. The canned line is
+  still what the parent sees — the test asserts the failure is recorded BEFORE
+  it, by source position, so a mutant that drops `obs.failed` fails.
+
+  `auto.accident` went in the same tranche and is worth naming for a different
+  reason: someone has just had a car accident, and a 503 there is the failure on
+  this whole list a family is most likely to write in about.
+
   **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
   (the common case), "never throws" (the chat assistant) and "answers 200 with a
   flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
@@ -373,7 +387,7 @@ the result rather than narrated as a fresh write.
   **The remaining 19 silent surfaces are counted, not ignored.**
   `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
   number above it, because slack in a ratchet is room for new silent surfaces to
-  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17) — and
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11) — and
   asserts the scanner finds something, so a broken scanner cannot satisfy the cap
   vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
 
