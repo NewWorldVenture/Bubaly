@@ -76,3 +76,30 @@ describe('overallReadiness', () => {
     expect(overall.status).toBe('at_risk');
   });
 });
+
+// ─── The two signals the page never actually computed ──────────────────────
+
+import { readFileSync } from 'node:fs';
+
+describe('the readiness page computes what it claims to know', () => {
+  const page = readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
+
+  it('no longer hands the assessor hardcoded zeros', () => {
+    // `conflictsWeek: 0` and `overloadedMembers: 0` were literals, so the week
+    // card could never report a clash and the month card could never name an
+    // overloaded person — while the rows to compute both sat in the same file.
+    const code = page.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+    expect(code).not.toMatch(/conflictsWeek:\s*0\b/);
+    expect(code).not.toMatch(/overloadedMembers:\s*0\b/);
+    expect(page).toContain('const conflictsWeek = countOverlaps(weekEvents, HOUR)');
+    expect(page).toContain('const overloadedMembers = loads.filter(');
+  });
+
+  it('reads the week, not just tomorrow', () => {
+    expect(page).toContain("gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)");
+  });
+
+  it('uses one overlap rule for both windows rather than two copies', () => {
+    expect((page.match(/countOverlaps\(/g) ?? []).length).toBe(3); // definition + two calls
+  });
+});
