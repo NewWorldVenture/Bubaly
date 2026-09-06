@@ -117,7 +117,7 @@ export async function POST(req: Request) {
   // prose instead of JSON costs the same tokens and leaves the family with the
   // same "try again", but outside the wrapper it would settle the row
   // `completed` — the one shape of failure this route actually produces.
-  let parsed: Record<string, unknown> | null;
+  let parsed: { nutrition: Nutrition; summary: string | null } | null;
   try {
     parsed = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
@@ -128,8 +128,14 @@ export async function POST(req: Request) {
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
         const out = parseModelJSON(completion.text);
-        if (!out) obs.failed(new Error('The nutrition estimate did not parse as JSON.'));
-        return out;
+        if (!out || Object.keys(out).length === 0) {
+          obs.failed(new Error('The nutrition estimate did not parse as JSON.'));
+          return null;
+        }
+        return {
+          nutrition: coerceNutrition(out),
+          summary: typeof out.summary === 'string' ? out.summary.slice(0, 280) : null,
+        };
       },
     );
   } catch (err) {
@@ -138,8 +144,7 @@ export async function POST(req: Request) {
   }
 
   if (!parsed) return NextResponse.json({ error: 'Could not read the nutrition estimate. Try again.' }, { status: 422 });
-  const n: Nutrition = coerceNutrition(parsed);
-  const summary = typeof parsed.summary === 'string' ? parsed.summary.slice(0, 280) : null;
+  const { nutrition: n, summary } = parsed;
 
   // Upsert the cache ------------------------------------------------------
   const row = {
