@@ -89,6 +89,27 @@ that does.
   agree, so the next one added has to decide deliberately. The §21 row above is what
   remains: two stores, no reader, no settings control, and `child_channels` unread.
 
+- **§48, the button reaches a screen people land on.** `[Let Bubaly handle it]`
+  existed in exactly one place — `readiness-module.tsx`, on `/dashboard/readiness`
+  — so §48's signature moment was one most families never encountered. The
+  Family Operating Index rendered each suggestion as a bare link to the module
+  that owns it, which asks the family to go and redo by hand the thinking Bubaly
+  had just done.
+
+  Every suggestion `buildSuggestions` can emit is now classified. Seven get a
+  request sentence written the way a person would say it, because that sentence
+  is what the planner reads — a domain, an object and a verb, not "get us ready".
+  **Five deliberately get no button**, and that restraint is the point: two are
+  payments (`fix-negative-balances`, `cover-bills`) and Bubaly does not move
+  money on its own; `decide-approvals` IS a decision waiting for a person, so
+  offering to handle it would have Bubaly approve its own requests; `close-votes`
+  and `nudge-goals` are the household making up its mind.
+
+  `tests/handle-it-coverage.test.ts` fails when a new suggestion is neither
+  handled nor named, when one is both, and when an entry no longer matches a
+  real id — plus a guard that the source parser still finds the list at all, so
+  the coverage assertions cannot pass vacuously.
+
 - **§21, the routes that went around it.** Quiet hours landing was only half the
   job: **fifteen call sites wrote `notifications` rows directly**, so they got
   neither the window nor the unread-duplicate guard. The three that woke a house
