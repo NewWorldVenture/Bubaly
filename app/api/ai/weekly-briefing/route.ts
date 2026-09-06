@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
@@ -166,15 +168,21 @@ Rules:
 - Score categories 0-100 honestly from the data; be encouraging if data is sparse but never invent events.
 - Emojis: 🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday.`;
 
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system: systemPrompt,
-      messages: [{ role: 'user', content: `Generate the weekly briefing for ${firstName}.\n\nData:\n${context}` }],
-      tools: [],
-      maxTokens: 2600,
-    });
-
-    const text = completion.text || '{}';
+    const text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'briefing.weekly', text: 'Generate the weekly briefing' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system: systemPrompt,
+          messages: [{ role: 'user', content: `Generate the weekly briefing for ${firstName}.\n\nData:\n${context}` }],
+          tools: [],
+          maxTokens: 2600,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text || '{}';
+      },
+    );
 
     let briefing: Record<string, unknown>;
     try {

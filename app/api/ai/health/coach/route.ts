@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -80,9 +82,16 @@ export async function POST(req: Request) {
   const userMsg = `Household health context:\n${context}\n\nQuestion: ${question}`;
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 1024 });
-    const text = completion.text.trim() || 'I couldn’t generate guidance just now. Please try again.';
+    const text = (await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'health.coach', text: 'Health coaching' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 1024 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    )).trim() || 'I couldn’t generate guidance just now. Please try again.';
     return NextResponse.json({ text });
   } catch (err) {
     console.error('AI health coach error:', err);

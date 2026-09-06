@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -62,9 +64,16 @@ export async function POST(req: NextRequest) {
 
     const maxTokens = Math.min(Math.max(body.maxTokens ?? 700, 100), 1500);
 
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages, tools: [], maxTokens });
-    const text = (completion.text || '').trim();
+    const text = (await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'assist', text: 'Assist' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages, tools: [], maxTokens });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text || '';
+      },
+    )).trim();
     if (!text) return NextResponse.json({ error: 'Could not generate a response. Please try again.' }, { status: 502 });
 
     return NextResponse.json({ message: text });

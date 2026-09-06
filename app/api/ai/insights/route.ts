@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { isManager } from '@/lib/constants/roles';
@@ -82,22 +84,29 @@ export async function POST(req: Request) {
 
   const def = INSIGHTS[kind];
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      // The rule lives with the fence, and is appended here rather than inside
-      // `lib/ai/insights.ts` — that module is imported by a client component,
-      // and the fence reaches `node:crypto`.
-      system: `${def.system}\n\n${UNTRUSTED_CONTENT_RULE}`,
-      // The whole user turn is household rows — titles, notes, message bodies,
-      // document names — assembled by the prompt registry. Every one of them is
-      // §44 content, so the whole body goes inside one fence rather than
-      // threading a fence through thirty `buildUser` functions. The rule that
-      // says fenced text is data is in SHARED_RULES, which every kind carries.
-      messages: [{ role: 'user', content: fenceUntrustedBlock(`insight_${kind}`, def.buildUser(data), 24_000) }],
-      tools: [],
-      maxTokens: def.maxTokens,
-    });
-    const text = completion.text.trim();
+    const text = (await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: `insights.${kind}`, text: `Insights: ${kind}` },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          // The rule lives with the fence, and is appended here rather than inside
+          // `lib/ai/insights.ts` — that module is imported by a client component,
+          // and the fence reaches `node:crypto`.
+          system: `${def.system}\n\n${UNTRUSTED_CONTENT_RULE}`,
+          // The whole user turn is household rows — titles, notes, message bodies,
+          // document names — assembled by the prompt registry. Every one of them is
+          // §44 content, so the whole body goes inside one fence rather than
+          // threading a fence through thirty `buildUser` functions. The rule that
+          // says fenced text is data is in SHARED_RULES, which every kind carries.
+          messages: [{ role: 'user', content: fenceUntrustedBlock(`insight_${kind}`, def.buildUser(data), 24_000) }],
+          tools: [],
+          maxTokens: def.maxTokens,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    )).trim();
     if (!text) return NextResponse.json({ error: 'No suggestions just now. Please try again.' }, { status: 502 });
     return NextResponse.json({ text });
   } catch (err) {

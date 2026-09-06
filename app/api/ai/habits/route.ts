@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -65,13 +67,21 @@ export async function POST() {
 
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
     const { system, user } = buildCoachPrompt(stats, firstName);
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system,
-      messages: [{ role: 'user', content: user }],
-      tools: [],
-      maxTokens: 600,
-    });
+    const completion = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'habits.coach', text: 'Habit coaching' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const done = await provider.complete({
+          system,
+          messages: [{ role: 'user', content: user }],
+          tools: [],
+          maxTokens: 600,
+        });
+        obs.used(done.model ?? 'unknown', done.usage);
+        return done;
+      },
+    );
 
     const coaching = parseCoachResponse(completion.text || '');
     if (!coaching.headline && coaching.nudges.length === 0) {
