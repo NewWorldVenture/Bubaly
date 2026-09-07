@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson } from 'lucide-react';
+import Link from 'next/link';
+// FileJson is the privacy export's; Gift and X are the referral panel's. Both
+// sets are still rendered, so the icon import is a union.
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson, Gift, X } from 'lucide-react';
+import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/core';
+import { fmtMoney } from '@/lib/utils/format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -61,12 +66,17 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
   profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock', privacy: 'privacy',
 };
 
-export function SettingsModule() {
+export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
   const t = useTranslations();
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  // M39 — after a member invite goes out, offer the next natural ask: another
+  // family. Amounts come from the referral config the page resolved (defaults
+  // otherwise), never typed here.
+  const [showReferralCta, setShowReferralCta] = useState(false);
+  const referral = referralConfig ?? DEFAULT_REFERRAL_CONFIG;
   const [editMember, setEditMember] = useState<Tables<'family_members'> | null>(null);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -350,6 +360,27 @@ export function SettingsModule() {
             </li>
           ))}
         </ul>
+        {showReferralCta && referral.enabled && (
+          <div
+            className="mt-4 flex items-center gap-3 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5"
+            role="status"
+            data-testid="invite-referral-cta"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><Gift className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{t('settingsModule.knowAnotherFamily')}</p>
+              <p className="text-xs text-muted">
+                {t('settingsModule.giveGetWhenTheyUpgrade', { give: fmtMoney(referral.referredRewardCents), get: fmtMoney(referral.referrerRewardCents) })}
+              </p>
+            </div>
+            <Link href="/referrals" className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">
+              {t('settingsModule.referAFamily')}
+            </Link>
+            <button type="button" onClick={() => setShowReferralCta(false)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-fg" aria-label={t('settingsModule.dismiss')}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </Card>
       </>)}
 
@@ -382,7 +413,7 @@ export function SettingsModule() {
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); success(t('settingsModule.inviteSent')); }}
+          onSent={() => { setInviteOpen(false); setShowReferralCta(true); success(t('settingsModule.inviteSent')); }}
         />
       )}
 

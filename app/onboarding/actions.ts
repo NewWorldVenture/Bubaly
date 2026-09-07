@@ -27,6 +27,7 @@ import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import { describeActionError } from '@/lib/supabase/errors';
 import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotency';
+import { captureSignupReferral } from '@/lib/referrals/signup';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -656,6 +657,17 @@ export async function finalizeOnboardingAction(input: {
     { onConflict: 'user_id' },
   );
   if (activeErr) return onboardingFailure('active family selection', activeErr, t('actions.couldNotFinishSettingUp2'));
+
+  // 3b. Referral attribution: a `/signup?ref=CODE` visit (cookie, or the auth
+  //     metadata the email form wrote) becomes this family's referrals row with
+  //     source 'signup_link'. Once per family — applyReferralCode enforces one
+  //     referral per referred family, and a replay is answered quietly. Never
+  //     blocks onboarding.
+  await captureSignupReferral({
+    referredFamilyId: familyId,
+    referredEmail: profile.email || auth.user.email || null,
+    metadataCode: auth.user.user_metadata?.referral_code,
+  });
 
   // 4. Save family details / onboarding questionnaire (service-role + logged —
   //    same flaky-RLS rationale as steps 2/3b: a silent failure here loses the

@@ -13,7 +13,7 @@ import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboard
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { fmtTime, firstName, fmtMoney } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
@@ -38,6 +38,9 @@ import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
+import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
+import { getReferralConfigResult } from '@/lib/referrals/server';
+import { REFERRAL_HOME_CARD_DISMISSED_KEY } from '@/lib/referrals/core';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
@@ -364,6 +367,36 @@ export default async function HomePage() {
     } catch { /* onboarding_progress not migrated yet → no nudge */ }
   }
 
+  // M39 — the referral prompt. Shown to managers once the family has invited
+  // at least one member (counted server-side from `invites`), until this user
+  // dismisses it (persisted on their own preferences row). Every read captures
+  // its error: a failed read logs and shows NO card — a promo must never be
+  // rendered on a guess, and its absence is not a claim about anything.
+  let referralCard: { give: string; get: string } | null = null;
+  if (manager) {
+    try {
+      const [invitesRes, prefsRes, referralConfig] = await Promise.all([
+        supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        supabase.from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle(),
+        getReferralConfigResult(createServiceClient()),
+      ]);
+      if (invitesRes.error || prefsRes.error || referralConfig.error) {
+        console.error('[home] referral card read failed', invitesRes.error ?? prefsRes.error ?? referralConfig.error);
+      } else {
+        const prefs = (prefsRes.data?.notification_prefs as Record<string, unknown> | null) ?? {};
+        const dismissed = typeof prefs[REFERRAL_HOME_CARD_DISMISSED_KEY] === 'string';
+        const { config } = referralConfig;
+        if ((invitesRes.count ?? 0) >= 1 && !dismissed && config.enabled) {
+          referralCard = { give: fmtMoney(config.referredRewardCents), get: fmtMoney(config.referrerRewardCents) };
+        }
+      }
+    } catch (err) {
+      // A promo may never take Home down with it (e.g. no service-role key in
+      // a preview env): log, show no card, and leave the rest of Home intact.
+      console.error('[home] referral card read failed', err);
+    }
+  }
+
   return (
     <div className="space-y-6 pb-28">
       {/* Header: greeting + quick actions */}
@@ -407,6 +440,9 @@ export default async function HomePage() {
           </span>
         </Link>
       )}
+
+      {/* M39 — refer a family, once the household itself is invited. */}
+      {referralCard && <ReferralHomeCard give={referralCard.give} get={referralCard.get} />}
 
       {/* R6 — intent-based entry, made primary: one NL bar routes to the reasoning
           engine ("plan Emma's party"), a page, or the assistant. */}
