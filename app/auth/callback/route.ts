@@ -3,6 +3,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { isRetryableAuthError } from '@/lib/auth/session';
 
 const VID_COOKIE = 'bubaly_vid';
 const VID_MAX_AGE = 400 * 24 * 60 * 60;
@@ -22,8 +23,24 @@ export async function GET(request: Request) {
       // Check the env/code allowlist as well as the DB RPC, so this works even
       // before migration 0008 is applied.
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        if (userError) console.error('[auth-callback] authenticated user lookup failed', userError);
+      if (userError) console.error('[auth-callback] authenticated user lookup failed', userError);
+
+      // The code exchange above already wrote the session cookies, so at this
+      // point the visitor IS signed in. A transient failure to read them back
+      // must not undo that: bouncing to /login shows the login page to someone
+      // who just signed in successfully, which is the surprise logout this
+      // whole path exists to prevent.
+      //
+      // What the failed read costs is only the ROUTING decisions below — the
+      // super-admin console and the new-account onboarding detour — so those
+      // are skipped and the visitor goes to the ordinary destination. Nothing
+      // is granted by that: /admin re-checks super-admin in its own layout and
+      // every authenticated page re-resolves the user through
+      // `requireUserContext`. A definitive "there is no user" still ends here.
+      if (!user) {
+        if (userError && isRetryableAuthError(userError)) {
+          return NextResponse.redirect(new URL(next, url.origin));
+        }
         return NextResponse.redirect(new URL('/login?error=auth', url.origin));
       }
       const { data: dbAdmin, error: adminLookupError } = await supabase.rpc('is_super_admin');
@@ -52,11 +69,13 @@ export async function GET(request: Request) {
         const { data: membership, error: membershipError } = await supabase
           .from('family_members').select('family_id')
           .eq('user_id', user.id).eq('is_active', true).limit(1);
-        if (membershipError) {
-          console.error('[auth-callback] membership lookup failed', membershipError);
-          return NextResponse.redirect(new URL('/login?error=auth', url.origin));
-        }
-        if (membership.length === 0) destination = '/onboarding';
+        // A failed read is not "this account has no family". It must not send
+        // the user to onboarding (which would provision a second family), and
+        // it must not send them to /login either — they are signed in. Leave
+        // the destination alone; `requireUserContext` resolves or provisions
+        // the family when they land.
+        if (membershipError) console.error('[auth-callback] membership lookup failed', membershipError);
+        else if (membership.length === 0) destination = '/onboarding';
       }
 
       const res = NextResponse.redirect(new URL(destination, url.origin));
