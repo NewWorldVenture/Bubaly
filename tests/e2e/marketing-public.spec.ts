@@ -122,12 +122,23 @@ test('mobile navigation closes after a route change and marks the current page',
 });
 
 test('mobile navigation stays usable on short screens and resets at desktop width', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 480 });
+  // The panel is `max-h-[calc(100dvh-3.5rem-var(--safe-top))] overflow-y-auto`,
+  // so the viewport decides its budget — but the CONTENT has to exceed that
+  // budget for "it scrolls instead of clipping" to be worth proving. Measured
+  // against the six-item MARKETING_NAV the content is 402px tall; at 400 the
+  // budget is 344px, so it is ~58px over. (At 480 the budget is 424px and it
+  // fits, which is exactly what happened when the nav dropped from seven items
+  // to six.) If a future nav change puts the content back under budget, the
+  // assertion below fails: shorten the viewport, do not delete the assertion.
+  await page.setViewportSize({ width: 390, height: 400 });
   const toggle = page.getByRole('button', { name: 'Toggle menu' });
   const navigation = page.getByRole('navigation', { name: 'Mobile navigation' });
   await toggle.click();
   const panel = page.locator('#mobile-navigation');
-  expect(await panel.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect(
+    await panel.evaluate((node) => node.scrollHeight > node.clientHeight),
+    'the menu must be taller than its budget here, or scrolling to the CTA proves nothing',
+  ).toBe(true);
   await navigation.getByRole('link', { name: 'Get Started Free' }).scrollIntoViewIfNeeded();
   await expect(navigation.getByRole('link', { name: 'Get Started Free' })).toBeInViewport();
   await page.setViewportSize({ width: 1280, height: 800 });
