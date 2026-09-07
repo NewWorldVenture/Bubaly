@@ -8,7 +8,13 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   const t = await getTranslations();
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-between px-5 py-5 sm:px-8">
+      {/* Safe-area padded for the same reason as the marketing header and
+          `.app-topbar`: with viewport-fit=cover and a black-translucent status
+          bar, the top of the viewport is underneath the iOS status bar, so an
+          unpadded header renders its logo behind the clock. This one does not
+          stick, but it is the first thing on the page, so it is exactly what
+          lands there. */}
+      <header className="flex items-center justify-between px-5 py-5 pt-[calc(1.25rem+var(--safe-top))] sm:px-8">
         <Logo />
         <ThemeToggle />
       </header>
