@@ -328,7 +328,8 @@ describe('the "Moving Home" life event launches the Move Planner', () => {
 
     const moduleSrc = readFileSync('components/modules/life-events-module.tsx', 'utf8');
     const launch = moduleSrc.slice(moduleSrc.indexOf('async function launch('), moduleSrc.indexOf('async function toggleItem('));
-    expect(launch).toContain("res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: res.moveDate ?? '' })");
+    expect(launch).toContain("res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: onFile })");
+    expect(launch).toContain('const onFile = res.moveDate');
     const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
     expect(en['lifeEventsModule.moveAlreadyOnFile']).toContain('{date}');
     expect(en['lifeEventsModule.moveAlreadyOnFile']).toMatch(/already/i);

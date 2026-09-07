@@ -90,9 +90,10 @@ export function LifeEventsModule() {
     // where it went — and when the family already had a move under way, say
     // which date is on file rather than implying the one just picked was
     // recorded, because the existing move keeps its own date.
+    const onFile = res.moveDate ? new Date(`${res.moveDate}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '';
     success(
       !res.moveId ? tr('lifeEventsModule.playbookStartedYourChecklistIs')
-      : res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: res.moveDate ?? '' })
+      : res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: onFile })
       : tr('lifeEventsModule.moveOnFile'),
     );
     setStartTemplate(null);
