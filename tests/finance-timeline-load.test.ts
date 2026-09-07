@@ -120,8 +120,9 @@ describe('loadMoneyTimelineInput read boundary', () => {
     ]));
     expect(timeline.coverage.coveredCount).toBe(3);
     expect(timeline.planOutflow).toBe(1000);
-    const trip = timeline.weeks.find((w) => w.weekStart === '2026-02-09')!.moments[0];
-    expect(trip).toMatchObject({ label: 'Spring break', kind: 'plan', source: 'vacation', amount: 1000 });
+    // Rent (Feb 10) shares the week of Feb 9 with the trip (Feb 14); the trip is the plan moment.
+    const trip = timeline.weeks.find((w) => w.weekStart === '2026-02-09')!.moments.find((m) => m.kind === 'plan');
+    expect(trip).toMatchObject({ label: 'Spring break', kind: 'plan', source: 'vacation', amount: 1000, date: '2026-02-14' });
     expect(timeline.lowestBalance).toBe(5000 - 3000 - 1000);
   });
 

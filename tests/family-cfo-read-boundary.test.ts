@@ -77,7 +77,8 @@ describe('family-cfo forecast surface', () => {
   it('never answers affordability from a failed read: the action reports the failure instead of a verdict', () => {
     expect(actions).toContain("console.error('[dashboard/family-cfo] affordability read failed', err);");
     expectTranslates(actions, 'familyCfoActions.couldNotReadYourForecast', 'Could not read your forecast from Supabase. Refresh and try again.');
-    expect(actions).not.toContain('verdict:');
+    // The catch hands back a failure the form shows, not an `ok` result.
+    expect(actions).toContain("return { ok: false, error: t('familyCfoActions.couldNotReadYourForecast') };");
   });
 
   it('the money-timeline page fails closed on the same loader', () => {
