@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { CATALOG_QUERY, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
+import { CATALOG_QUERY, baselineBlockedMessage, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
 
 const projectRef = 'abcdefghijklmnopqrst';
 const token = 'test-management-token';
@@ -115,6 +115,18 @@ describe('money write verdict', () => {
   it('points at the runbook instead of leaving the reader to re-derive it', () => {
     expect(moneyWriteVerdict({ moneyWritePolicies: [] }).runbook)
       .toBe('docs/runbooks/LB-016-wallet-permissive-policy-finding.md');
+  });
+
+  // Three releases stopped at the ledger gate and each responder read this
+  // failure as the wallet finding coming back. They are different problems that
+  // surface in the same red check, so the message has to say which one it is.
+  it('separates the ledger blocker from the money boundary and names the runbook', () => {
+    const runbook = moneyWriteVerdict({ moneyWritePolicies: [] }).runbook;
+    const message = baselineBlockedMessage(runbook);
+    expect(message).toContain('no recorded baseline migration 0004');
+    expect(message).toContain('Historical replay is blocked');
+    expect(message).toContain('NOT the money boundary');
+    expect(message).toContain(`${runbook} §4`);
   });
 
   it('asks the database for the manager-gated bit without exporting any expression', () => {
