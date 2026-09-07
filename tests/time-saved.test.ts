@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { computeTimeSaved, humanizeSaved } from '@/lib/metric/time-saved';
+import {
+  HANDLED_RUN_STATES, SAVED_KINDS, computeTimeSaved, humanizeSaved, isHandledRun,
+} from '@/lib/metric/time-saved';
+import enUS from '@/lib/i18n/messages/en-US.json';
 
 describe('humanizeSaved', () => {
   it('renders minutes under an hour, hours above', () => {
@@ -35,5 +38,57 @@ describe('computeTimeSaved', () => {
     expect(t.show).toBe(false);
     expect(t.actions).toBe(0);
     expect(t.headline).toContain('start saving you time');
+  });
+});
+
+// ─── S-15: the run kind, and the labels the UI actually renders ──────────────
+
+describe('the run kind', () => {
+  it('weights a whole automation run above a single reminder', () => {
+    const t = computeTimeSaved([{ kind: 'run', count: 1 }, { kind: 'reminder', count: 1 }]);
+    const run = t.rows.find((r) => r.kind === 'run');
+    const reminder = t.rows.find((r) => r.kind === 'reminder');
+    expect(run!.minutes).toBeGreaterThan(reminder!.minutes);
+    expect(t.minutes).toBe(run!.minutes + reminder!.minutes);
+  });
+
+  it('counts runs in the one handled-this-week number', () => {
+    const t = computeTimeSaved([
+      { kind: 'run', count: 2 }, { kind: 'autopilot', count: 1 },
+      { kind: 'assistant', count: 1 }, { kind: 'reminder', count: 3 },
+    ]);
+    expect(t.actions).toBe(7);
+  });
+
+  it('lists every kind in SAVED_KINDS', () => {
+    const t = computeTimeSaved(SAVED_KINDS.map((kind) => ({ kind, count: 1 })));
+    expect(t.rows.map((r) => r.kind)).toEqual([...SAVED_KINDS]);
+  });
+});
+
+describe('row labels', () => {
+  // The banner renders `labelKey`, never `label` — an English label reaching a
+  // screen is exactly the regression the i18n gate exists to prevent, and a
+  // key with no catalogue entry renders as the key itself.
+  it('carries a catalogue key whose English matches the label', () => {
+    const catalogue = enUS as Record<string, string>;
+    const t = computeTimeSaved(SAVED_KINDS.map((kind) => ({ kind, count: 1 })));
+    for (const row of t.rows) {
+      expect(row.labelKey.startsWith('timeSaved.')).toBe(true);
+      expect(catalogue[row.labelKey]).toBe(row.label);
+    }
+  });
+});
+
+describe('the handled-run vocabulary', () => {
+  it('is the one definition every surface reads', () => {
+    expect([...HANDLED_RUN_STATES]).toEqual(['completed', 'partially_completed']);
+  });
+
+  it('accepts a partial run and refuses everything unfinished or failed', () => {
+    expect(isHandledRun({ state: 'partially_completed' })).toBe(true);
+    for (const state of ['queued', 'planning', 'executing', 'verifying', 'failed', 'blocked', 'cancelled', 'paused']) {
+      expect(isHandledRun({ state })).toBe(false);
+    }
   });
 });

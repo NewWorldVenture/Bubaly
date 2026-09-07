@@ -507,7 +507,7 @@ export default async function HomePage() {
       <CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" />
 
       {/* R11 — the category metric: "N hours saved this week" */}
-      <TimeSavedBanner data={timeSaved} />
+      <TimeSavedBanner result={timeSaved} retryHref="/home" />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}

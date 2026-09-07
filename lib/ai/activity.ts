@@ -242,3 +242,86 @@ export async function recentAiFeatures(db: SupabaseClient<Database>, window = 50
   }
   return [...new Set((data ?? []).map((r) => r.feature).filter((f): f is string => Boolean(f)))].sort();
 }
+
+// ─── X3 · rework rate ────────────────────────────────────────────────────────
+//
+// "How often does Bubaly get it right the first time?" is the quality question
+// the ledger can already answer and nothing asked. A run that had to be
+// replanned, or whose steps had to be retried, cost the family patience even
+// when it finished — so counting only `completed` flatters the product.
+//
+// The measure is deliberately over TERMINAL runs, not over all of them: a run
+// still executing is not yet evidence either way, and including it would make
+// the number drift with load rather than with quality.
+
+/** Lifecycle states that mean the run is over, however it ended. */
+export const TERMINAL_RUN_STATES: readonly string[] = [
+  'completed', 'partially_completed', 'failed', 'blocked', 'cancelled',
+] as const;
+
+/**
+ * Run events that mean work had to be done twice.
+ *
+ * `replanned` has no `AiRunEventType` today — replanning shows up as a SECOND
+ * `ai_plans` version for the same request, which `plansByRequest` carries. The
+ * name is matched anyway so that adding the event type later needs no change
+ * here.
+ */
+export const REWORK_EVENT_TYPES: readonly string[] = ['step_retried', 'replanned'] as const;
+
+export type ReworkRunRow = { id: string; request_id: string | null; state: string };
+export type ReworkEventRow = { run_id: string; event_type: string };
+
+export type ReworkSummary = {
+  /** Runs that ended, in any terminal state — the denominator. */
+  terminal: number;
+  /** Completed, one plan version, no retries: right the first time. */
+  firstTimeRight: number;
+  /** Terminal runs that were not right the first time. */
+  reworked: number;
+  /** firstTimeRight / terminal, 0..1. `null` when no run has ended yet. */
+  firstTimeRightRate: number | null;
+  /** reworked / terminal, 0..1. `null` when no run has ended yet. */
+  reworkRate: number | null;
+};
+
+/**
+ * X3 — the rework rate over a window of runs.
+ *
+ * `plansByRequest` maps an `ai_requests.id` to how many `ai_plans` versions
+ * exist for it; a request with two or more versions was replanned. A run with
+ * no `request_id` cannot have been replanned through a request, so it is judged
+ * on its events alone rather than being excluded — dropping it would quietly
+ * shrink the denominator toward the runs we happen to understand best.
+ */
+export function summarizeRework(
+  runs: ReworkRunRow[],
+  plansByRequest: Record<string, number>,
+  events: ReworkEventRow[],
+): ReworkSummary {
+  const reworkedRuns = new Set<string>();
+  for (const e of events) {
+    if (REWORK_EVENT_TYPES.includes(e.event_type)) reworkedRuns.add(e.run_id);
+  }
+
+  let terminal = 0;
+  let firstTimeRight = 0;
+  for (const run of runs) {
+    if (!TERMINAL_RUN_STATES.includes(run.state)) continue;
+    terminal++;
+    if (run.state !== 'completed') continue;
+    if (reworkedRuns.has(run.id)) continue;
+    const versions = run.request_id ? (plansByRequest[run.request_id] ?? 1) : 1;
+    if (versions > 1) continue;
+    firstTimeRight++;
+  }
+
+  const reworked = terminal - firstTimeRight;
+  return {
+    terminal,
+    firstTimeRight,
+    reworked,
+    firstTimeRightRate: terminal > 0 ? firstTimeRight / terminal : null,
+    reworkRate: terminal > 0 ? reworked / terminal : null,
+  };
+}
