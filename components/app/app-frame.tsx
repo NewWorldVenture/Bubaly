@@ -1,6 +1,7 @@
 import { unstable_noStore as noStore } from 'next/cache';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { isDashboardView } from '@/lib/constants/dashboards';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
@@ -25,7 +26,27 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const [{ data: members }, { data: prefs }, planLevel, superAdmin, { count: unreadMessages }] = await Promise.all([
+  // This frame wraps EVERY authenticated page, so a rejection here is not one
+  // broken page — it is the whole signed-in app returning an error. Neither of
+  // these two is a { data, error } read, so they are resolved beside the batch
+  // with fallbacks chosen for what they gate:
+  //
+  //   planLevel  → 0, the free tier. A failed read shows FEWER features, never
+  //                more, so a flaky database cannot unlock paid surfaces.
+  //   superAdmin → false. Fails CLOSED. An unreachable check must never be
+  //                mistaken for an affirmative one.
+  const [planLevel, superAdmin] = await Promise.all([
+    resolveFamilyPlanLevel(supabase, ctx.active.familyId).catch((cause) => {
+      console.warn('[app-frame] plan level read failed — assuming free tier', cause);
+      return 0 as Awaited<ReturnType<typeof resolveFamilyPlanLevel>>;
+    }),
+    isSuperAdmin().catch((cause) => {
+      console.warn('[app-frame] super-admin check failed — denying', cause);
+      return false;
+    }),
+  ]);
+
+  const [{ data: members }, { data: prefs }, { count: unreadMessages }] = await settleAll([
     supabase
       .from('family_members')
       .select('*')
@@ -37,8 +58,6 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       .select('default_dashboard')
       .eq('user_id', ctx.user.id)
       .maybeSingle(),
-    resolveFamilyPlanLevel(supabase, ctx.active.familyId),
-    isSuperAdmin(),
     // Unread family messages for this user → sidebar Messages badge. Excludes my
     // own messages; `read_by` (user ids) not containing me = unread.
     supabase
