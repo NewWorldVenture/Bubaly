@@ -1104,7 +1104,6 @@ export async function reportTripDisruption(
     const patch: Updatable<'vacation_itinerary_items'> = {
       start_time: move.toStart,
       end_time: move.toEnd,
-      updated_at: new Date().toISOString(),
     };
     if (target.data) patch.day_id = target.data;
     const { error } = await scope.db
