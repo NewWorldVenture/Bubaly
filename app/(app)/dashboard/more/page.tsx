@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { Lock, ShieldCheck, HelpCircle, Mail, Info, FileText, ChevronRight, LayoutGrid } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export const metadata: Metadata = { title: 'More' };
+export const metadata: Metadata = { title: 'more.more' };
 
 // Screen 11 of the mockups: the "More" menu — a hub for account security and the
 // info/legal pages. Manage PIN jumps to the App Lock card in Settings; the rest
@@ -58,16 +59,17 @@ function Group({ title, rows }: { title: string; rows: Row[] }) {
   );
 }
 
-export default function MorePage() {
+export default async function MorePage() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-6 sm:py-8">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">More</h1>
       <div className="space-y-6">
-        <Group title="Browse" rows={BROWSE} />
-        <Group title="Account" rows={ACCOUNT} />
-        <Group title="Information" rows={INFO} />
+        <Group title={t('more.browse')} rows={BROWSE} />
+        <Group title={t('more.account')} rows={ACCOUNT} />
+        <Group title={t('more.information')} rows={INFO} />
       </div>
-      <p className="mt-8 text-center text-xs text-muted">Bubaly — Less Managing Life. More Living It.</p>
+      <p className="mt-8 text-center text-xs text-muted">{t('more.bubalyLessManagingLifeMore')}</p>
     </div>
   );
 }

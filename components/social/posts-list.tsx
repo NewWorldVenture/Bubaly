@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { formatDistanceToNow } from 'date-fns';
 import { FileText } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
@@ -15,7 +16,8 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning' | 
   canceled: 'neutral',
 };
 
-export function PostsList({ posts, emptyLabel }: { posts: Tables<'social_posts'>[]; emptyLabel?: string }) {
+export async function PostsList({ posts, emptyLabel }: { posts: Tables<'social_posts'>[]; emptyLabel?: string }) {
+  const t = await getTranslations();
   if (posts.length === 0) {
     return <EmptyState icon={FileText} title={emptyLabel ?? 'No posts yet'} description="Create content in the studio to see it here." />;
   }
@@ -24,10 +26,10 @@ export function PostsList({ posts, emptyLabel }: { posts: Tables<'social_posts'>
       <table className="w-full min-w-[560px] text-sm">
         <thead className="bg-elevated text-left text-xs text-muted">
           <tr>
-            <th className="px-3 py-2 font-medium">Post</th>
-            <th className="px-3 py-2 font-medium">Kind</th>
-            <th className="px-3 py-2 font-medium">Status</th>
-            <th className="px-3 py-2 font-medium">When</th>
+            <th className="px-3 py-2 font-medium">{t('postsList.post')}</th>
+            <th className="px-3 py-2 font-medium">{t('postsList.kind')}</th>
+            <th className="px-3 py-2 font-medium">{t('postsList.status')}</th>
+            <th className="px-3 py-2 font-medium">{t('postsList.when')}</th>
           </tr>
         </thead>
         <tbody>

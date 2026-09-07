@@ -163,7 +163,7 @@ export function FridgeChef() {
 
               {recipe.have.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">You have</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">{t('fridgeChef.youHave')}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {recipe.have.map((h) => <span key={h} className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">{h}</span>)}
                   </div>
@@ -172,7 +172,7 @@ export function FridgeChef() {
 
               {recipe.need.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">Need to buy</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">{t('fridgeChef.needToBuy')}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {recipe.need.map((n) => <span key={n} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200">{n}</span>)}
                   </div>
@@ -201,7 +201,7 @@ export function FridgeChef() {
                       : <><ShoppingCart className="h-4 w-4" /> Add {recipe.need.length} to grocery</>}
                   </Button>
                 ) : (
-                  <p className="text-center text-xs text-emerald-300">You have everything for this!</p>
+                  <p className="text-center text-xs text-emerald-300">{t('fridgeChef.youHaveEverythingForThis')}</p>
                 )}
               </div>
             </div>

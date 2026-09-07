@@ -242,7 +242,7 @@ export function CommunityModule({
                         type="button"
                         onClick={() => run(() => unshareListingAction(f.listing.id, f.circleId), 'Removed from the circle')}
                         disabled={pending}
-                        title="Stop sharing"
+                        title={t('communityModule.stopSharing')}
                         className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted transition hover:text-rose-400 disabled:opacity-50"
                       >
                         <X className="h-3.5 w-3.5" />

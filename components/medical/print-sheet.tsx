@@ -137,12 +137,12 @@ export function ProviderInfoSheet({
               </div>
               {p.specialty && <p className="text-sm font-medium text-gray-600">{p.specialty}</p>}
               <div className="mt-2">
-                <Row label="Practice" value={p.practice_name} />
-                <Row label="Phone" value={p.phone} />
+                <Row label={t('printSheet.practice')} value={p.practice_name} />
+                <Row label={t('printSheet.phone')} value={p.phone} />
                 <Row label="Fax" value={p.fax} />
-                <Row label="Email" value={p.email} />
-                <Row label="Address" value={p.address} />
-                <Row label="Notes" value={p.notes} />
+                <Row label={t('printSheet.email')} value={p.email} />
+                <Row label={t('printSheet.address')} value={p.address} />
+                <Row label={t('printSheet.notes')} value={p.notes} />
               </div>
             </div>
           ))}

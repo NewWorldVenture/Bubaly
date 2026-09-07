@@ -47,6 +47,7 @@ function countVideos(photos: PhotoRow[] | undefined): number {
 }
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const t = await getTranslations();
   const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? 'highlights') as TabKey;
@@ -176,9 +177,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   );
 
   const TimelineView = () => (
-    timeline.length === 0 ? <EmptyBlock label="No highlights yet — add a memory to start your timeline." /> : (
+    timeline.length === 0 ? <EmptyBlock label={t('memories.noHighlightsYetAddA')} /> : (
       <section>
-        <SectionHeader title="Timeline" />
+        <SectionHeader title={t('memories.timeline')} />
         <div className="space-y-6">
           {timeline.map((row) => {
             const strip = photosByAlbum.get(row.album.id) ?? [];

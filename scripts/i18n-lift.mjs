@@ -135,7 +135,12 @@ for (const { text } of result.findings) {
     form = { from: q, kind: /[A-Za-z0-9_$]+=$/.test(src.slice(Math.max(0, at - 40), at)) ? 'attr' : 'expr' };
     break;
   }
-  if (!form && src.includes(`>${text}<`)) form = { from: `>${text}<`, kind: 'jsxText' };
+  // `>text<` is only JSX TEXT if it reads like prose. The same shape occurs
+  // inside a TypeScript generic — `async <T,>(label: string, q: PromiseLike<…`
+  // — where rewriting it produces a syntax error rather than a translation.
+  // Punctuation that belongs to code and not to a sentence rules it out.
+  const looksLikeCode = /[{}|;=<>]|=>|:\s*[A-Za-z]/.test(text);
+  if (!form && !looksLikeCode && src.includes(`>${text}<`)) form = { from: `>${text}<`, kind: 'jsxText' };
   if (!form) continue; // JSX prose split across lines — leave it for a person.
 
   let key = `${ns}.${slugFor(text)}`;

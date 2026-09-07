@@ -32,6 +32,7 @@ export type PaymentRow = {
 export function BabysittersView({ sitters, payments, canManage }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -106,13 +107,13 @@ export function BabysittersView({ sitters, payments, canManage }: {
                 </div>
                 {canManage && (
                   <div className="flex flex-shrink-0 items-center gap-1">
-                    <button onClick={() => setPaying(s)} className="rounded-lg bg-green-500/15 px-2.5 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/25 transition" title="Record payment">
+                    <button onClick={() => setPaying(s)} className="rounded-lg bg-green-500/15 px-2.5 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/25 transition" title={t('babysittersView.recordPayment')}>
                       <DollarSign className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => setEditing(s)} className="rounded-lg p-1.5 text-muted hover:text-fg hover:bg-elevated transition" title="Edit">
+                    <button onClick={() => setEditing(s)} className="rounded-lg p-1.5 text-muted hover:text-fg hover:bg-elevated transition" title={t('babysittersView.edit')}>
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => archive(s)} className="rounded-lg p-1.5 text-muted hover:text-red-400 hover:bg-elevated transition" title="Remove">
+                    <button onClick={() => archive(s)} className="rounded-lg p-1.5 text-muted hover:text-red-400 hover:bg-elevated transition" title={t('babysittersView.remove')}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -164,6 +165,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
 function SitterModal({ sitter, onClose, onSaved }: {
   sitter: BabysitterRow | null; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -190,13 +192,13 @@ function SitterModal({ sitter, onClose, onSaved }: {
   return (
     <Modal open title={sitter ? 'Edit Babysitter' : 'Add Babysitter'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label={tr('babysitters.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={sitter?.name ?? ''} placeholder="Jamie Rivera" />}</Field>
+        <Field label={tr('babysitters.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={sitter?.name ?? ''} placeholder={t('babysittersView.jamieRivera')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('babysitters.phone')}>{(id) => <Input id={id} name="phone" defaultValue={sitter?.phone ?? ''} placeholder="+1 555 …" />}</Field>
           <Field label={tr('babysitters.hourlyRate')}>{(id) => <Input id={id} name="rate" type="number" min="0" step="0.5" defaultValue={sitter?.rateCents != null ? (sitter.rateCents / 100).toString() : ''} placeholder="20" />}</Field>
         </div>
         <Field label={tr('babysitters.email')}>{(id) => <Input id={id} name="email" type="email" defaultValue={sitter?.email ?? ''} placeholder="jamie@example.com" />}</Field>
-        <Field label={tr('babysitters.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={sitter?.notes ?? ''} placeholder="Great with toddlers, available weekends…" />}</Field>
+        <Field label={tr('babysitters.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={sitter?.notes ?? ''} placeholder={t('babysittersView.greatWithToddlersAvailableWeekends')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('babysitters.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : sitter ? 'Save Changes' : 'Add Sitter'}</Button>

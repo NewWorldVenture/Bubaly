@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -185,7 +186,8 @@ function formatBirthday(mmdd: string): string {
  * until the context resolves again. The display/error.tsx boundary remains the
  * backstop for anything unforeseen.
  */
-function DisplayReconnect() {
+async function DisplayReconnect() {
+  const t = await getTranslations();
   return (
     <>
       <AutoRefresh seconds={15} />
@@ -195,8 +197,8 @@ function DisplayReconnect() {
           <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-blue-600/40 blur-3xl" />
         </div>
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">Bubaly Kitchen</p>
-          <h1 className="mt-3 text-3xl font-black sm:text-4xl">One moment…</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+          <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
           <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">
             Reconnecting to your family space — the display will come right back.
           </p>

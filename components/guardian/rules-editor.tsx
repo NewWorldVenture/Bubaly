@@ -40,6 +40,7 @@ const ROUTING_MODES: RoutingMode[] = [
 ];
 
 export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [rules, setRules] = useState(initial);
@@ -171,19 +172,19 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
               <div className="border-t border-border bg-elevated/40 px-4 py-3 space-y-2 text-xs">
                 {rule.description && <p className="text-muted">{rule.description}</p>}
                 {rule.condition_trust_levels?.length && (
-                  <DetailRow label="Trust Levels" value={rule.condition_trust_levels.map(t => `${TRUST_ICONS[t]} ${TRUST_LABELS[t]}`).join(', ')} />
+                  <DetailRow label={t('rulesEditor.trustLevels')} value={rule.condition_trust_levels.map(t => `${TRUST_ICONS[t]} ${TRUST_LABELS[t]}`).join(', ')} />
                 )}
                 {rule.condition_time_start && (
-                  <DetailRow label="Time" value={`${rule.condition_time_start} – ${rule.condition_time_end}`} />
+                  <DetailRow label={t('rulesEditor.time')} value={`${rule.condition_time_start} – ${rule.condition_time_end}`} />
                 )}
                 {rule.condition_days_of_week?.length && (
-                  <DetailRow label="Days" value={rule.condition_days_of_week.map(d => DAYS[d]).join(', ')} />
+                  <DetailRow label={t('rulesEditor.days')} value={rule.condition_days_of_week.map(d => DAYS[d]).join(', ')} />
                 )}
                 {rule.condition_contexts?.length && (
-                  <DetailRow label="Context" value={rule.condition_contexts.join(', ')} />
+                  <DetailRow label={t('rulesEditor.context')} value={rule.condition_contexts.join(', ')} />
                 )}
                 {rule.condition_caller_pattern && (
-                  <DetailRow label="Pattern" value={rule.condition_caller_pattern} />
+                  <DetailRow label={t('rulesEditor.pattern')} value={rule.condition_caller_pattern} />
                 )}
               </div>
             )}

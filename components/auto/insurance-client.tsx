@@ -76,7 +76,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                     ] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => (
                       <div key={k}><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>
                     ))}
-                    {p.notes && <div className="col-span-full"><dt className="text-muted">Notes</dt><dd>{p.notes}</dd></div>}
+                    {p.notes && <div className="col-span-full"><dt className="text-muted">{t('insuranceClient.notes')}</dt><dd>{p.notes}</dd></div>}
                   </dl>
                 )}
 

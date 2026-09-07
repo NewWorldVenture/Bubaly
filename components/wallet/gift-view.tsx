@@ -65,7 +65,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
                 {canManage && (
                   <div className="flex items-center gap-1">
                     <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" /> Approve</button>
-                    <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label="Decline"><X className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label={t('giftView.decline')}><X className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </div>
@@ -181,12 +181,12 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
             )}</Field>
             <Field label={t('gift.occasion')}>{(id) => (
               <select id={id} name="occasion" className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
-                <option value="">None</option>
+                <option value="">{t('giftView.none')}</option>
                 {GIFT_OCCASIONS.map((o) => <option key={o} value={o}>{occasionLabel(o)}</option>)}
               </select>
             )}</Field>
             <Field label={t('gift.suggestedAmountsUsdCommaSeparated')}>{(id) => <Input id={id} name="suggested" placeholder="25, 50, 100" defaultValue="25, 50, 100" />}</Field>
-            <Field label={t('gift.messageToShareOptional')}>{(id) => <Input id={id} name="message" placeholder="Help Mia reach her bike goal!" />}</Field>
+            <Field label={t('gift.messageToShareOptional')}>{(id) => <Input id={id} name="message" placeholder={t('giftView.helpMiaReachHerBike')} />}</Field>
           </>
         )}
         <div className="flex justify-end gap-2 pt-2">
