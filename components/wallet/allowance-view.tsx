@@ -96,7 +96,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
                     {r.isActive ? (r.nextRunOn ? ` · next ${r.nextRunOn}` : '') : ' · paused'}
                   </p>
                 ) : (
-                  <p className="text-xs text-muted">No allowance set</p>
+                  <p className="text-xs text-muted">{t('allowanceView.noAllowanceSet')}</p>
                 )}
               </div>
               {canManage && enabled && (

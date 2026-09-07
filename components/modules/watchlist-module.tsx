@@ -165,7 +165,7 @@ export function WatchlistModule() {
                 <p>{tr('watchlist.ageNeedsClarificationFor')} {ageClarificationNames.join(', ')}{tr('watchlist.addOrCorrectEachDateOf')}</p>
               )}
               {unavailableAudience.length > 0 && (
-                <p>Some selected participants are no longer available in the household. Restore their member profiles, or remove them above if they are not watching.</p>
+                <p>{tr('watchlistModule.someSelectedParticipantsAreNo')}</p>
               )}
               <p>{tr('watchlist.selectEveryoneWhoIsWatchingOnly')}</p>
             </div>

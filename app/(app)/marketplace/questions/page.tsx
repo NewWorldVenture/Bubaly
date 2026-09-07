@@ -49,7 +49,7 @@ export default async function MarketplaceQuestionsPage() {
                   <p className="truncate font-medium">{titleOf.get(q.listing_id) ?? 'Listing'}</p>
                   <p className="truncate text-muted">{nameOf(q.asker_member)} asked: “{q.question}”</p>
                 </div>
-                <QLink id={q.listing_id}>Answer</QLink>
+                <QLink id={q.listing_id}>{t('questions.answer')}</QLink>
               </li>
             ))}
           </ul>
@@ -64,7 +64,7 @@ export default async function MarketplaceQuestionsPage() {
               <li key={q.id} className="rounded-xl border border-border bg-surface/50 p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate font-medium">{titleOf.get(q.listing_id) ?? 'Listing'}</p>
-                  <QLink id={q.listing_id}>View</QLink>
+                  <QLink id={q.listing_id}>{t('questions.view')}</QLink>
                 </div>
                 <p className="mt-0.5 text-muted">“{q.question}”</p>
                 {q.answer && <p className="mt-1.5 rounded-lg bg-brand/5 p-2 text-fg"><span className="font-medium text-brand-text">{nameOf(q.answered_by)}:</span> {q.answer}</p>}

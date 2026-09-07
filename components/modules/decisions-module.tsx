@@ -233,10 +233,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Scale className="mx-auto mb-3 size-8 text-muted" />
       <h3 className="mb-1 text-base font-semibold">{t('decisions.decideTheHardOnesTogether')}</h3>
-      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Which vacation fits the budget and calendar? Is another activity worth the load? Add the
-        options and their trade-offs — the engine scores them, explains why, and you choose.
-      </p>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('decisionsModule.whichVacationFitsTheBudget')}</p>
       <Button onClick={onAdd}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>
     </div>
   );

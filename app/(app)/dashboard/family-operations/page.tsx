@@ -11,19 +11,20 @@ import { StatTile, SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/compo
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Operations' };
+export const metadata: Metadata = { title: 'familyOperations.familyOperations' };
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500',
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">Family Operations</h1>
       <ErrorState message="Could not load family operations data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">Refresh family operations</Link>
+      <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">{t('familyOperations.refreshFamilyOperations')}</Link>
     </div>
   );
 }

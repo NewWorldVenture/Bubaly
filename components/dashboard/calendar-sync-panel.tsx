@@ -107,7 +107,7 @@ export function CalendarSyncPanel() {
                       <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {new Date(feed.last_synced_at).toLocaleDateString()}
                     </p>
                   ) : (
-                    <p className="text-[10px] text-muted mt-0.5">Not synced yet</p>
+                    <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -159,7 +159,7 @@ export function CalendarSyncPanel() {
               </div>
 
               <Field label={t('calendarSync.calendarName')}>
-                {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, School, Soccer…" />}
+                {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('calendarSyncPanel.workSchoolSoccer')} />}
               </Field>
               <Field label={t('calendarSync.icsWebcalUrl')} required>
                 {(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={provider.placeholder} autoFocus />}

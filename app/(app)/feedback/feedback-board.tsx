@@ -205,7 +205,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
             <div className="min-w-0 flex-1">
               <p className="text-xs">
                 <span className={cn('font-semibold', c.is_team && 'text-brand-text')}>{c.author_name}</span>
-                {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">Team</span>}
+                {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{t('feedbackBoard.team')}</span>}
                 <span className="ml-1.5 text-muted">{timeAgo(c.created_at)}</span>
               </p>
               <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.body}</p>

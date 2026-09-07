@@ -161,7 +161,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
   return (
     <Modal open onClose={onClose} title={t('bills.addBill')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Electric bill" required autoFocus />}</Field>
+        <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
           <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>

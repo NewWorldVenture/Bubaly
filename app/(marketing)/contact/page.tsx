@@ -54,10 +54,7 @@ export default async function ContactPage() {
 
             {loggedIn ? (
               <>
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  You’re in — so unwrapping the good stuff is easy. Found a bug? Dreaming up a feature your
-                  family can’t live without? Send it our way. The best parts of Bubaly started as a note from a
-                  family just like yours, and we read <span className="font-semibold text-fg">{t('contact.everySingleOne')}</span>.
+                <p className="mt-3 text-sm leading-6 text-muted">{t('contact.youReInSoUnwrapping')}{' '}<span className="font-semibold text-fg">{t('contact.everySingleOne')}</span>.
                 </p>
                 <Link
                   href="/feedback"

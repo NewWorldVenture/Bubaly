@@ -99,7 +99,7 @@ export default async function FamilyDigitalTwinPage() {
                       <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" /> {profile.ai_insights}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted">No AI insights captured yet.</p>
+                    <p className="text-xs text-muted">{tr('familyDigitalTwin.noAiInsightsCapturedYet')}</p>
                   )}
                   {(r.length > 0 || c.length > 0 || t.length > 0) && (
                     <p className="text-xs text-muted">

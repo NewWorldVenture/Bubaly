@@ -64,7 +64,7 @@ export function ContactForm() {
   return (
     <form onSubmit={onSubmit} className="glass-card space-y-5 p-7" noValidate>
       <Field label={tr('contact.yourName')} error={errors.name} required>
-        {(id) => <Input id={id} name="name" autoComplete="name" placeholder="Jordan Rivera" />}
+        {(id) => <Input id={id} name="name" autoComplete="name" placeholder={tr('contactForm.jordanRivera')} />}
       </Field>
       <Field label={tr('contact.email')} error={errors.email} required>
         {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
@@ -84,7 +84,7 @@ export function ContactForm() {
         )}
       </Field>
       <Field label={tr('contact.message')} error={errors.message} required>
-        {(id) => <Textarea id={id} name="message" placeholder="How can we help your family?" />}
+        {(id) => <Textarea id={id} name="message" placeholder={tr('contactForm.howCanWeHelpYour')} />}
       </Field>
       <Button type="submit" loading={loading} className="w-full">
         {!loading && <Send className="h-4 w-4" />} {tr('contact.sendMessage')}

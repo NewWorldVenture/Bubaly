@@ -185,7 +185,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
               return (
                 <li key={r.id} className={`flex items-start justify-between gap-3 rounded-xl border ${tone} bg-elevated/30 p-3`}>
                   <div><p className="text-sm font-medium">{meta.emoji} {r.title}</p>{r.detail && <p className="mt-0.5 text-xs text-muted">{r.detail}</p>}</div>
-                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">Dismiss</button>
+                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">{tr('tripOverview.dismiss')}</button>
                 </li>
               );
             })}

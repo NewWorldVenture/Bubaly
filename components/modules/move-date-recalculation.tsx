@@ -129,15 +129,11 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
       <div className="space-y-4">
         <p className="text-sm text-muted">Recorded move date: {move.move_date}. Review every deadline before changing it.</p>
         <label className="block space-y-1 text-sm">
-          <span>New move date</span>
+          <span>{t('moveDateRecalculation.newMoveDate')}</span>
           <Input aria-label={t('moveDateRecalculation.newMoveDate')} type="date" min="0001-01-01" max="9999-12-31" value={date}
             disabled={!allowed || pending !== null} onChange={(event) => changeDate(event.target.value)} />
         </label>
-        <p className="text-xs text-muted">
-          Only unfinished tasks explicitly set to follow the move date can shift. Fixed dates, older tasks without date-following evidence,
-          completed tasks and skipped tasks stay unchanged. To opt a fixed task in, edit that task first.
-          No addresses, bookings, boxes or external accounts are changed.
-        </p>
+        <p className="text-xs text-muted">{t('moveDateRecalculation.onlyUnfinishedTasksExplicitlySet')}</p>
         {!allowed && <p role="alert" className="text-sm text-muted">{t('moveDateRecalculation.anActiveParentOrAdult')}</p>}
         {error && <p role="alert" className="text-sm text-rose-400">{error}</p>}
         <Button type="button" variant="secondary" onClick={() => request(false)} loading={pending === 'preview'}

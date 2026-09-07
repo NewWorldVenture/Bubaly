@@ -48,9 +48,7 @@ export default async function HomePage() {
               <GradientText>{t('root.familyLife')}</GradientText>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-[540px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
-              Bubaly quietly handles the logistics of family life—phone calls, emails, scheduling, paperwork, reminders, and everyday coordination—so your family can spend less time managing life and more time living it.
-            </p>
+            <p className="mx-auto mt-5 max-w-[540px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">{t('app.bubalyQuietlyHandlesTheLogistics')}</p>
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
               <PrimaryLink href="/signup">{t('root.startFreeTrial')}</PrimaryLink>

@@ -192,7 +192,7 @@ export function MigrateWizard() {
                       {CSV_TARGETS.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   )}
-                  <button type="button" aria-label="Remove" onClick={() => setFiles((arr) => arr.filter((x) => x.id !== f.id))} className="text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                  <button type="button" aria-label={tr('migrateWizard.remove')} onClick={() => setFiles((arr) => arr.filter((x) => x.id !== f.id))} className="text-muted hover:text-danger"><X className="h-4 w-4" /></button>
                 </li>
               ))}
             </ul>

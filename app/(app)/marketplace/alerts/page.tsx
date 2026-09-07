@@ -103,7 +103,7 @@ export default async function MarketplaceAlertsPage() {
                 </div>
 
                 {matches.length === 0 ? (
-                  <p className="text-sm text-muted">Nothing matches yet — we’ll keep watching.</p>
+                  <p className="text-sm text-muted">{t('alerts.nothingMatchesYetWeLl')}</p>
                 ) : (
                   <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                     {matches.slice(0, 12).map((l) => {

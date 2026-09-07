@@ -485,9 +485,7 @@ export default async function SecurityPage() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link href="/privacy" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">{t('security.readOurPrivacyPolicy')}{' '}<ExternalLink className="h-4 w-4" />
                 </Link>
-                <Link href="/terms" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">
-                  Terms of Service
-                </Link>
+                <Link href="/terms" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">{t('security.termsOfService')}</Link>
               </div>
             </div>
             <div className="space-y-3">

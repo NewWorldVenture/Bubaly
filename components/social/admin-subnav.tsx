@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 
 const ITEMS = [
   { href: '/admin/social', label: 'Overview' },
@@ -7,9 +8,10 @@ const ITEMS = [
   { href: '/admin/social/usage', label: 'Usage' },
 ];
 
-export function AdminSocialSubnav({ active }: { active: string }) {
+export async function AdminSocialSubnav({ active }: { active: string }) {
+  const t = await getTranslations();
   return (
-    <nav className="flex flex-wrap gap-2" aria-label="Admin social sections">
+    <nav className="flex flex-wrap gap-2" aria-label={t('adminSubnav.adminSocialSections')}>
       {ITEMS.map((i) => (
         <Link
           key={i.href}

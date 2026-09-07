@@ -94,10 +94,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
             <Info className="size-5 text-brand-text" />
             <h3 className="font-semibold">{t('intelligence.whatYoudContribute')}</h3>
           </div>
-          <p className="mb-3 text-sm text-muted">
-            Only these coarse, anonymized bands — never names, exact ages, or precise counts. Shown
-            here from your own data so you can decide with your eyes open. Nothing is shared unless you join.
-          </p>
+          <p className="mb-3 text-sm text-muted">{t('intelligenceModule.onlyTheseCoarseAnonymizedBands')}</p>
           <div className="flex flex-wrap gap-2">
             {contribution.map((b) => (
               <span key={b.label} className="rounded-full border border-border px-3 py-1 text-xs">

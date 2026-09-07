@@ -108,7 +108,7 @@ export default async function TermsPage() {
   return (
     <>
       <LegalPage
-        title="Terms of Service"
+        title={t('terms.termsOfService')}
         summary="The agreement that governs your use of Bubaly. Plain language, no surprises."
         lastUpdated="June 24, 2026"
         path="/terms"

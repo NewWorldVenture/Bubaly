@@ -212,7 +212,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                     {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
                   </div>
                   {e.assignee_id === myMemberId && (
-                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand-text">Mine</span>
+                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand-text">{tr('personalDashboard.mine')}</span>
                   )}
                 </li>
               ))}
@@ -283,7 +283,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                         <p className="truncate text-sm font-medium">{chore?.title ?? 'Task'}</p>
                         <p className="truncate text-xs text-muted">{member?.display_name ?? 'Member'} submitted</p>
                       </div>
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">Review</span>
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">{tr('personalDashboard.review')}</span>
                     </li>
                   );
                 })}

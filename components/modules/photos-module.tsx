@@ -507,7 +507,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title={tr('photos.newAlbum')}>
       <form onSubmit={create} className="space-y-4">
         <Field label={tr('photos.albumName')} required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer 2025, Emma's Birthday…" autoFocus />}
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('photosModule.summer2025EmmaSBirthday')} autoFocus />}
         </Field>
         <Field label={tr('photos.category')}>
           {(id) => (

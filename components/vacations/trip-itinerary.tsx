@@ -179,7 +179,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit item' : 'Add itinerary item'}>
           <form onSubmit={saveItem} className="space-y-3">
-            <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Magic Kingdom" required />}</Field>
+            <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('tripItinerary.magicKingdom')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('tripItinerary.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
               <Field label={t('tripItinerary.timeOfDay')}>{(id) => <Select id={id} value={form.day_part} onChange={(e) => setForm({ ...form, day_part: e.target.value })}>{DAY_PARTS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>

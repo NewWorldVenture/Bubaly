@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'more.more' };
 
-// Screen 11 of the mockups: the "More" menu — a hub for account security and the
+// Screen 11 of the mockups: the t('more.more') menu — a hub for account security and the
 // info/legal pages. Manage PIN jumps to the App Lock card in Settings; the rest
 // link to the existing public pages. Lives in the (app) group, so it sits behind
 // auth + the App Lock gate like every other dashboard page.

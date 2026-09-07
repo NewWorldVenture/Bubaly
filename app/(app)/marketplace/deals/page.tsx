@@ -17,12 +17,13 @@ export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title="Deals" description="Deal discovery is temporarily unavailable." />
+      <PageHeader title={t('deals.deals')} description="Deal discovery is temporarily unavailable." />
       <ErrorState message="Could not load marketplace deals from Supabase. Refresh and try again." />
-      <Link href="/marketplace/deals" className="text-sm font-medium text-brand-text underline">Refresh deals</Link>
+      <Link href="/marketplace/deals" className="text-sm font-medium text-brand-text underline">{t('deals.refreshDeals')}</Link>
     </div>
   );
 }

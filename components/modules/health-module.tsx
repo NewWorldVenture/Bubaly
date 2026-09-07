@@ -868,7 +868,7 @@ export function HealthModule() {
       {/* Set Goal Modal */}
       <Modal open={goalOpen} title={tr('health.setHealthGoal')} onClose={() => setGoalOpen(false)}>
         <div className="space-y-4">
-          <p className="text-xs text-muted">Set a per-member daily or weekly target. Progress rings and insights use these goals (steps default to 10,000 when no goal is set).</p>
+          <p className="text-xs text-muted">{tr('healthModule.setAPerMemberDaily')}</p>
           <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('health.metric')}>{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>

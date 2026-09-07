@@ -1,11 +1,13 @@
 import { AppNotFound } from '@/components/app/app-not-found';
+import { getTranslations } from '@/lib/i18n/server';
 
 // Renders inside the wallet's AppFrame, so notFound() on a missing child wallet
 // keeps the nav chrome.
-export default function WalletNotFound() {
+export default async function WalletNotFound() {
+  const t = await getTranslations();
   return (
     <AppNotFound
-      title="That wallet isn’t here"
+      title={t('notFound.thatWalletIsnTHere')}
       description="This child wallet may have been removed, or the link is out of date."
       backHref="/wallet"
       backLabel="Back to Wallet"

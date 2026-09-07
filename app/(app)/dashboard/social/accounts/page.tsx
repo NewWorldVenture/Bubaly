@@ -80,14 +80,14 @@ export default async function AccountsPage() {
                     <td className="px-2 py-1.5">{cap(d.posting.supported, d.posting.limitation)}</td>
                     <td className="px-2 py-1.5">{cap(d.analytics.supported, d.analytics.limitation)}</td>
                     <td className="px-2 py-1.5">{cap(d.inbox.supported, d.inbox.limitation)}</td>
-                    <td className="px-2 py-1.5">{d.needsAppReview ? <Badge tone="warning">Required</Badge> : <Badge tone="neutral">No</Badge>}</td>
+                    <td className="px-2 py-1.5">{d.needsAppReview ? <Badge tone="warning">{t('accounts.required')}</Badge> : <Badge tone="neutral">No</Badge>}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-muted">Hover a cell for the exact API limitation. This matrix is the single source of truth — the studio never offers a capability a platform can’t actually do.</p>
+        <p className="mt-2 text-xs text-muted">{t('accounts.hoverACellForThe')}</p>
       </Card>
     </div>
   );

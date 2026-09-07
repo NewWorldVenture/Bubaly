@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -8,14 +9,15 @@ import { PersonalDashboard } from '@/components/dashboard/personal-dashboard';
 import { AiHomeDashboard } from '@/components/dashboard/ai-home-dashboard';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Home' };
+export const metadata: Metadata = { title: 'dashboard.home' };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">Home</h1>
       <ErrorState message="Could not load your dashboard preference from Supabase. Refresh and try again." />
-      <Link href="/dashboard" className="text-sm font-medium text-brand-text underline">Refresh home</Link>
+      <Link href="/dashboard" className="text-sm font-medium text-brand-text underline">{t('dashboard.refreshHome')}</Link>
     </div>
   );
 }

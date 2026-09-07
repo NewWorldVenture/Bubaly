@@ -181,7 +181,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
                         </button>
                         <button
                           type="button" onClick={() => dismiss(r.id)} disabled={pending}
-                          aria-label="Dismiss" title="Dismiss"
+                          aria-label={t('autopilotPanel.dismiss')} title={t('autopilotPanel.dismiss')}
                           className="grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:text-rose-400 disabled:opacity-50"
                         >
                           <X className="h-3.5 w-3.5" />

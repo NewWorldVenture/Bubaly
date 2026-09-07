@@ -129,7 +129,7 @@ export function CelebrationsModule() {
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title={t('celebrations.addACelebration')}>
         <form onSubmit={add} className="space-y-4">
-          <Field label={t('celebrations.whatAreWeCelebrating')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mom & Dad's anniversary" required />}</Field>
+          <Field label={t('celebrations.whatAreWeCelebrating')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('celebrationsModule.eGMomDadS')} required />}</Field>
           <Field label={t('celebrations.type')}>{(id) => (
             <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as CelebrationKind)}>
               <option value="birthday">{t('celebrations.birthday')}</option>

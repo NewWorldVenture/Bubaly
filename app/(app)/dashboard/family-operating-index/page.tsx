@@ -265,10 +265,7 @@ export default async function FamilyOperatingIndexPage() {
         </div>
       </section>
 
-      <p className="mt-5 text-center text-[11px] text-muted">
-        Computed live from your family’s calendar, chores, bills, documents, approvals and goals.
-        Saved once a day so you can watch the trend.
-      </p>
+      <p className="mt-5 text-center text-[11px] text-muted">{t('familyOperatingIndex.computedLiveFromYourFamily')}</p>
     </div>
   );
 }

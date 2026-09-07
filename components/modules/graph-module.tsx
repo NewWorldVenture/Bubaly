@@ -277,11 +277,7 @@ function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onReb
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Network className="mx-auto mb-3 size-8 text-muted" />
       <h3 className="mb-1 text-base font-semibold">{t('graph.buildYourFamilyAposSGraph')}</h3>
-      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Pull in the people, activities, schools, teams, vehicles and places you already track —
-        or add them by hand. Once relationships are explicit, the AI can trace dependencies and
-        predict ripple effects.
-      </p>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('graphModule.pullInThePeopleActivities')}</p>
       <div className="flex justify-center gap-2">
         <Button onClick={onRebuild} disabled={projecting}>
           <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Build from my family data'}
@@ -314,7 +310,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   return (
     <Modal open onClose={onClose} title={t('graph.addEntity')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label={t('graph.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's house…" autoFocus />}</Field>
+        <Field label={t('graph.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('graphModule.emmaSoccerGrandmaSHouse')} autoFocus />}</Field>
         <Field label={t('graph.kind')}>{(id) => (
           <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as EntityKind)}>
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}

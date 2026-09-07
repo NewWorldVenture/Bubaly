@@ -117,10 +117,7 @@ export default async function SocialOverviewPage() {
           ))}
         </div>
         {configured.length === 0 && (
-          <p className="mt-3 text-xs text-warning">
-            No platform credentials are configured yet, so live connecting and publishing are disabled. The full workflow
-            (drafts, AI, variants, scheduling, publish jobs) still records honestly and is ready the moment credentials are added.
-          </p>
+          <p className="mt-3 text-xs text-warning">{t('social.noPlatformCredentialsAreConfigured')}</p>
         )}
       </Card>
 

@@ -14,12 +14,13 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Stress Prediction' };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const tr = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Stress Prediction</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{tr('familyStress.familyStressPrediction')}</h1>
       <ErrorState message="Could not load family stress data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/family-stress" className="text-sm font-medium text-brand-text underline">Refresh family stress</Link>
+      <Link href="/dashboard/family-stress" className="text-sm font-medium text-brand-text underline">{tr('familyStress.refreshFamilyStress')}</Link>
     </div>
   );
 }

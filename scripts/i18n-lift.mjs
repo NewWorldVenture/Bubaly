@@ -122,9 +122,26 @@ if (!result) {
  * away from the cause. Reusing whatever the file already calls it avoids both
  * the duplicate and the shadow.
  */
+/**
+ * What to call the translator in THIS file.
+ *
+ * Reuse the name the file already has, so the lift does not add a second
+ * handle. Otherwise `t` — unless `t` is already bound to something else:
+ * `components/ui/toast.tsx` maps over its toasts as `t`, so `aria-label={t(…)}`
+ * there became "Type 'Toast' has no call signatures", reported fifty lines from
+ * the cause. A name that is taken is not a name.
+ */
 function translatorName(text) {
-  const m = /const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/.exec(text);
-  return m ? m[1] : 't';
+  const existing = /const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/.exec(text);
+  if (existing) return existing[1];
+
+  const isTaken = (name) => new RegExp(
+    // a parameter — `(t)`, `(t,`, `, t)` — or an arrow's bare parameter, or a
+    // declaration. Any of the three means the identifier already means
+    // something in some scope of this file.
+    `\\(\\s*${name}\\s*[,)]|[(,]\\s*${name}\\s*[,)]|\\b${name}\\s*=>|\\b(?:const|let|var|function)\\s+${name}\\b`,
+  ).test(text);
+  return ['t', 'tr', 'tx', 'translate_'].find((name) => !isTaken(name)) ?? 'tx';
 }
 const T = translatorName(src);
 

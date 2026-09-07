@@ -111,7 +111,7 @@ export function CheckInView() {
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>
-                {mine && <button onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>}
+                {mine && <button onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}

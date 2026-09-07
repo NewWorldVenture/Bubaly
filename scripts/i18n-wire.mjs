@@ -108,12 +108,35 @@ const SERVER_IMPORT = "import { getTranslations } from '@/lib/i18n/server';\n";
 const CLIENT_IMPORT = "import { useTranslations } from '@/components/i18n/locale-provider';\n";
 
 const input = readFileSync(0, 'utf8');
-const wanted = new Map(); // file -> Set(line)
+// The translator is not always called `t`. `i18n-lift` reuses whatever name a
+// file already had — `tr` in several dashboard pages — and picks a different one
+// when `t` is taken, so the name has to be READ from tsc rather than assumed.
+// Only short, translator-shaped names are accepted: an unrelated missing symbol
+// is a real error for a person, not something to declare a translator for.
+const TRANSLATOR_NAMES = new Set(['t', 'tr', 'tx', 'translate_']);
+
+/** Names this file already uses for a translator, whatever they are. */
+function declaredTranslators(src) {
+  return new Set(
+    [...src.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/g)]
+      .map((m) => m[1]),
+  );
+}
+
+const wanted = new Map(); // file -> Map(name -> Set(line))
 for (const line of input.split('\n')) {
-  const m = /^(.+?)\((\d+),\d+\): error TS2304: Cannot find name 't'\./.exec(line);
+  const m = /^(.+?)\((\d+),\d+\): error TS2304: Cannot find name '([A-Za-z_$][\w$]*)'\./.exec(line);
   if (!m) continue;
-  if (!wanted.has(m[1])) wanted.set(m[1], new Set());
-  wanted.get(m[1]).add(Number(m[2]));
+  // A name is a translator if it is one of the shortlist, or if this file
+  // already declares a translator under it — `app/(app)/home/page.tsx` calls
+  // its `i18nT`, and its failure component needed one of the same name.
+  let accepted;
+  try { accepted = declaredTranslators(readFileSync(m[1], 'utf8')); } catch { accepted = new Set(); }
+  if (!TRANSLATOR_NAMES.has(m[3]) && !accepted.has(m[3])) continue;
+  if (!wanted.has(m[1])) wanted.set(m[1], new Map());
+  const byName = wanted.get(m[1]);
+  if (!byName.has(m[3])) byName.set(m[3], new Set());
+  byName.get(m[3]).add(Number(m[2]));
 }
 
 if (!wanted.size) {
@@ -122,43 +145,42 @@ if (!wanted.size) {
 }
 
 let unplaced = 0;
-for (const [path, lines] of wanted) {
+for (const [path, byName] of wanted) {
   let src = readFileSync(path, 'utf8');
   const isClient = isClientModule(path);
+  let wired = 0;
 
-  // If the file already has a translator under another name, adding a second
-  // one called `t` is how you get a duplicate declaration, or a shadow when the
-  // file also binds `t` for something else. The lift reuses that name; there is
-  // nothing here to wire.
-  if (/const\s+(?!t\b)[A-Za-z_$][\w$]*\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/.test(src)) {
-    console.log(`  skip    ${path}  (already has a translator under another name)`);
-    continue;
-  }
+  for (const [name, lines] of byName) {
+    // Byte offset of the start of every line, so a tsc line number can be
+    // compared against a declaration's position.
+    const lineStart = [0];
+    for (const l of src.split('\n')) lineStart.push(lineStart.at(-1) + l.length + 1);
 
-  // Byte offset of the start of every line, so a tsc line number can be
-  // compared against a declaration's position.
-  const lineStart = [0];
-  for (const l of src.split('\n')) lineStart.push(lineStart.at(-1) + l.length + 1);
+    const decls = [...src.matchAll(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+[A-Za-z0-9_]+/gm)]
+      .map((m) => ({ at: m.index, text: m[0] }));
 
-  const decls = [...src.matchAll(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+[A-Za-z0-9_]+/gm)]
-    .map((m) => ({ at: m.index, text: m[0] }));
+    const targets = new Map();
+    for (const ln of lines) {
+      const off = lineStart[ln - 1];
+      const owner = decls.filter((d) => d.at <= off).at(-1);
+      if (!owner) { unplaced += 1; console.error(`  ${path}:${ln} — no enclosing named function; wire by hand`); continue; }
+      targets.set(owner.at, owner);
+    }
 
-  const targets = new Map();
-  for (const ln of lines) {
-    const off = lineStart[ln - 1];
-    const owner = decls.filter((d) => d.at <= off).at(-1);
-    if (!owner) { unplaced += 1; console.error(`  ${path}:${ln} — no enclosing named function; wire by hand`); continue; }
-    targets.set(owner.at, owner);
-  }
-
-  // Rewrite from the bottom so earlier offsets stay valid.
-  for (const { at, text } of [...targets.values()].sort((a, b) => b.at - a.at)) {
-    const open = src.indexOf('{', src.indexOf(')', at));
-    if (src.slice(open, open + 140).includes('const t =')) continue;
-    const decl = isClient || text.includes('async') ? text : text.replace('function', 'async function');
-    const stmt = isClient ? '\n  const t = useTranslations();' : '\n  const t = await getTranslations();';
-    src = src.slice(0, open + 1) + stmt + src.slice(open + 1);
-    src = src.slice(0, at) + decl + src.slice(at + text.length);
+    // Rewrite from the bottom so earlier offsets stay valid.
+    for (const { at, text } of [...targets.values()].sort((a, b) => b.at - a.at)) {
+      const open = src.indexOf('{', src.indexOf(')', at));
+      // Per FUNCTION, not per file: a page can declare `tr` in its default
+      // export and still need one in the failure component above it.
+      if (src.slice(open, open + 140).includes(`const ${name} =`)) continue;
+      const decl = isClient || text.includes('async') ? text : text.replace('function', 'async function');
+      const stmt = isClient
+        ? `\n  const ${name} = useTranslations();`
+        : `\n  const ${name} = await getTranslations();`;
+      src = src.slice(0, open + 1) + stmt + src.slice(open + 1);
+      src = src.slice(0, at) + decl + src.slice(at + text.length);
+      wired += 1;
+    }
   }
 
   const need = isClient ? CLIENT_IMPORT : SERVER_IMPORT;
@@ -169,7 +191,7 @@ for (const [path, lines] of wanted) {
 
   writeFileSync(path, src);
   const why = /^['"]use client['"]/.test(src.trimStart()) ? '' : ' (via an importer)';
-  console.log(`  ${isClient ? `client${why}` : 'server'}  ${relative(ROOT, resolve(ROOT, path))}  (${targets.size} component(s))`);
+  console.log(`  ${isClient ? `client${why}` : 'server'}  ${relative(ROOT, resolve(ROOT, path))}  (${wired} component(s))`);
 }
 
 if (unplaced) {

@@ -447,7 +447,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="name" defaultValue={contact?.name ?? ''} placeholder={t('contacts.janeSmith')} autoFocus />}
           </Field>
           <Field label={t('contacts.relationship')}>
-            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder="Mom's doctor, Emma's teacher…" />}
+            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder={t('contactsModule.momSDoctorEmmaS')} />}
           </Field>
         </div>
 

@@ -134,7 +134,7 @@ export default async function PrivacyPage() {
   return (
     <>
       <LegalPage
-        title="Privacy Policy"
+        title={t('privacy.privacyPolicy')}
         summary="What we collect, why, and the choices you have — written for families, in plain language."
         lastUpdated="June 24, 2026"
         path="/privacy"

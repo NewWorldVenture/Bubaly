@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -23,12 +24,13 @@ async function count(q: PromiseLike<{ count: number | null; error: unknown }>): 
   return { value: n ?? 0, error: error ?? null };
 }
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Family Assistant</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('agents.familyAssistant')}</h1>
       <ErrorState message="Could not load Family Assistant context from Supabase. Refresh and try again." />
-      <Link href="/dashboard/agents" className="text-sm font-medium text-brand-text underline">Refresh Family Assistant</Link>
+      <Link href="/dashboard/agents" className="text-sm font-medium text-brand-text underline">{t('agents.refreshFamilyAssistant')}</Link>
     </div>
   );
 }

@@ -181,10 +181,7 @@ export function RidesModule() {
         </div>
       )}
 
-      <p className="mb-4 text-xs text-muted">
-        Checks compare recorded pickup and drop-off times only. Travel between rides is not assessed.
-        Missing, invalid, or overnight times cannot establish a clear schedule.
-      </p>
+      <p className="mb-4 text-xs text-muted">{tr('ridesModule.checksCompareRecordedPickupAnd')}</p>
 
       <div className="flex items-center gap-1.5 mb-4">
         <button onClick={() => setShowPast(false)}

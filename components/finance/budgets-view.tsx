@@ -66,7 +66,7 @@ export function BudgetsView() {
                     <p className="font-semibold">{b.category}</p>
                     <p className="text-xs capitalize text-muted">{b.period}</p>
                   </div>
-                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('budgetsView.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
                   <span className={cn('font-bold tabular-nums', over ? 'text-rose-400' : 'text-fg')}>{usd(spent)}</span>

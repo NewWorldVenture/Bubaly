@@ -246,9 +246,7 @@ export function ConciergeModule() {
                         <h1 className="text-xl font-bold">{t('concierge.lifeSimplified')}</h1>
                       </div>
                     </div>
-                    <p className="text-sm text-muted max-w-sm">
-                      Your personal family concierge — plan getaways, book restaurants, coordinate date nights, and discover family activities.
-                    </p>
+                    <p className="text-sm text-muted max-w-sm">{tr('conciergeModule.yourPersonalFamilyConciergePlan')}</p>
                   </div>
                 </div>
 

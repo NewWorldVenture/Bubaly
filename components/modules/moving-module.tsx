@@ -412,7 +412,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
           <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
           <Field label={tr('moving.moveDay')} required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
         </div>
-        {move && <p className="text-xs text-muted">Use Change date on the move to review task deadlines before changing this date.</p>}
+        {move && <p className="text-xs text-muted">{tr('movingModule.useChangeDateOnThe')}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.from')}>{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder={tr('moving.12OldRoad')} />}</Field>
           <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder={tr('moving.34MapleStreet')} />}</Field>

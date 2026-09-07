@@ -115,10 +115,7 @@ export default async function ReasoningPage() {
         })}
       </div>
 
-      <p className="mt-5 text-center text-[11px] text-muted">
-        Reasoned live across your family’s data — the Operating Index, decisions, hard signals and knowledge graph.
-        Saved once a day so you can watch the trend.
-      </p>
+      <p className="mt-5 text-center text-[11px] text-muted">{t('reasoning.reasonedLiveAcrossYourFamily')}</p>
     </div>
   );
 }

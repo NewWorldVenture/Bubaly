@@ -154,7 +154,7 @@ export function SignupForm() {
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
           <Field label={t('signup.yourName')} error={errors.fullName} required>
-            {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
+            {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder={t('signupForm.jordanRivera')} autoFocus />}
           </Field>
           <Field label={t('signup.email')} error={errors.email} required>
             {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}

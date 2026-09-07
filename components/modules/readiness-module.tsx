@@ -2,6 +2,7 @@
 // Presentational: the server page rolls live signals through the pure engine
 // (lib/readiness/assess.ts) and passes the cards here. No client state needed.
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { AlertTriangle, CircleCheck, Check, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { HandleItButton } from '@/components/modules/handle-it-button';
@@ -28,10 +29,11 @@ function Dial({ score, status }: { score: number; status: ReadinessStatus }) {
   );
 }
 
-export function ReadinessModule({ cards, overall }: { cards: ReadinessCard[]; overall: { score: number; status: ReadinessStatus } }) {
+export async function ReadinessModule({ cards, overall }: { cards: ReadinessCard[]; overall: { score: number; status: ReadinessStatus } }) {
+  const t = await getTranslations();
   return (
     <div className="space-y-6">
-      <PageHeader title="Life Readiness" description="Not another list of data — a straight answer to “are we ready?”, and what to close if not." />
+      <PageHeader title={t('readinessModule.lifeReadiness')} description="Not another list of data — a straight answer to “are we ready?”, and what to close if not." />
       <ReadinessHorizons cards={cards} overall={overall} />
     </div>
   );

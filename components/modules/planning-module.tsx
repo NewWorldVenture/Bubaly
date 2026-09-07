@@ -99,10 +99,7 @@ export function PlanningModule() {
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <CalendarClock className="mx-auto mb-3 size-8 text-muted" />
           <h3 className="mb-1 text-base font-semibold">{t('planning.nothingToPrepYet')}</h3>
-          <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-            Add a trip, a birthday, or a document with an expiry date, then generate plans. The
-            assistant works backward from each date into timed, ordered steps.
-          </p>
+          <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('planningModule.addATripABirthday')}</p>
           <Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>
         </div>
       ) : (

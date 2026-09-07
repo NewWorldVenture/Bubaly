@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -11,15 +12,16 @@ import { ContactTimelineModule } from '@/components/modules/contact-timeline-mod
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Contact Timeline' };
+export const metadata: Metadata = { title: 'contacts.contactTimeline' };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">Contact Timeline</h1>
       <ErrorState message="Could not load this contact timeline from Supabase. Refresh and try again." />
-      <Link href="/dashboard/contacts" className="text-sm font-medium text-brand-text underline">Back to contacts</Link>
+      <Link href="/dashboard/contacts" className="text-sm font-medium text-brand-text underline">{t('contacts.backToContacts')}</Link>
     </div>
   );
 }

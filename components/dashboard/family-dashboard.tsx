@@ -468,7 +468,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{e.title} added to calendar</p>
-                  <p className="text-xs text-muted/60">Today</p>
+                  <p className="text-xs text-muted/60">{tr('familyDashboard.today')}</p>
                 </div>
               </li>
             ))}
@@ -477,7 +477,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 <Avatar name={m.display_name} color={m.color} size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{m.display_name} is a member</p>
-                  <p className="text-xs text-muted/60">Recently</p>
+                  <p className="text-xs text-muted/60">{tr('familyDashboard.recently')}</p>
                 </div>
               </li>
             ))}

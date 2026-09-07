@@ -61,7 +61,7 @@ export function SubmitProofForm({ assignmentId, proofKind }: { assignmentId: str
         <div className="flex flex-wrap gap-2">
           {previews.map((src, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={src} alt="Preview" className="h-24 w-24 rounded-xl border border-border object-cover" />
+            <img key={i} src={src} alt={t('submitForm.preview')} className="h-24 w-24 rounded-xl border border-border object-cover" />
           ))}
         </div>
       )}

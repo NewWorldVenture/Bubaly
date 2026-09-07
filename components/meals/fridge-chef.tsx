@@ -187,7 +187,7 @@ export function FridgeChef() {
                 >
                   {planned.has(i)
                     ? <><Check className="h-4 w-4" /> On tonight&apos;s plan</>
-                    : <><CalendarPlus className="h-4 w-4" /> Plan for dinner</>}
+                    : <><CalendarPlus className="h-4 w-4" />{' '}{t('fridgeChef.planForDinner')}</>}
                 </Button>
                 {recipe.need.length > 0 ? (
                   <Button
@@ -197,7 +197,7 @@ export function FridgeChef() {
                     disabled={addingIndex !== null}
                   >
                     {added.has(i)
-                      ? <><Check className="h-4 w-4" /> Added to grocery</>
+                      ? <><Check className="h-4 w-4" />{' '}{t('fridgeChef.addedToGrocery')}</>
                       : <><ShoppingCart className="h-4 w-4" /> Add {recipe.need.length} to grocery</>}
                   </Button>
                 ) : (

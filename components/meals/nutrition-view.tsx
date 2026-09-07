@@ -86,7 +86,7 @@ export function NutritionView() {
                       <p className="truncate text-sm font-semibold">{l.item}</p>
                       <p className="truncate text-xs text-muted">{l.calories} cal · P {Number(l.protein_g)}g · C {Number(l.carbs_g)}g · F {Number(l.fat_g)}g{l.water_ml ? ` · 💧 ${l.water_ml}ml` : ''}</p>
                     </div>
-                    <button onClick={() => remove(l.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => remove(l.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -135,7 +135,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
   return (
     <Modal open onClose={onClose} title={t('nutrition.logFood')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('nutrition.foodItem')}>{(id) => <Input id={id} value={v.item} onChange={(e) => setV({ ...v, item: e.target.value })} placeholder="Oatmeal with berries" required autoFocus />}</Field>
+        <Field label={t('nutrition.foodItem')}>{(id) => <Input id={id} value={v.item} onChange={(e) => setV({ ...v, item: e.target.value })} placeholder={t('nutritionView.oatmealWithBerries')} required autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label={t('nutrition.member')}>{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={t('nutrition.meal')}>{(id) => <Select id={id} value={v.meal} onChange={(e) => setV({ ...v, meal: e.target.value })}>{MEALS.map((m) => <option key={m} value={m}>{MEAL_META[m].label}</option>)}</Select>}</Field>

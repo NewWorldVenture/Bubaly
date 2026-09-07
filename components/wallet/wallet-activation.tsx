@@ -66,7 +66,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
         <ul className="space-y-2 text-xs text-muted">
           <li>{t('walletActivation.theWalletIs')} <strong>{t('walletActivation.controlledByYou')}</strong>{t('walletActivation.theParentGuardianChildBalancesAre')}</li>
           <li>{t('walletActivation.inThisModeBalancesAre')} <strong>{t('walletActivation.trackedInsideBubaly')}</strong> {t('walletActivation.aVirtualLedgerToTeachSaving')}</li>
-          <li>• <strong>{t('walletActivation.bubalyIsNotABank')}</strong> When money movement and cards are enabled, funds and cards are provided through Stripe and its banking partners, with separate terms.</li>
+          <li>• <strong>{t('walletActivation.bubalyIsNotABank')}</strong>{' '}{t('walletActivation.whenMoneyMovementAndCards')}</li>
           <li>{t('walletActivation.noClaimsAreMadeAboutFdic')}</li>
           <li>{t('walletActivation.anyFeesWillBeDisclosedBefore')}</li>
         </ul>

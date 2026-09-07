@@ -366,7 +366,7 @@ export function MarketplaceModule({
       <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit listing' : 'Post a listing'}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('marketplace.whatIsIt')} required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Kids' balance bike" autoFocus />}
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('marketplaceModule.eGKidsBalanceBike')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('marketplace.type')}>
@@ -426,7 +426,7 @@ export function MarketplaceModule({
           </Field>
 
           <Field label={t('marketplace.details')}>
-            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
+            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('marketplaceModule.sizeAgeWhyYouRe')} />}
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">

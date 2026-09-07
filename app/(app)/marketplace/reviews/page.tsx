@@ -57,7 +57,7 @@ export default async function MarketplaceReviewsPage() {
     <section className="mt-5">
       <h2 className="mb-2 text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">None yet.</p>
+        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('reviews.noneYet')}</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (

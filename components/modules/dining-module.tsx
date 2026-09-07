@@ -188,7 +188,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       {addOpen && (
         <Modal open onClose={() => setAddOpen(false)} title={t('dining.addAPlace')}>
           <form onSubmit={submitAdd} className="space-y-3">
-            <Field label={t('dining.name')}>{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Nonna's Trattoria" autoFocus />}</Field>
+            <Field label={t('dining.name')}>{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder={t('diningModule.nonnaSTrattoria')} autoFocus />}</Field>
             <div className="grid grid-cols-3 gap-3">
               <Field label={t('dining.cuisine')}>{(id) => <Input id={id} value={addForm.cuisine} onChange={e => setAddForm({ ...addForm, cuisine: e.target.value })} placeholder={t('dining.italian')} />}</Field>
               <Field label={t('dining.price')}>{(id) => (

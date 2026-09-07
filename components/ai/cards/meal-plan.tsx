@@ -2,6 +2,7 @@
 // dinners only (what a phone glance needs); full shows every slot and the
 // "swap" follow-up so the plan can be adjusted from the card itself.
 import { UtensilsCrossed } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { cn } from '@/lib/utils/cn';
 import type { MealPlanCard } from '@/lib/ai/result-cards';
 import { CardFrame, MoreRow } from './index';
@@ -13,6 +14,7 @@ function mealLabel(type: string): string {
 }
 
 export function MealPlanCardView({ card, compact = false, onAsk, className }: { card: MealPlanCard; compact?: boolean; onAsk?: (text: string) => void; className?: string }) {
+  const t = useTranslations();
   const days = compact ? card.days.slice(0, COMPACT_DAYS) : card.days;
   const hidden = card.days.length - days.length;
   const plannedCount = card.days.reduce((n, d) => n + d.meals.filter((m) => m.name).length, 0);
@@ -33,7 +35,7 @@ export function MealPlanCardView({ card, compact = false, onAsk, className }: { 
       footer={notes || undefined}
     >
       {card.days.length === 0 ? (
-        <p className="text-sm text-muted">Nothing is planned yet.</p>
+        <p className="text-sm text-muted">{t('mealPlan.nothingIsPlannedYet')}</p>
       ) : (
         <ul className={cn('grid gap-1.5', compact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2')}>
           {days.map((day) => {

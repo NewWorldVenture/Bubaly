@@ -92,7 +92,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
               ) : isOwner ? (
                 <AnswerForm question={q} onAnswered={() => success('Answer posted')} onError={toastError} answererId={meId} />
               ) : (
-                <p className="mt-1.5 text-xs text-muted">Awaiting the seller’s reply…</p>
+                <p className="mt-1.5 text-xs text-muted">{t('listingQuestions.awaitingTheSellerSReply')}</p>
               )}
             </li>
           ))}

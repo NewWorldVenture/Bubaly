@@ -52,10 +52,7 @@ export default async function FeedbackPage() {
             <Lightbulb className="h-3.5 w-3.5" /> {t('feedback.ideaBoard')}
           </span>
           <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">{t('feedback.letAposSMakeLifeEasier')}</h1>
-          <p className="mt-3 text-sm text-muted sm:text-base">
-            Bubaly gets better when you tell us what your family needs. Share an idea, upvote the
-            ones you love, and watch them roll onto our roadmap.
-          </p>
+          <p className="mt-3 text-sm text-muted sm:text-base">{t('feedback.bubalyGetsBetterWhenYou')}</p>
           <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-surface/60 px-3 py-1 text-xs font-semibold text-brand-text ring-1 ring-brand/20">
             {t('feedback.smallIdeasBigImpact')}
           </p>

@@ -348,7 +348,7 @@ export function RelationshipModule() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-2">Duplicate checks use wishlist IDs or gift titles ignoring case and whitespace. Different wording may still describe the same gift.</p>
+                  <p className="mt-2">{t('relationshipModule.duplicateChecksUseWishlistIds')}</p>
                 </details>
               )}
             </div>

@@ -88,7 +88,7 @@ export function AiInsight({ kind, params, label, className, variant = 'secondary
                   id={id}
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Anything specific you want the assistant to focus on?"
+                  placeholder={t('aiInsight.anythingSpecificYouWantThe')}
                   className="min-h-[4.5rem]"
                 />
               )}
