@@ -45,6 +45,7 @@ const CARD_TINT: Record<string, string> = {
 type AddKind = 'account' | 'card' | 'pass' | 'reward' | 'transaction' | null;
 
 export function WalletHub() {
+  const t = useTranslations();
   const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
@@ -205,7 +206,7 @@ export function WalletHub() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold tabular-nums text-emerald-400">{fmtDollars(a.balance)}</p>
-                        <p className="text-[11px] text-muted">Available</p>
+                        <p className="text-[11px] text-muted">{t('walletHub.available')}</p>
                       </div>
                     </Row>
                   );
@@ -281,7 +282,7 @@ export function WalletHub() {
               <div key={c.id} className="flex items-center gap-3">
                 <span className={cn('grid h-8 w-11 shrink-0 place-items-center rounded-md text-[10px] font-bold text-white', CARD_TINT[c.brand] ?? CARD_TINT.other)}>{CARD_BRAND_LABEL[c.brand] ?? 'CARD'}</span>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{c.name}</p><p className="text-[11px] text-muted">···· {c.last_four ?? '••••'}</p></div>
-                <div className="text-right"><p className="text-sm font-bold tabular-nums">{fmtUsd(c.available_cents)}</p><p className="text-[10px] text-muted">Available</p></div>
+                <div className="text-right"><p className="text-sm font-bold tabular-nums">{fmtUsd(c.available_cents)}</p><p className="text-[10px] text-muted">{t('walletHub.available')}</p></div>
               </div>
             ))}
             <RailAdd label={tr('wallet.addCard')} onClick={() => setAdding('card')} />
@@ -449,19 +450,20 @@ function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolea
 }
 
 function AddAccountModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addAccountAction, onClose, onDone);
   const [v, setV] = useState({ name: '', type: 'checking', institution: '', last_four: '', balance: '' });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addAccount')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
-        <Field label={tr('wallet.accountName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Family Checking" required autoFocus />}</Field>
+        <Field label={tr('wallet.accountName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.familyChecking')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('wallet.type')}>{(id) => <Select id={id} value={v.type} onChange={(e) => setV({ ...v, type: e.target.value })}>{['checking', 'savings', 'credit', 'investment', 'retirement'].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}</Select>}</Field>
           <Field label={tr('wallet.last4')}>{(id) => <Input id={id} value={v.last_four} onChange={(e) => setV({ ...v, last_four: e.target.value })} maxLength={4} placeholder="3456" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('wallet.institution')} hint="Optional">{(id) => <Input id={id} value={v.institution} onChange={(e) => setV({ ...v, institution: e.target.value })} placeholder="Chase" />}</Field>
+          <Field label={tr('wallet.institution')} hint="Optional">{(id) => <Input id={id} value={v.institution} onChange={(e) => setV({ ...v, institution: e.target.value })} placeholder={t('walletHub.chase')} />}</Field>
           <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="2735.40" />}</Field>
         </div>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim()} />
@@ -471,13 +473,14 @@ function AddAccountModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 }
 
 function AddCardModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addCardAction, onClose, onDone);
   const [v, setV] = useState({ name: '', brand: 'visa', kind: 'credit', last_four: '', available: '', limit: '' });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addCard')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
-        <Field label={tr('wallet.cardName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Family Credit Card" required autoFocus />}</Field>
+        <Field label={tr('wallet.cardName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.familyCreditCard')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('wallet.brand')}>{(id) => <Select id={id} value={v.brand} onChange={(e) => setV({ ...v, brand: e.target.value })}>{['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => <option key={b} value={b}>{CARD_BRAND_LABEL[b]}</option>)}</Select>}</Field>
           <Field label={tr('wallet.type')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{['credit', 'debit', 'gas', 'store', 'prepaid', 'other'].map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}</Select>}</Field>
@@ -494,18 +497,19 @@ function AddCardModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
 }
 
 function AddPassModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addPassAction, onClose, onDone);
   const [v, setV] = useState({ name: '', kind: 'membership', status: '', detail: '', member_no: '' });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addPassMembership')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
-        <Field label={tr('wallet.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Sam's Club" required autoFocus />}</Field>
+        <Field label={tr('wallet.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.samSClub')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('wallet.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{['membership', 'loyalty', 'ticket', 'insurance', 'transit', 'other'].map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}</Select>}</Field>
-          <Field label={tr('wallet.status')} hint="Optional">{(id) => <Input id={id} value={v.status} onChange={(e) => setV({ ...v, status: e.target.value })} placeholder="Member" />}</Field>
+          <Field label={tr('wallet.status')} hint="Optional">{(id) => <Input id={id} value={v.status} onChange={(e) => setV({ ...v, status: e.target.value })} placeholder={t('walletHub.member')} />}</Field>
         </div>
-        <Field label={tr('wallet.detail')} hint="e.g. Expires Dec 31, 2025">{(id) => <Input id={id} value={v.detail} onChange={(e) => setV({ ...v, detail: e.target.value })} placeholder="Expires Dec 31, 2025" />}</Field>
+        <Field label={tr('wallet.detail')} hint="e.g. Expires Dec 31, 2025">{(id) => <Input id={id} value={v.detail} onChange={(e) => setV({ ...v, detail: e.target.value })} placeholder={t('walletHub.expiresDec312025')} />}</Field>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim()} />
       </form>
     </Modal>
@@ -513,13 +517,14 @@ function AddPassModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
 }
 
 function AddRewardModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addRewardAction, onClose, onDone);
   const [v, setV] = useState({ name: '', kind: 'points', balance: '', value: '', program: '' });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addRewardProgram')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
-        <Field label={tr('wallet.programName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Chase Ultimate Rewards" required autoFocus />}</Field>
+        <Field label={tr('wallet.programName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.chaseUltimateRewards')} required autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('wallet.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{['points', 'miles', 'cashback'].map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}</Select>}</Field>
           <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="1250" />}</Field>
@@ -532,13 +537,14 @@ function AddRewardModal({ onClose, onDone }: { onClose: () => void; onDone: () =
 }
 
 function AddTransactionModal({ accounts, onClose, onDone }: { accounts: Account[]; onClose: () => void; onDone: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addTransactionAction, onClose, onDone);
   const [v, setV] = useState({ name: '', merchant: '', amount: '', type: 'expense', status: 'posted', category: '', account_id: '', date: new Date().toISOString().slice(0, 10) });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addTransaction')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
-        <Field label={tr('wallet.description')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Grocery Store" required autoFocus />}</Field>
+        <Field label={tr('wallet.description')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.groceryStore')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('wallet.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="87.65" required />}</Field>
           <Field label={tr('wallet.type')}>{(id) => <Select id={id} value={v.type} onChange={(e) => setV({ ...v, type: e.target.value })}>{['expense', 'income', 'transfer'].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}</Select>}</Field>
@@ -548,7 +554,7 @@ function AddTransactionModal({ accounts, onClose, onDone }: { accounts: Account[
           <Field label={tr('wallet.date')}>{(id) => <Input id={id} type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('wallet.category')} hint="Optional">{(id) => <Input id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} placeholder="Groceries" />}</Field>
+          <Field label={tr('wallet.category')} hint="Optional">{(id) => <Input id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} placeholder={t('walletHub.groceries')} />}</Field>
           <Field label={tr('wallet.account')} hint="Optional">{(id) => <Select id={id} value={v.account_id} onChange={(e) => setV({ ...v, account_id: e.target.value })}><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>
         </div>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim() || !v.amount} />

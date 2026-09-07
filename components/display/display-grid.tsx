@@ -472,6 +472,7 @@ const DRIFT_CSS = `@keyframes displayDrift{0%,100%{transform:translate(0,0)}25%{
 export function DisplayShell({ initialTiles, initialSettings, data, familyId, userId }: {
   initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
@@ -659,7 +660,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
               {editing && (
                 <div className="absolute inset-0 flex flex-col justify-between bg-black/75 p-3 backdrop-blur-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/60">Tile</span>
+                    <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
                       <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
                       <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
@@ -679,10 +680,10 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                         }}
                         className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white"
                       >
-                        <optgroup label="Display widgets">
+                        <optgroup label={t('displayGrid.displayWidgets')}>
                           {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
                         </optgroup>
-                        <optgroup label="All services & features">
+                        <optgroup label={t('displayGrid.allServicesFeatures')}>
                           {ALL_SERVICES_CATALOG.map((s) => (
                             <option key={s.href} value={`service:${s.href}`}>{s.label}</option>
                           ))}
