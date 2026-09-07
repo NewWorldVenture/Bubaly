@@ -18,6 +18,7 @@ import type { Priority, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
@@ -265,7 +266,7 @@ export async function lastServiceByTrade(scope: ServiceScope, tradeInput: string
   const trade = normalizeTrade(tradeInput);
   if (!trade) return fail(`"${tradeInput}" is not a trade Bubaly knows.`, { code: SERVICE_CODES.invalidInput });
 
-  const [records, contractors, assets] = await Promise.all([
+  const [records, contractors, assets] = await settleAll([
     scope.db.from('home_service_records').select('*').eq('family_id', scope.familyId).is('deleted_at', null)
       .order('service_date', { ascending: false }).limit(300),
     scope.db.from('home_contractors').select('*').eq('family_id', scope.familyId).is('deleted_at', null).limit(200),
