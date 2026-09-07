@@ -258,7 +258,11 @@ describe('Daily Brief response validation', () => {
 function queryResult(data: unknown[]) {
   const promise = Promise.resolve({ data, error: null });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not']) {
+  // `or` and `update` joined the list when the brief started folding the quiet
+  // notifications in: `listUnread` scopes with `.or(user_id…)` and the route
+  // marks the rows it rendered read. The fake has to offer every method the
+  // route really calls, or a missing one reads as a route failure.
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
     query[method] = vi.fn(() => query);
   }
   return query;
@@ -367,8 +371,15 @@ describe('Daily Brief route schema boundary', () => {
     const response = await requestBriefing();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(Object.keys(body).sort()).toEqual(['briefing', 'digest', 'generatedAt']);
-    expect(body).toMatchObject({ digest, generatedAt: utcNow.toISOString(), briefing: { completed: [] } });
+    // `alsoToday` rides BESIDE `briefing`, never inside it: the briefing object
+    // is the model's contract, and this list is read from the notifications
+    // table. `alsoTodayUnavailable` is what keeps a failed read from rendering
+    // as "nothing else today".
+    expect(Object.keys(body).sort()).toEqual(['alsoToday', 'alsoTodayUnavailable', 'briefing', 'digest', 'generatedAt']);
+    expect(body).toMatchObject({
+      digest, generatedAt: utcNow.toISOString(), briefing: { completed: [] },
+      alsoToday: [], alsoTodayUnavailable: false,
+    });
     expect(schoolQuery.gte).toHaveBeenCalledWith('starts_at', '2026-09-06T00:00:00.000Z');
     expect(schoolQuery.lte).toHaveBeenCalledWith('starts_at', '2026-09-13T23:59:59.999Z');
     expect(mocks.complete).toHaveBeenCalledTimes(providerResult === 'success' || providerResult === 'failure' ? 1 : 0);
@@ -433,7 +444,7 @@ describe('Daily Brief route schema boundary', () => {
     // Every field the model wrote survives EXCEPT `completed`: "Completed
     // Today" is evidence, so the route replaces the model's list with the runs
     // that really finished. Here no run has, so the honest answer is none.
-    expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tools: [], maxTokens: 2000 }));
     expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
     expect(fetch).not.toHaveBeenCalled();
@@ -614,7 +625,7 @@ describe('what Bubaly claims to have done', () => {
     mocks.complete.mockResolvedValue({ text, toolCalls: [] });
     const response = await requestBriefing();
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(), completed: [] }, digest, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -623,7 +634,7 @@ describe('what Bubaly claims to have done', () => {
     mocks.isAIConfigured.mockResolvedValue(false);
     const response = await requestBriefing(type);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(type), completed: [] }, digest, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(type), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.resolveProvider).not.toHaveBeenCalled();
     expect(mocks.complete).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
@@ -657,6 +668,8 @@ describe('what Bubaly claims to have done', () => {
     expect(await response.json()).toEqual({
       briefing: { ...expectedFallback(), completed: [] },
       digest,
+      alsoToday: [],
+      alsoTodayUnavailable: false,
       generatedAt: now.toISOString(),
     });
     expect(mocks.requireUserContext).toHaveBeenCalledTimes(1);

@@ -21,7 +21,7 @@ import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/c
 import type { BriefDecisions } from '@/lib/briefing/response-schema';
 import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
-  type BriefingData,
+  type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -275,6 +275,54 @@ function DecisionsSection({ decisions }: { decisions: BriefDecisions }) {
         </Link>
       )}
     </section>
+type AlsoTodayRow = NonNullable<BriefingResponse['alsoToday']>[number];
+
+/**
+ * "Also today" — the notifications that did not earn an interruption.
+ *
+ * These rows were classified 'digest' by lib/notifications/priority.ts, folded
+ * in by `buildBrief` and marked read by the route that rendered them, so each
+ * one is said exactly once: here, with a link to the thing it is about, instead
+ * of once in the bell and again in the list.
+ *
+ * `unavailable` is the read-boundary case. If the notification queue could not
+ * be read, this says so and stays retryable — it must never render as an empty
+ * "nothing else today", which is a claim the failed read cannot support.
+ */
+function AlsoToday({ items, unavailable }: { items: AlsoTodayRow[]; unavailable: boolean }) {
+  const tr = useTranslations();
+  return (
+    <div className="rounded-2xl border border-border bg-surface/30 p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted" />
+        <span className="text-sm font-semibold uppercase tracking-wider text-fg">{tr('briefing.alsoToday')}</span>
+      </div>
+      {unavailable ? (
+        <p className="flex items-center gap-2 py-1 text-sm text-amber-300">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {tr('briefing.alsoTodayUnavailable')}
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <li key={item.id}>
+                <a
+                  href={item.href}
+                  className="flex min-h-11 items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 transition-colors hover:bg-surface/70"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-fg">{item.title}</span>
+                    {item.detail && <span className="block truncate text-xs text-muted">{item.detail}</span>}
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted" aria-hidden="true" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">{tr('briefing.alsoTodayHint')}</p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -763,6 +811,8 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const generatedAt = active?.data?.generatedAt;
   const digest = active?.data?.digest;
   const decisions = active?.data?.decisions;
+  const alsoToday = active?.data?.alsoToday ?? [];
+  const alsoTodayUnavailable = active?.data?.alsoTodayUnavailable ?? false;
   const generate = session.generate;
   const today = now.toISOString().slice(0, 10);
 
@@ -906,6 +956,13 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
           {tab === 'morning' && <MorningContent data={currentBriefing} relationships={relationships} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}
           {tab === 'weekly'  && <WeeklyContent  data={currentBriefing} />}
+
+          {/* Last, and deliberately: the quiet notifications are the part you
+              are allowed to skim past. The weekly tab does not fold them — its
+              window is a different one. */}
+          {tab !== 'weekly' && (alsoToday.length > 0 || alsoTodayUnavailable) && (
+            <div className="mt-6"><AlsoToday items={alsoToday} unavailable={alsoTodayUnavailable} /></div>
+          )}
         </div>
       )}
     </div>

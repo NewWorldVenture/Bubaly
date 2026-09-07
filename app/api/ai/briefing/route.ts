@@ -4,7 +4,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
-import { buildBrief } from '@/lib/briefing/build';
+import { buildBrief, type BriefNotice } from '@/lib/briefing/build';
+import { listUnread } from '@/lib/services/notifications';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
 import { viewerFor } from '@/lib/ai/context/policy';
@@ -388,6 +389,44 @@ ${UNTRUSTED_CONTENT_RULE}
     // 0258's unique key is (family_id, as_of_date, kind), so a `weekly` request
     // must not be filed as the day's brief — the "This Week" tab used to
     // overwrite it on every visit.
+    // ── "Also today": the quiet notifications, said once ────────────────────
+    //
+    // The low-priority half of the notification queue (see
+    // lib/notifications/priority.ts) does not earn a badge — it earns a line in
+    // the brief. This is the only read of the table the brief makes, it goes
+    // through the service so the `send_at` deferral is honoured, and it is
+    // skipped for the weekly tab, whose whole point is a different window.
+    //
+    // A FAILED READ IS NOT AN EMPTY DAY. If the queue cannot be read the
+    // section is marked unavailable rather than rendered empty: "nothing else
+    // today" is a claim, and this is not the moment to make it.
+    let notices: BriefNotice[] = [];
+    let alsoTodayUnavailable = false;
+    if (type !== 'weekly') {
+      try {
+        const unread = await listUnread(scopeFromUserContext(ctx, supabase), { limit: 100, priority: 'digest' });
+        if (unread.ok) {
+          notices = unread.data.map(n => ({
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            body: n.body,
+            createdAt: n.created_at,
+            relatedType: n.related_type,
+            relatedId: n.related_id,
+          }));
+        } else {
+          console.error('[api/ai/briefing] notification read failed', unread.error);
+          alsoTodayUnavailable = true;
+        }
+      } catch (err) {
+        // One section failing must not take the brief with it: the calendar,
+        // the digest and "Completed today" are all already computed.
+        console.error('[api/ai/briefing] notification read failed', err);
+        alsoTodayUnavailable = true;
+      }
+    }
+
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
@@ -396,7 +435,23 @@ ${UNTRUSTED_CONTENT_RULE}
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
       decisions: decisions.items,
+      notifications: notices,
     }, tz);
+
+    // Read only because it was RENDERED. `foldAlsoToday` drops duplicates and
+    // caps the list, so the rows that survived are exactly the ones this
+    // response shows — marking the whole unread queue read here would silently
+    // swallow notices the family never saw.
+    if (brief.alsoToday.length > 0) {
+      const { error: markError } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('family_id', familyId)
+        .in('id', brief.alsoToday.map(item => item.id));
+      // A brief that showed the notices is still a correct brief; failing to
+      // mark them read only means they appear again tomorrow.
+      if (markError) console.error('[api/ai/briefing] mark folded notifications read failed', markError);
+    }
 
     briefing = {
       ...briefing,

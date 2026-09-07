@@ -74,7 +74,7 @@ export const INTENT_SLICES: Record<IntentKey, SliceName[]> = {
   answer_question: ['people', 'schedule', 'tasks', 'memory', 'food', 'activities', 'proactive'],
   capture: ['people', 'schedule', 'tasks', 'shopping'],
   navigate: ['people'],
-  chief_of_staff: ['people', 'schedule', 'tasks', 'activities', 'proactive', 'memory', 'food', 'shopping', 'home', 'money', 'travel', 'documents', 'vendors'],
+  chief_of_staff: ['people', 'schedule', 'tasks', 'activities', 'proactive', 'memory', 'food', 'shopping', 'home', 'money', 'travel', 'documents', 'vendors', 'moving'],
   other: ['people', 'schedule', 'tasks', 'memory', 'proactive'],
 };
 

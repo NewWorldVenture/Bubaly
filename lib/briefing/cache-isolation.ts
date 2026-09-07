@@ -55,6 +55,14 @@ const responseSchema = z.object({
   // whole request when the decisions read fails, so an absent slice means
   // "nothing to decide", never "could not tell".
   decisions: BriefDecisionsSchema.optional(),
+  // The quiet notifications the brief folded in. Optional because a cached or
+  // older response predates the section, and `alsoTodayUnavailable` is what
+  // keeps a failed read from rendering as "nothing else today".
+  alsoToday: z.array(z.object({
+    id: z.string(), title: z.string(), detail: z.string().nullable(),
+    href: z.string(), at: z.string().nullable(),
+  })).optional(),
+  alsoTodayUnavailable: z.boolean().optional(),
 }).passthrough();
 
 export type BriefingData = z.infer<typeof briefingSchema>;
