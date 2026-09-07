@@ -123,19 +123,13 @@ stray permissive write policy remains, so this cannot quietly regress.
 
 ## 4. The one thing still open — and it is an operator action
 
-`0275` closes this **when it is applied**. Production cannot currently apply it,
-for a reason unrelated to wallets:
-
 `scripts/audit-production-migration-state.mjs` refuses historical replay when
 production carries the `profiles_insert_self` policy but has **no migration
-`0004` recorded** (`hasUnrecordedBaseline`). The last release attempt hit exactly
-this: it failed the safety check, **rolled back atomically**, and a follow-up
-audit showed only `0001`–`0003` in the ledger. Nothing was applied and no data
-was lost.
+`0004` recorded** (`hasUnrecordedBaseline`). Production's ledger holds only
+`0001`–`0003` while the schema is hundreds of tables ahead, so every release
+that touches `supabase/` stops here.
 
-That check is correct and must not be bypassed. Repairing it means stamping the
-production migration ledger to match the schema that is really there — a
-deliberate, credentialed operator action against the production database.
+That check is correct and must not be bypassed.
 
 **Do not:**
 - disable or weaken `hasUnrecordedBaseline`;
@@ -143,15 +137,70 @@ deliberate, credentialed operator action against the production database.
 - hand-apply anything that touches **data or schema** out of band — that is what
   the ledger exists to keep honest.
 
-**Do:** repair the ledger baseline, then let the normal forward release apply
-`0272` onward, `0275` included.
+### 4.1 What the repair actually is
 
-`0275` itself is a defensible exception, and §5 walks through running it by hand:
-it changes policies only, touches no row and no column, is idempotent, and
-asserts its own end state. Applying it early closes the finding now rather than
-after the ledger work. It does widen the ledger gap by one more unrecorded
-migration, which is a real cost — see the caveat at the end of §5 — so it is a
-trade, not a free action.
+Not a stamping exercise. Every migration in this repository is **additive and
+idempotent** — `tests/migrations-are-additive.test.ts` holds the whole history
+to zero `DROP TABLE` / `DROP COLUMN` / `TRUNCATE` / `DROP TYPE`, and CI replays
+all 291 of them against a real Postgres on every PR (`Database (migration
+replay · RLS boundary probes)`). So the ledger does not need to be *told* what
+is applied; it repairs itself by letting `supabase db push` run from `0004`,
+where the already-applied migrations no-op and the genuinely missing ones land.
+
+Writing rows into `supabase_migrations.schema_migrations` by hand is the option
+NOT to take: it asserts that work was done without doing it, and a migration
+wrongly marked applied is skipped forever.
+
+### 4.2 Prerequisite, now satisfied
+
+`schema_migrations` has a **PRIMARY KEY on `version`**. The repository used to
+carry 17 duplicate version numbers (`0010`, `0026`, `0042`, …), so a replay died
+at the second `0010` with
+
+```
+ERROR: duplicate key value violates unique constraint "schema_migrations_pkey"
+```
+
+Every group has since been renamed to a unique version preserving apply order
+(`0010_blog_posts` → `00100_blog_posts`, `0010_support_tickets_admin_users` →
+`00101_support_tickets_admin_users`). `KNOWN_DUPLICATE_MIGRATIONS` is now empty
+and `tests/migration-version-safety.test.ts` fails if a duplicate returns.
+
+### 4.3 The procedure
+
+1. **Pre-flight.** Run `docs/audit/migration-ledger-state.sql` — read-only. It
+   reports what the ledger holds, how far ahead the schema is, and whether the
+   three hand-applied migrations (`0249`, `0254`, `0275`) show as
+   *present / unrecorded*. Expect exactly that for all three.
+2. **Take a restore point.** A PITR checkpoint or a backup, not a mental note.
+   This is the step that makes everything after it reversible.
+3. **Pick a maintenance window** — see the warning in 4.4.
+4. **Replay**, outside the workflow, with the ledger guard intact:
+   `supabase db push` against the production project.
+5. **Verify.** Re-run the pre-flight; the ledger high-water mark should now be
+   the newest migration. Then run `node scripts/audit-production-migration-state.mjs`
+   and confirm `requiresBaselineReview: false` and `moneyWrites.exploitable: false`.
+6. **Re-run the release workflow.** With `0004` recorded, the guard passes on
+   its own — nothing in the code needs changing to make that happen.
+
+### 4.4 The window nobody has flagged before
+
+A replay runs the history **in order**, and the history contains a period where
+the money boundary is open:
+
+- `0006` creates the household finance policies gated on `is_family_member`
+  (membership, not role);
+- `0267` narrows them to `can_manage_family`;
+- `0275` sweeps whatever survived and adds the restrictive guards.
+
+Between `0006` and `0267` executing, production briefly carries the exact
+permissive policies §5 describes. The end state is correct — that is the whole
+point of running them in order — but the intermediate state is not. Replay in a
+maintenance window with the app unavailable, not against live traffic.
+
+That risk is a consequence of repairing the ledger late. It gets no smaller by
+waiting, and every migration hand-applied in the meantime adds one more row the
+replay has to no-op through.
 
 ## 5. Running this by hand in the Supabase SQL editor
 
