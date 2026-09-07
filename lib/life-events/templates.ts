@@ -119,6 +119,106 @@ export const LIFE_EVENT_TEMPLATES: LifeEventTemplate[] = [
     ],
   },
   {
+    // M25: the families who have Bubaly's actions turned off still get the
+    // holiday season as a dated checklist rather than nothing at all.
+    key: 'holidays', title: 'The Holidays', icon: 'gift', defaultLeadDays: 45,
+    description: 'Gatherings, cooking, gifts and travel — the season planned instead of survived.',
+    items: [
+      { title: 'Agree who is hosting and who is travelling', category: 'plan', offsetDays: -40 },
+      { title: 'Set the gift budget', category: 'plan', offsetDays: -38 },
+      { title: 'Book travel or guest rooms', category: 'book', offsetDays: -35 },
+      { title: 'Write the guest list and send invitations', category: 'notify', offsetDays: -30 },
+      { title: 'Order gifts that need shipping time', category: 'buy', offsetDays: -25 },
+      { title: 'Plan the holiday menu around the diets in the house', category: 'plan', offsetDays: -18 },
+      { title: 'Send holiday cards', category: 'celebrate', offsetDays: -18 },
+      { title: 'Order anything that has to be collected (turkey, cake, flowers)', category: 'buy', offsetDays: -14 },
+      { title: 'Do the big holiday shop', category: 'buy', offsetDays: -4 },
+      { title: 'Wrap the gifts', category: 'celebrate', offsetDays: -2 },
+      { title: 'Prep what can be cooked ahead', category: 'plan', offsetDays: -1 },
+      { title: 'Take the family photo', category: 'celebrate', offsetDays: 0 },
+      { title: 'Send thank-you notes', category: 'notify', offsetDays: 7 },
+    ],
+  },
+  {
+    // M25. Readiness is not a purchase — most of this checklist is knowing
+    // things, which is why it ends with telling everyone rather than buying.
+    key: 'emergency_prep', title: 'Emergency Readiness', icon: 'shield-alert', defaultLeadDays: 30,
+    description: 'A kit, current documents and a plan everyone in the house has actually been told.',
+    items: [
+      { title: 'Agree the meeting point and the out-of-area contact', category: 'plan', offsetDays: -28 },
+      { title: 'Check passports, IDs and insurance are in date', category: 'document', offsetDays: -25 },
+      { title: 'Photograph or scan the critical documents', category: 'document', offsetDays: -21 },
+      { title: 'Build the emergency kit: water, food, torch, batteries', category: 'buy', offsetDays: -18 },
+      { title: 'Add a first-aid kit and a week of medication', category: 'health', offsetDays: -14 },
+      { title: 'Pack a go-bag per person', category: 'home', offsetDays: -12 },
+      { title: 'Add pet food, carrier and vet records to the kit', category: 'buy', offsetDays: -10 },
+      { title: 'Test the smoke and carbon-monoxide alarms', category: 'home', offsetDays: -7 },
+      { title: 'Locate the water, gas and power shut-offs', category: 'home', offsetDays: -7 },
+      { title: 'Write the emergency contact card for each child', category: 'notify', offsetDays: -4 },
+      { title: 'Walk the whole family through the plan', category: 'notify', offsetDays: 0 },
+      { title: 'Diary the six-month kit and document review', category: 'plan', offsetDays: 3 },
+    ],
+  },
+  {
+    // M34: the summer that arrives every year and is booked every year late.
+    key: 'camp', title: 'Camp / Summer Care', icon: 'tent', defaultLeadDays: 60,
+    description: 'Places booked, forms in, kit labelled — before the good camps fill up.',
+    items: [
+      { title: 'Agree which weeks need cover', category: 'plan', offsetDays: -60 },
+      { title: 'Shortlist camps and compare costs', category: 'plan', offsetDays: -55 },
+      { title: 'Register and pay the deposit', category: 'book', offsetDays: -50 },
+      { title: 'Submit the health form and immunisation records', category: 'document', offsetDays: -35 },
+      { title: 'Arrange transport or the carpool', category: 'plan', offsetDays: -21 },
+      { title: 'Book the weeks nobody is covering yet', category: 'book', offsetDays: -21 },
+      { title: 'Buy the kit list', category: 'buy', offsetDays: -14 },
+      { title: 'Label everything', category: 'home', offsetDays: -5 },
+      { title: 'Confirm drop-off time and what to bring on day one', category: 'plan', offsetDays: -2 },
+      { title: 'Pack the bag', category: 'home', offsetDays: -1 },
+      { title: 'Check in after the first day', category: 'notify', offsetDays: 1 },
+    ],
+  },
+  {
+    // M34: the transition families handle worst, because it starts as a worry
+    // rather than a date. The checklist gives it a shape.
+    key: 'aging_parent', title: 'Caring for a Parent', icon: 'heart-handshake', defaultLeadDays: 45,
+    description: 'Medical, legal, financial and practical — the care conversation with a checklist under it.',
+    items: [
+      { title: 'Have the conversation about what they want', category: 'plan', offsetDays: -45 },
+      { title: 'List the medications, doses and prescribing doctors', category: 'health', offsetDays: -40 },
+      { title: 'Collect the medical history and insurance details', category: 'document', offsetDays: -35 },
+      { title: 'Find out what legal paperwork exists (will, power of attorney)', category: 'document', offsetDays: -30 },
+      { title: 'Agree who in the family does what', category: 'plan', offsetDays: -28 },
+      { title: 'Assess the home for falls and access', category: 'home', offsetDays: -21 },
+      { title: 'Research care options and costs', category: 'plan', offsetDays: -18 },
+      { title: 'Book the appointment with the doctor', category: 'book', offsetDays: -14 },
+      { title: 'Set up the medication reminders', category: 'health', offsetDays: -7 },
+      { title: 'Share the contact list with everyone involved', category: 'notify', offsetDays: -3 },
+      { title: 'Set the weekly check-in', category: 'plan', offsetDays: 7 },
+      { title: 'Review how it is going after a month', category: 'plan', offsetDays: 30 },
+    ],
+  },
+  {
+    // M34: a renovation hands off to Home Projects on launch — see
+    // lib/life-events/launch.ts. The checklist is the part Home Projects
+    // does not carry: living through it.
+    key: 'renovation', title: 'Home Renovation', icon: 'hammer', defaultLeadDays: 60,
+    description: 'Quotes, permits, and a household that still functions while the kitchen does not.',
+    items: [
+      { title: 'Write down the scope and what "done" looks like', category: 'plan', offsetDays: -60 },
+      { title: 'Set the budget and the contingency', category: 'plan', offsetDays: -56 },
+      { title: 'Get three quotes', category: 'plan', offsetDays: -45 },
+      { title: 'Check permits and any approvals needed', category: 'document', offsetDays: -40 },
+      { title: 'Choose the contractor and sign the contract', category: 'document', offsetDays: -30 },
+      { title: 'Tell the insurer about the work', category: 'notify', offsetDays: -25 },
+      { title: 'Order the long-lead materials', category: 'buy', offsetDays: -21 },
+      { title: 'Plan where the family cooks, washes and sleeps during the work', category: 'plan', offsetDays: -14 },
+      { title: 'Warn the neighbours about noise and deliveries', category: 'notify', offsetDays: -7 },
+      { title: 'Clear and protect the work area', category: 'home', offsetDays: -3 },
+      { title: 'Walk the site with the contractor on day one', category: 'plan', offsetDays: 0 },
+      { title: 'Do the snagging walk-through before the final payment', category: 'plan', offsetDays: 30 },
+    ],
+  },
+  {
     key: 'new_job', title: 'New Job / Schedule Change', icon: 'briefcase', defaultLeadDays: 21,
     description: 'A new routine handled — coverage, commute, and calendars aligned.',
     items: [

@@ -8,11 +8,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Sun, UtensilsCrossed, Plane, GraduationCap, Wallet, HeartPulse, Cake, ShieldAlert,
-  ArrowRight, ChevronRight, Sparkles,
+  ArrowRight, ChevronRight, Sparkles, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import type { Outcome, OutcomeStep, OutcomeId } from '@/lib/outcomes/launcher';
+import { buildOutcomeLaunchRequest, type Outcome, type OutcomeStep, type OutcomeId } from '@/lib/outcomes/launcher';
+import { submitAIRequest, runPagePath } from '@/lib/ai/chat-request';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ICON: Record<string, typeof Sun> = {
@@ -32,10 +34,40 @@ const ACCENT: Record<OutcomeId, string> = {
 
 export type OutcomePlan = { outcome: Outcome; steps: OutcomeStep[]; urgency: number };
 
+/**
+ * What the launch button knows. `filed` is only ever set from a response the
+ * server sent back after it wrote the `ai_requests` row, so the "Bubaly is on
+ * it" line can never appear for work that was not actually filed.
+ */
+type LaunchState =
+  | { status: 'idle' }
+  | { status: 'filing'; outcomeId: OutcomeId }
+  | { status: 'filed'; outcomeId: OutcomeId; runId: string | null; summary: string }
+  | { status: 'failed'; outcomeId: OutcomeId; error: string };
+
 export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
   const t = useTranslations();
   const [selectedId, setSelectedId] = useState<OutcomeId>(plans[0]?.outcome.id ?? 'run_today');
   const selected = plans.find((p) => p.outcome.id === selectedId) ?? plans[0];
+  const [launch, setLaunch] = useState<LaunchState>({ status: 'idle' });
+  const launchForSelected = launch.status !== 'idle' && launch.outcomeId === selectedId ? launch : null;
+
+  async function launchOutcome(id: OutcomeId) {
+    setLaunch({ status: 'filing', outcomeId: id });
+    const request = buildOutcomeLaunchRequest(id);
+    const result = await submitAIRequest({
+      text: request.text,
+      context: request.context,
+      // A double tap must not file the work twice; the route replays the first answer.
+      clientRequestId: `outcome-${id}-${Date.now()}`,
+    });
+    if (!result.ok) {
+      console.error('[outcomes] launch request failed', result.status, result.code, result.error);
+      setLaunch({ status: 'failed', outcomeId: id, error: result.error });
+      return;
+    }
+    setLaunch({ status: 'filed', outcomeId: id, runId: result.data.runId ?? null, summary: result.data.summary ?? '' });
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl">
@@ -83,6 +115,41 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
                 <h2 className="text-lg font-bold text-fg">{selected.outcome.title}</h2>
                 <p className="text-xs text-muted">{selected.outcome.tagline}</p>
               </div>
+            </div>
+
+            {/* M25: the outcome is a request, not only a menu. This files a real
+                ai_requests row; nothing below claims Bubaly did anything until
+                the server has answered with the run it created. */}
+            <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted">{t('outcomesLauncher.orHandTheWholeOutcomeToBubaly')}</p>
+                <Button
+                  size="sm"
+                  onClick={() => void launchOutcome(selected.outcome.id)}
+                  disabled={launchForSelected?.status === 'filing'}
+                >
+                  {launchForSelected?.status === 'filing'
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Sparkles className="h-4 w-4" />}
+                  {t('outcomesLauncher.haveBubalyDoIt')}
+                </Button>
+              </div>
+              {launchForSelected?.status === 'filed' && (
+                <p className="mt-2 text-xs text-brand-text">
+                  {t('outcomesLauncher.bubalyIsWorkingOnIt')}{' '}
+                  {launchForSelected.runId && (
+                    <Link href={runPagePath(launchForSelected.runId)} className="underline underline-offset-2">
+                      {t('outcomesLauncher.followTheRun')}
+                    </Link>
+                  )}
+                </p>
+              )}
+              {launchForSelected?.status === 'failed' && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-danger">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{t('outcomesLauncher.bubalyCouldNotStartThatTryAgain')}</span>
+                </p>
+              )}
             </div>
 
             <ul className="mt-4 space-y-2">

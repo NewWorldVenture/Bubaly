@@ -4,6 +4,16 @@
 // small snapshot of the family's real state, auto-selects + badges the steps
 // that matter right now. DOM-free and fully unit-tested; the page feeds it real
 // Supabase data and renders the plan.
+//
+// M25: an outcome is also a REQUEST. Every outcome names the workflow template
+// that runs it (`OUTCOME_INTENT`) and the sentence that reaches the classifier
+// (`buildOutcomeLaunchRequest`), so the "Have Bubaly do it" button files an
+// `ai_requests` row that lands on the same run timeline and the same Home
+// "Working on" strip as anything typed into the bar. The launch text is written
+// to match a deterministic fast path in `lib/ai/context/intents.ts`, which is
+// what `tests/outcomes-launch-request.test.ts` pins: an outcome must never fall
+// through to the classifier model and be planned as something else.
+import type { IntentKey } from '@/lib/ai/context/intents';
 
 export type OutcomeId =
   | 'run_today' | 'feed_family' | 'plan_trip' | 'prepare_school'
@@ -128,4 +138,59 @@ export function buildOutcomePlan(id: OutcomeId, ctx: OutcomeContext = EMPTY_CONT
 /** Total live-urgency badges across an outcome — for a summary count on the card. */
 export function outcomeUrgencyCount(id: OutcomeId, ctx: OutcomeContext): number {
   return buildOutcomePlan(id, ctx).filter((s) => s.badge).length;
+}
+
+// ── Launching an outcome (M25) ──────────────────────────────────────────────
+
+/**
+ * The workflow template each outcome runs. Eight outcomes, eight intents — a
+ * card the concierge cannot act on is a card that lies about what the button
+ * does, so this map is total by construction and the test proves every value
+ * has a registered template.
+ */
+export const OUTCOME_INTENT: Record<OutcomeId, IntentKey> = {
+  run_today: 'daily_brief',
+  feed_family: 'plan_meals',
+  plan_trip: 'prepare_vacation',
+  prepare_school: 'back_to_school',
+  manage_money: 'spending_review',
+  stay_healthy: 'what_am_i_forgetting',
+  celebrate: 'holiday',
+  prepare_unexpected: 'emergency_prep',
+};
+
+/**
+ * The sentence the launch button files. Deliberately the phrasing a person
+ * would use, not a machine token: it is stored verbatim in
+ * `ai_requests.request_text` and read back on the run page, and it has to match
+ * a fast-path rule so the request is classified without a model call.
+ */
+const OUTCOME_REQUEST_TEXT: Record<OutcomeId, string> = {
+  run_today: 'Brief me on today and get the day moving.',
+  feed_family: "Plan our week's meals and put what we need on the shopping list.",
+  plan_trip: 'Prepare for our trip: documents, packing and the home checklist.',
+  prepare_school: 'Get us ready for the new school year: supplies, forms and the routine.',
+  manage_money: 'Spending review: where did our money go this month?',
+  stay_healthy: 'What are we forgetting about appointments, medications and records?',
+  celebrate: 'Plan the holidays: the day, the food, the gifts and who is coming.',
+  prepare_unexpected: 'Prepare for an emergency: our kit, documents, contacts and plan.',
+};
+
+export type OutcomeLaunchRequest = {
+  outcomeId: OutcomeId;
+  /** The intent the request must classify as; the test asserts the fast path agrees. */
+  intent: IntentKey;
+  text: string;
+  /** Page context sent with the request, so the run says where it came from. */
+  context: { module: string };
+};
+
+/** Everything the "Have Bubaly do it" button POSTs to `/api/ai/requests`. */
+export function buildOutcomeLaunchRequest(id: OutcomeId): OutcomeLaunchRequest {
+  return {
+    outcomeId: id,
+    intent: OUTCOME_INTENT[id],
+    text: OUTCOME_REQUEST_TEXT[id],
+    context: { module: `outcomes:${id}` },
+  };
 }
