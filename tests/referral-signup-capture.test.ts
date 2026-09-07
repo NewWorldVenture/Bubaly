@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { expectTranslates } from './helpers/translated';
 import {
   REFERRAL_COOKIE, REFERRAL_SIGNUP_SOURCE, isPlausibleReferralCode, referralCodeFromSignup,
 } from '@/lib/referrals/core';
@@ -126,6 +127,7 @@ describe('signup capture wiring (source)', () => {
   const form = readFileSync('components/auth/signup-form.tsx', 'utf8');
   const cookieAction = readFileSync('app/(auth)/signup/actions.ts', 'utf8');
   const onboarding = readFileSync('app/onboarding/actions.ts', 'utf8');
+  const referralActions = readFileSync('app/(app)/referrals/actions.ts', 'utf8');
 
   it('the signup form reads ?ref=, remembers it server-side, and writes it into the auth metadata', () => {
     expect(form).toContain("params.get('ref')");
@@ -147,5 +149,25 @@ describe('signup capture wiring (source)', () => {
     expect(finalize).toContain('metadataCode: auth.user.user_metadata?.referral_code');
     // Attribution happens after the family exists and its owner is a member.
     expect(finalize.indexOf('captureSignupReferral(')).toBeGreaterThan(finalize.indexOf("from('family_members').upsert("));
+  });
+
+  it('every way applying a code can fail reaches the family as translated words', () => {
+    // lib/ has no translator, so applyReferralCode answers with a machine code
+    // and English; the action maps EVERY code to a catalogue key. A new code
+    // without a key would not type-check (Record<ApplyFailureCode, string>),
+    // and these pin the wording that key still carries.
+    expect(referralActions).toContain('const APPLY_FAILURE_KEY: Record<ApplyFailureCode, string>');
+    expect(referralActions).toContain('reason: t(APPLY_FAILURE_KEY[result.code])');
+    for (const key of [
+      'referralActions.enterAReferralCode',
+      'referralActions.codeNotFound',
+      'referralActions.cannotUseYourOwnCode',
+      'referralActions.familyAlreadyUsedACode',
+      'referralActions.couldNotApplyCode',
+      'referralActions.programPaused',
+    ]) {
+      expect(referralActions, `should map a failure to ${key}`).toContain(`'${key}'`);
+    }
+    expectTranslates(referralActions, 'referralActions.programPaused', 'The referral program is currently paused.');
   });
 });

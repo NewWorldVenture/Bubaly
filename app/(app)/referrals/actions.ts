@@ -10,11 +10,27 @@ import { ReferralEmail } from '@/lib/emails/referral';
 import { emailSchema } from '@/lib/validation';
 import {
   applyReferralCode, getOrCreateReferralCode, getReferralConfig,
-  recordReferralEmailInvite, rollbackReferralEmailInvite, type ApplyResult,
+  recordReferralEmailInvite, rollbackReferralEmailInvite, type ApplyFailureCode, type ApplyResult,
 } from '@/lib/referrals/server';
 import { REFERRAL_EMAIL_POLICY, REFERRAL_HOME_CARD_DISMISSED_KEY, referralLink } from '@/lib/referrals/core';
 
+/**
+ * The catalogue key for each way applying a code can fail. `applyReferralCode`
+ * lives in lib/, where there is no translator, so it answers with a machine
+ * code and an English fallback; the wording the family reads is chosen here.
+ */
+const APPLY_FAILURE_KEY: Record<ApplyFailureCode, string> = {
+  empty: 'referralActions.enterAReferralCode',
+  paused: 'referralActions.programPaused',
+  not_found: 'referralActions.codeNotFound',
+  own_code: 'referralActions.cannotUseYourOwnCode',
+  already_referred: 'referralActions.familyAlreadyUsedACode',
+  lookup_failed: 'referralActions.couldNotApplyCode',
+  write_failed: 'referralActions.couldNotApplyCode',
+};
+
 export async function applyReferralCodeAction(rawCode: string): Promise<ApplyResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const result = await applyReferralCode({
     rawCode,
@@ -22,8 +38,11 @@ export async function applyReferralCodeAction(rawCode: string): Promise<ApplyRes
     referredEmail: ctx.user.email,
     source: 'apply_code',
   });
-  if (result.ok) revalidatePath('/referrals');
-  return result;
+  if (result.ok) {
+    revalidatePath('/referrals');
+    return result;
+  }
+  return { ...result, reason: t(APPLY_FAILURE_KEY[result.code]) };
 }
 
 export type SendReferralEmailResult = { ok: true; email: string } | { ok: false; reason: string };
