@@ -13,7 +13,7 @@ function migration(file: string): string {
 }
 
 describe('A-11 documents DB table is RLS family-scoped', () => {
-  const sql = migration('0109_documents_favorite.sql');
+  const sql = migration('01090_documents_favorite.sql');
   it('enables RLS and scopes every op to is_family_member(family_id)', () => {
     expect(sql).toContain('alter table public.documents enable row level security');
     expect(sql).toContain('create policy documents_select on public.documents');
