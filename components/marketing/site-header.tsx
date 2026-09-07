@@ -57,7 +57,16 @@ export function SiteHeader() {
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
-      className="sticky top-0 z-50 border-b border-border/70 bg-bg/95 text-fg backdrop-blur-xl transition-colors duration-300"
+      // `sticky top-0` pins the header to the viewport's top edge — and with
+      // `viewport-fit=cover` plus the black-translucent status bar (app/layout.tsx
+      // `appleWebApp.statusBarStyle`), that edge is UNDERNEATH the iOS status bar.
+      // The header did stay put; it stayed put behind the clock and the battery,
+      // with its logo clipped by the notch, which reads as a header that slid up
+      // and vanished. Padding by the top inset makes "the top" mean below the
+      // status bar. `.app-topbar` already does this for the authenticated chrome
+      // (app/globals.css) — the marketing header was the one that never got it.
+      // The horizontal insets cover landscape, where the notch takes a side.
+      className="sticky top-0 z-50 border-b border-border/70 bg-bg/95 pl-[var(--safe-left)] pr-[var(--safe-right)] pt-[var(--safe-top)] text-fg backdrop-blur-xl transition-colors duration-300"
     >
       <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
         <Logo className="[&>img]:h-11" />
@@ -114,7 +123,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-        <div id="mobile-navigation" hidden={!open} className="max-h-[calc(100dvh-3.5rem)] overflow-y-auto overscroll-contain border-t border-border/70 bg-bg/98 px-4 py-4 backdrop-blur-xl lg:hidden">
+        <div id="mobile-navigation" hidden={!open} className="max-h-[calc(100dvh-3.5rem-var(--safe-top))] overflow-y-auto overscroll-contain border-t border-border/70 bg-bg/98 px-4 py-4 backdrop-blur-xl lg:hidden">
           <nav aria-label={t('nav.mobileNavigation')} className="flex flex-col gap-1">
             {MARKETING_NAV.map((item) => (
               <Link
