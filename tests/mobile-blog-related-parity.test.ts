@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // Mobile production-readiness (Phase 3 — responsive layout / content parity [M-027]):
@@ -9,7 +10,7 @@ import fs from 'node:fs';
 // that mirrors the sidebar list for < lg, while the sticky sidebar owns lg+. This
 // guard locks the mobile parity in and the desktop sidebar's lg-scoping.
 
-const page = fs.readFileSync('app/(marketing)/blog/[slug]/page.tsx', 'utf8');
+const page = readUiSource('app/(marketing)/blog/[slug]/page.tsx');
 
 describe('blog article shows Related Articles on mobile too (M-027)', () => {
   it('renders an inline Related section that is visible below lg (mobile/tablet)', () => {

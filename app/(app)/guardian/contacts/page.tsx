@@ -4,11 +4,13 @@ import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
 import { Users, ArrowLeft } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Trust Graph · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function ContactsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -37,15 +39,13 @@ export default async function ContactsPage() {
           <Users className="h-5 w-5 text-blue-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">Family Trust Graph™</h1>
+          <h1 className="text-xl font-bold leading-tight">{t('guardianContacts.familyTrustGraph')}</h1>
           <p className="text-sm text-muted">{contacts?.length ?? 0} contacts</p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-3">
-        <p className="text-xs text-blue-300">
-          Trust levels control how Bubaly handles calls and messages. Bubaly learns from patterns and will suggest updates — you always have final say.
-        </p>
+        <p className="text-xs text-blue-300">{t('contacts.trustLevelsControlHowBubaly')}</p>
       </div>
 
       <ContactList

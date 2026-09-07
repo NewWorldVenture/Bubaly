@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/kitchen/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('kitchen page read boundary', () => {
 
   it('logs and returns an ErrorState on a core read failure', () => {
     expect(page).toContain("console.error('[dashboard/kitchen] kitchen read failed', coreError);");
-    expect(page).toContain('return <ErrorState message="Could not load your kitchen from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'kitchen.couldNotLoadYourKitchen', "Could not load your kitchen from Supabase. Refresh and try again.");
   });
 
   it('keeps the optional leftover/nutrition reads best-effort', () => {

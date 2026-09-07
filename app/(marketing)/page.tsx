@@ -20,6 +20,7 @@ import { SiteStructuredData } from '@/components/marketing/structured-data';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 import type { Metadata } from 'next';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
+import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/', {
@@ -29,6 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
+  const t = await getTranslations();
   return (
     <PageWrap>
       <SiteStructuredData />
@@ -38,21 +40,19 @@ export default async function HomePage() {
 
           {/* Left */}
           <div className="order-1 text-center lg:text-left">
-            <Pill icon={Sparkles}>Less Managing Life. More Living It.</Pill>
+            <Pill icon={Sparkles}>{t('root.lessManagingLifeMoreLivingIt')}</Pill>
 
             <h1 className="mt-6 text-[clamp(3rem,11vw,4.1rem)] font-extrabold leading-[1.03] tracking-[-0.038em] lg:text-[4.25rem]">
-              The AI Operating<br />
-              System for<br />
-              <GradientText>Family Life.</GradientText>
+              {t('root.theAiOperating')}<br />
+              {t('root.systemFor')}<br />
+              <GradientText>{t('root.familyLife')}</GradientText>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-[540px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
-              Bubaly quietly handles the logistics of family life—phone calls, emails, scheduling, paperwork, reminders, and everyday coordination—so your family can spend less time managing life and more time living it.
-            </p>
+            <p className="mx-auto mt-5 max-w-[540px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">{t('app.bubalyQuietlyHandlesTheLogistics')}</p>
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
-              <PrimaryLink href="/signup">Start Free Trial</PrimaryLink>
-              <WatchDemoLink href="/how-it-works">See how it works</WatchDemoLink>
+              <PrimaryLink href="/signup">{t('root.startFreeTrial')}</PrimaryLink>
+              <WatchDemoLink href="/how-it-works">{t('root.seeHowItWorks')}</WatchDemoLink>
             </div>
             <div className="mt-6 flex justify-center lg:justify-start">
               <PlatformBadges />
@@ -69,19 +69,19 @@ export default async function HomePage() {
       {/* ── Tagline divider ── */}
       <div className="mt-12 border-y border-white/[0.06] bg-white/[0.012] py-5 text-center lg:mt-2">
         <p className="text-lg font-semibold text-white/80 sm:text-xl">
-          Less stress. Less mental load. More time together.
+          {t('root.lessStressLessMentalLoadMore')}
         </p>
       </div>
 
       {/* ── Feature rail ── */}
       <Container className="max-w-[1440px] px-5 pb-4 pt-10 sm:px-8 sm:pt-12 lg:px-10">
-        <h2 className="sr-only">Tools for everyday family life</h2>
-        <nav aria-label="Explore family tools" className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+        <h2 className="sr-only">{t('root.toolsForEverydayFamilyLife')}</h2>
+        <nav aria-label={t('root.exploreFamilyTools')} className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
           {FEATURE_RAIL.map(({ icon, title, body, tone, href }) => (
             <Link key={title} href={href} className="focus-visible:focus-ring group flex flex-col items-center rounded-xl px-2 py-3 text-center transition hover:bg-white/[0.045]">
               <IconOrb icon={icon} tone={tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
-              <h3 className="mt-3 text-xs font-semibold">{title}</h3>
-              <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{body}</p>
+              <h3 className="mt-3 text-xs font-semibold">{t(title)}</h3>
+              <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{t(body)}</p>
             </Link>
           ))}
         </nav>
@@ -110,7 +110,7 @@ export default async function HomePage() {
       <MarketingAeoSection
         path="/"
         name="Bubaly"
-        description="The AI operating system for family life."
+        description={t('app.theAiOperatingSystemFor')}
       />
     </PageWrap>
   );

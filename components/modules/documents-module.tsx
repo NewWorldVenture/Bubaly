@@ -23,6 +23,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Document = Tables<'documents'>;
 
@@ -120,6 +121,7 @@ type SortKey = (typeof SORTS)[number]['value'];
 const PAGE_SIZE = 10;
 
 export function DocumentsModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -236,7 +238,7 @@ export function DocumentsModule() {
 
   async function download(doc: Document) {
     setMenuId(null);
-    if (!doc.storage_path) { toastError('No file attached to this document'); return; }
+    if (!doc.storage_path) { toastError(tr('documentsModule.noFileAttachedToThis')); return; }
     const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const sb = createClient();
     const { url, error: err } = await getDocumentSignedUrl(sb, doc.storage_path);
@@ -250,7 +252,7 @@ export function DocumentsModule() {
     if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
     const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('File deleted'); refresh();
+    success(tr('documentsModule.fileDeleted')); refresh();
   }
 
   function pickFile(f: File | null) {
@@ -265,7 +267,7 @@ export function DocumentsModule() {
   }
 
   async function save() {
-    if (!form.title || !file) { toastError('Choose a file and name it'); return; }
+    if (!form.title || !file) { toastError(tr('documentsModule.chooseAFileAndName')); return; }
     setSaving(true);
     const sb = createClient();
     const folder = form.category.trim() || 'general';
@@ -278,8 +280,8 @@ export function DocumentsModule() {
       expires_at: form.expires_at || null,
     });
     setSaving(false);
-    if (err) { await removeFamilyDocument(sb, path); toastError('Failed to save file'); return; }
-    success('File uploaded');
+    if (err) { await removeFamilyDocument(sb, path); toastError(tr('documentsModule.failedToSaveFile')); return; }
+    success(tr('documentsModule.fileUploaded'));
     setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
   }
 
@@ -293,20 +295,20 @@ export function DocumentsModule() {
     <div className="module-with-sidebar">
       <div className="module-main space-y-5">
         <PageHeader
-          title="Files"
-          description="Store, organize, and share important documents with your family."
+          title={tr('documents.files')}
+          description={tr('documentsModule.storeOrganizeAndShareImportant')}
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={() => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> Upload</Button>
-              <Button variant="secondary" onClick={() => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); }}><FolderPlus className="h-4 w-4" /> New Folder</Button>
+              <Button onClick={() => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> {tr('documents.upload')}</Button>
+              <Button variant="secondary" onClick={() => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); }}><FolderPlus className="h-4 w-4" /> {tr('documents.newFolder')}</Button>
               <AiInsight kind="documents" iconOnly />
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search files..."
-                  aria-label="Search files"
+                  placeholder={tr('documents.searchFiles')}
+                  aria-label={tr('documents.searchFiles')}
                   className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 sm:w-56"
                 />
               </div>
@@ -317,7 +319,7 @@ export function DocumentsModule() {
         {/* Folders */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Folders</h2>
+            <h2 className="font-semibold">{tr('documents.folders')}</h2>
             {folders.length > 6 && (
               <button onClick={() => setShowAllFolders((v) => !v)} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">
                 {showAllFolders ? 'Show less' : 'View all folders'} <ChevronRight className="h-3.5 w-3.5" />
@@ -325,7 +327,7 @@ export function DocumentsModule() {
             )}
           </div>
           {folders.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No folders yet. Upload a file to create one.</p>
+            <p className="py-6 text-center text-sm text-muted">{tr('documents.noFoldersYetUploadAFile')}</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {folderCards.map((f) => {
@@ -360,7 +362,7 @@ export function DocumentsModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-semibold">
-              All Files
+              {tr('documents.allFiles')}
               {folderFilter && (
                 <button onClick={() => setFolderFilter(null)} className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-text">
                   {folderLabel(folderFilter)} ✕
@@ -368,15 +370,15 @@ export function DocumentsModule() {
               )}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
-              <Select aria-label="Filter by type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | StorageGroup)} className="h-9 w-auto text-sm">
+              <Select aria-label={tr('documents.filterByType')} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | StorageGroup)} className="h-9 w-auto text-sm">
                 {TYPE_FILTERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </Select>
-              <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 w-auto text-sm">
+              <Select aria-label={tr('documents.sort')} value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 w-auto text-sm">
                 {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </Select>
               <div className="inline-flex items-center rounded-lg border border-border p-0.5">
-                <button onClick={() => setView('list')} aria-label="List view" className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'list' ? 'bg-elevated text-fg' : 'text-muted')}><List className="h-4 w-4" /></button>
-                <button onClick={() => setView('grid')} aria-label="Grid view" className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'grid' ? 'bg-elevated text-fg' : 'text-muted')}><LayoutGrid className="h-4 w-4" /></button>
+                <button onClick={() => setView('list')} aria-label={tr('documents.listView')} className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'list' ? 'bg-elevated text-fg' : 'text-muted')}><List className="h-4 w-4" /></button>
+                <button onClick={() => setView('grid')} aria-label={tr('documents.gridView')} className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'grid' ? 'bg-elevated text-fg' : 'text-muted')}><LayoutGrid className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
@@ -386,17 +388,17 @@ export function DocumentsModule() {
               <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-surface/40"><File className="h-8 w-8 text-muted/60" /></div>
               <p className="font-semibold text-muted">{hasFilters ? 'No files match your filters' : 'No files yet'}</p>
               <p className="mt-1 text-sm text-muted/60">{hasFilters ? 'Try clearing the search or filters.' : 'Upload your first file to get started.'}</p>
-              {!hasFilters && <Button onClick={() => setOpen(true)} className="mt-5"><Plus className="h-4 w-4" /> Upload File</Button>}
+              {!hasFilters && <Button onClick={() => setOpen(true)} className="mt-5"><Plus className="h-4 w-4" /> {tr('documents.uploadFile')}</Button>}
             </div>
           ) : view === 'list' ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted">
-                    <th className="py-2.5 pr-4 text-left font-medium">Name</th>
-                    <th className="hidden py-2.5 pr-4 text-left font-medium sm:table-cell">Shared</th>
-                    <th className="hidden py-2.5 pr-4 text-left font-medium md:table-cell">Modified</th>
-                    <th className="py-2.5 pr-4 text-left font-medium">Size</th>
+                    <th className="py-2.5 pr-4 text-left font-medium">{tr('documents.name')}</th>
+                    <th className="hidden py-2.5 pr-4 text-left font-medium sm:table-cell">{tr('documents.shared')}</th>
+                    <th className="hidden py-2.5 pr-4 text-left font-medium md:table-cell">{tr('documents.modified')}</th>
+                    <th className="py-2.5 pr-4 text-left font-medium">{tr('documents.size')}</th>
                     <th className="w-16 py-2.5" />
                   </tr>
                 </thead>
@@ -436,16 +438,16 @@ export function DocumentsModule() {
                               <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                             </button>
                             <div className="relative">
-                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label="More actions" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label={tr('documents.moreActions')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
                                 <MoreHorizontal className="h-4 w-4" />
                               </button>
                               {menuId === doc.id && (
                                 <>
                                   <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setMenuId(null)} tabIndex={-1} />
                                   <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-                                    <button onClick={() => download(doc)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"><Download className="h-4 w-4" /> Download</button>
+                                    <button onClick={() => download(doc)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"><Download className="h-4 w-4" /> {tr('documents.download')}</button>
                                     <button onClick={() => { setMenuId(null); toggleFavorite(doc); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"><Star className="h-4 w-4" /> {isFav(doc) ? 'Unstar' : 'Star'}</button>
-                                    <button onClick={() => { setMenuId(null); setConfirmDoc(doc); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /> Delete</button>
+                                    <button onClick={() => { setMenuId(null); setConfirmDoc(doc); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /> {tr('documents.delete')}</button>
                                   </div>
                                 </>
                               )}
@@ -484,16 +486,16 @@ export function DocumentsModule() {
           {filtered.length > PAGE_SIZE && (
             <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border pt-4 sm:flex-row">
               <p className="text-xs text-muted">
-                Showing {(safePage - 1) * PAGE_SIZE + 1} to {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} files
+                {tr('documents.showing')} {(safePage - 1) * PAGE_SIZE + 1} to {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} files
               </p>
               <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label="Previous page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label={tr('documents.previousPage')} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronLeft className="h-4 w-4" /></button>
                 {pageNumbers(safePage, totalPages).map((p, i) => (
                   p === '…'
                     ? <span key={`e${i}`} className="px-1.5 text-sm text-muted">…</span>
                     : <button key={p} onClick={() => setPage(p as number)} className={cn('h-8 min-w-8 rounded-lg px-2 text-sm font-medium', p === safePage ? 'bg-brand text-brand-fg' : 'border border-border text-muted hover:bg-elevated')}>{p}</button>
                 ))}
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label="Next page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label={tr('documents.nextPage')} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </div>
           )}
@@ -505,7 +507,7 @@ export function DocumentsModule() {
         {/* Storage Overview */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Storage Overview</h2>
+            <h2 className="font-semibold">{tr('documents.storageOverview')}</h2>
             <span className="text-xs text-muted">{fmtGb(STORAGE_LIMIT)} plan</span>
           </div>
           <div className="flex items-center gap-4">
@@ -535,14 +537,14 @@ export function DocumentsModule() {
             <div className="h-full rounded-full bg-brand" style={{ width: `${usedPct}%` }} />
           </div>
           <div className="mt-1.5 flex justify-between text-[11px] text-muted">
-            <span>{usedPct.toFixed(0)}% used</span>
+            <span>{usedPct.toFixed(0)}{tr('documents.used')}</span>
             <span>{fmtGb(Math.max(STORAGE_LIMIT - storage.used, 0))} free</span>
           </div>
         </div>
 
         {/* Quick Actions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Quick Actions</h2>
+          <h2 className="mb-4 font-semibold">{tr('documents.quickActions')}</h2>
           <div className="space-y-1.5">
             {[
               { icon: Upload, label: 'Upload Files', onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
@@ -559,11 +561,11 @@ export function DocumentsModule() {
         {/* Recent Activity */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Activity</h2>
-            <AiInsight kind="documents" label="View all" variant="ghost" className="!px-0 text-xs text-brand-text" />
+            <h2 className="font-semibold">{tr('documents.recentActivity')}</h2>
+            <AiInsight kind="documents" label={tr('documents.viewAll')} variant="ghost" className="!px-0 text-xs text-brand-text" />
           </div>
           {recentActivity.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">No recent activity.</p>
+            <p className="py-4 text-center text-sm text-muted">{tr('documents.noRecentActivity')}</p>
           ) : (
             <div className="space-y-3">
               {recentActivity.map((doc) => {
@@ -595,9 +597,9 @@ export function DocumentsModule() {
         {/* AI Document Assistant */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
-          <h3 className="font-bold">AI Document Assistant</h3>
-          <p className="mt-2 text-xs leading-5 text-muted">Summarize, extract key info, and get insights from any document.</p>
-          <AiInsight kind="documents" label="Ask AI" variant="primary" className="mt-4 w-full justify-center" />
+          <h3 className="font-bold">{tr('documents.aiDocumentAssistant')}</h3>
+          <p className="mt-2 text-xs leading-5 text-muted">{tr('documents.summarizeExtractKeyInfoAndGet')}</p>
+          <AiInsight kind="documents" label={tr('documents.askAi')} variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
 
@@ -616,36 +618,36 @@ export function DocumentsModule() {
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (
-              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p></>
+              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} {tr('documents.clickToChange')}</p></>
             ) : (
-              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
+              <><p className="text-sm font-semibold text-muted">{tr('documents.dragAmpDropAFileHere')}</p><p className="mt-1 text-xs text-muted/60">{tr('documents.pdfImagesDocsVideoUpTo')} {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">{tr('documents.browseFiles')}</span></>
             )}
           </div>
-          <Field label="File Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma.pdf" />}</Field>
-          <Field label="Folder" hint="Type a new name to create a folder, or reuse an existing one.">{(id) => (
+          <Field label={tr('documents.fileName')}>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('documents.eGPassportEmmaPdf')} />}</Field>
+          <Field label={tr('documents.folder')} hint={tr('documentsModule.typeANewNameTo')}>{(id) => (
             <>
-              <Input id={id} list="folder-options" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} placeholder="e.g. School, Finances, Vacation 2025" />
+              <Input id={id} list="folder-options" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} placeholder={tr('documents.eGSchoolFinancesVacation2025')} />
               <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
             </>
           )}</Field>
-          <Field label="Visibility">{(id) => (
+          <Field label={tr('documents.visibility')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-              <option value="">Shared with family</option>
-              {members.map((m) => <option key={m.id} value={m.id}>Private · {m.display_name}</option>)}
+              <option value="">{tr('documents.sharedWithFamily')}</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{tr('documents.private')} {m.display_name}</option>)}
             </Select>
           )}</Field>
-          <Field label="Expires (optional)" hint="For passports, insurance, registrations — Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
+          <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
           <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload File'}</Button>
         </div>
       </Modal>
 
       {/* Delete confirmation */}
-      <Modal open={!!confirmDoc} title="Delete file?" onClose={() => setConfirmDoc(null)}>
+      <Modal open={!!confirmDoc} title={tr('documents.deleteFile')} onClose={() => setConfirmDoc(null)}>
         <div className="space-y-4">
-          <p className="text-sm text-muted">Delete <span className="font-semibold text-fg">{confirmDoc?.title}</span>? This permanently removes the file and cannot be undone.</p>
+          <p className="text-sm text-muted">{tr('documents.delete')} <span className="font-semibold text-fg">{confirmDoc?.title}</span>{tr('documents.thisPermanentlyRemovesTheFileAnd')}</p>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setConfirmDoc(null)}>Cancel</Button>
-            <Button variant="danger" onClick={() => confirmDoc && remove(confirmDoc)}>Delete</Button>
+            <Button variant="secondary" onClick={() => setConfirmDoc(null)}>{tr('documents.cancel')}</Button>
+            <Button variant="danger" onClick={() => confirmDoc && remove(confirmDoc)}>{tr('documents.delete')}</Button>
           </div>
         </div>
       </Modal>

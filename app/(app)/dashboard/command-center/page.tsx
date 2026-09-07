@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Command Center' };
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ type Issue = { icon: typeof AlertTriangle; text: string; href: string; severity:
 // Family+ feature — the AI Family Command Center. Every figure is computed from
 // real family data; nothing is fabricated.
 export default async function CommandCenterPage() {
+  const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/command-center');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -53,7 +55,7 @@ export default async function CommandCenterPage() {
   ].find(Boolean);
   if (readError) {
     console.error('[dashboard/command-center] command center read failed', readError);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   const { data: members } = membersResult;
@@ -71,7 +73,7 @@ export default async function CommandCenterPage() {
     ({ change } = await loadOperatingIndex(supabase, familyId, now));
   } catch (error) {
     console.error('[dashboard/command-center] operating index read failed', error);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──
@@ -120,8 +122,8 @@ export default async function CommandCenterPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Family Command Center</h1>
-        <p className="mt-1 text-sm text-muted">A live readiness view of your week — conflicts, gaps, and what needs attention.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardCommandCenter.familyCommandCenter')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('dashboardCommandCenter.aLiveReadinessViewOfYour')}</p>
       </div>
 
       {/* Since yesterday — the evening "what changed" recap (pillar #5) */}
@@ -130,7 +132,7 @@ export default async function CommandCenterPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Readiness score */}
         <div className="rounded-2xl border border-border bg-surface/40 p-6">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> Family Readiness</h2>
+          <h2 className="mb-4 flex items-center gap-2 font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> {t('dashboardCommandCenter.familyReadiness')}</h2>
           <div className="flex items-center gap-5">
             <div className="relative h-32 w-32 shrink-0">
               <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
@@ -152,11 +154,11 @@ export default async function CommandCenterPage() {
 
         {/* Needs attention */}
         <div className="rounded-2xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 text-amber-400" /> Needs Attention</h2>
+          <h2 className="mb-4 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 text-amber-400" /> {t('dashboardCommandCenter.needsAttention')}</h2>
           {issues.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-400/70" />
-              <p className="mt-2 text-sm text-muted">No conflicts or gaps detected this week. Nicely run.</p>
+              <p className="mt-2 text-sm text-muted">{t('dashboardCommandCenter.noConflictsOrGapsDetectedThis')}</p>
             </div>
           ) : (
             <ul className="space-y-2">
@@ -178,9 +180,9 @@ export default async function CommandCenterPage() {
 
       {/* This week at a glance */}
       <div className="rounded-2xl border border-border bg-surface/40 p-6">
-        <h2 className="mb-4 flex items-center gap-2 font-semibold"><CalendarClock className="h-4 w-4 text-violet-300" /> This Week</h2>
+        <h2 className="mb-4 flex items-center gap-2 font-semibold"><CalendarClock className="h-4 w-4 text-violet-300" /> {t('dashboardCommandCenter.thisWeek')}</h2>
         {(events ?? []).length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No events scheduled in the next 7 days.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('dashboardCommandCenter.noEventsScheduledInTheNext')}</p>
         ) : (
           <ul className="divide-y divide-border/50">
             {(events ?? []).slice(0, 12).map((e) => {
@@ -190,8 +192,8 @@ export default async function CommandCenterPage() {
                 <li key={e.id} className="flex items-center gap-3 py-2.5">
                   <span className="w-32 shrink-0 text-xs text-muted">{fmtDate(e.starts_at)} · {e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.title}</span>
-                  {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">Conflict</span>}
-                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted/60">Unassigned</span>}
+                  {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">{t('commandCenter.conflict')}</span>}
+                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted/60">{t('commandCenter.unassigned')}</span>}
                 </li>
               );
             })}

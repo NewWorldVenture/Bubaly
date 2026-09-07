@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, X, SwitchCamera, ImagePlus, Check } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type FacingMode = 'environment' | 'user';
 
@@ -28,6 +29,7 @@ export function CameraCapture({
   onCapture: (file: File) => void;
   onClose: () => void;
 }) {
+  const tr = useTranslations();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -55,7 +57,7 @@ export function CameraCapture({
     setError(null);
     (async () => {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-        setError('This browser doesn’t support the camera. You can upload a photo instead.');
+        setError(tr('cameraCapture.thisBrowserDoesnTSupport'));
         return;
       }
       try {
@@ -73,7 +75,7 @@ export function CameraCapture({
       }
     })();
     return () => { cancelled = true; stop(); };
-  }, [facing, stop]);
+  }, [facing, stop, tr]);
 
   // Close on Escape.
   useEffect(() => {
@@ -107,15 +109,15 @@ export function CameraCapture({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]" role="dialog" aria-modal="true" aria-label="Take a photo">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]" role="dialog" aria-modal="true" aria-label={tr('cameraCapture.takeAPhoto')}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 text-white">
-        <button type="button" onClick={handleClose} aria-label="Close camera" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20">
+        <button type="button" onClick={handleClose} aria-label={tr('cameraCapture.closeCamera')} className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20">
           <X className="h-5 w-5" />
         </button>
         <span className="text-sm font-medium">{count > 0 ? `${count} photo${count === 1 ? '' : 's'} added` : 'Take a photo'}</span>
         <button type="button" onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))}
-          aria-label="Switch camera" disabled={!!error}
+          aria-label={tr('cameraCapture.switchCamera')} disabled={!!error}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30">
           <SwitchCamera className="h-5 w-5" />
         </button>
@@ -129,7 +131,7 @@ export function CameraCapture({
             <p className="max-w-sm text-sm text-white/80">{error}</p>
             <button type="button" onClick={() => fallbackRef.current?.click()}
               className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-white/90">
-              <ImagePlus className="h-4 w-4" /> Upload a photo
+              <ImagePlus className="h-4 w-4" /> {tr('cameraCapture.uploadAPhoto')}
             </button>
           </div>
         ) : (
@@ -138,7 +140,7 @@ export function CameraCapture({
             <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
             {!ready && (
               <div className="absolute inset-0 grid place-items-center text-white/70">
-                <span className="text-sm">Starting camera…</span>
+                <span className="text-sm">{tr('cameraCapture.startingCamera')}</span>
               </div>
             )}
             {flash && <div className="absolute inset-0 bg-white/80 transition-opacity" />}
@@ -152,10 +154,10 @@ export function CameraCapture({
           {count > 0 ? (
             <button type="button" onClick={handleClose}
               className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20">
-              <Check className="h-4 w-4" /> Done
+              <Check className="h-4 w-4" /> {tr('cameraCapture.done')}
             </button>
           ) : <span className="w-20" />}
-          <button type="button" onClick={shoot} disabled={!ready} aria-label="Take photo"
+          <button type="button" onClick={shoot} disabled={!ready} aria-label={tr('cameraCapture.takePhoto')}
             className="grid place-items-center rounded-full bg-white ring-4 ring-white/30 transition active:scale-95 disabled:opacity-40"
             style={{ height: '4.5rem', width: '4.5rem' }}>
             <span className="h-14 w-14 rounded-full border-4 border-black/80" />

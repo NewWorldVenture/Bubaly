@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -19,8 +20,9 @@ const MAX_LEN = 400;
  * the service role (RLS denies client writes).
  */
 export async function saveServiceDescriptionAction({ key, description }: { key: string; description: string }): Promise<ActionResult> {
-  if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
-  if (!isKnownServiceKey(key)) return { ok: false, error: 'Unknown service.' };
+  const t = await getTranslations();
+  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  if (!isKnownServiceKey(key)) return { ok: false, error: t('actions.unknownService') };
 
   const trimmed = (description ?? '').trim().slice(0, MAX_LEN);
   const supabase = createServiceClient();
@@ -29,7 +31,7 @@ export async function saveServiceDescriptionAction({ key, description }: { key: 
     // Empty or same-as-default → remove the override (fall back to the code default).
     if (!trimmed || trimmed === SERVICE_DESCRIPTIONS[key]) {
       const { error } = await supabase.from('service_descriptions').delete().eq('service_key', key);
-      if (error) return { ok: false, error: describeActionError(error, 'Could not reset that description.') };
+      if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotResetThatDescription')) };
       revalidatePath('/admin/services');
       return { ok: true };
     }
@@ -38,11 +40,11 @@ export async function saveServiceDescriptionAction({ key, description }: { key: 
     const { error } = await supabase
       .from('service_descriptions')
       .upsert({ service_key: key, description: trimmed, updated_by: updatedBy }, { onConflict: 'service_key' });
-    if (error) return { ok: false, error: describeActionError(error, 'Could not save that description.') };
+    if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotSaveThatDescription')) };
     revalidatePath('/admin/services');
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: describeActionError(error, 'Could not save that description.') };
+    return { ok: false, error: describeActionError(error, t('actions.couldNotSaveThatDescription')) };
   }
 }
 

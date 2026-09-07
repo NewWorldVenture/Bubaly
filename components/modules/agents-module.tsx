@@ -11,14 +11,14 @@ import {
   Plane, Cake, Inbox, ArrowRight, Check, X, CircleDot, Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { resolveActivityAction } from '@/app/(app)/dashboard/agents/actions';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatus } from '@/lib/agents/roster';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAgentActivity } from '@/lib/ai/explanation';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Activity = Tables<'agent_activity'>;
 
@@ -35,6 +35,7 @@ const SEV_STYLE = {
 } as const;
 
 export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing[]; activity: Activity[] }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<AgentId>('scheduler');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -57,9 +58,8 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
 
   async function resolve(a: Activity, status: 'done' | 'dismissed') {
     setHidden((h) => new Set(h).add(a.id));
-    const sb = createClient();
-    const { error: err } = await sb.from('agent_activity').update({ status }).eq('id', a.id);
-    if (err) { toastError(describeDbError(err)); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
+    const res = await resolveActivityAction(a.id, status);
+    if (!res.ok) { toastError(res.error); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
     success(status === 'done' ? 'Marked done' : 'Dismissed');
   }
 
@@ -68,8 +68,8 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title="Your family assistant"
-        description="One assistant, a team of specialists behind it — each watching its corner of family life."
+        title={t('agents.yourFamilyAssistant')}
+        description={t('agentsModule.oneAssistantATeamOf')}
       />
 
       {/* Chief of Staff synthesis */}
@@ -81,7 +81,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-brand-text"><Compass className="h-5 w-5" /></span>
             <div>
-              <h2 className="text-sm font-semibold text-fg">Chief of Staff</h2>
+              <h2 className="text-sm font-semibold text-fg">{t('agents.chiefOfStaff')}</h2>
               <p className="text-xs text-muted">{AGENTS_BY_ID.chief_of_staff.role}</p>
             </div>
           </div>
@@ -161,7 +161,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
               if (acts.length === 0) return null;
               return (
                 <div className="mt-5">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recent activity</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('agentsModule.recentActivity')}</h3>
                   <ul className="space-y-2">
                     {acts.slice(0, 8).map((a) => (
                       <li key={a.id} className="rounded-xl border border-border bg-bg/30 p-2.5">
@@ -170,9 +170,9 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
                             <p className="truncate text-sm text-fg">{a.title}</p>
                             {a.detail && <p className="truncate text-xs text-muted">{a.detail}</p>}
                           </div>
-                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
-                          <button onClick={() => resolve(a, 'done')} aria-label="Mark done" className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
-                          <button onClick={() => resolve(a, 'dismissed')} aria-label="Dismiss" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label={t('agentsModule.open')}><ArrowRight className="h-4 w-4" /></Link>}
+                          <button onClick={() => resolve(a, 'done')} aria-label={t('agentsModule.markDone')} className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
+                          <button onClick={() => resolve(a, 'dismissed')} aria-label={t('agentsModule.dismiss')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
                         </div>
                         <div className="mt-1.5">
                           <WhyThis

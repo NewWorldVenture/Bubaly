@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ITEMS = [
   { href: '/dashboard/home', label: 'Overview' },
@@ -14,9 +15,10 @@ const ITEMS = [
 ];
 
 export function HomeSubnav() {
+  const t = useTranslations();
   const pathname = usePathname();
   return (
-    <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1" aria-label="Home sections">
+    <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1" aria-label={t('homeSubnav.homeSections')}>
       {ITEMS.map((item) => {
         const active = item.href === '/dashboard/home' ? pathname === item.href : pathname.startsWith(item.href);
         return (

@@ -35,13 +35,17 @@ export type NavGroup = { title: string; layout: 'list' | 'grid'; items: NavItem[
 
 /** Marketing top-nav. */
 export const MARKETING_NAV = [
-  { href: '/features', label: 'Features' },
-  { href: '/how-it-works', label: 'How It Works' },
-  { href: '/ai', label: 'AI Assistant' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/faq', label: 'FAQ' },
-  { href: '/security', label: 'Security' },
-  { href: '/blog', label: 'Blog' },
+  // `label` stays as the English source of truth (it is what the catalogue key
+  // resolves to, and what non-UI callers read); `labelKey` is what the header
+  // renders through t(). Keeping both means a caller that is not translating
+  // still gets a real string rather than a raw key.
+  { href: '/features', label: 'Features', labelKey: 'marketing.nav.features' },
+  { href: '/how-it-works', label: 'How It Works', labelKey: 'marketing.nav.howItWorks' },
+  { href: '/ai', label: 'AI Assistant', labelKey: 'marketing.nav.aiAssistant' },
+  { href: '/pricing', label: 'Pricing', labelKey: 'marketing.nav.pricing' },
+  { href: '/faq', label: 'FAQ', labelKey: 'marketing.nav.faq' },
+  { href: '/security', label: 'Security', labelKey: 'marketing.nav.security' },
+  { href: '/blog', label: 'Blog', labelKey: 'marketing.nav.blog' },
 ] as const;
 
 /**
@@ -238,6 +242,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },
   { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
+  { href: '/admin/ai-activity', label: 'AI Activity', icon: Bot },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
   { href: '/admin/feedback', label: 'Feedback & Ideas', icon: MessagesSquare },

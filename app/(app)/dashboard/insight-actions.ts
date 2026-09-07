@@ -6,13 +6,15 @@
 // signal. Family-scoped: RLS (is_family_member) guarantees a caller can only touch
 // their own family's insights.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 
 type Result = { ok: boolean; error?: string };
 
 async function setInsightStatus(id: string, status: 'dismissed' | 'acted'): Promise<Result> {
-  if (!id || typeof id !== 'string') return { ok: false, error: 'Invalid insight' };
+  const t = await getTranslations();
+  if (!id || typeof id !== 'string') return { ok: false, error: t('insightActions.invalidInsight') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase

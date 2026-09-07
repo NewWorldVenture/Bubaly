@@ -5,22 +5,25 @@ import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Gauge } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Usage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('usage.usage')}</h1>
       <AdminSocialSubnav active="/admin/social/usage" />
-      <ErrorState message="Could not load social usage events from Supabase. Refresh and try again." />
-      <Link href="/admin/social/usage" className="text-sm font-medium text-brand-text underline">Refresh social usage</Link>
+      <ErrorState message={t('usage.couldNotLoadSocialUsage')} />
+      <Link href="/admin/social/usage" className="text-sm font-medium text-brand-text underline">{t('usage.refreshSocialUsage')}</Link>
     </div>
   );
 }
 
 export default async function AdminUsagePage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: events, error } = await supabase
     .from('social_usage_events')
@@ -39,16 +42,16 @@ export default async function AdminUsagePage() {
 
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('adminSocialUsage.usage')}</h1>
       <AdminSocialSubnav active="/admin/social/usage" />
-      <p className="text-sm text-muted">Metered events (AI generations, publishes, media uploads, feed syncs) across all families.</p>
+      <p className="text-sm text-muted">{t('adminSocialUsage.meteredEventsAiGenerationsPublishesMedia')}</p>
       {rows.length === 0 ? (
-        <EmptyState icon={Gauge} title="No usage recorded yet" description="Usage events accrue as families generate AI content and publish." />
+        <EmptyState icon={Gauge} title={t('adminSocialUsage.noUsageRecordedYet')} description={t('usage.usageEventsAccrueAsFamilies')} />
       ) : (
         <Card>
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted"><tr><th className="px-2 py-1.5 font-medium">Event</th><th className="px-2 py-1.5 font-medium">Total</th></tr></thead>
+            <thead className="text-left text-xs text-muted"><tr><th className="px-2 py-1.5 font-medium">{t('adminSocialUsage.event')}</th><th className="px-2 py-1.5 font-medium">{t('adminSocialUsage.total')}</th></tr></thead>
             <tbody>
               {rows.map(([kind, total]) => (
                 <tr key={kind} className="border-t border-border">

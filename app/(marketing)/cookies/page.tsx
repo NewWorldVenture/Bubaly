@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
+  // The browser tab title is copy too — a French visitor should not get an
+  // English <title> above a French page.
+  const t = await getTranslations();
   return resolveMarketingMetadata('/cookies', {
-  title: 'Cookie Policy',
+  title: t('cookies.cookiePolicy'),
   description: 'How Bubaly uses cookies and similar technologies, and the choices you have.',
   });
 }
@@ -48,12 +52,13 @@ const SECTIONS: LegalSection[] = [
   },
 ];
 
-export default function CookiesPage() {
+export default async function CookiesPage() {
+  const t = await getTranslations();
   return (
     <>
       <LegalPage
-        title="Cookie Policy"
-        summary="The small files that keep you signed in and Bubaly running — and how to control them."
+        title={t('cookies.cookiePolicy')}
+        summary={t('cookies.theSmallFilesThatKeep')}
         lastUpdated="June 24, 2026"
         path="/cookies"
         sections={SECTIONS}

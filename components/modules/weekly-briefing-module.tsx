@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types (mirror the /api/ai/weekly-briefing JSON contract) ──────────────────
 
@@ -94,22 +95,20 @@ function CategoryBar({ label, score, icon }: OpsCategory) {
 }
 
 function GenerateCTA({ onGenerate, loading }: { onGenerate: () => void; loading: boolean }) {
+  const t = useTranslations();
   return (
     <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
       <div className="w-20 h-20 rounded-2xl bg-surface/50 border border-border flex items-center justify-center mb-6">
         <CalendarDays className="h-8 w-8 text-emerald-400" />
       </div>
-      <h2 className="text-2xl font-bold text-fg mb-3">Weekly AI Briefing</h2>
-      <p className="text-muted max-w-md mb-8">
-        Look back at how last week went and get ahead of the next seven days — conflicts flagged,
-        prep checklist ready, and a day-by-day plan for the whole family.
-      </p>
+      <h2 className="text-2xl font-bold text-fg mb-3">{t('weeklyBriefing.weeklyAiBriefing')}</h2>
+      <p className="text-muted max-w-md mb-8">{t('weeklyBriefingModule.lookBackAtHowLast')}</p>
       <Button onClick={onGenerate} disabled={loading}
         className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
         {loading ? 'Planning your week…' : 'Generate Weekly Briefing'}
       </Button>
-      {loading && <p className="text-muted text-sm mt-4">Analyzing last week and the week ahead with AI…</p>}
+      {loading && <p className="text-muted text-sm mt-4">{t('weeklyBriefing.analyzingLastWeekAndTheWeek')}</p>}
     </div>
   );
 }
@@ -117,6 +116,7 @@ function GenerateCTA({ onGenerate, loading }: { onGenerate: () => void; loading:
 // ─── Main content ──────────────────────────────────────────────────────────────
 
 function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
+  const t = useTranslations();
   const ops = data.weeklyScore;
   const stress = ops?.stressLevel ? STRESS_CONFIG[ops.stressLevel] : STRESS_CONFIG.low;
   const recap = data.recap;
@@ -128,7 +128,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
         <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-border p-6">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp className="h-4 w-4 text-emerald-400" />
-            <span className="text-sm font-semibold text-fg uppercase tracking-wider">Week Readiness Score</span>
+            <span className="text-sm font-semibold text-fg uppercase tracking-wider">{t('weeklyBriefing.weekReadinessScore')}</span>
           </div>
           <div className="flex gap-8 items-center">
             <div className="relative flex-shrink-0">
@@ -165,19 +165,19 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
       {recap && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
           <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-            <History className="h-4 w-4 text-indigo-400" /> Last Week Recap
+            <History className="h-4 w-4 text-indigo-400" /> {t('weeklyBriefing.lastWeekRecap')}
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-5 items-start">
             <div className="rounded-xl bg-indigo-500/5 border border-indigo-500/20 px-5 py-4 text-center">
               <div className="text-3xl font-bold text-indigo-300">{recap.choreCompletion}%</div>
-              <div className="text-xs text-muted mt-1">Chores done</div>
+              <div className="text-xs text-muted mt-1">{t('weeklyBriefing.choresDone')}</div>
             </div>
             <div>
               <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Trophy className="h-3.5 w-3.5" /> Wins
+                <Trophy className="h-3.5 w-3.5" /> {t('weeklyBriefing.wins')}
               </div>
               {(recap.wins ?? []).length === 0 ? (
-                <p className="text-muted text-sm">Nothing logged</p>
+                <p className="text-muted text-sm">{t('weeklyBriefing.nothingLogged')}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {recap.wins.map((wIt, i) => (
@@ -190,10 +190,10 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
             </div>
             <div>
               <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5" /> Slipped
+                <AlertTriangle className="h-3.5 w-3.5" /> {t('weeklyBriefing.slipped')}
               </div>
               {(recap.misses ?? []).length === 0 ? (
-                <p className="text-muted text-sm">All clear</p>
+                <p className="text-muted text-sm">{t('weeklyBriefing.allClear')}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {recap.misses.map((m, i) => (
@@ -215,7 +215,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
       {(data.dayByDay ?? []).length > 0 && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
           <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-blue-400" /> The Week Ahead
+            <Clock className="h-4 w-4 text-blue-400" /> {t('weeklyBriefing.theWeekAhead')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             {data.dayByDay.map((d, i) => {
@@ -232,7 +232,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
                     </span>
                   </div>
                   {(d.events ?? []).length === 0 ? (
-                    <p className="text-xs text-muted py-2">Open day</p>
+                    <p className="text-xs text-muted py-2">{t('weeklyBriefing.openDay')}</p>
                   ) : (
                     <ul className="space-y-2">
                       {d.events.map((ev, j) => (
@@ -274,7 +274,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
         {(data.conflicts ?? []).length > 0 && (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
             <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" /> Conflicts This Week
+              <AlertTriangle className="h-4 w-4" /> {t('weeklyBriefing.conflictsThisWeek')}
             </h3>
             <div className="space-y-3">
               {data.conflicts.map((c, i) => (
@@ -294,7 +294,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
         {(data.prepChecklist ?? []).length > 0 && (
           <div className="rounded-2xl bg-surface/50 border border-border p-5">
             <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-              <ListTodo className="h-4 w-4 text-violet-400" /> Get Ahead — Prep Checklist
+              <ListTodo className="h-4 w-4 text-violet-400" /> {t('weeklyBriefing.getAheadPrepChecklist')}
             </h3>
             <ul className="space-y-2">
               {data.prepChecklist.map((p, i) => (
@@ -316,7 +316,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
         <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-5 flex items-start gap-3">
           <Target className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
           <div>
-            <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">Focus of the Week</div>
+            <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">{t('weeklyBriefing.focusOfTheWeek')}</div>
             <p className="text-sm text-fg/90">{data.focusOfTheWeek}</p>
           </div>
         </div>
@@ -328,6 +328,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
 // ─── Main export ───────────────────────────────────────────────────────────────
 
 export function WeeklyBriefingModule() {
+  const t = useTranslations();
   const [data, setData] = useState<WeeklyBriefingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -365,11 +366,11 @@ export function WeeklyBriefingModule() {
       setGeneratedAt(at);
       try { sessionStorage.setItem(storageKey, JSON.stringify({ briefing, at })); } catch { /* ignore */ }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setError(e instanceof Error ? e.message : t('weeklyBriefingModule.somethingWentWrong'));
     } finally {
       setLoading(false);
     }
-  }, [storageKey]);
+  }, [storageKey, t]);
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -379,19 +380,19 @@ export function WeeklyBriefingModule() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-emerald-400" /> Weekly AI Briefing
+            <CalendarDays className="h-6 w-6 text-emerald-400" /> {t('weeklyBriefing.weeklyAiBriefing')}
           </h1>
           <p className="text-muted text-sm mt-1">
-            Reflect on last week and plan the next seven days
+            {t('weeklyBriefing.reflectOnLastWeekAndPlan')}
             {data?.weekRange ? ` · ${data.weekRange}` : ''}
           </p>
         </div>
         {data && (
           <div className="flex items-center gap-3">
-            {generatedAt && <span className="text-xs text-muted">Generated {fmtTime(generatedAt)}</span>}
+            {generatedAt && <span className="text-xs text-muted">{t('weeklyBriefing.generated')} {fmtTime(generatedAt)}</span>}
             <Button variant="outline" size="sm" onClick={generate} disabled={loading}
               className="border-border hover:bg-elevated text-fg/80 gap-1.5">
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> {t('weeklyBriefing.refresh')}
             </Button>
           </div>
         )}

@@ -4,14 +4,18 @@
 // ratings or reviews — so we never risk a structured-data spam penalty.
 
 import { Fragment } from 'react';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getSocialLinks } from '@/lib/server/social-links';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
 function JsonLd({ data }: { data: Record<string, unknown> }) {
-  // Today every caller passes static, developer-authored data. As defense in
-  // depth, escape `<` (as <) so a value can never break out of the
-  // <script> tag with `</script>` — the standard safe way to inline JSON-LD —
-  // in case a future caller ever passes dynamic/DB content.
+  // Most callers pass static, developer-authored data, but Organization.sameAs
+  // now carries admin-entered URLs out of app_settings. Escaping `<` (as <)
+  // is what stops any value closing the <script> tag with `</script>` — the
+  // standard safe way to inline JSON-LD. Those URLs are also parsed and
+  // restricted to https before they are stored (lib/marketing/social-links.ts),
+  // so this is the second of two gates, not the only one.
   const json = JSON.stringify(data).replace(/</g, '\\u003c');
   return (
     <script
@@ -22,7 +26,12 @@ function JsonLd({ data }: { data: Record<string, unknown> }) {
 }
 
 /** Organization + WebSite + SoftwareApplication — render once, on the homepage. */
-export function SiteStructuredData() {
+export async function SiteStructuredData() {
+  // The same admin-entered profiles the footer shows. `sameAs` is how a search
+  // engine ties those accounts to the brand, so it reads from one source rather
+  // than a second hand-kept list that would drift from the footer.
+  const social = await getSocialLinks(createServiceClient());
+
   const organization = {
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -31,7 +40,7 @@ export function SiteStructuredData() {
     logo: `${SITE_URL}/brand/bubaly-logo.png`,
     description:
       'Bubaly is the AI operating system for family life — it handles the logistics so families spend less time managing life and more time living it.',
-    sameAs: [] as string[],
+    sameAs: Object.values(social),
   };
 
   const website = {

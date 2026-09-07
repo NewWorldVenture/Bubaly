@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -15,23 +18,24 @@ export const dynamic = 'force-dynamic';
  * this adds the human judgement layer. Grounded only in the asset list provided.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('forecast.unauthorized') }, { status: 401 }); }
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-home-forecast:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many maintenance-forecast requests. Please try again shortly.' },
+    { error: t('forecast.tooManyMaintenanceForecastRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: t('forecast.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('forecast.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const assets = Array.isArray(body.assets) ? body.assets.slice(0, 40) : [];
-  if (assets.length === 0) return NextResponse.json({ error: 'Add some home assets first to forecast maintenance.' }, { status: 400 });
+  if (assets.length === 0) return NextResponse.json({ error: t('forecast.addSomeHomeAssetsFirst') }, { status: 400 });
 
   const lines = assets.map((a: Record<string, unknown>) => {
     const parts = [String(a.name ?? a.category ?? 'item')];
@@ -52,8 +56,15 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: `Home assets:\n${lines}` }], tools: [] });
-    text = completion.text.trim();
+    text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'home.forecast', text: `Maintenance outlook for ${assets.length} assets` },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: `Home assets:\n${lines}` }], tools: [] });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text.trim();
+      },
+    );
   } catch (err) {
     console.error('Home maintenance forecast error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });

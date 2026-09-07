@@ -9,8 +9,9 @@ import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch } from '@/lib/marketing/personalization';
 import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/marketing/exit-intent';
 import { createExitIntentAction, toggleExitIntentAction, deleteExitIntentAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Exit-Intent Popups', robots: { index: false } };
+export const metadata: Metadata = { title: 'exitIntent.exitIntentPopups', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Offer = Tables<'marketing_exit_intent'>;
@@ -18,12 +19,13 @@ type Offer = Tables<'marketing_exit_intent'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Exit-Intent Popups</h1>
-      <ErrorState message="Could not load exit-intent offers from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">Refresh exit-intent offers</Link>
+      <h1 className="text-xl font-black sm:text-2xl">{t('exitIntent.exitIntentPopups')}</h1>
+      <ErrorState message={t('exitIntent.couldNotLoadExitIntent')} />
+      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">{t('exitIntent.refreshExitIntentOffers')}</Link>
     </div>
   );
 }
@@ -40,6 +42,7 @@ function matchSummary(m: AudienceMatch): string {
 }
 
 export default async function ExitIntentPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('marketing_exit_intent')
@@ -74,48 +77,48 @@ export default async function ExitIntentPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><LogOut className="h-4 w-4 text-brand-text" /> New offer</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><LogOut className="h-4 w-4 text-brand-text" /> {t('adminMarketingExitIntent.newOffer')}</h2>
         <form action={createExitIntentAction} className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <input name="name" required placeholder="Internal name" className={`${inputCls} lg:col-span-2`} />
-            <input name="priority" type="number" defaultValue={0} placeholder="Priority" className={inputCls} />
+            <input name="name" required placeholder={t('adminMarketingExitIntent.internalName')} className={`${inputCls} lg:col-span-2`} />
+            <input name="priority" type="number" defaultValue={0} placeholder={t('adminMarketingExitIntent.priority')} className={inputCls} />
             <select name="status" defaultValue="active" className={inputCls}>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
+              <option value="active">{t('adminMarketingExitIntent.active')}</option>
+              <option value="paused">{t('adminMarketingExitIntent.paused')}</option>
             </select>
-            <input name="headline" required placeholder="Headline" className={`${inputCls} lg:col-span-2`} />
-            <input name="cta_label" placeholder="CTA label" className={inputCls} />
-            <input name="cta_href" placeholder="CTA href (e.g. /signup)" className={inputCls} />
-            <input name="body" placeholder="Body" className={`${inputCls} lg:col-span-4`} />
+            <input name="headline" required placeholder={t('adminMarketingExitIntent.headline')} className={`${inputCls} lg:col-span-2`} />
+            <input name="cta_label" placeholder={t('adminMarketingExitIntent.ctaLabel')} className={inputCls} />
+            <input name="cta_href" placeholder={t('adminMarketingExitIntent.ctaHrefEGSignup')} className={inputCls} />
+            <input name="body" placeholder={t('adminMarketingExitIntent.body')} className={`${inputCls} lg:col-span-4`} />
           </div>
-          <p className="text-xs font-medium text-muted">Trigger</p>
+          <p className="text-xs font-medium text-muted">{t('adminMarketingExitIntent.trigger')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <select name="mode" defaultValue="mouseleave" className={inputCls}>
-              <option value="mouseleave">On exit (mouseleave)</option>
-              <option value="scroll">On scroll depth</option>
+              <option value="mouseleave">{t('adminMarketingExitIntent.onExitMouseleave')}</option>
+              <option value="scroll">{t('adminMarketingExitIntent.onScrollDepth')}</option>
             </select>
-            <input name="delayMs" type="number" min="0" defaultValue={0} placeholder="Min delay (ms)" className={inputCls} />
-            <input name="scrollPercent" type="number" min="0" max="100" defaultValue={60} placeholder="Scroll % (scroll mode)" className={inputCls} />
+            <input name="delayMs" type="number" min="0" defaultValue={0} placeholder={t('adminMarketingExitIntent.minDelayMs')} className={inputCls} />
+            <input name="scrollPercent" type="number" min="0" max="100" defaultValue={60} placeholder={t('adminMarketingExitIntent.scrollScrollMode')} className={inputCls} />
           </div>
-          <p className="text-xs font-medium text-muted">Audience (blank = everyone; all set conditions must hold)</p>
+          <p className="text-xs font-medium text-muted">{t('adminMarketingExitIntent.audienceBlankEveryoneAllSetConditions')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <input name="source" placeholder="UTM source(s)" className={inputCls} />
-            <input name="campaign" placeholder="UTM campaign(s)" className={inputCls} />
-            <input name="paths" placeholder="Path prefix(es)" className={inputCls} />
-            <input name="countries" placeholder="Country code(s)" className={inputCls} />
+            <input name="source" placeholder={t('adminMarketingExitIntent.utmSourceS')} className={inputCls} />
+            <input name="campaign" placeholder={t('adminMarketingExitIntent.utmCampaignS')} className={inputCls} />
+            <input name="paths" placeholder={t('adminMarketingExitIntent.pathPrefixEs')} className={inputCls} />
+            <input name="countries" placeholder={t('adminMarketingExitIntent.countryCodeS')} className={inputCls} />
             <select name="returning" defaultValue="" className={inputCls}>
-              <option value="">New or returning</option>
-              <option value="true">Returning only</option>
-              <option value="false">New visitors only</option>
+              <option value="">{t('adminMarketingExitIntent.newOrReturning')}</option>
+              <option value="true">{t('adminMarketingExitIntent.returningOnly')}</option>
+              <option value="false">{t('adminMarketingExitIntent.newVisitorsOnly')}</option>
             </select>
-            <input name="minSessions" type="number" min="0" placeholder="Min sessions" className={inputCls} />
-            <button type="submit" className={`${btnCls} lg:col-span-2`}>Create offer</button>
+            <input name="minSessions" type="number" min="0" placeholder={t('adminMarketingExitIntent.minSessions')} className={inputCls} />
+            <button type="submit" className={`${btnCls} lg:col-span-2`}>{t('adminMarketingExitIntent.createOffer')}</button>
           </div>
         </form>
       </Card>
 
       {offers.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No exit-intent offers yet.</p>
+        <p className="py-8 text-center text-sm text-muted">{t('adminMarketingExitIntent.noExitIntentOffersYet')}</p>
       ) : (
         <div className="space-y-2">
           {offers.map((o) => {

@@ -64,6 +64,17 @@ round-trip and web push. Per callback: valid→200, replay→idempotent, forged 
 - **PLA-0610** — family-PII visibility model (should children read a parent's passwords/medical/IDs?).
 - **PLA-0581** — "Secure Vault" is label-only today; decide whether it needs real gating beyond family RLS.
 
+## 8. "wallet_transactions has a permissive INSERT policy" — LB-016
+
+`docs/runbooks/LB-016-wallet-permissive-policy-finding.md` — the metadata finding
+that has stopped three release attempts. **Not exploitable** (0254's restrictive
+guards; proved behaviourally in `docs/audit/wallet-write-rls-check.sql`
+invariants 5-7, run in CI). Code side closed by migration `0275`, which sweeps
+stray permissive write policies by shape instead of by name. What remains is an
+operator action: production's migration ledger records only 0001-0003, so
+`hasUnrecordedBaseline` correctly blocks replay until the baseline is stamped.
+Read that page before halting on this finding again.
+
 ## Release rule
 
 No GO while any **P0** is open (LB-001, LB-003, LB-010 via migration 0217) or a P1 lacks owner + exit

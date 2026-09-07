@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useRouter } from 'next/navigation';
 import { Plug, Loader2, ShieldAlert, CheckCircle2, ExternalLink } from 'lucide-react';
 import { PROVIDERS, PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
@@ -12,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 /** readiness is computed server-side (reads env) and passed in to avoid leaking
  *  which env vars exist; the client only sees ready/requires_setup booleans. */
 export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, boolean> }) {
+  const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busyPlatform, setBusyPlatform] = useState<SocialPlatform | null>(null);
@@ -48,7 +50,7 @@ export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, b
               <div className="mb-2 flex items-center gap-2">
                 <PlatformDot platform={p} />
                 <span className="text-sm font-semibold">{def.label}</span>
-                {ready ? <Badge tone="success" className="ml-auto">Ready</Badge> : <Badge tone="neutral" className="ml-auto">Requires setup</Badge>}
+                {ready ? <Badge tone="success" className="ml-auto">{t('connectGrid.ready')}</Badge> : <Badge tone="neutral" className="ml-auto">{t('connectGrid.requiresSetup')}</Badge>}
               </div>
               <ul className="mb-2 space-y-0.5 text-xs text-muted">
                 <li>Auth: {def.auth}</li>
@@ -72,7 +74,7 @@ export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, b
                   {pending && busyPlatform === p ? <Loader2 className="h-4 w-4 animate-spin" /> : ready ? <CheckCircle2 className="h-4 w-4" /> : <Plug className="h-4 w-4" />}
                   {ready ? 'Connect' : 'Add (setup)'}
                 </button>
-                <a href={def.docsUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted" title="API docs">
+                <a href={def.docsUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted" title={t('connectGrid.apiDocs')}>
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </div>

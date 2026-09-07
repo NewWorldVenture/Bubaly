@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: 'Trust & Permissions' };
 export const dynamic = 'force-dynamic';
 
 export default async function TrustPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -46,7 +48,7 @@ export default async function TrustPage() {
     .find((e) => e && !isMissingTableError(e));
   if (trustError) {
     console.error('[dashboard/trust] trust read failed', trustError);
-    return <ErrorState message="Could not load your family trust & permissions from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('trust.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;

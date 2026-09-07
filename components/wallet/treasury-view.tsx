@@ -7,6 +7,7 @@ import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { Avatar } from '@/components/ui/avatar';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { progressBarA11y } from '@/lib/ui/a11y';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type TreasuryChild = {
   id: string;
@@ -43,6 +44,7 @@ export function TreasuryView({
   trend: { label: string; credits: number; debits: number }[];
   canManage: boolean;
 }) {
+  const tr = useTranslations();
   const netMonth = thisMonthIn - thisMonthOut;
   const goalPct = totalGoalTargets > 0 ? Math.min(100, Math.round((totalGoalSaved / totalGoalTargets) * 100)) : 0;
   const savingsRate = thisMonthIn > 0
@@ -51,16 +53,16 @@ export function TreasuryView({
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Treasury" description="Complete financial picture for your household." />
+      <PageHeader title={tr('treasury.familyTreasury')} description={tr('treasuryView.completeFinancialPictureForYour')} />
       <WalletSubnav />
 
       {/* Hero: total balance */}
       <div className="mb-6 overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-text/70">Total Family Balance</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-text/70">{tr('treasury.totalFamilyBalance')}</p>
             <p className="mt-1 text-4xl font-black tracking-tight">{formatCents(familyTotal)}</p>
-            <p className="mt-1 text-sm text-muted">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} · {totalActiveGoals} active goal{totalActiveGoals !== 1 ? 's' : ''}</p>
+            <p className="mt-1 text-sm text-muted">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} · {totalActiveGoals} {tr('treasury.activeGoal')}{totalActiveGoals !== 1 ? 's' : ''}</p>
           </div>
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/15">
             <Building2 className="h-6 w-6 text-brand-text" />
@@ -77,13 +79,13 @@ export function TreasuryView({
       {/* Month stats */}
       <div className="mb-6 grid grid-cols-3 gap-3">
         <StatCard
-          label="Month In"
+          label={tr('treasury.monthIn')}
           value={formatCents(thisMonthIn)}
           icon={<ArrowDownLeft className="h-4 w-4 text-emerald-400" />}
           color="text-emerald-400"
         />
         <StatCard
-          label="Month Out"
+          label={tr('treasury.monthOut')}
           value={formatCents(thisMonthOut)}
           icon={<ArrowUpRight className="h-4 w-4 text-rose-400" />}
           color="text-rose-400"
@@ -99,11 +101,11 @@ export function TreasuryView({
       {/* Per-child overview */}
       <section className="mb-6">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-          <PiggyBank className="h-4 w-4" /> Children
+          <PiggyBank className="h-4 w-4" /> {tr('treasury.children')}
         </h2>
         {wallets.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-            No child wallets yet.
+            {tr('treasury.noChildWalletsYet')}
           </div>
         ) : (
           <div className="space-y-2">
@@ -118,15 +120,15 @@ export function TreasuryView({
       {totalActiveGoals > 0 && (
         <section className="mb-6">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-            <Target className="h-4 w-4" /> Goals Progress
+            <Target className="h-4 w-4" /> {tr('treasury.goalsProgress')}
           </h2>
           <div className="rounded-2xl border border-border bg-surface/40 p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">
-                  {formatCents(totalGoalSaved)} saved toward {formatCents(totalGoalTargets)}
+                  {formatCents(totalGoalSaved)} {tr('treasury.savedToward')} {formatCents(totalGoalTargets)}
                 </p>
-                <p className="text-xs text-muted">{totalActiveGoals} active goal{totalActiveGoals !== 1 ? 's' : ''} across {wallets.filter((c) => c.activeGoals > 0).length} child{wallets.filter((c) => c.activeGoals > 0).length !== 1 ? 'ren' : ''}</p>
+                <p className="text-xs text-muted">{totalActiveGoals} {tr('treasury.activeGoal')}{totalActiveGoals !== 1 ? 's' : ''} across {wallets.filter((c) => c.activeGoals > 0).length} child{wallets.filter((c) => c.activeGoals > 0).length !== 1 ? 'ren' : ''}</p>
               </div>
               <div className="flex items-center gap-1 text-lg font-black text-brand-text">
                 {goalPct}%
@@ -140,7 +142,7 @@ export function TreasuryView({
             </div>
             <div className="mt-3 flex justify-end">
               <Link href="/wallet/goals" className="flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
-                View all goals <ChevronRight className="h-3.5 w-3.5" />
+                {tr('treasury.viewAllGoals')} <ChevronRight className="h-3.5 w-3.5" />
               </Link>
             </div>
           </div>
@@ -151,23 +153,23 @@ export function TreasuryView({
       {familyTotal > 0 && (
         <section className="mb-6">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-            <Percent className="h-4 w-4" /> Savings Rate
+            <Percent className="h-4 w-4" /> {tr('treasury.savingsRate')}
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-border bg-surface/40 p-4">
-              <p className="text-xs text-muted">Save bucket</p>
+              <p className="text-xs text-muted">{tr('treasury.saveBucket')}</p>
               <p className="mt-1 text-2xl font-black text-emerald-400">
                 {formatCents(wallets.reduce((s, c) => s + c.buckets.save, 0))}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted">{savingsRate}% of total balance</p>
+              <p className="mt-0.5 text-[11px] text-muted">{savingsRate}{tr('treasury.ofTotalBalance')}</p>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-4">
-              <p className="text-xs text-muted">Give bucket</p>
+              <p className="text-xs text-muted">{tr('treasury.giveBucket')}</p>
               <p className="mt-1 text-2xl font-black text-rose-400">
                 {formatCents(wallets.reduce((s, c) => s + c.buckets.give, 0))}
               </p>
               <p className="mt-0.5 text-[11px] text-muted">
-                {familyTotal > 0 ? Math.round((wallets.reduce((s, c) => s + c.buckets.give, 0) / familyTotal) * 100) : 0}% of total balance
+                {familyTotal > 0 ? Math.round((wallets.reduce((s, c) => s + c.buckets.give, 0) / familyTotal) * 100) : 0}{tr('treasury.ofTotalBalance')}
               </p>
             </div>
           </div>
@@ -177,7 +179,7 @@ export function TreasuryView({
       {/* 6-month trend */}
       <section className="mb-6">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-          <TrendingUp className="h-4 w-4" /> 6-Month Flow
+          <TrendingUp className="h-4 w-4" /> {tr('treasury.6MonthFlow')}
         </h2>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <TrendChart trend={trend} />
@@ -186,7 +188,7 @@ export function TreasuryView({
 
       {/* Quick links */}
       <section>
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-muted">Quick Actions</h2>
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-muted">{tr('treasury.quickActions')}</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { href: '/wallet/allowance', label: 'Allowance', emoji: '📅' },
@@ -252,6 +254,7 @@ function MiniSplitBar({ wallets, familyTotal }: { wallets: TreasuryChild[]; fami
 }
 
 function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: number }) {
+  const tr = useTranslations();
   const share = familyTotal > 0 ? Math.round((child.total / familyTotal) * 100) : 0;
   const goalPct = child.goalTargetCents > 0 ? Math.min(100, Math.round((child.goalSavedCents / child.goalTargetCents) * 100)) : null;
 
@@ -275,7 +278,7 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
           </div>
         )}
         <div className="mt-1 flex items-center gap-3 text-[11px] text-muted">
-          <span>{share}% of family</span>
+          <span>{share}{tr('treasury.ofFamily')}</span>
           {child.activeGoals > 0 && (
             <span className="flex items-center gap-0.5 text-brand-text">
               <Target className="h-2.5 w-2.5" />
@@ -284,7 +287,7 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
           )}
           {child.monthlyIn > 0 && (
             <span className="flex items-center gap-0.5 text-emerald-400">
-              +{formatCents(child.monthlyIn)} this month
+              +{formatCents(child.monthlyIn)} {tr('treasury.thisMonth')}
             </span>
           )}
         </div>

@@ -25,6 +25,7 @@ import {
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ const KIND_ICON: Record<string, typeof ShoppingBag> = {
 };
 
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -53,7 +55,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     .eq('id', id).eq('family_id', familyId).maybeSingle();
   if (listingError) {
     reportRead('Listing', listingError);
-    return <ErrorState message="Could not load this listing from the marketplace. Refresh and try again." />;
+    return <ErrorState message={t('item.couldNotLoadThisListing')} />;
   }
   if (!listing) notFound();
 
@@ -194,16 +196,16 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
       {dataWarnings.length > 0 && (
         <div
           role="status"
-          aria-label="Listing data health"
+          aria-label={t('marketplaceItem.listingDataHealth')}
           className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
         >
-          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some listing details are temporarily unavailable.</p>
-          <p className="mt-1 text-xs">The listing is still shown, but affected trust, offer, auction, or history details may be incomplete. Refresh after the connection is restored.</p>
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> {t('marketplaceItem.someListingDetailsAreTemporarilyUnavailable')}</p>
+          <p className="mt-1 text-xs">{t('item.theListingIsStillShown')}</p>
           <p className="mt-1 text-xs">Unavailable: {Array.from(new Set(dataWarnings)).join(', ')}.</p>
         </div>
       )}
       <Link href="/marketplace/browse" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> Back to browse
+        <ArrowLeft className="h-4 w-4" /> {t('marketplaceItem.backToBrowse')}
       </Link>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -241,7 +243,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               )}
               {atLowest && priceHistory.length > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  Lowest ever
+                  {t('marketplaceItem.lowestEver')}
                 </span>
               )}
               {dealBadge && (
@@ -256,10 +258,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
           )}
-          {compBand && <p className="mt-0.5 text-[11px] text-muted">{compBand} · based on comparable listings</p>}
+          {compBand && <p className="mt-0.5 text-[11px] text-muted">{compBand} {t('marketplaceItem.basedOnComparableListings')}</p>}
           {tracksPrice && priceHistory.length > 0 && (
             <details className="mt-2 text-xs text-muted">
-              <summary className="cursor-pointer select-none hover:text-fg">Price history ({priceHistory.length})</summary>
+              <summary className="cursor-pointer select-none hover:text-fg">{t('marketplaceItem.priceHistory')}{priceHistory.length})</summary>
               <ul className="mt-1.5 space-y-0.5">
                 {priceHistory.map((h, i) => (
                   <li key={i} className="flex items-center justify-between gap-3">
@@ -323,7 +325,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               {rs.count > 0 ? (
                 <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />{rs.avg.toFixed(1)} ({rs.count})</span>
               ) : (
-                <span>No reviews yet</span>
+                <span>{t('marketplaceItem.noReviewsYet')}</span>
               )}
               {trust.factors[0] && <span className="truncate">· {trust.factors[0]}</span>}
             </div>
@@ -332,7 +334,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {/* Actions */}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {isOwner ? (
-              <span className="text-sm text-muted">This is your listing{openOffers > 0 ? ` · ${openOffers} open offer${openOffers === 1 ? '' : 's'}` : ''}.</span>
+              <span className="text-sm text-muted">{t('marketplaceItem.thisIsYourListing')}{openOffers > 0 ? ` · ${openOffers} open offer${openOffers === 1 ? '' : 's'}` : ''}.</span>
             ) : open ? (
               <InterestButton listingId={listing.id} label={claimLabel} sentLabel={sentLabel} alreadySent={alreadySent} />
             ) : (
@@ -366,7 +368,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
       {/* Reviews for this listing */}
       {(listingReviewsRes.data ?? []).length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold text-fg">Reviews</h2>
+          <h2 className="mb-3 text-sm font-semibold text-fg">{t('marketplaceItem.reviews')}</h2>
           <ul className="space-y-3">
             {(listingReviewsRes.data ?? []).map((r) => (
               <li key={r.id} className="rounded-xl border border-border bg-surface/50 p-3">

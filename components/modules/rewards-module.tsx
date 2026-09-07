@@ -24,6 +24,7 @@ import {
   type AssignmentLike, type RedemptionLike,
 } from '@/lib/rewards/points';
 import type { Tables, RedemptionStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Reward = Tables<'rewards'>;
 type Redemption = Tables<'reward_redemptions'>;
@@ -39,6 +40,7 @@ const STATUS_STYLES: Record<RedemptionStatus, string> = {
 const blankReward = { id: '', title: '', description: '', cost_points: 100 };
 
 export function RewardsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canManage = isManager(role);
@@ -82,8 +84,8 @@ export function RewardsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
-    if (form.cost_points < 0) { toastError('Cost must be 0 or more'); return; }
+    if (!form.title.trim()) { toastError(t('rewardsModule.titleIsRequired')); return; }
+    if (form.cost_points < 0) { toastError(t('rewardsModule.costMustBe0Or')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
@@ -101,7 +103,7 @@ export function RewardsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Reward deleted');
+    success(t('rewardsModule.rewardDeleted'));
   }
 
   // ── Redemption flow ───────────────────────────────────────
@@ -139,12 +141,12 @@ export function RewardsModule() {
   return (
     <div>
       <PageHeader
-        title="Rewards & Allowance"
-        description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
+        title={t('rewards.rewardsAllowance')}
+        description={t('rewardsModule.turnChorePointsIntoRewards')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rewards" iconOnly />
-            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>}
           </div>
         }
       />
@@ -152,10 +154,10 @@ export function RewardsModule() {
       {/* Balances leaderboard */}
       <div className="rounded-2xl bg-surface/50 border border-border p-5 mb-6">
         <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-amber-400" /> Points Leaderboard
+          <Trophy className="h-4 w-4 text-amber-400" /> {t('rewards.pointsLeaderboard')}
         </h2>
         {sortedBalances.length === 0 ? (
-          <p className="text-muted text-sm">No family members yet.</p>
+          <p className="text-muted text-sm">{t('rewards.noFamilyMembersYet')}</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {sortedBalances.map((b, i) => {
@@ -171,7 +173,7 @@ export function RewardsModule() {
                   <div className="mt-1 text-2xl font-bold text-amber-400 tabular-nums flex items-center justify-center gap-1">
                     <Coins className="h-4 w-4" />{b.available}
                   </div>
-                  <div className="text-[11px] text-muted mt-0.5">{b.earned} earned · {b.spent} spent</div>
+                  <div className="text-[11px] text-muted mt-0.5">{b.earned} {t('rewards.earned')} {b.spent} spent</div>
                 </div>
               );
             })}
@@ -183,7 +185,7 @@ export function RewardsModule() {
       {canManage && pending.length > 0 && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 mb-6">
           <h2 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4" /> Pending Approvals ({pending.length})
+            <Clock className="h-4 w-4" /> {t('rewards.pendingApprovals')}{pending.length})
           </h2>
           <div className="space-y-2">
             {pending.map((red) => {
@@ -195,16 +197,16 @@ export function RewardsModule() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-fg truncate">{memberName(red.member_id)} wants {red.reward_title}</div>
                     <div className="text-xs text-muted">
-                      {red.cost_points} pts · {affordable ? `${bal?.available} available` : <span className="text-rose-400">not enough points ({bal?.available ?? 0})</span>}
+                      {red.cost_points} {t('rewards.pts')} {affordable ? `${bal?.available} available` : <span className="text-rose-400">{t('rewards.notEnoughPoints')}{bal?.available ?? 0})</span>}
                     </div>
                   </div>
                   <button onClick={() => decide(red, 'approved')} disabled={busy === red.id || !affordable}
                     className="inline-flex h-8 px-3 items-center justify-center gap-1 rounded-lg border border-emerald-500/50 text-emerald-300 text-xs font-medium hover:bg-emerald-500/10 disabled:opacity-40">
-                    <Check className="h-3.5 w-3.5" /> Approve
+                    <Check className="h-3.5 w-3.5" /> {t('rewards.approve')}
                   </button>
                   <button onClick={() => decide(red, 'rejected')} disabled={busy === red.id}
                     className="inline-flex h-8 px-3 items-center justify-center gap-1 rounded-lg border border-rose-500/50 text-rose-300 text-xs font-medium hover:bg-rose-500/10 disabled:opacity-40">
-                    <X className="h-3.5 w-3.5" /> Reject
+                    <X className="h-3.5 w-3.5" /> {t('rewards.reject')}
                   </button>
                 </div>
               );
@@ -215,12 +217,12 @@ export function RewardsModule() {
 
       {/* Rewards catalog */}
       <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
-        <Gift className="h-4 w-4 text-brand-text" /> Rewards Catalog
+        <Gift className="h-4 w-4 text-brand-text" /> {t('rewards.rewardsCatalog')}
       </h2>
       {(rewards ?? []).length === 0 ? (
-        <EmptyState icon={Gift} title="No rewards yet"
+        <EmptyState icon={Gift} title={t('rewards.noRewardsYet')}
           description={canManage ? 'Add rewards kids can redeem with the points they earn from chores.' : 'No rewards have been added yet.'}
-          action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>} />
+          action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {(rewards ?? []).map((r) => {
@@ -233,8 +235,8 @@ export function RewardsModule() {
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(r)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => remove(r)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => openEdit(r)} aria-label={t('rewards.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => remove(r)} aria-label={t('rewards.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
                 </div>
@@ -263,7 +265,7 @@ export function RewardsModule() {
       {history.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
-            <History className="h-4 w-4 text-muted" /> Recent Redemptions
+            <History className="h-4 w-4 text-muted" /> {t('rewards.recentRedemptions')}
           </h2>
           <div className="space-y-1.5">
             {history.map((red) => (
@@ -276,7 +278,7 @@ export function RewardsModule() {
                 </span>
                 {canManage && red.status === 'approved' && (
                   <button onClick={() => decide(red, 'fulfilled')} disabled={busy === red.id}
-                    className="text-xs font-medium text-blue-300 hover:underline">Mark fulfilled</button>
+                    className="text-xs font-medium text-blue-300 hover:underline">{t('rewards.markFulfilled')}</button>
                 )}
               </div>
             ))}
@@ -287,17 +289,17 @@ export function RewardsModule() {
       {/* Reward modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit reward' : 'Add reward'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="Reward" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Movie night pick" autoFocus />}
+          <Field label={t('rewards.reward')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rewards.eGMovieNightPick')} autoFocus />}
           </Field>
-          <Field label="Description">
-            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="What does this reward include?" />}
+          <Field label={t('rewards.description')}>
+            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('rewards.whatDoesThisRewardInclude')} />}
           </Field>
-          <Field label="Cost (points)" required>
+          <Field label={t('rewards.costPoints')} required>
             {(id) => <Input id={id} type="number" min={0} step={5} value={form.cost_points} onChange={(e) => setForm((f) => ({ ...f, cost_points: Number(e.target.value) }))} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('rewards.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add reward'}</Button>
           </div>
         </form>
@@ -314,6 +316,7 @@ function RedeemForMember({ reward, onRedeem, members, balanceByMember, busy }: {
   balanceByMember: Map<string, { available: number }>;
   busy: boolean;
 }) {
+  const t = useTranslations();
   const kids = members.filter((m) => m.role === 'child' || m.role === 'teen');
   const [memberId, setMemberId] = useState<string>(kids[0]?.id ?? '');
   if (kids.length === 0) return null;
@@ -326,7 +329,7 @@ function RedeemForMember({ reward, onRedeem, members, balanceByMember, busy }: {
         {kids.map((k) => <option key={k.id} value={k.id}>{k.display_name}</option>)}
       </select>
       <Button onClick={() => onRedeem(reward, memberId)} disabled={busy || !affordable} variant={affordable ? 'primary' : 'outline'} size="sm" className="gap-1">
-        <Sparkles className="h-3.5 w-3.5" /> Redeem
+        <Sparkles className="h-3.5 w-3.5" /> {t('rewards.redeem')}
       </Button>
     </div>
   );

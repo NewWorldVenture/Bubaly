@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
   recordConsentEvents, getConsentState, toConsentCategory,
@@ -22,9 +23,10 @@ type ConsentBody = {
 };
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const limited = rateLimit(`consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many consent updates. Please try again shortly.' },
+    { error: t('consent.tooManyConsentUpdatesPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
@@ -33,10 +35,10 @@ export async function POST(req: NextRequest) {
   const body = boundedBody.value as ConsentBody;
 
   const anonymousId = typeof body.anonymousId === 'string' ? body.anonymousId.trim().slice(0, 200) : '';
-  if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
+  if (!anonymousId) return NextResponse.json({ error: t('consent.anonymousidRequired') }, { status: 400 });
 
   if (!isValidConsentMap(body.consents)) {
-    return NextResponse.json({ error: 'Invalid consent map' }, { status: 400 });
+    return NextResponse.json({ error: t('consent.invalidConsentMap') }, { status: 400 });
   }
 
   const decisions: Partial<Record<ConsentCategory, ConsentDecision>> = {};
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (category) decisions[category] = rawVal ? 'granted' : 'denied';
   }
   if (Object.keys(decisions).length === 0) {
-    return NextResponse.json({ error: 'No valid consent categories' }, { status: 400 });
+    return NextResponse.json({ error: t('consent.noValidConsentCategories') }, { status: 400 });
   }
 
   const source = typeof body.source === 'string' ? body.source.trim().slice(0, 60) || 'banner' : 'banner';
@@ -59,20 +61,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, state });
   } catch (error) {
     console.error('[mkt-consent] consent persistence failed', error);
-    return NextResponse.json({ error: 'Consent is temporarily unavailable. Please try again.' }, { status: 503 });
+    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503 });
   }
 }
 
 // Read the current consent state (for hydrating the banner/preference center).
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   const limited = rateLimit(`consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many consent requests. Please try again shortly.' },
+    { error: t('consent.tooManyConsentRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const anonymousId = new URL(req.url).searchParams.get('anonymousId')?.trim().slice(0, 200) ?? '';
-  if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
+  if (!anonymousId) return NextResponse.json({ error: t('consent.anonymousidRequired') }, { status: 400 });
   const gpc = new URL(req.url).searchParams.get('gpc') === '1';
   const supabase = createServiceClient();
   try {
@@ -80,6 +83,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, state });
   } catch (error) {
     console.error('[mkt-consent] consent read failed', error);
-    return NextResponse.json({ error: 'Consent is temporarily unavailable. Please try again.' }, { status: 503 });
+    return NextResponse.json({ error: t('consent.consentIsTemporarilyUnavailablePlease') }, { status: 503 });
   }
 }

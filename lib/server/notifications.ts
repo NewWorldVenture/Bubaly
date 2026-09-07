@@ -13,6 +13,8 @@ import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } f
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
 import { onThisDayNotice } from '@/lib/memories/on-this-day';
 import { imminentMomentNotices } from '@/lib/moments/notify';
+import { deliveryTimeFor } from '@/lib/services/notifications';
+import { systemScopeForFamily } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
 
@@ -309,6 +311,29 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 
   const allRows = [...rows, ...medRows].slice(0, 150);
   if (allRows.length === 0) return 0;
+
+  // The last writer that bypassed the quiet-hours window. It is NOT routed
+  // through `notify()`, deliberately: it builds up to 150 rows and inserts them
+  // in one batch, with its own per-type dedupe reads above, so `notify()` would
+  // turn one insert into 150 round trips on a cron to re-solve a problem this
+  // function already solves. What it lacked was the window — so it takes the
+  // window, from the same function `notify()` uses, resolved ONCE for the whole
+  // batch since every row belongs to this one family.
+  //
+  // Not urgent: everything this generator produces is a courtesy notice about a
+  // day's events, reminders and medications. A run at 06:30 UTC is 23:30 for a
+  // family on US Pacific time.
+  const scope = await systemScopeForFamily(supabase, familyId);
+  if (scope) {
+    const { sendAt } = await deliveryTimeFor(scope);
+    for (const row of allRows) row.send_at = sendAt;
+  } else {
+    // The family could not be read, so its zone is unknown. Send now rather than
+    // hold against a guessed window: a notice that arrives is recoverable, one
+    // held for eight hours against the wrong clock is not.
+    console.error('[notifications] could not read the family for quiet hours', { familyId });
+  }
+
   const { error } = await supabase.from('notifications').insert(allRows);
   if (error) throw new Error(error.message);
   return allRows.length;
@@ -317,6 +342,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 type NotificationRow = {
   family_id: string;
   user_id: string | null;
+  /** Set from `deliveryTimeFor` before the insert; the column defaults to now(). */
+  send_at?: string;
   type: NotificationType;
   title: string;
   body: string | null;

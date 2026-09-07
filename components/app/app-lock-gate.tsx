@@ -10,6 +10,7 @@ import { Lock, Delete, LogOut } from 'lucide-react';
 import { verifyPin, unlockKey } from '@/lib/security/app-lock';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function AppLockGate({
   enabled, salt, hash, userId, children,
@@ -20,6 +21,7 @@ export function AppLockGate({
   userId: string;
   children: React.ReactNode;
 }) {
+  const tr = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [digits, setDigits] = useState('');
@@ -116,8 +118,8 @@ export function AppLockGate({
         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">
           <Lock className="h-7 w-7" />
         </div>
-        <h1 id="app-lock-title" className="mt-5 text-lg font-bold">Enter your PIN</h1>
-        <p className="mt-1 text-sm text-muted">Bubaly is locked for your privacy.</p>
+        <h1 id="app-lock-title" className="mt-5 text-lg font-bold">{tr('appLockGate.enterYourPin')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('appLockGate.bubalyIsLockedForYourPrivacy')}</p>
 
         {/* PIN dots */}
         <div className={cn('mt-7 flex items-center gap-4', error && 'animate-shake')}>
@@ -129,9 +131,9 @@ export function AppLockGate({
           ))}
         </div>
         {inCooldown ? (
-          <p className="mt-3 text-xs font-medium text-amber-400">Too many attempts — try again in {cooldownLeft}s</p>
+          <p className="mt-3 text-xs font-medium text-amber-400">{tr('appLockGate.tooManyAttemptsTryAgainIn')} {cooldownLeft}s</p>
         ) : error ? (
-          <p className="mt-3 text-xs font-medium text-rose-400">Wrong PIN — try again</p>
+          <p className="mt-3 text-xs font-medium text-rose-400">{tr('appLockGate.wrongPinTryAgain')}</p>
         ) : null}
 
         {/* Keypad */}
@@ -147,7 +149,7 @@ export function AppLockGate({
             className="h-16 w-16 rounded-full border border-border bg-surface/50 text-2xl font-semibold transition hover:bg-elevated active:scale-95 disabled:opacity-50">
             0
           </button>
-          <button onClick={back} disabled={checking || digits.length === 0} aria-label="Delete"
+          <button onClick={back} disabled={checking || digits.length === 0} aria-label={tr('appLockGate.delete')}
             className="grid h-16 w-16 place-items-center rounded-full text-muted transition hover:bg-elevated active:scale-95 disabled:opacity-30">
             <Delete className="h-6 w-6" />
           </button>
@@ -156,7 +158,7 @@ export function AppLockGate({
         {/* The escape hatch — can never trap a forgotten PIN. */}
         <form action="/auth/signout" method="post" className="mt-9">
           <button type="submit" className="flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-fg">
-            <LogOut className="h-3.5 w-3.5" /> Forgot PIN? Sign out
+            <LogOut className="h-3.5 w-3.5" /> {tr('appLockGate.forgotPinSignOut')}
           </button>
         </form>
       </div>

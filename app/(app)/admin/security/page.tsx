@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { UserSecurityActions } from '@/components/admin/user-security-actions';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Security', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,8 @@ const POSTURE = [
 ];
 
 export default async function AdminSecurityPage() {
+  const tr = await getTranslations();
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   const [invitesResult, authUsersResult, auditLogsResult, familiesResult] = await Promise.all([
@@ -36,11 +39,11 @@ export default async function AdminSecurityPage() {
     return (
       <div className="module-page space-y-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Security</h1>
-          <p className="mt-1 text-sm text-muted">Live access-control signals across accounts, invites, and sensitive activity.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSecurity.security')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('adminSecurity.liveAccessControlSignalsAcrossAccounts')}</p>
         </div>
-        <ErrorState message="Could not load security data from Supabase. Refresh and try again." />
-        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">Refresh security overview</a>
+        <ErrorState message={tr('security.couldNotLoadSecurityData')} />
+        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">{t('adminSecurity.refreshSecurityOverview')}</a>
       </div>
     );
   }
@@ -86,11 +89,11 @@ export default async function AdminSecurityPage() {
     return (
       <div className="module-page space-y-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Security</h1>
-          <p className="mt-1 text-sm text-muted">Live access-control signals across accounts, invites, and sensitive activity.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSecurity.security')}</h1>
+          <p className="mt-1 text-sm text-muted">{t('adminSecurity.liveAccessControlSignalsAcrossAccounts')}</p>
         </div>
-        <ErrorState message="Could not load security activity details from Supabase. Refresh and try again." />
-        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">Refresh security overview</a>
+        <ErrorState message={tr('security.couldNotLoadSecurityActivity')} />
+        <a href="/admin/security" className="text-sm font-medium text-brand-text underline">{t('adminSecurity.refreshSecurityOverview')}</a>
       </div>
     );
   }
@@ -100,20 +103,20 @@ export default async function AdminSecurityPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Security</h1>
-        <p className="mt-1 text-sm text-muted">Real access-control signals — invites, account security, and sensitive activity across every family.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSecurity.security')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminSecurity.realAccessControlSignalsInvitesAccount')}</p>
       </div>
 
       <div className="grid-stats">
-        <StatCard icon={Mail} label="Pending invites" value={inviteCounts.pending} tone="bg-warning/10 text-warning" />
-        <StatCard icon={ShieldCheck} label="Invite accept rate" value={`${acceptRate.toFixed(0)}%`} tone="bg-success/10 text-success" />
-        <StatCard icon={UserX} label="Unconfirmed emails" value={unconfirmedCount} tone="bg-danger/10 text-danger" />
-        <StatCard icon={Clock} label="Never signed in" value={neverSignedIn} tone="bg-accent/10 text-accent" />
+        <StatCard icon={Mail} label={t('adminSecurity.pendingInvites')} value={inviteCounts.pending} tone="bg-warning/10 text-warning" />
+        <StatCard icon={ShieldCheck} label={t('adminSecurity.inviteAcceptRate')} value={`${acceptRate.toFixed(0)}%`} tone="bg-success/10 text-success" />
+        <StatCard icon={UserX} label={t('adminSecurity.unconfirmedEmails')} value={unconfirmedCount} tone="bg-danger/10 text-danger" />
+        <StatCard icon={Clock} label={t('adminSecurity.neverSignedIn')} value={neverSignedIn} tone="bg-accent/10 text-accent" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Invite funnel</h2>
+          <h2 className="mb-4 text-base font-semibold">{t('adminSecurity.inviteFunnel')}</h2>
           <ul className="space-y-3">
             {Object.entries(inviteCounts).map(([status, count]) => {
               const pct = totalInvites > 0 ? (count / totalInvites) * 100 : 0;
@@ -133,18 +136,18 @@ export default async function AdminSecurityPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Account security</h2>
+          <h2 className="mb-4 text-base font-semibold">{t('adminSecurity.accountSecurity')}</h2>
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted">Email confirmed</span>
+              <span className="text-muted">{t('adminSecurity.emailConfirmed')}</span>
               <span className="font-medium">{confirmedCount} / {users.length}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted">Currently banned</span>
+              <span className="text-muted">{t('adminSecurity.currentlyBanned')}</span>
               <Badge tone={bannedCount > 0 ? 'danger' : 'success'}>{bannedCount}</Badge>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted">Never signed in (account exists, no login yet)</span>
+              <span className="text-muted">{t('adminSecurity.neverSignedInAccountExistsNo')}</span>
               <span className="font-medium">{neverSignedIn}</span>
             </div>
           </div>
@@ -152,19 +155,19 @@ export default async function AdminSecurityPage() {
       </div>
 
       <Card>
-        <h2 className="mb-1 text-base font-semibold">Accounts</h2>
-        <p className="mb-4 text-sm text-muted">The most recent sign-ups — reset a password or ban an account that needs intervention.</p>
+        <h2 className="mb-1 text-base font-semibold">{t('adminSecurity.accounts')}</h2>
+        <p className="mb-4 text-sm text-muted">{t('adminSecurity.theMostRecentSignUpsReset')}</p>
         {recentAccounts.length === 0 ? (
-          <EmptyState icon={UserX} title="No accounts yet" />
+          <EmptyState icon={UserX} title={t('adminSecurity.noAccountsYet')} />
         ) : (
           <div className="table-responsive">
             <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">Account</th>
-                  <th className="px-3 py-2 font-medium">Email</th>
-                  <th className="px-3 py-2 font-medium">Last sign-in</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">{t('adminSecurity.account')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminSecurity.email')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminSecurity.lastSignIn')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminSecurity.status')}</th>
                   <th className="px-3 py-2 font-medium" />
                 </tr>
               </thead>
@@ -180,7 +183,7 @@ export default async function AdminSecurityPage() {
                     <td className="px-3 py-2.5 font-medium">{u.email ?? '—'}</td>
                     <td className="px-3 py-2.5 text-muted">{u.lastSignIn ? fmtDate(u.lastSignIn, 'MMM d, yyyy') : 'Never'}</td>
                     <td className="px-3 py-2.5">
-                      {u.banned ? <Badge tone="danger">Banned</Badge> : u.confirmed ? <Badge tone="success">Confirmed</Badge> : <Badge tone="warning">Unconfirmed</Badge>}
+                      {u.banned ? <Badge tone="danger">{tr('security.banned')}</Badge> : u.confirmed ? <Badge tone="success">{tr('security.confirmed')}</Badge> : <Badge tone="warning">{tr('security.unconfirmed')}</Badge>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <UserSecurityActions userId={u.id} email={u.email} banned={u.banned} />
@@ -196,10 +199,10 @@ export default async function AdminSecurityPage() {
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Activity className="h-4 w-4 text-muted" />
-          <h2 className="text-base font-semibold">Sensitive activity, across all families</h2>
+          <h2 className="text-base font-semibold">{t('adminSecurity.sensitiveActivityAcrossAllFamilies')}</h2>
         </div>
         {!auditLogs || auditLogs.length === 0 ? (
-          <EmptyState icon={Activity} title="No activity recorded yet" />
+          <EmptyState icon={Activity} title={t('adminSecurity.noActivityRecordedYet')} />
         ) : (
           <ul className="space-y-2">
             {auditLogs.map((log) => {
@@ -212,7 +215,7 @@ export default async function AdminSecurityPage() {
                   <span className="font-medium">{log.resource}</span>
                   {log.family_id && <span className="text-muted">in {familyNameById.get(log.family_id) ?? 'a family'}</span>}
                   {actor && <span className="text-muted">· by {actor.full_name || actor.email}</span>}
-                  {viaAdmin && <Badge tone="brand">Site Admin</Badge>}
+                  {viaAdmin && <Badge tone="brand">{tr('security.siteAdmin')}</Badge>}
                   <span className="ml-auto text-xs text-muted">{fmtDate(log.created_at, 'MMM d, h:mm a')}</span>
                 </li>
               );
@@ -222,8 +225,8 @@ export default async function AdminSecurityPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-1 text-base font-semibold">Security posture</h2>
-        <p className="mb-4 text-sm text-muted">What&rsquo;s actually true about this application&rsquo;s architecture — not a live scan, a description of how it&rsquo;s built.</p>
+        <h2 className="mb-1 text-base font-semibold">{t('adminSecurity.securityPosture')}</h2>
+        <p className="mb-4 text-sm text-muted">{tr('adminSecurity.whatsActuallyTrueAboutThisApplications')}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {POSTURE.map((p) => (
             <div key={p.title} className="flex gap-3 rounded-xl border border-border bg-surface/40 p-3">

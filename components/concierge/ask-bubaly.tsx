@@ -22,6 +22,7 @@ import { answerAIRequest, submitAIRequest, type AIRequestResponse } from '@/lib/
 import { moduleFromPathname, suggestedPromptsFor } from '@/lib/concierge/suggested-prompts';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -45,6 +46,7 @@ type Inline =
   | { kind: 'answer' | 'recommendation'; text: string; runId: string | null };
 
 export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, autoFocus, className, onOutcome }: AskBubalyProps) {
+  const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const { success, error: toastError } = useToast();
@@ -73,7 +75,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
     setAnswer('');
     switch (data.outcome) {
       case 'plan':
-        success('Bubaly is on it.');
+        success(t('askBubaly.bubalyIsOnIt'));
         if (data.redirect) router.push(data.redirect);
         setInline(null);
         break;
@@ -87,7 +89,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
         setInline({ kind: 'recommendation', text: data.summary, runId: data.runId });
         break;
     }
-  }, [onOutcome, router, success]);
+  }, [onOutcome, router, success, t]);
 
   const submit = useCallback(async (raw: string) => {
     const query = raw.trim();
@@ -111,7 +113,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
 
   const reply = useCallback(async () => {
     if (inline?.kind !== 'clarification' || !answer.trim() || busy) return;
-    if (!inline.runId) { toastError('Bubaly lost track of that question. Ask again.'); setInline(null); return; }
+    if (!inline.runId) { toastError(t('askBubaly.bubalyLostTrackOfThat')); setInline(null); return; }
     setBusy(true);
     setError(null);
     try {
@@ -119,7 +121,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
     } finally {
       setBusy(false);
     }
-  }, [answer, busy, handle, inline, toastError]);
+  }, [answer, busy, handle, inline, toastError, t]);
 
   const hero = variant === 'hero';
 
@@ -154,7 +156,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
         <button
           type="submit"
           disabled={!text.trim() || busy}
-          aria-label="Ask Bubaly"
+          aria-label={t('askBubaly.askBubaly')}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand text-brand-fg transition hover:opacity-90 focus-ring disabled:opacity-40 coarse:min-h-11 coarse:min-w-11 sm:h-9 sm:w-9"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ArrowRight className="h-4 w-4" aria-hidden />}
@@ -162,7 +164,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
       </form>
 
       {busy && (
-        <p className="mt-2 text-xs text-muted" role="status">Bubaly is looking at your family’s week…</p>
+        <p className="mt-2 text-xs text-muted" role="status">{t('askBubaly.bubalyIsLookingAtYourFamilys')}</p>
       )}
       {error && (
         <p className="mt-2 text-sm text-danger" role="alert">{error}</p>
@@ -172,7 +174,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
         <form
           onSubmit={(e) => { e.preventDefault(); void reply(); }}
           className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3"
-          aria-label="Bubaly has a question"
+          aria-label={t('askBubaly.bubalyHasAQuestion')}
         >
           <p className="flex items-start gap-2 text-sm text-fg">
             <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" aria-hidden />
@@ -185,8 +187,8 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
               onChange={(e) => setAnswer(e.target.value)}
               enterKeyHint="send"
               disabled={busy}
-              aria-label="Your answer"
-              placeholder="Your answer…"
+              aria-label={t('askBubaly.yourAnswer')}
+              placeholder={t('askBubaly.yourAnswer')}
               className="h-12 min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 text-base outline-none focus:border-brand placeholder:text-muted sm:h-11 sm:text-sm"
             />
             <button
@@ -194,7 +196,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
               disabled={!answer.trim() || busy}
               className="inline-flex h-11 items-center justify-center rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg transition hover:opacity-90 focus-ring disabled:opacity-40 coarse:min-h-11"
             >
-              Answer
+              {t('askBubaly.answer')}
             </button>
           </div>
         </form>
@@ -207,13 +209,13 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
             <span className="whitespace-pre-wrap">{inline.text}</span>
           </p>
           {inline.kind === 'recommendation' && (
-            <p className="mt-2 text-xs text-muted">Bubaly left this as a suggestion for you to decide on — it is waiting under Needs your attention.</p>
+            <p className="mt-2 text-xs text-muted">{t('askBubaly.bubalyLeftThisAsASuggestion')}</p>
           )}
         </div>
       )}
 
       {hero && (
-        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Suggested prompts">
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label={t('askBubaly.suggestedPrompts')}>
           {suggestions.map((s) => (
             <button
               key={s.text}

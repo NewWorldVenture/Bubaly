@@ -9,6 +9,7 @@ import { Plus, Loader2, Check, X } from 'lucide-react';
 import { createFamilyRecord } from '@/lib/family/actions';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'checkbox' | 'member';
 export type Field = {
@@ -36,6 +37,7 @@ export function QuickAdd({
   members?: MemberOption[];
   buttonClassName?: string;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function QuickAdd({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button type="button" onClick={cancelForm} aria-label="Cancel" className="text-muted hover:text-fg">
+        <button type="button" onClick={cancelForm} aria-label={t('quickAdd.cancel')} className="text-muted hover:text-fg">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -114,7 +116,7 @@ export function QuickAdd({
                 </select>
               ) : f.type === 'member' ? (
                 <select id={id} name={f.name} required={f.required} defaultValue="" className={base}>
-                  <option value="">Whole family</option>
+                  <option value="">{t('quickAdd.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </select>
               ) : f.type === 'checkbox' ? (

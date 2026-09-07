@@ -9,6 +9,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
+import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -22,6 +24,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Recipe = Tables<'family_recipes'>;
 
@@ -62,6 +65,7 @@ function categoryMeta(id: string) { return CATEGORIES.find((c) => c.id === id) ?
 function difficultyMeta(id: string) { return DIFFICULTIES.find((d) => d.id === id) ?? DIFFICULTIES[1]; }
 
 export function RecipesModule() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -87,10 +91,10 @@ export function RecipesModule() {
         body: JSON.stringify({ constraint: tonightConstraint }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGetSuggestions'));
       setTonightPicks(json.picks ?? []);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not get suggestions'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGetSuggestions')));
     } finally {
       setTonightBusy(false);
     }
@@ -140,11 +144,11 @@ export function RecipesModule() {
         body: JSON.stringify({ recipeId: recipe.id, actionId }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
-      success('AI variant saved to your recipes');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGenerateVariant'));
+      success(tr('recipesModule.aiVariantSavedToYour'));
       setViewing(null);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not generate variant'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGenerateVariant')));
     } finally {
       setAiBusy(null);
     }
@@ -157,7 +161,7 @@ export function RecipesModule() {
       last_made_at: new Date().toISOString(),
     }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Marked as made today! 🍴');
+    success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
 
@@ -169,24 +173,30 @@ export function RecipesModule() {
     setViewing(null);
   }
 
+  // A recipe's ingredients are the family's staples, so this is where duplicate
+  // lines pile up fastest: adding tacos when milk, onions and tortillas are
+  // already on the list used to append all three again. The service skips them
+  // by normalised name and says how many it skipped.
   async function addItemsToList(recipe: Recipe, listId: string): Promise<boolean> {
-    const supabase = createClient();
     const ingredients = (recipe.ingredients as unknown as Ingredient[]) ?? [];
     const multiplier = (servingsOverride ?? recipe.servings) / recipe.servings;
-    const items = ingredients.map((ing) => {
-      const qty = scaleQuantity(ing.quantity, multiplier);
-      return {
-        family_id: familyId,
-        list_id: listId,
-        name: ing.name,
-        quantity: qty ? `${qty} ${ing.unit ?? ''}`.trim() : null,
-        category: 'Pantry',
-        created_by: userId,
-      };
+    const result = await addGroceryItemsAction({
+      listId,
+      items: ingredients.map((ing) => {
+        const qty = scaleQuantity(ing.quantity, multiplier);
+        return {
+          name: ing.name,
+          quantity: qty ? `${qty} ${ing.unit ?? ''}`.trim() : null,
+          // Unchanged: every ingredient has always been filed under Pantry here.
+          // The service would categorise by aisle instead, which is better, but
+          // that is a change to what the list looks like and not to who writes it.
+          category: 'Pantry',
+        };
+      }),
     });
-    const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) { toastError(describeDbError(error)); return false; }
-    success(`${items.length} ingredients added to your grocery list!`);
+    if (!result.ok) { toastError(result.error); return false; }
+    if (groceryAddWasNoOp(result)) toastError(describeGroceryAdd(result));
+    else success(describeGroceryAdd(result));
     return true;
   }
 
@@ -194,7 +204,7 @@ export function RecipesModule() {
     const supabase = createClient();
     const { data: list } = await supabase
       .from('grocery_lists').select('id')
-      .eq('family_id', familyId).eq('is_archived', false)
+      .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
       .order('created_at').limit(1).maybeSingle();
     if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
     await addItemsToList(recipe, list.id);
@@ -209,7 +219,7 @@ export function RecipesModule() {
       .from('grocery_lists')
       .insert({ family_id: familyId, name, created_by: userId })
       .select('id').single();
-    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, 'Could not create list')); return; }
+    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, tr('recipesModule.couldNotCreateList'))); return; }
     const ok = await addItemsToList(groceryPrompt, created.id);
     setCreatingList(false);
     if (ok) setGroceryPrompt(null);
@@ -222,27 +232,27 @@ export function RecipesModule() {
   };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family recipes. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('recipesModule.couldNotLoadFamilyRecipes')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Recipes"
-        description="Your family's cookbook — organized, searchable, and always at hand."
+        title={tr('recipes.familyRecipes')}
+        description={tr('recipesModule.yourFamilySCookbookOrganized')}
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search recipes…"
+                placeholder={tr('recipes.searchRecipes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
-            <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> Vote</a>
-            <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
+            <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> {tr('recipes.vote')}</a>
+            <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> {tr('recipes.discover')}</a>
             <AiInsight kind="recipes" iconOnly />
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Recipe</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addRecipe')}</Button>
           </div>
         }
       />
@@ -277,16 +287,16 @@ export function RecipesModule() {
         </div>
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
           className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-          <option value="all">All categories</option>
+          <option value="all">{tr('recipes.allCategories')}</option>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
         </select>
       </div>
 
       {/* Recipe grid */}
       {filtered.length === 0 ? (
-        <EmptyState icon={ChefHat} title="No recipes yet"
-          description="Add your family's favorite recipes and they'll appear here."
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add First Recipe</Button>} />
+        <EmptyState icon={ChefHat} title={tr('recipes.noRecipesYet')}
+          description={tr('recipesModule.addYourFamilySFavorite')}
+          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((recipe) => {
@@ -336,7 +346,7 @@ export function RecipesModule() {
                     <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {recipe.servings}</span>
                     <Badge tone={diff.badge as 'neutral'}>{diff.label}</Badge>
                     {recipe.times_made > 0 && (
-                      <span className="ml-auto text-success">{recipe.times_made}× made</span>
+                      <span className="ml-auto text-success">{recipe.times_made}{tr('recipes.made')}</span>
                     )}
                   </div>
                 </div>
@@ -370,7 +380,7 @@ export function RecipesModule() {
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm('Delete this recipe?')) deleteRecipe(viewing.id); }}
+                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -387,12 +397,12 @@ export function RecipesModule() {
               ); })()}
               {viewing.prep_time_mins && (
                 <span className="flex items-center gap-1 rounded-lg bg-elevated px-3 py-1.5 text-sm">
-                  <Clock className="h-4 w-4 text-muted" /> Prep {viewing.prep_time_mins} min
+                  <Clock className="h-4 w-4 text-muted" /> {tr('recipes.prep')} {viewing.prep_time_mins} min
                 </span>
               )}
               {viewing.cook_time_mins && (
                 <span className="flex items-center gap-1 rounded-lg bg-elevated px-3 py-1.5 text-sm">
-                  <Flame className="h-4 w-4 text-accent" /> Cook {viewing.cook_time_mins} min
+                  <Flame className="h-4 w-4 text-accent" /> {tr('recipes.cook')} {viewing.cook_time_mins} min
                 </span>
               )}
               {viewing.cuisine && <span className="rounded-lg bg-elevated px-3 py-1.5 text-sm">{viewing.cuisine}</span>}
@@ -401,7 +411,7 @@ export function RecipesModule() {
 
             {/* Servings adjuster */}
             <div className="mb-5 flex items-center gap-4 rounded-2xl border border-border bg-elevated/50 p-4">
-              <span className="text-sm font-semibold">Servings</span>
+              <span className="text-sm font-semibold">{tr('recipes.servings')}</span>
               <div className="flex items-center gap-3">
                 <button onClick={() => setServingsOverride((s) => Math.max(1, (s ?? viewing.servings) - 1))}
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-elevated transition text-lg font-bold">−</button>
@@ -410,13 +420,13 @@ export function RecipesModule() {
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-elevated transition text-lg font-bold">+</button>
               </div>
               <Button variant="outline" size="sm" className="ml-auto" onClick={() => addToGrocery(viewing)}>
-                <ShoppingCart className="h-4 w-4" /> Add to Grocery List
+                <ShoppingCart className="h-4 w-4" /> {tr('recipes.addToGroceryList')}
               </Button>
             </div>
 
             {/* AI Remix — saves a transformed variant to your recipes */}
             <div className="mb-5 rounded-2xl border border-brand/25 bg-brand/5 p-3">
-              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Remix</p>
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('recipes.aiRemix')}</p>
               <div className="flex flex-wrap gap-2">
                 {RECIPE_AI_ACTIONS.map((a) => (
                   <button
@@ -429,12 +439,12 @@ export function RecipesModule() {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-muted">Creates a new variant in your recipes. AI amounts/nutrition are estimates — not medical advice.</p>
+              <p className="mt-2 text-[11px] text-muted">{tr('recipes.createsANewVariantInYour')}</p>
             </div>
 
             {/* Ingredients */}
             <div className="mb-5">
-              <h3 className="mb-3 text-base font-bold">Ingredients</h3>
+              <h3 className="mb-3 text-base font-bold">{tr('recipes.ingredients')}</h3>
               <div className="space-y-2">
                 {((viewing.ingredients as unknown as Ingredient[]) ?? []).map((ing, i) => {
                   const multiplier = (servingsOverride ?? viewing.servings) / viewing.servings;
@@ -452,7 +462,7 @@ export function RecipesModule() {
 
             {/* Instructions */}
             <div className="mb-5">
-              <h3 className="mb-3 text-base font-bold">Instructions</h3>
+              <h3 className="mb-3 text-base font-bold">{tr('recipes.instructions')}</h3>
               <div className="space-y-3">
                 {((viewing.instructions as unknown as InstructionStep[]) ?? []).map((step, i) => (
                   <div key={i} className="flex gap-4 text-sm">
@@ -468,7 +478,7 @@ export function RecipesModule() {
             {/* Notes */}
             {viewing.notes && (
               <div className="mb-5 rounded-xl bg-warning/10 p-4 text-sm">
-                <p className="font-semibold text-warning mb-1">Chef&apos;s Notes</p>
+                <p className="font-semibold text-warning mb-1">{tr('recipes.chefAposSNotes')}</p>
                 <p className="text-muted">{viewing.notes}</p>
               </div>
             )}
@@ -478,11 +488,11 @@ export function RecipesModule() {
               {viewing.source_url && (
                 <a href={viewing.source_url} target="_blank" rel="noreferrer"
                   className="flex items-center gap-1 text-sm text-brand-text hover:underline">
-                  <ExternalLink className="h-3.5 w-3.5" /> View original
+                  <ExternalLink className="h-3.5 w-3.5" /> {tr('recipes.viewOriginal')}
                 </a>
               )}
               <Button onClick={() => markMade(viewing)} className="ml-auto">
-                <Check className="h-4 w-4" /> Made it today!
+                <Check className="h-4 w-4" /> {tr('recipes.madeItToday')}
               </Button>
             </div>
           </div>
@@ -501,33 +511,33 @@ export function RecipesModule() {
       )}
 
       {groceryPrompt && (
-        <Modal open onClose={() => setGroceryPrompt(null)} title="Create a grocery list">
+        <Modal open onClose={() => setGroceryPrompt(null)} title={tr('recipes.createAGroceryList')}>
           <form onSubmit={(e) => { e.preventDefault(); void createListAndAdd(); }} className="space-y-4">
-            <p className="text-sm text-muted">You don&apos;t have a grocery list yet. Name one and we&apos;ll add the ingredients from <span className="font-medium text-fg">{groceryPrompt.name}</span> to it.</p>
-            <Field label="List name">
-              {(id) => <Input id={id} autoFocus value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Groceries" />}
+            <p className="text-sm text-muted">{tr('recipes.youDonAposTHaveA')} <span className="font-medium text-fg">{groceryPrompt.name}</span> {tr('recipes.toIt')}</p>
+            <Field label={tr('recipes.listName')}>
+              {(id) => <Input id={id} autoFocus value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder={tr('recipes.groceries')} />}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setGroceryPrompt(null)}>Cancel</Button>
-              <Button type="submit" loading={creatingList} disabled={!newListName.trim()}>Create &amp; add</Button>
+              <Button type="button" variant="ghost" onClick={() => setGroceryPrompt(null)}>{tr('recipes.cancel')}</Button>
+              <Button type="submit" loading={creatingList} disabled={!newListName.trim()}>{tr('recipes.createAmpAdd')}</Button>
             </div>
           </form>
         </Modal>
       )}
 
       {tonightOpen && (
-        <Modal open onClose={() => setTonightOpen(false)} title="What can we make tonight?">
+        <Modal open onClose={() => setTonightOpen(false)} title={tr('recipes.whatCanWeMakeTonight')}>
           <div className="space-y-4">
-            <p className="text-sm text-muted">We&apos;ll pick from your saved recipes. Optionally tell us what you have or need.</p>
+            <p className="text-sm text-muted">{tr('recipes.weAposLlPickFromYour')}</p>
             <Input value={tonightConstraint} onChange={(e) => setTonightConstraint(e.target.value)}
-              placeholder="e.g. we have chicken & rice · quick · no dairy" />
+              placeholder={tr('recipes.eGWeHaveChickenRice')} />
             <Button onClick={suggestTonight} loading={tonightBusy} className="w-full">
               <Sparkles className="h-4 w-4" /> {tonightBusy ? 'Thinking…' : 'Suggest dinner'}
             </Button>
 
             {tonightPicks && tonightPicks.length === 0 && (
               <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">
-                No matches yet — save a few recipes (try Discover) and ask again.
+                {tr('recipes.noMatchesYetSaveAFew')}
               </p>
             )}
             {tonightPicks && tonightPicks.length > 0 && (
@@ -559,6 +569,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   recipe: Recipe | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [ingredients, setIngredients] = useState<Ingredient[]>(
@@ -601,7 +612,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
       instructions: instructions.filter((s) => s.text.trim()),
       allergy_flags: selectedFlags,
     };
-    if (!payload.name) return toastError('Recipe name is required');
+    if (!payload.name) return toastError(tr('recipesModule.recipeNameIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { error } = recipe
@@ -616,15 +627,15 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   return (
     <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
-        <Field label="Recipe name" required>
-          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder="Grandma's Spaghetti, Taco Tuesday…" autoFocus />}
+        <Field label={tr('recipes.recipeName')} required>
+          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder={tr('recipesModule.grandmaSSpaghettiTacoTuesday')} autoFocus />}
         </Field>
-        <Field label="Description">
-          {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder="A brief description of this dish…" className="min-h-[60px]" />}
+        <Field label={tr('recipes.description')}>
+          {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder={tr('recipes.aBriefDescriptionOfThisDish')} className="min-h-[60px]" />}
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Category">
+          <Field label={tr('recipes.category')}>
             {(id) => (
               <select id={id} name="category" defaultValue={recipe?.category ?? 'dinner'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
@@ -632,7 +643,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
               </select>
             )}
           </Field>
-          <Field label="Difficulty">
+          <Field label={tr('recipes.difficulty')}>
             {(id) => (
               <select id={id} name="difficulty" defaultValue={recipe?.difficulty ?? 'medium'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
@@ -643,22 +654,22 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Servings">
+          <Field label={tr('recipes.servings')}>
             {(id) => <Input id={id} name="servings" type="number" min={1} defaultValue={recipe?.servings ?? 4} />}
           </Field>
-          <Field label="Prep time (min)">
+          <Field label={tr('recipes.prepTimeMin')}>
             {(id) => <Input id={id} name="prep_time_mins" type="number" min={0} defaultValue={recipe?.prep_time_mins ?? ''} placeholder="15" />}
           </Field>
-          <Field label="Cook time (min)">
+          <Field label={tr('recipes.cookTimeMin')}>
             {(id) => <Input id={id} name="cook_time_mins" type="number" min={0} defaultValue={recipe?.cook_time_mins ?? ''} placeholder="30" />}
           </Field>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Cuisine">
-            {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder="Italian, Mexican, American…" />}
+          <Field label={tr('recipes.cuisine')}>
+            {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder={tr('recipes.italianMexicanAmerican')} />}
           </Field>
-          <Field label="Photo URL">
+          <Field label={tr('recipes.photoUrl')}>
             {(id) => <Input id={id} name="photo_url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
@@ -666,15 +677,15 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Ingredients */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">Ingredients</label>
-            <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">+ Add ingredient</button>
+            <label className="text-sm font-medium">{tr('recipes.ingredients')}</label>
+            <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">{tr('recipes.addIngredient')}</button>
           </div>
           <div className="space-y-2">
             {ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
                 <Input value={ing.unit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} placeholder="cups" className="w-20 flex-shrink-0" />
-                <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder="Ingredient name" className="flex-1" />
+                <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder={tr('recipes.ingredientName')} className="flex-1" />
                 <button type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
               </div>
             ))}
@@ -684,8 +695,8 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Instructions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">Instructions</label>
-            <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">+ Add step</button>
+            <label className="text-sm font-medium">{tr('recipes.instructions')}</label>
+            <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">{tr('recipes.addStep')}</button>
           </div>
           <div className="space-y-2">
             {instructions.map((step, i) => (
@@ -703,7 +714,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         {/* Allergy flags */}
         <div>
-          <label className="mb-2 block text-sm font-medium">Dietary flags</label>
+          <label className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</label>
           <div className="flex flex-wrap gap-2">
             {ALLERGY_FLAGS.map((f) => (
               <button key={f} type="button" onClick={() => toggleFlag(f)}
@@ -717,16 +728,16 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Notes">
-            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder="Chef's tips, substitutions…" className="min-h-[60px]" />}
+          <Field label={tr('recipes.notes')}>
+            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder={tr('recipesModule.chefSTipsSubstitutions')} className="min-h-[60px]" />}
           </Field>
-          <Field label="Source URL">
+          <Field label={tr('recipes.sourceUrl')}>
             {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('recipes.cancel')}</Button>
           <Button type="submit" loading={loading}>{recipe ? 'Save Recipe' : 'Add Recipe'}</Button>
         </div>
       </form>

@@ -6,15 +6,17 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import type { ContactBand, ContactScoreFactor } from '@/lib/marketing/contact-score';
 import { recomputeLeadScoresAction } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function RecomputeButton() {
+  const t = useTranslations();
   const [pending, startTransition] = useTransition();
   const { success, error } = useToast();
   return (
     <button
       onClick={() => startTransition(async () => {
         try { const { scored } = await recomputeLeadScoresAction(); success(`Recomputed ${scored} lead score${scored === 1 ? '' : 's'}`); }
-        catch { error('Could not recompute scores'); }
+        catch { error(t('leadScoresClient.couldNotRecomputeScores')); }
       })}
       disabled={pending}
       className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
@@ -36,6 +38,7 @@ export function LeadRow({
   bandTint: string;
   factors: ContactScoreFactor[];
 }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   return (
     <li>
@@ -60,7 +63,7 @@ export function LeadRow({
             <div className="h-full rounded-full bg-brand" style={{ width: `${score}%` }} />
           </div>
           {factors.length === 0 ? (
-            <p className="text-xs text-muted">No positive signals yet — this contact scores 0.</p>
+            <p className="text-xs text-muted">{t('adminMarketingLeadScoresLeadScoresClient.noPositiveSignalsYetThisContact')}</p>
           ) : (
             <ul className="space-y-1.5">
               {factors.map((f) => (
@@ -71,7 +74,7 @@ export function LeadRow({
               ))}
             </ul>
           )}
-          <p className="mt-2 text-[10px] text-muted">The score is the sum of these factors, capped at 100.</p>
+          <p className="mt-2 text-[10px] text-muted">{t('adminMarketingLeadScoresLeadScoresClient.theScoreIsTheSumOf')}</p>
         </div>
       )}
     </li>

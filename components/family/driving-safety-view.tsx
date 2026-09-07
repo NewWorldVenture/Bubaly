@@ -15,10 +15,12 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime } from '@/lib/family/safety';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'driving_trips'>;
 
 export function DrivingSafetyView() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -34,26 +36,26 @@ export function DrivingSafetyView() {
   const [form, setForm] = useState(false);
 
   async function remove(id: string) {
-    if (!confirm('Delete this trip?')) return;
+    if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
     const { error } = await createClient().from('driving_trips').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(tr('drivingSafetyView.deleted'));
   }
 
   return (
     <div className="module-page">
-      <PageHeader title="Driving Safety" description="Track trips and driving scores for teen and family drivers."
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Log trip</Button>} />
+      <PageHeader title={tr('drivingSafety.drivingSafety')} description={tr('drivingSafetyView.trackTripsAndDrivingScores')}
+        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {tr('drivingSafety.logTrip')}</Button>} />
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Avg score" value={avg != null ? String(avg) : '—'} tint={avg != null ? SCORE_TINT[scoreBand(avg)] : 'text-muted'} icon={Gauge} />
-        <Stat label="Trips" value={String(trips.length)} tint="text-fg" icon={Car} />
-        <Stat label="Miles" value={totalMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} tint="text-fg" icon={TrendingDown} />
+        <Stat label={tr('drivingSafety.avgScore')} value={avg != null ? String(avg) : '—'} tint={avg != null ? SCORE_TINT[scoreBand(avg)] : 'text-muted'} icon={Gauge} />
+        <Stat label={tr('drivingSafety.trips')} value={String(trips.length)} tint="text-fg" icon={Car} />
+        <Stat label={tr('drivingSafety.miles')} value={totalMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} tint="text-fg" icon={TrendingDown} />
       </div>
 
-      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load driving trips. Refresh and try again." onRetry={refresh} /> : trips.length === 0 ? (
-        <EmptyState icon={Car} title="No trips logged" description="Log a trip to start tracking driving safety scores."
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Log trip</Button>} />
+      {loading ? <SkeletonList /> : error ? <ErrorState message={tr('drivingSafetyView.couldNotLoadDrivingTrips')} onRetry={refresh} /> : trips.length === 0 ? (
+        <EmptyState icon={Car} title={tr('drivingSafety.noTripsLogged')} description={tr('drivingSafetyView.logATripToStart')}
+          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {tr('drivingSafety.logTrip')}</Button>} />
       ) : (
         <div className="space-y-2">
           {trips.map((t) => {
@@ -77,7 +79,7 @@ export function DrivingSafetyView() {
                   <p className={cn('text-2xl font-black tabular-nums', SCORE_TINT[band])}>{t.score}</p>
                   <p className="text-[10px] capitalize text-muted">{band}</p>
                 </div>
-                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             );
           })}
@@ -99,6 +101,7 @@ function Stat({ label, value, tint, icon: Icon }: { label: string; value: string
 }
 
 function TripModal({ members, familyId, userId, onClose }: { members: Tables<'family_members'>[]; familyId: string; userId: string; onClose: () => void }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState({ member_id: '', label: '', distance_miles: '', max_mph: '', hard_brakes: '0', rapid_accels: '0', phone_use_seconds: '0', started_at: new Date().toISOString().slice(0, 16) });
@@ -118,34 +121,34 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Trip logged');
+    success(tr('drivingSafetyView.tripLogged'));
     onClose();
   }
 
   return (
-    <Modal open onClose={onClose} title="Log a Trip">
+    <Modal open onClose={onClose} title={tr('drivingSafety.logATrip')}>
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Driver">{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="When">{(id) => <Input id={id} type="datetime-local" value={v.started_at} onChange={(e) => setV({ ...v, started_at: e.target.value })} />}</Field>
+          <Field label={tr('drivingSafety.driver')}>{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('drivingSafety.when')}>{(id) => <Input id={id} type="datetime-local" value={v.started_at} onChange={(e) => setV({ ...v, started_at: e.target.value })} />}</Field>
         </div>
-        <Field label="Label" hint="Optional">{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder="School run" />}</Field>
+        <Field label={tr('drivingSafety.label')} hint={tr('drivingSafetyView.optional')}>{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder={tr('drivingSafetyView.schoolRun')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Distance (mi)">{(id) => <Input id={id} type="number" step="0.1" value={v.distance_miles} onChange={(e) => setV({ ...v, distance_miles: e.target.value })} placeholder="8.4" />}</Field>
-          <Field label="Max speed (mph)">{(id) => <Input id={id} type="number" value={v.max_mph} onChange={(e) => setV({ ...v, max_mph: e.target.value })} placeholder="68" />}</Field>
+          <Field label={tr('drivingSafety.distanceMi')}>{(id) => <Input id={id} type="number" step="0.1" value={v.distance_miles} onChange={(e) => setV({ ...v, distance_miles: e.target.value })} placeholder="8.4" />}</Field>
+          <Field label={tr('drivingSafety.maxSpeedMph')}>{(id) => <Input id={id} type="number" value={v.max_mph} onChange={(e) => setV({ ...v, max_mph: e.target.value })} placeholder="68" />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Hard brakes">{(id) => <Input id={id} type="number" value={v.hard_brakes} onChange={(e) => setV({ ...v, hard_brakes: e.target.value })} />}</Field>
-          <Field label="Rapid accels">{(id) => <Input id={id} type="number" value={v.rapid_accels} onChange={(e) => setV({ ...v, rapid_accels: e.target.value })} />}</Field>
-          <Field label="Phone (sec)">{(id) => <Input id={id} type="number" value={v.phone_use_seconds} onChange={(e) => setV({ ...v, phone_use_seconds: e.target.value })} />}</Field>
+          <Field label={tr('drivingSafety.hardBrakes')}>{(id) => <Input id={id} type="number" value={v.hard_brakes} onChange={(e) => setV({ ...v, hard_brakes: e.target.value })} />}</Field>
+          <Field label={tr('drivingSafety.rapidAccels')}>{(id) => <Input id={id} type="number" value={v.rapid_accels} onChange={(e) => setV({ ...v, rapid_accels: e.target.value })} />}</Field>
+          <Field label={tr('drivingSafety.phoneSec')}>{(id) => <Input id={id} type="number" value={v.phone_use_seconds} onChange={(e) => setV({ ...v, phone_use_seconds: e.target.value })} />}</Field>
         </div>
         <div className="flex items-center justify-between rounded-xl border border-border bg-elevated/40 px-4 py-3">
-          <span className="text-sm text-muted">Safety score</span>
+          <span className="text-sm text-muted">{tr('drivingSafety.safetyScore')}</span>
           <span className={cn('text-2xl font-black tabular-nums', SCORE_TINT[scoreBand(preview)])}>{preview}</span>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={saving}>Log trip</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{tr('drivingSafety.cancel')}</Button>
+          <Button type="submit" loading={saving}>{tr('drivingSafety.logTrip')}</Button>
         </div>
       </form>
     </Modal>

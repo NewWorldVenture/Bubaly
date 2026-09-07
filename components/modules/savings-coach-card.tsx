@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Sparkles, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = { title: string; detail: string };
 
@@ -12,6 +13,7 @@ type Suggestion = { title: string; detail: string };
  * prioritised, concrete recommendations. Embeddable on any finance surface.
  */
 export function SavingsCoachCard() {
+  const t = useTranslations();
   const [state, setState] = useState<{ loading: boolean; summary: string; suggestions: Suggestion[] } | null>(null);
 
   async function run() {
@@ -28,8 +30,8 @@ export function SavingsCoachCard() {
   return (
     <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Savings Suggestions</p>
-        <Button variant="secondary" onClick={run} loading={state?.loading}>Analyze my finances</Button>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('savingsCoach.aiSavingsSuggestions')}</p>
+        <Button variant="secondary" onClick={run} loading={state?.loading}>{t('savingsCoach.analyzeMyFinances')}</Button>
       </div>
       {state && !state.loading && (
         <div className="mt-3 space-y-2 text-sm">

@@ -23,6 +23,7 @@ import {
   type WishLike, type WishPriority, type ClaimState,
 } from '@/lib/wishlists/gifts';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Wish = Tables<'wishlist_items'>;
 
@@ -42,6 +43,7 @@ const CLAIM_BADGE: Record<ClaimState, { label: string; cls: string } | null> = {
 const blank = { id: '', title: '', url: '', price: '', priority: 'medium' as WishPriority, notes: '' };
 
 export function WishlistsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -80,7 +82,7 @@ export function WishlistsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('What do you wish for?'); return; }
+    if (!form.title.trim()) { toastError(t('wishlistsModule.whatDoYouWishFor')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), url: form.url.trim() || null, price: form.price ? Number(form.price) : null, priority: form.priority, notes: form.notes.trim() || null };
@@ -98,7 +100,7 @@ export function WishlistsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('wishlist_items').delete().eq('id', w.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Removed');
+    success(t('wishlistsModule.removed'));
   }
 
   async function toggleClaim(w: Wish) {
@@ -124,12 +126,12 @@ export function WishlistsModule() {
   return (
     <div>
       <PageHeader
-        title="Wish Lists"
-        description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
+        title={t('wishlists.wishLists')}
+        description={t('wishlistsModule.everyoneSWishesInOne')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="wishlists" />
-            {isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+            {isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('wishlists.addAWish')}</Button>}
           </div>
         }
       />
@@ -149,14 +151,14 @@ export function WishlistsModule() {
 
       {isOwnList && (
         <p className="text-xs text-muted mb-4 flex items-center gap-1.5">
-          <Lock className="h-3.5 w-3.5" /> This is your list. You can&apos;t see who&apos;s claimed your wishes — that&apos;s the surprise!
+          <Lock className="h-3.5 w-3.5" /> {t('wishlists.thisIsYourListYouCan')}
         </p>
       )}
 
       {visible.length === 0 ? (
         <EmptyState icon={Gift} title={isOwnList ? 'Your wish list is empty' : `${memberName(activeMember)} hasn't added wishes yet`}
           description={isOwnList ? 'Add things you\'d love for birthdays and holidays — your family can claim them as gifts.' : 'Check back later, or nudge them to add some ideas.'}
-          action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>} />
+          action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('wishlists.addAWish')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {visible.map((row) => {
@@ -174,8 +176,8 @@ export function WishlistsModule() {
                     </span>
                     {isOwnList && (
                       <>
-                        <button onClick={() => openEdit(w)} aria-label="Edit" className="p-1 rounded text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => remove(w)} aria-label="Remove" className="p-1 rounded text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => openEdit(w)} aria-label={t('wishlists.edit')} className="p-1 rounded text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => remove(w)} aria-label={t('wishlists.remove')} className="p-1 rounded text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /></button>
                       </>
                     )}
                   </div>
@@ -184,7 +186,7 @@ export function WishlistsModule() {
                 {w.notes && <p className="mt-0.5 text-sm text-muted flex-1">{w.notes}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {w.price != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{w.price}</span>}
-                  {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />View</a>}
+                  {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('wishlists.view')}</a>}
                 </div>
 
                 {/* Gift coordination (hidden from owner) */}
@@ -199,7 +201,7 @@ export function WishlistsModule() {
                       )}
                       {canClaim && (
                         <Button size="sm" variant={cs === 'claimed_by_you' ? 'outline' : 'primary'} onClick={() => toggleClaim(w)} className="gap-1 h-7 text-xs">
-                          {cs === 'claimed_by_you' ? <><Check className="h-3.5 w-3.5" /> Claimed</> : <><HandHeart className="h-3.5 w-3.5" /> Claim gift</>}
+                          {cs === 'claimed_by_you' ? <><Check className="h-3.5 w-3.5" /> {t('wishlists.claimed')}</> : <><HandHeart className="h-3.5 w-3.5" /> {t('wishlists.claimGift')}</>}
                         </Button>
                       )}
                     </div>
@@ -214,29 +216,29 @@ export function WishlistsModule() {
       {/* Add/edit (own list only) */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit wish' : 'Add a wish'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What do you wish for?" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Lego Botanicals set" autoFocus />}
+          <Field label={t('wishlists.whatDoYouWishFor')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('wishlists.eGLegoBotanicalsSet')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Link">
+            <Field label={t('wishlists.link')}>
               {(id) => <Input id={id} type="url" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
             </Field>
-            <Field label="Approx. price ($)">
+            <Field label={t('wishlists.approxPrice')}>
               {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
             </Field>
           </div>
-          <Field label="Priority">
+          <Field label={t('wishlists.priority')}>
             {(id) => (
               <Select id={id} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as WishPriority }))}>
                 {(Object.keys(WISH_PRIORITY_LABELS) as WishPriority[]).map((p) => <option key={p} value={p}>{WISH_PRIORITY_LABELS[p]}</option>)}
               </Select>
             )}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Size, color, any details…" />}
+          <Field label={t('wishlists.notes')}>
+            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('wishlists.sizeColorAnyDetails')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('wishlists.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add wish'}</Button>
           </div>
         </form>

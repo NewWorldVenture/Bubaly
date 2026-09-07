@@ -12,8 +12,9 @@ import {
   saveKeywordAction, deleteKeywordAction,
   saveBacklinkAction, deleteBacklinkAction,
 } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Competitive Intelligence', robots: { index: false } };
+export const metadata: Metadata = { title: 'competitive.competitiveIntelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Competitor = Tables<'competitors'>;
@@ -23,17 +24,19 @@ type Backlink = Tables<'backlinks'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Competitive Intelligence</h1>
-      <ErrorState message="Could not load competitive intelligence from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/competitive" className="text-sm font-medium text-brand-text underline">Refresh competitive intelligence</a>
+      <h1 className="text-xl font-black sm:text-2xl">{t('competitive.competitiveIntelligence')}</h1>
+      <ErrorState message={t('competitive.couldNotLoadCompetitiveIntelligence')} />
+      <a href="/admin/marketing/competitive" className="text-sm font-medium text-brand-text underline">{t('competitive.refreshCompetitiveIntelligence')}</a>
     </div>
   );
 }
 
 export default async function CompetitivePage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   let results;
   try {
@@ -61,7 +64,7 @@ export default async function CompetitivePage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Track competitors, find keyword opportunities, and monitor your backlink profile — market awareness + SEO authority.</p>
+      <p className="text-sm text-muted">{t('adminMarketingCompetitive.trackCompetitorsFindKeywordOpportunitiesAnd')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -74,14 +77,14 @@ export default async function CompetitivePage() {
 
       {/* Competitors */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Radar className="h-4 w-4 text-brand-text" /> Competitors</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Radar className="h-4 w-4 text-brand-text" /> {t('adminMarketingCompetitive.competitors')}</h2>
         <form action={saveCompetitorAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="name" required placeholder="HubSpot" className={inputCls} />
           <input name="domain" placeholder="hubspot.com" className={inputCls} />
-          <input name="ranking" type="number" min="1" placeholder="Rank (1=top)" className={inputCls} />
-          <button type="submit" className={btnCls}>Add competitor</button>
+          <input name="ranking" type="number" min="1" placeholder={t('adminMarketingCompetitive.rank1Top')} className={inputCls} />
+          <button type="submit" className={btnCls}>{t('adminMarketingCompetitive.addCompetitor')}</button>
         </form>
-        {comps.length === 0 ? <p className="py-3 text-center text-sm text-muted">No competitors tracked.</p> : (
+        {comps.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noCompetitorsTracked')}</p> : (
           <div className="space-y-1.5">
             {comps.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
@@ -95,18 +98,18 @@ export default async function CompetitivePage() {
 
       {/* Keyword Intelligence */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Search className="h-4 w-4 text-brand-text" /> Keyword Intelligence</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Search className="h-4 w-4 text-brand-text" /> {t('adminMarketingCompetitive.keywordIntelligence')}</h2>
         <form action={saveKeywordAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <input name="keyword" required placeholder="family calendar app" className={`${inputCls} lg:col-span-2`} />
+          <input name="keyword" required placeholder={t('adminMarketingCompetitive.familyCalendarApp')} className={`${inputCls} lg:col-span-2`} />
           <input name="search_volume" type="number" min="0" placeholder="Volume/mo" className={inputCls} />
-          <input name="difficulty" type="number" min="0" max="100" placeholder="Difficulty" className={inputCls} />
-          <input name="our_rank" type="number" min="1" placeholder="Our rank" className={inputCls} />
-          <button type="submit" className={`${btnCls} lg:col-span-5`}>Add keyword</button>
+          <input name="difficulty" type="number" min="0" max="100" placeholder={t('adminMarketingCompetitive.difficulty')} className={inputCls} />
+          <input name="our_rank" type="number" min="1" placeholder={t('adminMarketingCompetitive.ourRank')} className={inputCls} />
+          <button type="submit" className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addKeyword')}</button>
         </form>
-        {kws.length === 0 ? <p className="py-3 text-center text-sm text-muted">No keywords tracked.</p> : (
+        {kws.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noKeywordsTracked')}</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted"><tr><th className="pb-2">Keyword</th><th className="pb-2">Volume</th><th className="pb-2">Difficulty</th><th className="pb-2">Our rank</th><th className="pb-2">Opportunity</th><th className="pb-2"></th></tr></thead>
+              <thead className="text-left text-xs text-muted"><tr><th className="pb-2">{t('adminMarketingCompetitive.keyword')}</th><th className="pb-2">{t('adminMarketingCompetitive.volume')}</th><th className="pb-2">{t('adminMarketingCompetitive.difficulty')}</th><th className="pb-2">{t('adminMarketingCompetitive.ourRank')}</th><th className="pb-2">{t('adminMarketingCompetitive.opportunity')}</th><th className="pb-2"></th></tr></thead>
               <tbody>
                 {kws.map((k) => (
                   <tr key={k.id} className="border-t border-border">
@@ -126,15 +129,15 @@ export default async function CompetitivePage() {
 
       {/* Backlinks */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Link2 className="h-4 w-4 text-brand-text" /> Backlink Monitoring</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Link2 className="h-4 w-4 text-brand-text" /> {t('adminMarketingCompetitive.backlinkMonitoring')}</h2>
         <form action={saveBacklinkAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <input name="source_domain" required placeholder="techcrunch.com" className={`${inputCls} lg:col-span-2`} />
           <input name="target_url" placeholder="/blog/post" className={inputCls} />
-          <input name="authority" type="number" min="0" max="100" placeholder="Authority" className={inputCls} />
-          <select name="status" defaultValue="active" className={inputCls}><option value="active">Active</option><option value="lost">Lost</option><option value="toxic">Toxic</option></select>
-          <button type="submit" className={`${btnCls} lg:col-span-5`}>Add backlink</button>
+          <input name="authority" type="number" min="0" max="100" placeholder={t('adminMarketingCompetitive.authority')} className={inputCls} />
+          <select name="status" defaultValue="active" className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
+          <button type="submit" className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</button>
         </form>
-        {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">No backlinks tracked.</p> : (
+        {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (
           <div className="space-y-1.5">
             {links.map((l) => (
               <div key={l.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">

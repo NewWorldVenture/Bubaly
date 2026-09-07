@@ -17,6 +17,7 @@ import {
   type AuditRecord, type DimensionKey, type Grade,
 } from '@/lib/experience/scorecard';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Row = Tables<'experience_audits'>;
 
@@ -42,6 +43,7 @@ function Delta({ delta }: { delta: number | null }) {
 }
 
 export function ExperienceScorecardModule() {
+  const t = useTranslations();
   const { familyId } = useApp();
 
   const { data, loading, error, refresh } = useRealtimeQuery<Row>({
@@ -71,19 +73,19 @@ export function ExperienceScorecardModule() {
   }, [data]);
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message="Could not load the experience scorecard. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('experienceScorecardModule.couldNotLoadTheExperience')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Experience Scorecard"
-        description="Premium consistency, measured — every surface graded on empty states, error recovery, transitions, performance, accessibility and consistency, tracked over time."
+        title={t('experienceScorecard.experienceScorecard')}
+        description={t('experienceScorecardModule.premiumConsistencyMeasuredEverySurface')}
       />
 
       {card.auditedSurfaces === 0 ? (
         <EmptyState
           icon={ClipboardCheck}
-          title="No audits yet"
+          title={t('experienceScorecard.noAuditsYet')}
           description="Once surfaces are audited, this scorecard grades each one across the six premium dimensions and tracks the trend. Run seed_experience_audits_one_family.sql to populate a baseline."
         />
       ) : (
@@ -91,19 +93,19 @@ export function ExperienceScorecardModule() {
           {/* Overall + weakest dimensions */}
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-card p-5">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Gauge className="h-4 w-4" /> Overall</div>
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Gauge className="h-4 w-4" /> {t('experienceScorecard.overall')}</div>
               <div className="mt-2 flex items-end gap-3">
                 <span className="text-4xl font-bold tabular-nums">{card.overall}</span>
                 <span className={cn('mb-1 rounded-lg border px-2 py-0.5 text-sm font-bold', GRADE_TONE[card.overallGrade])}>{card.overallGrade}</span>
               </div>
               <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                <span>Since last audit:</span> <Delta delta={card.overallDelta} />
+                <span>{t('experienceScorecard.sinceLastAudit')}</span> <Delta delta={card.overallDelta} />
               </div>
-              <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} surfaces · {card.needsWorkCount} below the bar</p>
+              <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} {t('experienceScorecard.surfaces')} {card.needsWorkCount} {t('experienceScorecard.belowTheBar')}</p>
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-5 md:col-span-2">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted">By dimension</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-muted">{t('experienceScorecard.byDimension')}</div>
               <div className="mt-3 space-y-2.5">
                 {card.dimensionAverages.map((d) => (
                   <div key={d.key} className="flex items-center gap-3">
@@ -123,8 +125,8 @@ export function ExperienceScorecardModule() {
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
               <span>
-                <strong>{card.needsWorkCount}</strong> surface{card.needsWorkCount === 1 ? '' : 's'} below the premium bar (score &lt; 70).
-                {card.weakestDimensions.length > 0 && <> Weakest dimension overall: <strong>{EXPERIENCE_DIMENSIONS.find((x) => x.key === card.weakestDimensions[0])?.label}</strong>.</>}
+                <strong>{card.needsWorkCount}</strong> surface{card.needsWorkCount === 1 ? '' : 's'} {t('experienceScorecard.belowThePremiumBarScoreLt')}
+                {card.weakestDimensions.length > 0 && <> {t('experienceScorecard.weakestDimensionOverall')} <strong>{EXPERIENCE_DIMENSIONS.find((x) => x.key === card.weakestDimensions[0])?.label}</strong>.</>}
               </span>
             </div>
           )}
@@ -134,9 +136,9 @@ export function ExperienceScorecardModule() {
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="border-b border-border bg-surface/40 text-[11px] uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Surface</th>
-                  <th className="px-3 py-2.5 font-medium">Score</th>
-                  <th className="px-3 py-2.5 font-medium">Trend</th>
+                  <th className="px-4 py-2.5 font-medium">{t('experienceScorecard.surface')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('experienceScorecard.score')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('experienceScorecard.trend')}</th>
                   {DIMENSION_KEYS.map((k) => (
                     <th key={k} className="px-2 py-2.5 text-center font-medium" title={EXPERIENCE_DIMENSIONS.find((d) => d.key === k)?.label}>
                       {EXPERIENCE_DIMENSIONS.find((d) => d.key === k)?.label.slice(0, 4)}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // A-06 calendar (direct user request): two guarantees.
@@ -10,7 +11,7 @@ import fs from 'node:fs';
 //     member, each showing that member's events plus shared/family events, so a
 //     family can compare everyone's day at a glance.
 
-const src = fs.readFileSync('components/modules/calendar-module.tsx', 'utf8');
+const src = readUiSource('components/modules/calendar-module.tsx');
 
 describe('calendar mini-calendar highlights the focused day (A-06)', () => {
   it('MiniCalendar receives the focused day, not the week Monday', () => {

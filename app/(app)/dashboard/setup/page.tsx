@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, ScoreRing } from '@/components/family/shell';
 import { resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { CompleteSetupForm } from '@/components/onboarding/complete-setup';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Complete your setup' };
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export const dynamic = 'force-dynamic';
  * for the CURRENT family — never creates a second one).
  */
 export default async function CompleteSetupPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const admin = createServiceClient();
   const familyId = ctx.active.familyId;
@@ -47,12 +49,12 @@ export default async function CompleteSetupPage() {
     <div className="space-y-5">
       <PageHeader
         title={result.headline}
-        description="Finish a few details so Bubaly fits how your family runs — and unlock the full experience."
+        description={t('setup.finishAFewDetailsSo')}
       />
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <div className="space-y-5">
-          <SectionCard title="Setup progress">
+          <SectionCard title={t('dashboardSetup.setupProgress')}>
             <div className="flex flex-col items-center gap-4">
               <ScoreRing pct={result.score} label={result.isComplete ? 'Complete' : 'Set up'} />
               <p className="text-center text-xs text-muted">
@@ -65,10 +67,10 @@ export default async function CompleteSetupPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="What’s left">
+          <SectionCard title={t('dashboardSetup.whatsLeft')}>
             {result.missing.length === 0 ? (
               <p className="flex items-center gap-2 text-sm text-muted">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Nothing left — you’re all set.
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" /> {t('dashboardSetup.nothingLeftYoureAllSet')}
               </p>
             ) : (
               <ul className="space-y-2">
@@ -88,12 +90,12 @@ export default async function CompleteSetupPage() {
         </div>
 
         <SectionCard
-          title="About your family"
-          description="Tell us your household makeup and what you want help with. This tailors your dashboard and never creates a second family."
+          title={t('dashboardSetup.aboutYourFamily')}
+          description={t('setup.tellUsYourHouseholdMakeup')}
         >
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5 text-xs text-muted">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
-            <span>Saved to your existing family — <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
+            <span>{t('dashboardSetup.savedToYourExistingFamily')} <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
           </div>
           <CompleteSetupForm familyId={familyId} initial={initial} />
         </SectionCard>

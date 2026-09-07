@@ -16,6 +16,7 @@ import {
 } from '@/lib/storage/marketplace-photos';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
@@ -29,6 +30,7 @@ export function PhotoUpload({
   className?: string;
   onOwnedPathChange?: (path: string | null) => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -38,8 +40,8 @@ export function PhotoUpload({
   const [showPaste, setShowPaste] = useState(false);
 
   async function handleFile(file: File) {
-    if (!OK_TYPES.includes(file.type)) { toastError('Please choose a JPEG, PNG, WebP, GIF or AVIF image.'); return; }
-    if (file.size > MAX_BYTES) { toastError('That image is over 10 MB — pick a smaller one.'); return; }
+    if (!OK_TYPES.includes(file.type)) { toastError(t('photoUpload.pleaseChooseAJpegPng')); return; }
+    if (file.size > MAX_BYTES) { toastError(t('photoUpload.thatImageIsOver10')); return; }
     setUploading(true);
     try {
       const sb = createClient();
@@ -49,19 +51,19 @@ export function PhotoUpload({
         : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const path = `${userId}/${unique}.${ext}`;
       const { data, error } = await sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (error) { toastError('Upload failed. Please try again.'); return; }
+      if (error) { toastError(t('photoUpload.uploadFailedPleaseTryAgain')); return; }
       // Delete a previously-uploaded object we're replacing.
       const previousPath = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) {
         const { error: removeError } = await removeMarketplacePhotoPath(sb, previousPath);
-        if (removeError) toastError('The previous photo could not be cleaned up.');
+        if (removeError) toastError(t('photoUpload.thePreviousPhotoCouldNot'));
       }
       const { data: pub } = sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).getPublicUrl(data.path);
       setOwnedPath(data.path);
       onOwnedPathChange?.(data.path);
       onChange(pub.publicUrl);
     } catch {
-      toastError('Upload failed. Please try again.');
+      toastError(t('photoUpload.uploadFailedPleaseTryAgain'));
     } finally {
       setUploading(false);
     }
@@ -71,7 +73,7 @@ export function PhotoUpload({
     const path = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (path) {
       const { error } = await removeMarketplacePhotoPath(createClient(), path);
-      if (error) { toastError('The photo could not be removed.'); return; }
+      if (error) { toastError(t('photoUpload.thePhotoCouldNotBe')); return; }
     }
     setOwnedPath(null);
     onOwnedPathChange?.(null);
@@ -85,12 +87,12 @@ export function PhotoUpload({
       {has ? (
         <div className="relative overflow-hidden rounded-xl border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value.trim()} alt="Listing photo" className="h-44 w-full object-cover" referrerPolicy="no-referrer" />
+          <img src={value.trim()} alt={t('photoUpload.listingPhoto')} className="h-44 w-full object-cover" referrerPolicy="no-referrer" />
           <button
             type="button" onClick={() => void remove()}
             className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/80"
           >
-            <X className="h-3.5 w-3.5" /> Remove
+            <X className="h-3.5 w-3.5" /> {t('photoUpload.remove')}
           </button>
         </div>
       ) : (
@@ -105,8 +107,8 @@ export function PhotoUpload({
           ) : (
             <>
               <ImagePlus className="h-6 w-6" />
-              <span className="text-sm font-semibold">Add a photo</span>
-              <span className="text-xs">JPEG · PNG · WebP · up to 10 MB</span>
+              <span className="text-sm font-semibold">{t('photoUpload.addAPhoto')}</span>
+              <span className="text-xs">{t('photoUpload.jpegPngWebpUpTo10')}</span>
             </>
           )}
         </button>
@@ -120,13 +122,13 @@ export function PhotoUpload({
       {!has && (
         showPaste ? (
           <input
-            type="url" autoFocus placeholder="…or paste an image URL (https://)"
+            type="url" autoFocus placeholder={t('photoUpload.orPasteAnImageUrlHttps')}
             onChange={(e) => onChange(e.target.value)}
             className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 focus:ring-2"
           />
         ) : (
           <button type="button" onClick={() => setShowPaste(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-brand-text">
-            <Link2 className="h-3 w-3" /> or paste a link
+            <Link2 className="h-3 w-3" /> {t('photoUpload.orPasteALink')}
           </button>
         )
       )}

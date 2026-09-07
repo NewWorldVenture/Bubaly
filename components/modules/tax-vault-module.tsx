@@ -18,6 +18,7 @@ import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductible
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type TaxDoc = Tables<'tax_documents'>;
 
@@ -25,6 +26,7 @@ const thisYear = new Date().getFullYear();
 const blank = () => ({ name: '', tax_year: String(thisYear), category: 'receipt', amount: '', member_id: '', note: '', file: null as File | null });
 
 export function TaxVaultModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -63,7 +65,7 @@ export function TaxVaultModule() {
         created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Document saved');
+      success(t('taxVaultModule.documentSaved'));
       setForm(null);
     } finally {
       setSaving(false);
@@ -78,35 +80,35 @@ export function TaxVaultModule() {
   }
 
   async function remove(d: TaxDoc) {
-    if (!confirm('Delete this document?')) return;
+    if (!confirm(t('taxVaultModule.deleteThisDocument'))) return;
     const supabase = createClient();
     if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
     const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('taxVaultModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load tax documents. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('taxVaultModule.couldNotLoadTaxDocuments')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> Tax Document Vault</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('taxVault.taxDocumentVault')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="tax" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('taxVault.addDocument')}</Button>
         </div>
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={FolderLock} title="No tax documents yet" description="Securely store W-2s, 1099s, receipts and deduction records by year." />
+        <EmptyState icon={FolderLock} title={t('taxVault.noTaxDocumentsYet')} description={t('taxVaultModule.securelyStoreW2s1099s')} />
       ) : grouped.map(({ year, docs: yearDocs }) => {
         const deductible = deductibleTotalCents(yearDocs as TaxDocLike[]);
         return (
           <div key={year}>
             <div className="mb-2 flex items-center justify-between">
               <h4 className="text-sm font-semibold">{year} <span className="text-xs font-normal text-muted">· {yearDocs.length} docs</span></h4>
-              {deductible > 0 && <span className="text-xs text-muted">Deductible logged: <span className="font-semibold text-success">{usd(deductible)}</span></span>}
+              {deductible > 0 && <span className="text-xs text-muted">{t('taxVault.deductibleLogged')} <span className="font-semibold text-success">{usd(deductible)}</span></span>}
             </div>
             <div className="space-y-2">
               {yearDocs.map((d) => {
@@ -120,8 +122,8 @@ export function TaxVaultModule() {
                         {taxCategoryLabel(d.category)}{d.amount_cents != null ? ` · ${usd(d.amount_cents)}` : ''}{m ? ` · ${m.display_name}` : ''} · {fmtDate(d.created_at)}
                       </p>
                     </div>
-                    {d.storage_path && <button onClick={() => download(d.storage_path!)} className="text-muted hover:text-brand-text" aria-label="Download"><Download className="h-4 w-4" /></button>}
-                    <button onClick={() => remove(d)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                    {d.storage_path && <button onClick={() => download(d.storage_path!)} className="text-muted hover:text-brand-text" aria-label={t('taxVault.download')}><Download className="h-4 w-4" /></button>}
+                    <button onClick={() => remove(d)} className="text-muted hover:text-danger" aria-label={t('taxVault.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 );
               })}
@@ -131,24 +133,24 @@ export function TaxVaultModule() {
       })}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Add tax document">
+        <Modal open onClose={() => setForm(null)} title={t('taxVault.addTaxDocument')}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="2025 W-2 — Acme Corp" />}</Field>
+            <Field label={t('taxVault.name')}>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('taxVault.2025W2AcmeCorp')} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Tax year">{(id) => <Input id={id} type="number" value={form.tax_year} onChange={(e) => setForm({ ...form, tax_year: e.target.value })} />}</Field>
-              <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{TAX_CATEGORIES.map((c) => <option key={c} value={c}>{taxCategoryLabel(c)}</option>)}</Select>}</Field>
+              <Field label={t('taxVault.taxYear')}>{(id) => <Input id={id} type="number" value={form.tax_year} onChange={(e) => setForm({ ...form, tax_year: e.target.value })} />}</Field>
+              <Field label={t('taxVault.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{TAX_CATEGORIES.map((c) => <option key={c} value={c}>{taxCategoryLabel(c)}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($, optional)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
-              <Field label="Member (optional)">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">— None —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label={t('taxVault.amountOptional')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label={t('taxVault.memberOptional')}>{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">{t('taxVault.none')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
-            <Field label="File (optional, stored privately)">
+            <Field label={t('taxVault.fileOptionalStoredPrivately')}>
               {(id) => <input id={id} type="file" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
             </Field>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
+            <Field label={t('taxVault.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('taxVault.cancel')}</Button>
+              <Button type="submit" loading={saving}>{t('taxVault.save')}</Button>
             </div>
           </form>
         </Modal>

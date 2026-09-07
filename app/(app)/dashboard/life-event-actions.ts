@@ -5,6 +5,7 @@
 // never appears), then archiving/completing flips status. Family-scoped: RLS
 // (is_family_member) guarantees a caller only ever touches their own family.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { getTemplate, buildPlanItems } from '@/lib/life-events/templates';
 
@@ -15,8 +16,9 @@ type Result = { ok: boolean; error?: string };
  *  items. `eventDate` is YYYY-MM-DD; when omitted, defaults to the template's
  *  lead time from today. */
 export async function launchLifeEventAction(templateKey: string, eventDate?: string | null): Promise<LaunchResult> {
+  const t = await getTranslations();
   const template = getTemplate(templateKey);
-  if (!template) return { ok: false, error: 'Unknown life event' };
+  if (!template) return { ok: false, error: t('lifeEventActions.unknownLifeEvent') };
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -52,7 +54,8 @@ export async function launchLifeEventAction(templateKey: string, eventDate?: str
 
 /** Set a plan's status (complete / archive / reactivate). */
 export async function setLifeEventStatusAction(planId: string, status: 'active' | 'completed' | 'archived'): Promise<Result> {
-  if (!planId) return { ok: false, error: 'Invalid plan' };
+  const t = await getTranslations();
+  if (!planId) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase

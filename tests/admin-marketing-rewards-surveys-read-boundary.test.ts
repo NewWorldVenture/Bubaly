@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const affiliates = readFileSync('app/(app)/admin/marketing/affiliates/page.tsx', 'utf8');
@@ -10,21 +11,21 @@ const surveyDetail = readFileSync('app/(app)/admin/marketing/surveys/[id]/page.t
 describe('admin marketing rewards and survey read boundaries', () => {
   it('preserves affiliate and loyalty payout/read failures', () => {
     expect(affiliates).toContain('affiliatesResult.error ?? referralsResult.error');
-    expect(affiliates).toContain('Could not load affiliate payout data from Supabase. Refresh and try again.');
+    expectSays(affiliates, 'affiliates.couldNotLoadAffiliatePayout', 'Could not load affiliate payout data from Supabase. Refresh and try again.');
     expect(loyalty).toContain('settingsResult.error ?? rewardsResult.error ?? accountsResult.error ?? redemptionsResult.error ?? familiesResult.error');
-    expect(loyalty).toContain('Could not load loyalty data from Supabase. Refresh and try again.');
+    expectSays(loyalty, 'loyalty.couldNotLoadLoyaltyData', 'Could not load loyalty data from Supabase. Refresh and try again.');
   });
 
   it('preserves proposal and survey list failures before write actions', () => {
     expect(proposals).toContain('quotesResult.error ?? contactsResult.error');
-    expect(proposals).toContain('Could not load proposals from Supabase. Refresh and try again.');
+    expectSays(proposals, 'proposals.couldNotLoadProposalsFrom', 'Could not load proposals from Supabase. Refresh and try again.');
     expect(surveys).toContain('surveysResult.error ?? responsesResult.error');
-    expect(surveys).toContain('Could not load survey data from Supabase. Refresh and try again.');
+    expectSays(surveys, 'surveys.couldNotLoadSurveyData', 'Could not load survey data from Supabase. Refresh and try again.');
   });
 
   it('preserves survey detail and response read failures separately from not-found', () => {
     expect(surveyDetail).toContain('surveyError');
     expect(surveyDetail).toContain('responsesError');
-    expect(surveyDetail).toContain('Could not load this survey from Supabase. Refresh and try again.');
+    expectSays(surveyDetail, 'surveys.couldNotLoadThisSurvey', 'Could not load this survey from Supabase. Refresh and try again.');
   });
 });

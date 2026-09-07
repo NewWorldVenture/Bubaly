@@ -14,6 +14,7 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 import { useTheme } from '@/components/theme/use-theme';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = Tables<'family_members'>;
 
@@ -65,6 +66,7 @@ function Section({ children, className }: { children: React.ReactNode; className
 }
 
 export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) {
+  const t = useTranslations();
   const { family, role, isSuperAdmin } = useApp();
   const { theme, setTheme } = useTheme();
   const [isDark, setIsDark] = useState(theme !== 'light');
@@ -112,23 +114,23 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
 
       {/* Account */}
       <div>
-        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">Account</p>
+        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">{t('profile.account')}</p>
         <Section>
-          <Row icon={User} label="Edit Profile" href="/dashboard/settings#profile" />
-          <Row icon={Bell} label="Notifications" href="/dashboard/settings#notifications" />
-          <Row icon={CreditCard} label="Subscription & Billing" href="/dashboard/billing" />
+          <Row icon={User} label={t('profile.editProfile')} href="/dashboard/settings#profile" />
+          <Row icon={Bell} label={t('profile.notifications')} href="/dashboard/settings#notifications" />
+          <Row icon={CreditCard} label={t('profile.subscriptionBilling')} href="/dashboard/billing" />
           {isSuperAdmin && (
-            <Row icon={ShieldCheck} label="Site Admin" href="/admin" badge="Admin" />
+            <Row icon={ShieldCheck} label={t('profile.siteAdmin')} href="/admin" badge={t('profileModule.admin')} />
           )}
         </Section>
       </div>
 
       {/* Family */}
       <div>
-        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">Family</p>
+        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">{t('profile.family')}</p>
         <Section>
-          <Row icon={Users} label="Family Members" href="/dashboard/settings#members" />
-          <Row icon={HeartPulse} label="Health & Medical" href="/dashboard/health" />
+          <Row icon={Users} label={t('profile.familyMembers')} href="/dashboard/settings#members" />
+          <Row icon={HeartPulse} label={t('profile.healthMedical')} href="/dashboard/health" />
         </Section>
       </div>
 
@@ -136,9 +138,9 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
       <div>
         <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">App</p>
         <Section>
-          <Row icon={Sparkles} label="AI Engine" href="/admin/ai" />
-          <Row icon={LayoutGrid} label="More" href="/dashboard/more" />
-          <Row icon={Settings} label="All Settings" href="/dashboard/settings" />
+          <Row icon={Sparkles} label={t('profile.aiEngine')} href="/admin/ai" />
+          <Row icon={LayoutGrid} label={t('profile.more')} href="/dashboard/more" />
+          <Row icon={Settings} label={t('profile.allSettings')} href="/dashboard/settings" />
           <div className="flex items-center gap-3 px-4 py-3.5">
             {isDark ? <Moon className="h-5 w-5 shrink-0 text-muted" /> : <SunMedium className="h-5 w-5 shrink-0 text-muted" />}
             <span className="flex-1 text-sm font-medium">{isDark ? 'Dark Mode' : 'Light Mode'}</span>
@@ -156,8 +158,8 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
               )} />
             </button>
           </div>
-          <Row icon={HelpCircle} label="Help & Support" href="/dashboard/settings#support" />
-          <Row icon={Star} label="Rate the App" onClick={() => window.open('https://apps.apple.com/', '_blank')} />
+          <Row icon={HelpCircle} label={t('profile.helpSupport')} href="/dashboard/settings#support" />
+          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank')} />
         </Section>
       </div>
 
@@ -165,7 +167,7 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
       <Section>
         <SignOutButton className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-danger transition hover:bg-elevated">
           <LogOut className="h-5 w-5 shrink-0 text-danger" />
-          Sign out
+          {t('profile.signOut')}
         </SignOutButton>
       </Section>
     </div>

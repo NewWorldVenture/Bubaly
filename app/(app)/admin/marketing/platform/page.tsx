@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { PAGE_TYPES } from '@/lib/marketing/platform';
 import { archivePlatformPage, createPlatformPage, retryMarketingJob, saveMarketingBrandRule, saveMarketingTemplate, updatePlatformPage } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Platform', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ const inputCls = 'h-10 w-full rounded-lg border border-border bg-surface/60 px-3
 const areaCls = 'w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring';
 
 export default async function MarketingPlatformPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const providerNames = ['google_search_console', 'bing_webmaster', 'ai_citation'] as const;
   const jobStatuses = ['queued', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled'] as const;
@@ -55,7 +57,7 @@ export default async function MarketingPlatformPage() {
     ?? observationError?.countResult.error
     ?? observationError?.latestResult.error
     ?? embeddingError;
-  if (error || operationsError) return <ErrorState message="Could not load the marketing platform control center. Refresh and try again." />;
+  if (error || operationsError) return <ErrorState message={t('platform.couldNotLoadTheMarketing')} />;
   const pages = pagesResult.data ?? [];
   const templates = templatesResult.data ?? [];
   const rules = rulesResult.data ?? [];
@@ -78,46 +80,46 @@ export default async function MarketingPlatformPage() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-text">Marketing operating system</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Pages, rules, and automation</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">Every platform page is versioned in Supabase. Edits enqueue generation, AEO, and embedding work with visible provider health.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-text">{t('adminMarketingPlatform.marketingOperatingSystem')}</p>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingPlatform.pagesRulesAndAutomation')}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted">{t('platform.everyPlatformPageIsVersioned')}</p>
         </div>
-        <Link href="#new-page" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90"><Plus className="h-4 w-4" /> New page</Link>
+        <Link href="#new-page" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90"><Plus className="h-4 w-4" /> {t('adminMarketingPlatform.newPage')}</Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Metric icon={FileText} label="Pages" value={pages.length} />
-        <Metric icon={Sparkles} label="Published" value={published} />
-        <Metric icon={Layers3} label="Templates" value={templates.length} />
-        <Metric icon={Activity} label="Jobs active" value={activeJobs} />
-        <Metric icon={RefreshCw} label="Jobs needing review" value={failed} />
-        <Metric icon={Layers3} label="Vector chunks ready" value={embeddingCounts.ready} />
+        <Metric icon={FileText} label={t('adminMarketingPlatform.pages')} value={pages.length} />
+        <Metric icon={Sparkles} label={t('adminMarketingPlatform.published')} value={published} />
+        <Metric icon={Layers3} label={t('adminMarketingPlatform.templates')} value={templates.length} />
+        <Metric icon={Activity} label={t('adminMarketingPlatform.jobsActive')} value={activeJobs} />
+        <Metric icon={RefreshCw} label={t('adminMarketingPlatform.jobsNeedingReview')} value={failed} />
+        <Metric icon={Layers3} label={t('adminMarketingPlatform.vectorChunksReady')} value={embeddingCounts.ready} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
-          <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Page registry</h3><p className="text-xs text-muted">The canonical public page inventory.</p></div><Badge tone="neutral">{pages.length} loaded</Badge></div>
-          {pages.length === 0 ? <EmptyState icon={FileText} title="No platform pages yet" description="Create the first page and the worker will prepare its content automatically." /> : (
+          <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.pageRegistry')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.theCanonicalPublicPageInventory')}</p></div><Badge tone="neutral">{pages.length} loaded</Badge></div>
+          {pages.length === 0 ? <EmptyState icon={FileText} title={t('adminMarketingPlatform.noPlatformPagesYet')} description={t('platform.createTheFirstPageAnd')} /> : (
             <div className="space-y-3">{pages.map((page) => <PageEditor key={page.id} page={page} />)}</div>
           )}
         </Card>
 
         <div className="space-y-5">
           <Card id="new-page">
-            <h3 className="font-semibold">Create page</h3><p className="mt-1 text-xs text-muted">The first save creates a queued regeneration job.</p>
+            <h3 className="font-semibold">{t('adminMarketingPlatform.createPage')}</h3><p className="mt-1 text-xs text-muted">{t('adminMarketingPlatform.theFirstSaveCreatesAQueued')}</p>
             <form action={createPlatformPage} className="mt-4 space-y-3">
               <select name="page_type" className={inputCls} defaultValue="guide">{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label} ({type.prefix})</option>)}</select>
-              <input name="title" required placeholder="Title" className={inputCls} />
-              <input name="slug" placeholder="Slug (auto from title)" className={inputCls} />
-              <input name="summary" placeholder="One-sentence promise" className={inputCls} />
-              <textarea name="body" rows={4} placeholder="Source facts or editorial brief" className={areaCls} />
-              <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90"><WandSparkles className="h-4 w-4" /> Create and queue</button>
+              <input name="title" required placeholder={t('adminMarketingPlatform.title')} className={inputCls} />
+              <input name="slug" placeholder={t('adminMarketingPlatform.slugAutoFromTitle')} className={inputCls} />
+              <input name="summary" placeholder={t('adminMarketingPlatform.oneSentencePromise')} className={inputCls} />
+              <textarea name="body" rows={4} placeholder={t('adminMarketingPlatform.sourceFactsOrEditorialBrief')} className={areaCls} />
+              <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90"><WandSparkles className="h-4 w-4" /> {t('adminMarketingPlatform.createAndQueue')}</button>
             </form>
           </Card>
 
           <Card>
-            <div className="mb-3 flex items-center gap-2"><Bot className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">Provider sync health</h3></div>
-            <p className="mb-3 text-xs text-muted">Provider status is live from Supabase. Unconfigured sources never appear as measured traffic.</p>
+            <div className="mb-3 flex items-center gap-2"><Bot className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">{t('adminMarketingPlatform.providerSyncHealth')}</h3></div>
+            <p className="mb-3 text-xs text-muted">{t('adminMarketingPlatform.providerStatusIsLiveFromSupabase')}</p>
             <div className="space-y-2">{syncs.map((sync) => {
               const observation = observationByProvider.get(sync.provider as typeof providerNames[number]);
               return <div key={sync.provider} className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -129,25 +131,25 @@ export default async function MarketingPlatformPage() {
           </Card>
 
           <Card>
-            <div className="mb-3 flex items-center gap-2"><Layers3 className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">Vector index health</h3></div>
-            <p className="mb-3 text-xs text-muted">Only persisted rows in the Supabase vector index count as ready.</p>
+            <div className="mb-3 flex items-center gap-2"><Layers3 className="h-4 w-4 text-brand-text" /><h3 className="font-semibold">{t('adminMarketingPlatform.vectorIndexHealth')}</h3></div>
+            <p className="mb-3 text-xs text-muted">{t('adminMarketingPlatform.onlyPersistedRowsInTheSupabase')}</p>
             <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">{embeddingStatuses.map((status) => <div key={status} className="rounded-lg border border-border px-2 py-2"><span className="block capitalize text-muted">{status}</span><span className="mt-1 block text-lg font-bold tabular-nums">{embeddingCounts[status].toLocaleString()}</span></div>)}</div>
-            {embeddingCounts.ready === 0 ? <p className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">No ready vectors are currently persisted.</p> : null}
+            {embeddingCounts.ready === 0 ? <p className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{t('adminMarketingPlatform.noReadyVectorsAreCurrentlyPersisted')}</p> : null}
           </Card>
         </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Templates</h3><p className="text-xs text-muted">Reusable page instructions and defaults.</p></div><Badge tone="neutral">{templates.length}</Badge></div><div className="space-y-3">{templates.map((template) => <div key={template.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{template.name}</span><Badge tone={template.status === 'active' ? 'success' : 'neutral'}>{template.page_type}</Badge></div><p className="mt-1 text-xs text-muted">{template.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><input name="name" required placeholder="Template name" className={inputCls} /><select name="page_type" className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder="Description" className={inputCls} /><input name="cta_label" placeholder="Default CTA" className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder="Sections" className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> Default for this type</label><textarea name="instructions" rows={3} placeholder="Generation instructions" className={`${areaCls} sm:col-span-2`} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">Save template</button></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.templates')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.reusablePageInstructionsAndDefaults')}</p></div><Badge tone="neutral">{templates.length}</Badge></div><div className="space-y-3">{templates.map((template) => <div key={template.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{template.name}</span><Badge tone={template.status === 'active' ? 'success' : 'neutral'}>{template.page_type}</Badge></div><p className="mt-1 text-xs text-muted">{template.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><input name="name" required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} /><select name="page_type" className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder={t('adminMarketingPlatform.description')} className={inputCls} /><input name="cta_label" placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder={t('adminMarketingPlatform.sections')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> {t('adminMarketingPlatform.defaultForThisType')}</label><textarea name="instructions" rows={3} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingPlatform.saveTemplate')}</button></form></Card>
 
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Brand rules</h3><p className="text-xs text-muted">Facts and constraints every generated page receives.</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <div key={rule.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{rule.name}</span><Badge tone={rule.active ? 'success' : 'neutral'}>{rule.rule_key}</Badge></div><p className="mt-1 text-xs text-muted">{rule.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder="Brand voice" className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder="Write the rule in plain language" className={areaCls} /><input name="examples" placeholder="Approved examples or facts" className={inputCls} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">Save brand rule</button></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.brandRules')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.factsAndConstraintsEveryGeneratedPage')}</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <div key={rule.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{rule.name}</span><Badge tone={rule.active ? 'success' : 'neutral'}>{rule.rule_key}</Badge></div><p className="mt-1 text-xs text-muted">{rule.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} /><input name="examples" placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('adminMarketingPlatform.saveBrandRule')}</button></form></Card>
       </div>
 
-      <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Generation queue</h3><p className="text-xs text-muted">Claimed by the five-minute worker with exact queue counts and stale-lock detection.</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>
+      <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.generationQueue')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.claimedByTheFiveMinuteWorker')}</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>
         <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-6">{jobStatuses.map((status) => <div key={status} className="rounded-lg border border-border px-2 py-2"><span className="block capitalize text-muted">{status.replace('_', ' ')}</span><span className="mt-1 block text-lg font-bold tabular-nums">{jobCounts[status].toLocaleString()}</span></div>)}</div>
-        {staleJobs ? <p className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{staleJobs} running job{staleJobs === 1 ? '' : 's'} has a lock older than 15 minutes. The next claim cycle will recover it.</p> : null}
-        <p className="mb-3 text-xs text-muted">Last successful job: {latestSuccess?.completed_at ? `${latestSuccess.job_type.replaceAll('_', ' ')} · ${formatTimestamp(latestSuccess.completed_at)}${latestSuccess.target_path ? ` · ${latestSuccess.target_path}` : ''}` : 'none recorded'}</p>
-        {jobs.length === 0 ? <p className="text-sm text-muted">No jobs have been created yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-border text-xs text-muted"><tr><th className="px-2 py-2">Type</th><th className="px-2 py-2">Target</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Attempts</th><th className="px-2 py-2">Action</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-b border-border/60"><td className="px-2 py-2 font-medium">{job.job_type.replaceAll('_', ' ')}</td><td className="px-2 py-2 text-muted">{job.target_path ?? job.target_id ?? 'system'}</td><td className="px-2 py-2"><Badge tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'dead_letter' ? 'danger' : 'neutral'}>{job.status}</Badge></td><td className="px-2 py-2 text-muted">{job.attempts}/{job.max_attempts}</td><td className="px-2 py-2">{job.status === 'failed' || job.status === 'dead_letter' ? <form action={retryMarketingJob}><input type="hidden" name="id" value={job.id} /><button className="text-xs font-semibold text-brand-text hover:underline">Retry</button></form> : <span className="text-xs text-muted">{job.completed_at ? 'Complete' : 'Waiting'}</span>}</td></tr>)}</tbody></table></div>}
+        {staleJobs ? <p className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{staleJobs} {t('adminMarketingPlatform.runningJob')}{staleJobs === 1 ? '' : 's'} {t('adminMarketingPlatform.hasALockOlderThan15')}</p> : null}
+        <p className="mb-3 text-xs text-muted">{t('adminMarketingPlatform.lastSuccessfulJob')} {latestSuccess?.completed_at ? `${latestSuccess.job_type.replaceAll('_', ' ')} · ${formatTimestamp(latestSuccess.completed_at)}${latestSuccess.target_path ? ` · ${latestSuccess.target_path}` : ''}` : 'none recorded'}</p>
+        {jobs.length === 0 ? <p className="text-sm text-muted">{t('adminMarketingPlatform.noJobsHaveBeenCreatedYet')}</p> : <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-border text-xs text-muted"><tr><th className="px-2 py-2">{t('adminMarketingPlatform.type')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.target')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.status')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.attempts')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.action')}</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-b border-border/60"><td className="px-2 py-2 font-medium">{job.job_type.replaceAll('_', ' ')}</td><td className="px-2 py-2 text-muted">{job.target_path ?? job.target_id ?? 'system'}</td><td className="px-2 py-2"><Badge tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'dead_letter' ? 'danger' : 'neutral'}>{job.status}</Badge></td><td className="px-2 py-2 text-muted">{job.attempts}/{job.max_attempts}</td><td className="px-2 py-2">{job.status === 'failed' || job.status === 'dead_letter' ? <form action={retryMarketingJob}><input type="hidden" name="id" value={job.id} /><button className="text-xs font-semibold text-brand-text hover:underline">{t('platform.retry')}</button></form> : <span className="text-xs text-muted">{job.completed_at ? 'Complete' : 'Waiting'}</span>}</td></tr>)}</tbody></table></div>}
       </Card>
     </div>
   );
@@ -161,8 +163,9 @@ function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-function PageEditor({ page }: { page: Awaited<ReturnType<typeof createServiceClient>> extends never ? never : DatabasePage }) {
-  return <div className="rounded-xl border border-border p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="flex items-center gap-2"><span className="font-semibold">{page.title}</span><Badge tone={page.status === 'published' ? 'success' : 'neutral'}>{page.status}</Badge></div><p className="mt-0.5 text-xs text-muted">{page.path} · v{page.version}</p></div><form action={archivePlatformPage}><input type="hidden" name="id" value={page.id} /><button className="text-xs text-muted hover:text-danger">Archive</button></form></div><form action={updatePlatformPage} className="grid gap-2 sm:grid-cols-2"><input type="hidden" name="id" value={page.id} /><select name="page_type" defaultValue={page.page_type} className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><select name="status" defaultValue={page.status} className={inputCls}>{['draft', 'review', 'approved', 'published', 'archived'].map((status) => <option key={status} value={status}>{status}</option>)}</select><input name="title" defaultValue={page.title} required className={inputCls} /><input name="slug" defaultValue={page.slug} required className={inputCls} /><input name="summary" defaultValue={page.summary ?? ''} placeholder="Summary" className={`${inputCls} sm:col-span-2`} /><textarea name="body" defaultValue={page.body ?? ''} rows={3} placeholder="Body" className={`${areaCls} sm:col-span-2`} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">Save and regenerate</button></form></div>;
+async function PageEditor({ page }: { page: Awaited<ReturnType<typeof createServiceClient>> extends never ? never : DatabasePage }) {
+  const t = await getTranslations();
+  return <div className="rounded-xl border border-border p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="flex items-center gap-2"><span className="font-semibold">{page.title}</span><Badge tone={page.status === 'published' ? 'success' : 'neutral'}>{page.status}</Badge></div><p className="mt-0.5 text-xs text-muted">{page.path} · v{page.version}</p></div><form action={archivePlatformPage}><input type="hidden" name="id" value={page.id} /><button className="text-xs text-muted hover:text-danger">{t('platform.archive')}</button></form></div><form action={updatePlatformPage} className="grid gap-2 sm:grid-cols-2"><input type="hidden" name="id" value={page.id} /><select name="page_type" defaultValue={page.page_type} className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><select name="status" defaultValue={page.status} className={inputCls}>{['draft', 'review', 'approved', 'published', 'archived'].map((status) => <option key={status} value={status}>{status}</option>)}</select><input name="title" defaultValue={page.title} required className={inputCls} /><input name="slug" defaultValue={page.slug} required className={inputCls} /><input name="summary" defaultValue={page.summary ?? ''} placeholder={t('platform.summary')} className={`${inputCls} sm:col-span-2`} /><textarea name="body" defaultValue={page.body ?? ''} rows={3} placeholder={t('platform.body')} className={`${areaCls} sm:col-span-2`} /><button className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('platform.saveAndRegenerate')}</button></form></div>;
 }
 
 type DatabasePage = {

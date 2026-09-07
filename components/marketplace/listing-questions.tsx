@@ -13,10 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { isAnswered } from '@/lib/marketplace/questions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Question = Tables<'marketplace_questions'>;
 
 export function ListingQuestions({ listingId, isOwner }: { listingId: string; isOwner: boolean }) {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
@@ -37,7 +39,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
   async function ask(e: React.FormEvent) {
     e.preventDefault();
     if (!asking.trim()) return;
-    if (!meId) { toastError('Join the family as a member to ask'); return; }
+    if (!meId) { toastError(t('listingQuestions.joinTheFamilyAsA')); return; }
     setBusy(true);
     const { error } = await createClient().from('marketplace_questions').insert({
       family_id: familyId, listing_id: listingId, asker_member: meId, question: asking.trim(), created_by: userId,
@@ -45,7 +47,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
     setBusy(false);
     if (error) { toastError(describeDbError(error)); return; }
     setAsking('');
-    success('Question sent');
+    success(t('listingQuestions.questionSent'));
   }
 
   const rows = questions ?? [];
@@ -53,14 +55,14 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
   return (
     <div className="mt-8">
       <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-        <MessageSquare className="h-4 w-4 text-brand-text" /> Questions{rows.length > 0 ? ` (${rows.length})` : ''}
+        <MessageSquare className="h-4 w-4 text-brand-text" /> {t('listingQuestions.questions')}{rows.length > 0 ? ` (${rows.length})` : ''}
       </h2>
 
       {!isOwner && meId && (
         <form onSubmit={ask} className="mb-4 flex items-start gap-2">
           <textarea
             value={asking} onChange={(e) => setAsking(e.target.value)}
-            placeholder="Ask the seller a question — is it still available? pickup options?"
+            placeholder={t('listingQuestions.askTheSellerAQuestionIs')}
             className="min-h-[2.5rem] flex-1 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm outline-none focus:border-brand"
             rows={2}
           />
@@ -69,7 +71,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
       )}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">No questions yet{isOwner ? ' — buyers can ask here.' : '. Be the first to ask.'}</p>
+        <p className="text-sm text-muted">{t('listingQuestions.noQuestionsYet')}{isOwner ? ' — buyers can ask here.' : '. Be the first to ask.'}</p>
       ) : (
         <ul className="space-y-3">
           {rows.map((q) => (
@@ -88,9 +90,9 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
                   </div>
                 </div>
               ) : isOwner ? (
-                <AnswerForm question={q} onAnswered={() => success('Answer posted')} onError={toastError} answererId={meId} />
+                <AnswerForm question={q} onAnswered={() => success(t('listingQuestions.answerPosted'))} onError={toastError} answererId={meId} />
               ) : (
-                <p className="mt-1.5 text-xs text-muted">Awaiting the seller’s reply…</p>
+                <p className="mt-1.5 text-xs text-muted">{t('listingQuestions.awaitingTheSellerSReply')}</p>
               )}
             </li>
           ))}
@@ -103,6 +105,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
 function AnswerForm({ question, answererId, onAnswered, onError }: {
   question: Question; answererId: string | null; onAnswered: () => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
@@ -122,7 +125,7 @@ function AnswerForm({ question, answererId, onAnswered, onError }: {
         value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Answer…"
         className="flex-1 rounded-lg border border-border bg-surface/40 px-3 py-1.5 text-sm outline-none focus:border-brand"
       />
-      <Button type="submit" size="sm" disabled={busy || !answer.trim()}>Reply</Button>
+      <Button type="submit" size="sm" disabled={busy || !answer.trim()}>{t('listingQuestions.reply')}</Button>
     </form>
   );
 }

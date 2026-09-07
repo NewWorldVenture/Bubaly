@@ -22,6 +22,7 @@ import {
   addSourceAction, removeSourceAction, toggleFavoriteAction, markReadAction, markAllReadAction,
   addByUrlAction,
 } from '@/app/(app)/dashboard/social-feed/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type FeedSource = { id: string; platform: string; displayName: string; handle: string | null; accountCount: number; category: string };
 export type FeedItem = {
@@ -69,6 +70,7 @@ const QUICK: { key: QuickFilter; label: string; icon: typeof Star }[] = [
 ];
 
 export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; items: FeedItem[] }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<FeedTab>('all');
@@ -119,7 +121,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not add that link');
     setLinkUrl('');
-    success('Added to your feed');
+    success(tr('socialFeedModule.addedToYourFeed'));
     router.refresh();
   }
 
@@ -129,8 +131,8 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
     <div>
       {/* Hero header (mirrors the mock's title + platform row) */}
       <div className="text-center">
-        <h1 className="text-2xl font-bold sm:text-3xl">All your social feeds. <span className="gradient-text">One place.</span></h1>
-        <p className="mx-auto mt-1 max-w-xl text-sm text-muted">Collect, organize, and enjoy content from all your favorite social media in one beautiful, ad-free feed for your family.</p>
+        <h1 className="text-2xl font-bold sm:text-3xl">{tr('socialFeed.allYourSocialFeeds')} <span className="gradient-text">{tr('socialFeed.onePlace')}</span></h1>
+        <p className="mx-auto mt-1 max-w-xl text-sm text-muted">{tr('socialFeed.collectOrganizeAndEnjoyContentFrom')}</p>
       </div>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {PLATFORMS.map((p) => (
@@ -142,7 +144,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
         ))}
         <button type="button" onClick={() => setShowAdd(true)} className="flex flex-col items-center gap-1 rounded-xl p-1.5 hover:bg-elevated">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-border text-muted"><Plus className="h-4 w-4" /></span>
-          <span className="text-[10px] text-muted">More</span>
+          <span className="text-[10px] text-muted">{tr('socialFeed.more')}</span>
         </button>
       </div>
 
@@ -153,16 +155,16 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface/40 p-3">
             <div>
-              <h2 className="font-semibold">Social Feed</h2>
-              <p className="text-xs text-muted">Your all-in-one collection from across the web</p>
+              <h2 className="font-semibold">{tr('socialFeed.socialFeed')}</h2>
+              <p className="text-xs text-muted">{tr('socialFeed.yourAllInOneCollectionFrom')}</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                <input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder="Search feed"
+                <input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={tr('socialFeed.searchFeed')}
                   className="h-9 w-36 rounded-lg border border-border bg-bg pl-8 pr-2 text-sm focus-ring sm:w-44" />
               </div>
-              <Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add Source</Button>
+              <Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> {tr('socialFeed.addSource')}</Button>
             </div>
           </div>
 
@@ -173,7 +175,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
             <Link2 className="ml-1 hidden h-4 w-4 shrink-0 text-brand-text sm:block" />
             <input
               value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} inputMode="url"
-              placeholder="Paste any link — a video, post, or article — to add it to your feed"
+              placeholder={tr('socialFeed.pasteAnyLinkAVideoPost')}
               className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <Button type="submit" disabled={!linkUrl.trim() || busy === 'addlink'}>
               {busy === 'addlink' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
@@ -199,9 +201,9 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           </div>
 
           {empty ? (
-            <EmptyState icon={Rss} title="Your feed is empty" description="Paste any link above — a video, post, or article — to add it instantly, or connect your favorite accounts. It all lands here, ad-free." action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add your first source</Button>} />
+            <EmptyState icon={Rss} title={tr('socialFeed.yourFeedIsEmpty')} description={tr('socialFeedModule.pasteAnyLinkAboveA')} action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> {tr('socialFeed.addYourFirstSource')}</Button>} />
           ) : feed.length === 0 ? (
-            <EmptyState icon={Filter} title="Nothing matches" description="Try a different tab or clear the filter." />
+            <EmptyState icon={Filter} title={tr('socialFeed.nothingMatches')} description={tr('socialFeedModule.tryADifferentTabOr')} />
           ) : (
             <div className="space-y-3">
               {feed.map((item) => (
@@ -220,11 +222,11 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
         <aside className="space-y-4">
           <section className="rounded-2xl border border-border bg-surface/40 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">Your Sources</h3>
-              {counts.unread > 0 && <button onClick={() => run('readall', () => markAllReadAction(), 'Marked all read')} className="text-xs text-brand-text hover:underline">Mark all read</button>}
+              <h3 className="font-semibold">{tr('socialFeed.yourSources')}</h3>
+              {counts.unread > 0 && <button onClick={() => run('readall', () => markAllReadAction(), 'Marked all read')} className="text-xs text-brand-text hover:underline">{tr('socialFeed.markAllRead')}</button>}
             </div>
             {sources.length === 0 ? (
-              <p className="text-sm text-muted">No sources yet.</p>
+              <p className="text-sm text-muted">{tr('socialFeed.noSourcesYet')}</p>
             ) : (
               <div className="space-y-2">
                 {[...sourcesByPlatform.entries()].map(([platform, agg]) => (
@@ -240,13 +242,13 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                 ))}
               </div>
             )}
-            <Button variant="secondary" className="mt-3 w-full" onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add More Sources</Button>
+            <Button variant="secondary" className="mt-3 w-full" onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> {tr('socialFeed.addMoreSources')}</Button>
           </section>
 
           <section className="rounded-2xl border border-border bg-surface/40 p-4">
-            <h3 className="mb-3 font-semibold">Activity</h3>
+            <h3 className="mb-3 font-semibold">{tr('socialFeed.activity')}</h3>
             {items.length === 0 ? (
-              <p className="text-sm text-muted">No recent activity.</p>
+              <p className="text-sm text-muted">{tr('socialFeed.noRecentActivity')}</p>
             ) : (
               <div className="space-y-2.5">
                 {items.slice(0, 5).map((i) => (
@@ -263,7 +265,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           </section>
 
           <section className="rounded-2xl border border-border bg-surface/40 p-4">
-            <h3 className="mb-3 font-semibold">Quick Filters</h3>
+            <h3 className="mb-3 font-semibold">{tr('socialFeed.quickFilters')}</h3>
             <div className="flex flex-wrap gap-2">
               {QUICK.map((q) => {
                 const on = quick === q.key;
@@ -281,8 +283,8 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
           <section className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center">
             <Heart className="mx-auto h-7 w-7 text-brand-text" />
-            <p className="mt-2 text-sm font-semibold">Less scrolling. More connecting.</p>
-            <p className="mt-1 text-xs text-muted">Your family&rsquo;s world in one calm, ad-free place — so you can focus on what matters most.</p>
+            <p className="mt-2 text-sm font-semibold">{tr('socialFeed.lessScrollingMoreConnecting')}</p>
+            <p className="mt-1 text-xs text-muted">{tr('socialFeed.yourFamilyRsquoSWorldIn')}</p>
           </section>
         </aside>
       </div>
@@ -291,6 +293,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 }
 
 function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: string | null; onFavorite: () => void; onOpen: () => void }) {
+  const tr = useTranslations();
   const m = platformMeta(item.platform);
   const media = item.mediaUrls.slice(0, 3);
   const hasVideo = item.kind === 'video';
@@ -314,7 +317,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             <Bookmark className={cn('h-4 w-4', item.isFavorite && 'fill-brand text-brand-text')} />
           </button>
           {item.permalink && (
-            <button type="button" onClick={onOpen} aria-label="Open post" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
+            <button type="button" onClick={onOpen} aria-label={tr('socialFeed.openPost')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
               <MoreHorizontal className="h-4 w-4" />
             </button>
           )}
@@ -350,11 +353,12 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
 }
 
 function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; sources: FeedSource[]; busy: string | null; onRemove: (id: string) => void }) {
+  const tr = useTranslations();
   const [open, setOpen] = useState(false);
   const own = sources.filter((s) => s.platform === platform);
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Source options" className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={tr('socialFeed.sourceOptions')} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg">
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
@@ -362,7 +366,7 @@ function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; s
           {own.map((s) => (
             <button key={s.id} type="button" disabled={busy === `rm-${s.id}`} onClick={() => { onRemove(s.id); setOpen(false); }}
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted hover:bg-elevated hover:text-danger">
-              <Trash2 className="h-3.5 w-3.5" /> Remove {s.displayName}
+              <Trash2 className="h-3.5 w-3.5" /> {tr('socialFeed.remove')} {s.displayName}
             </button>
           ))}
         </div>
@@ -372,6 +376,7 @@ function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; s
 }
 
 function AddSourcePanel({ busy, onClose, onAdd }: { busy: string | null; onClose: () => void; onAdd: (platform: string, name: string, handle: string, category: string) => void }) {
+  const tr = useTranslations();
   const [platform, setPlatform] = useState(PLATFORMS[0].key);
   const [name, setName] = useState('');
   const [handle, setHandle] = useState('');
@@ -379,18 +384,18 @@ function AddSourcePanel({ busy, onClose, onAdd }: { busy: string | null; onClose
   return (
     <div className="mt-4 rounded-2xl border border-brand/30 bg-brand/5 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold">Add a source</h3>
-        <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+        <h3 className="font-semibold">{tr('socialFeed.addASource')}</h3>
+        <button type="button" onClick={onClose} aria-label={tr('socialFeed.close')} className="rounded-lg p-1 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <label className="block">
-          <span className="mb-1 block text-xs text-muted">Platform</span>
+          <span className="mb-1 block text-xs text-muted">{tr('socialFeed.platform')}</span>
           <select value={platform} onChange={(e) => setPlatform(e.target.value as typeof platform)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
             {PLATFORMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
         </label>
         <label className="block min-w-[140px] flex-1">
-          <span className="mb-1 block text-xs text-muted">Name (optional)</span>
+          <span className="mb-1 block text-xs text-muted">{tr('socialFeed.nameOptional')}</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={platformLabel(platform)} className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
         </label>
         <label className="block w-32">
@@ -398,12 +403,12 @@ function AddSourcePanel({ busy, onClose, onAdd }: { busy: string | null; onClose
           <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@" className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-muted">Group</span>
+          <span className="mb-1 block text-xs text-muted">{tr('socialFeed.group')}</span>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
-            <option value="other">General</option>
-            <option value="family">Family</option>
-            <option value="friends">Friends</option>
-            <option value="groups">Groups</option>
+            <option value="other">{tr('socialFeed.general')}</option>
+            <option value="family">{tr('socialFeed.family')}</option>
+            <option value="friends">{tr('socialFeed.friends')}</option>
+            <option value="groups">{tr('socialFeed.groups')}</option>
           </select>
         </label>
         <Button onClick={() => onAdd(platform, name, handle, category)} loading={busy === 'add'}>Add</Button>

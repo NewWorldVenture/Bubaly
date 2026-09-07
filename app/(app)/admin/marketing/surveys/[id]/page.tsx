@@ -11,6 +11,7 @@ import {
   SURVEY_TYPES, summarize, computeNps, distribution, isSurveyType,
 } from '@/lib/marketing/surveys';
 import { SurveyControls } from './survey-controls';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Survey · Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export const dynamic = 'force-dynamic';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
 export default async function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const supabase = createServiceClient();
   const { data: survey, error: surveyError } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
@@ -45,7 +47,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="space-y-5">
       <Link href="/admin/marketing/surveys" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> All surveys
+        <ArrowLeft className="h-4 w-4" /> {t('adminMarketingSurveys.allSurveys')}
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -62,7 +64,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
       {/* Share link */}
       <Card>
-        <p className="text-xs font-medium text-muted">Public share link {survey.status !== 'active' && <span className="text-warning">(activate the survey to accept responses)</span>}</p>
+        <p className="text-xs font-medium text-muted">{t('adminMarketingSurveys.publicShareLink')} {survey.status !== 'active' && <span className="text-warning">{t('adminMarketingSurveys.activateTheSurveyToAcceptResponses')}</span>}</p>
         <a href={publicUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1.5 break-all text-sm font-medium text-brand-text underline">
           {publicUrl} <ExternalLink className="h-3.5 w-3.5 shrink-0" />
         </a>
@@ -77,15 +79,15 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
           <p className="mt-2 text-xs text-muted">{summary.total} response{summary.total === 1 ? '' : 's'}{summary.detail && summary.total > 0 ? ` · ${summary.detail}` : ''}</p>
           {nps && nps.total > 0 && (
             <div className="mt-3 space-y-1 text-xs">
-              <div className="flex items-center justify-between"><span className="text-success">Promoters</span><span>{nps.promoters} ({nps.promoterPct}%)</span></div>
-              <div className="flex items-center justify-between"><span className="text-muted">Passives</span><span>{nps.passives} ({nps.passivePct}%)</span></div>
-              <div className="flex items-center justify-between"><span className="text-danger">Detractors</span><span>{nps.detractors} ({nps.detractorPct}%)</span></div>
+              <div className="flex items-center justify-between"><span className="text-success">{t('adminMarketingSurveys.promoters')}</span><span>{nps.promoters} ({nps.promoterPct}%)</span></div>
+              <div className="flex items-center justify-between"><span className="text-muted">{t('adminMarketingSurveys.passives')}</span><span>{nps.passives} ({nps.passivePct}%)</span></div>
+              <div className="flex items-center justify-between"><span className="text-danger">{t('adminMarketingSurveys.detractors')}</span><span>{nps.detractors} ({nps.detractorPct}%)</span></div>
             </div>
           )}
         </Card>
 
         <Card className="lg:col-span-2">
-          <p className="mb-2 text-xs font-medium text-muted">Score distribution</p>
+          <p className="mb-2 text-xs font-medium text-muted">{t('adminMarketingSurveys.scoreDistribution')}</p>
           <div className="flex items-end gap-1.5" style={{ height: 140 }}>
             {dist.map((d) => (
               <div key={d.value} className="flex flex-1 flex-col items-center justify-end gap-1">
@@ -103,9 +105,9 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
 
       {/* Responses */}
       <Card>
-        <h3 className="mb-3 text-sm font-semibold">Responses</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t('adminMarketingSurveys.responses')}</h3>
         {rows.length === 0 ? (
-          <EmptyState icon={MessagesSquare} title="No responses yet" description="Share the link above to start collecting feedback." />
+          <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (
           <div className="space-y-2">
             {rows.slice(0, 100).map((r) => (
@@ -124,15 +126,16 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   );
 }
 
-function SurveyDetailReadError() {
+async function SurveyDetailReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Survey</h1>
-        <p className="mt-1 text-sm text-muted">Review survey configuration and responses.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('surveys.survey')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('surveys.reviewSurveyConfigurationAndResponses')}</p>
       </div>
-      <ErrorState message="Could not load this survey from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">Back to surveys</Link>
+      <ErrorState message={t('surveys.couldNotLoadThisSurvey')} />
+      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">{t('surveys.backToSurveys')}</Link>
     </div>
   );
 }

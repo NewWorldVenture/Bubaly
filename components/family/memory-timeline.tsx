@@ -10,6 +10,7 @@ import { MiniEmpty } from '@/components/family/shell';
 import { DeleteButton } from '@/components/family/record-actions';
 import { fmtDate } from '@/lib/utils/format';
 import { filterMemories, type SearchableMemory } from '@/lib/family/memory-search';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   photo: Camera, quote: Quote, trip: Plane, achievement: Award, journal: BookHeart, milestone: Star,
@@ -21,6 +22,7 @@ export function MemoryTimeline({ memories, nameById }: {
   memories: TimelineMemory[];
   nameById: Record<string, string>;
 }) {
+  const t = useTranslations();
   const [query, setQuery] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
 
@@ -38,11 +40,11 @@ export function MemoryTimeline({ memories, nameById }: {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search memories — title, who, date…"
+            placeholder={t('memoryTimeline.searchMemoriesTitleWhoDate')}
             className="w-full rounded-xl border border-border bg-surface/60 py-2 pl-9 pr-8 text-sm outline-none transition focus:border-brand/50"
           />
           {query && (
-            <button onClick={() => setQuery('')} aria-label="Clear search"
+            <button onClick={() => setQuery('')} aria-label={t('memoryTimeline.clearSearch')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
               <X className="h-4 w-4" />
             </button>
@@ -54,7 +56,7 @@ export function MemoryTimeline({ memories, nameById }: {
             favoritesOnly ? 'border-amber-400/60 bg-amber-400/10 text-amber-500' : 'border-border bg-surface/60 text-muted hover:text-fg'
           }`}
         >
-          <Star className={`h-3.5 w-3.5 ${favoritesOnly ? 'fill-amber-400' : ''}`} /> Favorites
+          <Star className={`h-3.5 w-3.5 ${favoritesOnly ? 'fill-amber-400' : ''}`} /> {t('memoryTimeline.favorites')}
         </button>
       </div>
 
@@ -78,9 +80,9 @@ export function MemoryTimeline({ memories, nameById }: {
           })}
         </ul>
       ) : memories.length > 0 ? (
-        <MiniEmpty icon={Search} text="No memories match your search." />
+        <MiniEmpty icon={Search} text={t('memoryTimeline.noMemoriesMatchYourSearch')} />
       ) : (
-        <MiniEmpty icon={Camera} text="No memories yet — capture your first above." />
+        <MiniEmpty icon={Camera} text={t('memoryTimeline.noMemoriesYetCaptureYour')} />
       )}
     </div>
   );

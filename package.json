@@ -13,6 +13,8 @@
     "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "next lint",
+    "i18n:scan": "node scripts/i18n-scan.mjs --list app components",
+    "i18n:gate": "node scripts/i18n-gate.mjs",
     "typecheck": "tsc --noEmit",
     "db:reset": "supabase db reset",
     "db:push": "npm run db:audit:migrations && supabase migration list --linked && supabase db push",

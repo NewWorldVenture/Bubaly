@@ -20,6 +20,7 @@ import {
   type BehaviorLogLike,
 } from '@/lib/behavior/insights';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Log = Tables<'behavior_logs'>;
 
@@ -28,6 +29,7 @@ const blank = () => ({ id: '', member_id: '', kind: 'positive', category: 'respo
 const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
 export function BehaviorModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -81,9 +83,9 @@ export function BehaviorModule() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {
@@ -101,33 +103,33 @@ export function BehaviorModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load behavior logs. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('behaviorModule.couldNotLoadBehaviorLogs')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> Behavior & Parenting Insights</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> {tr('behavior.behaviorParentingInsights')}</h3>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9">
-              <option value="all">All kids</option>
+              <option value="all">{tr('behavior.allKids')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}
           <AiInsight kind="behavior" iconOnly />
           <Link href="/dashboard/independence"
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
-            <Award className="h-4 w-4" /> Independence
+            <Award className="h-4 w-4" /> {tr('behavior.independence')}
           </Link>
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log behavior</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>
         </div>
       </div>
 
       {/* AI parenting insight */}
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI parenting insight</p>
-          <Button variant="secondary" onClick={getInsight} loading={ai?.loading}>Generate</Button>
+          <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('behavior.aiParentingInsight')}</p>
+          <Button variant="secondary" onClick={getInsight} loading={ai?.loading}>{tr('behavior.generate')}</Button>
         </div>
         {ai && !ai.loading && (
           <div className="mt-3 space-y-2 text-sm">
@@ -161,7 +163,7 @@ export function BehaviorModule() {
                 <div className="mt-3 flex items-end justify-between">
                   <div>
                     <p className="text-2xl font-bold">{s.balanceScore}<span className="text-sm font-normal text-muted">/100</span></p>
-                    <p className="text-xs text-muted">balance score</p>
+                    <p className="text-xs text-muted">{tr('behavior.balanceScore')}</p>
                   </div>
                   <div className="text-right text-xs">
                     <p className="text-success">{s.positive} positive</p>
@@ -189,7 +191,7 @@ export function BehaviorModule() {
       {/* Recent log */}
       <div className="space-y-2">
         {scoped.length === 0 ? (
-          <EmptyState icon={Smile} title="No behavior logged yet" description="Log positive moments and concerns to build parenting insights." />
+          <EmptyState icon={Smile} title={tr('behavior.noBehaviorLoggedYet')} description={tr('behaviorModule.logPositiveMomentsAndConcerns')} />
         ) : scoped.map((l) => {
           const Icon = KIND_ICON[l.kind as keyof typeof KIND_ICON] ?? Minus;
           const meta = kindMeta(l.kind);
@@ -208,7 +210,7 @@ export function BehaviorModule() {
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
               </div>
-              <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+              <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>
             </div>
           );
         })}
@@ -217,39 +219,39 @@ export function BehaviorModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit behavior' : 'Log behavior'}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Child">
+            <Field label={tr('behavior.child')}>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">{tr('behavior.select')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Kind">
+            <Field label={tr('behavior.kind')}>
               {(id) => (
                 <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
                   {BEHAVIOR_KINDS.map((k) => <option key={k} value={k}>{kindMeta(k).label}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Category">
+            <Field label={tr('behavior.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                   {BEHAVIOR_CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Points (optional, +/-)">
+            <Field label={tr('behavior.pointsOptional')}>
               {(id) => <Input id={id} type="number" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value })} />}
             </Field>
-            <Field label="When">
+            <Field label={tr('behavior.when')}>
               {(id) => <Input id={id} type="datetime-local" value={form.occurred_at} onChange={(e) => setForm({ ...form, occurred_at: e.target.value })} />}
             </Field>
-            <Field label="Note">
-              {(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="What happened?" />}
+            <Field label={tr('behavior.note')}>
+              {(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={tr('behavior.whatHappened')} />}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('behavior.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>

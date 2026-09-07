@@ -5,6 +5,8 @@
 // penalised by an AI outage.
 import 'server-only';
 import { getProvider, type AIImage } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import type { ServiceScope } from '@/lib/services/types';
 
 export type ValidationStatus = 'approved' | 'needs_improvement' | 'unclear' | 'rejected' | 'parent_review_required';
 
@@ -75,7 +77,16 @@ const VALIDATION_SYSTEM =
  * submitted images to the model and parses a structured verdict. Falls back to
  * parent review on any failure.
  */
-export async function validateChoreSubmission(input: ValidateInput): Promise<AiValidationResult> {
+export async function validateChoreSubmission(scope: ServiceScope, input: ValidateInput): Promise<AiValidationResult> {
+  // Four ways this ends at `fallbackValidation`, and from the child's side they
+  // are one thing: the chore they did goes to a parent instead of being
+  // auto-approved, and they wait. Two of the four are silent failures (the model
+  // answered unusably; the provider threw) and had no record at all.
+  //
+  // The two above the model call are NOT failures and open no row: no key
+  // configured is a setting, and a photo chore with no photo is a guard that
+  // fires before anything is asked of a model. A row for either would fill the
+  // ledger with non-events and make the failure count useless.
   if (!aiConfigured()) return fallbackValidation('AI not configured');
   // Without any visual proof we cannot truly verify a photo/video chore.
   if ((input.proofKind === 'photo' || input.proofKind === 'video' || input.proofKind === 'before_after') && !input.images?.length) {
@@ -93,16 +104,30 @@ export async function validateChoreSubmission(input: ValidateInput): Promise<AiV
     (input.images?.length ? `Photos attached: ${input.images.length}.` : 'No photo attached.');
 
   try {
-    const provider = getProvider();
-    const completion = await provider.complete({
-      system: VALIDATION_SYSTEM,
-      messages: [{ role: 'user', content: userText, images: input.images?.slice(0, 4) }],
-      tools: [],
-    });
-    const parsed = parseJsonLoose(completion.text);
-    if (!parsed) return fallbackValidation('could not parse AI response');
-    return normalize(parsed, provider.model);
+    return await withAiRequest(
+      scope,
+      // The chore title, not the child's note: a kid's own words about what they
+      // did are not something the request ledger needs to carry.
+      { feature: 'chores.validate', text: `Validate a chore submission: ${input.choreTitle}` },
+      async (obs) => {
+        const provider = getProvider();
+        const completion = await provider.complete({
+          system: VALIDATION_SYSTEM,
+          messages: [{ role: 'user', content: userText, images: input.images?.slice(0, 4) }],
+          tools: [],
+        });
+        obs.used(provider.model, completion.usage);
+        const parsed = parseJsonLoose(completion.text);
+        if (!parsed) {
+          obs.failed(new Error('The verdict did not parse; the chore went to parent review.'));
+          return fallbackValidation('could not parse AI response');
+        }
+        return normalize(parsed, provider.model);
+      },
+    );
   } catch (err) {
+    // The wrapper recorded it on the way past; this still swallows, because a
+    // child whose proof cannot be checked should get a parent, not an error.
     return fallbackValidation(err instanceof Error ? err.message : 'AI error');
   }
 }
@@ -132,14 +157,29 @@ const PLAN_SYSTEM =
   '"recurrence":"none|daily|weekly|monthly","proof_required":"none|photo|video|before_after",' +
   '"safety_level":"none|caution|parent_required","auto_approve_eligible":boolean}';
 
-export async function generateChorePlan(prompt: string, kidAges: number[] = []): Promise<{ items: ChorePlanItem[]; error?: string }> {
+export async function generateChorePlan(
+  scope: ServiceScope,
+  prompt: string,
+  kidAges: number[] = [],
+): Promise<{ items: ChorePlanItem[]; error?: string }> {
   if (!aiConfigured()) return { items: [], error: 'AI is not configured.' };
   const userText = `Kids' ages: ${kidAges.length ? kidAges.join(', ') : 'unspecified'}\nRequest: ${prompt.slice(0, 1500)}`;
   try {
-    const completion = await getProvider().complete({ system: PLAN_SYSTEM, messages: [{ role: 'user', content: userText }], tools: [] });
-    const parsed = parseJsonLoose(completion.text);
-    if (!Array.isArray(parsed)) return { items: [], error: 'Could not parse the AI plan.' };
-    return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };
+    return await withAiRequest(
+      scope,
+      { feature: 'chores.plan', text: prompt.slice(0, 200) },
+      async (obs) => {
+        const provider = getProvider();
+        const completion = await provider.complete({ system: PLAN_SYSTEM, messages: [{ role: 'user', content: userText }], tools: [] });
+        obs.used(provider.model, completion.usage);
+        const parsed = parseJsonLoose(completion.text);
+        if (!Array.isArray(parsed)) {
+          obs.failed(new Error('The chore plan did not parse as a JSON array.'));
+          return { items: [], error: 'Could not parse the AI plan.' };
+        }
+        return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };
+      },
+    );
   } catch (err) {
     return { items: [], error: err instanceof Error ? err.message : 'AI request failed.' };
   }

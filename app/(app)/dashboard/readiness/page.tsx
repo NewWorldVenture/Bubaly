@@ -10,6 +10,7 @@ import type { Evidence, ReadinessCoverage } from '@/lib/readiness/assess';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Readiness' };
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ const BAND_COLOR = {
 } as const;
 
 export default async function ReadinessPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -57,7 +59,7 @@ export default async function ReadinessPage() {
   ].find(Boolean);
   if (primaryError) {
     console.error('[dashboard/readiness] readiness score read failed', primaryError);
-    return <ErrorState message="Could not load your family readiness from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('readiness.couldNotLoadYourFamily')} />;
   }
 
   const input: ReadinessInput = {
@@ -159,7 +161,7 @@ export default async function ReadinessPage() {
     <div className="space-y-5">
       <div className="flex items-center gap-2">
         <Gauge className="h-5 w-5 text-brand-text" />
-        <h1 className="text-lg font-bold">Family Readiness</h1>
+        <h1 className="text-lg font-bold">{t('dashboardReadiness.familyReadiness')}</h1>
       </div>
 
       {/* §51's readiness, and the only thing on this page that answers "are we
@@ -170,10 +172,10 @@ export default async function ReadinessPage() {
           thing — how much the household is currently doing in the app — and it
           keeps its place further down under a name that says so. */}
       <div>
-        <p className="mb-3 text-sm text-muted">Calendar and workload checks use only events and active household members you can access.</p>
+        <p className="mb-3 text-sm text-muted">{t('dashboardReadiness.calendarAndWorkloadChecksUseOnly')}</p>
         {coverageIncomplete && (
           <p role="status" className="mb-3 rounded-xl border border-border bg-surface/40 p-3 text-sm text-amber-300">
-            Readiness is not confirmed while some of it could not be read. Known issues remain shown below.
+            {t('dashboardReadiness.readinessIsNotConfirmedWhileSome')}
           </p>
         )}
         <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
@@ -191,14 +193,14 @@ export default async function ReadinessPage() {
         </div>
 
         <div className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <h2 className="text-base font-semibold">How much your family is running through Bubaly</h2>
+          <h2 className="text-base font-semibold">{t('dashboardReadiness.howMuchYourFamilyIsRunning')}</h2>
           <p className="mb-4 mt-1 text-sm text-muted">
             A measure of activity — planned meals, an up-to-date calendar, chores kept on top of. Not the same question as
             &ldquo;are we ready?&rdquo; above, which is about what is still open. Its own six inputs are required reads, so
             this number is never assembled from a source that failed.
           </p>
           {factors.length === 0 ? (
-            <p className="text-sm text-muted">Add events, chores, and meals to see what shapes this.</p>
+            <p className="text-sm text-muted">{t('dashboardReadiness.addEventsChoresAndMealsTo')}</p>
           ) : (
             <ul className="space-y-2">
               {factors.map((f, i) => (
@@ -217,8 +219,8 @@ export default async function ReadinessPage() {
         <Link href="/dashboard/billing?upgrade=1&need=2" className="group flex items-center gap-4 rounded-3xl border border-brand/30 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 transition hover:border-brand/50">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15"><Sparkles className="h-5 w-5 text-brand-text" /></div>
           <div className="flex-1">
-            <p className="font-semibold">Want the full picture?</p>
-            <p className="text-sm text-muted">Family+ adds live Stress &amp; Operations scores, predictive alerts, and the AI Command Center.</p>
+            <p className="font-semibold">{t('dashboardReadiness.wantTheFullPicture')}</p>
+            <p className="text-sm text-muted">{t('dashboardReadiness.familyAddsLiveStressAmpOperations')}</p>
           </div>
           <ArrowRight className="h-5 w-5 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
         </Link>

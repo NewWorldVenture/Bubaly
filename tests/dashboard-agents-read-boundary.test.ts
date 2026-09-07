@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/agents/page.tsx', 'utf8');
@@ -10,7 +11,7 @@ describe('dashboard agents read boundary', () => {
     expect(page).toContain('if (readError) {');
     expect(page).toContain('loadFamilyContext(supabase, familyId, now)');
     expect(page).toContain("console.error('[dashboard-agents] reasoning context read failed'");
-    expect(page).toContain('Could not load Family Assistant context from Supabase. Refresh and try again.');
+    expectSays(page, 'agents.couldNotLoadFamilyAssistant', 'Could not load Family Assistant context from Supabase. Refresh and try again.');
     expect(page).toContain('<ErrorState message=');
   });
 });

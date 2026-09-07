@@ -29,6 +29,7 @@ import { Card } from '@/components/ui/card';
 import { AIMemoryPanel } from '@/components/settings/ai-memory';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const LEVELS: { value: AutonomyBehavior; label: string; hint: string }[] = [
   { value: 'recommend', label: 'Recommend', hint: 'Suggests only' },
@@ -73,6 +74,7 @@ function LevelPicker({
 }
 
 export function AISettingsPanel({ role }: { role: MemberRole | null | undefined }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const canManage = isManager(role);
 
@@ -101,15 +103,15 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     setSaving(field);
     const res = await saveAISettingsAction(patch);
     setSaving(null);
-    if (res.ok) { setSettings(res.settings); success('Saved'); }
+    if (res.ok) { setSettings(res.settings); success(t('aiSettings.saved')); }
     else { toastError(res.error); const reload = await loadAISettingsAction(); if (reload.ok) setSettings(reload.settings); }
-  }, [success, toastError]);
+  }, [success, toastError, t]);
 
   if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
   if (!settings) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading what Bubaly may do…
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t('aiSettings.loadingWhatBubalyMayDo')}
       </Card>
     );
   }
@@ -122,11 +124,8 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       <Card className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-base font-semibold"><Bot className="h-4 w-4 text-brand-text" aria-hidden /> Bubaly AI</h3>
-            <p className="mt-1 text-sm text-muted">
-              What Bubaly may do without asking. Whatever you choose, money moves, document sharing and
-              anything high-risk still wait for a person.
-            </p>
+            <h3 className="flex items-center gap-2 text-base font-semibold"><Bot className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiSettings.bubalyAi')}</h3>
+            <p className="mt-1 text-sm text-muted">{t('aiSettings.whatBubalyMayDoWithout')}</p>
           </div>
           <Button
             variant={settings.enabled ? 'secondary' : 'primary'}
@@ -138,7 +137,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
         </div>
         {!settings.enabled && (
           <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
-            Bubaly is switched off: it will still answer questions, but it will not change anything for your family.
+            {t('aiSettings.bubalyIsSwitchedOffItWill')}
           </p>
         )}
       </Card>
@@ -146,8 +145,8 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h4 className="text-sm font-semibold">Everything else</h4>
-            <p id="default-behavior-hint" className="text-sm text-muted">The level Bubaly uses where you haven’t chosen one.</p>
+            <h4 className="text-sm font-semibold">{t('aiSettings.everythingElse')}</h4>
+            <p id="default-behavior-hint" className="text-sm text-muted">{t('aiSettings.theLevelBubalyUsesWhereYou')}</p>
           </div>
           <LevelPicker
             name="Default autonomy"
@@ -184,9 +183,9 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       <Card className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h4 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" aria-hidden /> Memory</h4>
+            <h4 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiSettings.memory')}</h4>
             <p id="memory-hint" className="text-sm text-muted">
-              Let Bubaly remember what it learns about your family — allergies, sizes, who does what — and use it next time.
+              {t('aiSettings.letBubalyRememberWhatItLearns')}
             </p>
           </div>
           <Button
@@ -204,13 +203,10 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           had a service writer and no surface, so the setting a family would
           look for was one nobody could reach. */}
       <Card className="p-4">
-        <h4 className="flex items-center gap-2 text-sm font-semibold"><Moon className="h-4 w-4 text-brand-text" aria-hidden /> Quiet hours</h4>
-        <p id="quiet-hint" className="mt-1 text-sm text-muted">
-          Bubaly holds notifications raised in this window until it ends. Anything urgent — a safety alert —
-          still comes through, and a reminder you asked for at a specific time still arrives then.
-        </p>
+        <h4 className="flex items-center gap-2 text-sm font-semibold"><Moon className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiSettings.quietHours')}</h4>
+        <p id="quiet-hint" className="mt-1 text-sm text-muted">{t('aiSettings.bubalyHoldsNotificationsRaisedIn')}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="text-sm text-muted" htmlFor="quiet-start">From</label>
+          <label className="text-sm text-muted" htmlFor="quiet-start">{t('aiSettings.from')}</label>
           <select
             id="quiet-start"
             aria-describedby="quiet-hint"
@@ -248,12 +244,12 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
               disabled={!canManage || saving === 'quietHours'}
               onClick={() => save('quietHours', { quietHours: null }, (prev) => ({ ...prev, quietHours: null }))}
             >
-              Clear
+              {t('aiSettings.clear')}
             </Button>
           )}
         </div>
         {!settings.quietHours && (
-          <p className="mt-2 text-sm text-muted">No quiet hours set — Bubaly may notify you at any time.</p>
+          <p className="mt-2 text-sm text-muted">{t('aiSettings.noQuietHoursSetBubalyMay')}</p>
         )}
       </Card>
 
@@ -262,7 +258,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       <AIMemoryPanel canManage={canManage} />
 
       {!canManage && (
-        <p className="text-sm text-muted">Only a parent or adult can change what Bubaly may do.</p>
+        <p className="text-sm text-muted">{t('aiSettings.onlyAParentOrAdultCan')}</p>
       )}
     </div>
   );

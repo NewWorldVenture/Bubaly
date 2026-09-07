@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
 const ROOT = join(__dirname, '..');
 const posts = readFileSync(join(ROOT, 'lib/blog/posts.ts'), 'utf8');
-const page = readFileSync(join(ROOT, 'app/(marketing)/blog/page.tsx'), 'utf8');
+const page = readUiSource(join(ROOT, 'app/(marketing)/blog/page.tsx'));
 
 describe('blog performance', () => {
   it('list queries project card columns (no heavy body) — only getPost fetches *', () => {

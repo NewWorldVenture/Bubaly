@@ -124,8 +124,9 @@ const SEED_TABLES = [
   'vacations', 'trips', 'relationship_dates', 'notes', 'reminder_lists',
   // Economy (rewards reference the currency)
   'economy_rewards', 'family_currencies',
-  // Assistant activity
-  'autopilot_suggestions', 'approval_requests', 'agent_activity',
+  // Assistant activity, and the household trail the services now append to —
+  // without it a "fresh" demo would still list every change the last one made.
+  'autopilot_suggestions', 'approval_requests', 'agent_activity', 'audit_logs',
 ] as const;
 
 /** Wipe the demo family's seeded data and re-seed it fresh (all ~200 rows). */

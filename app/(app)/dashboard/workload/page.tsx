@@ -4,12 +4,14 @@ import { createServer } from '@/lib/supabase/server';
 import { WorkloadModule } from '@/components/modules/workload-module';
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Workload Balance' };
 export const dynamic = 'force-dynamic';
 
 /** Who is carrying the household — mental-load measurement + one-tap rebalance. */
 export default async function WorkloadPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -36,9 +38,9 @@ export default async function WorkloadPage() {
     console.error('[workload] page data read failed', failedQuery.error);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Workload Balance</h1>
-        <ErrorState message="Could not load workload data from Supabase. Refresh and try again." />
-        <a href="/dashboard/workload" className="text-sm font-medium text-brand-text underline">Refresh workload data</a>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardWorkload.workloadBalance')}</h1>
+        <ErrorState message={t('workload.couldNotLoadWorkloadData')} />
+        <a href="/dashboard/workload" className="text-sm font-medium text-brand-text underline">{t('dashboardWorkload.refreshWorkloadData')}</a>
       </div>
     );
   }

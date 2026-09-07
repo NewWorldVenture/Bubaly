@@ -9,6 +9,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
 import { archiveContentAction, updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Content', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const STATUSES = ['idea', 'brief', 'drafting', 'review', 'approved', 'published'
 type BlogMeta = { slug?: string; category?: string; author?: string; excerpt?: string; featured?: boolean; tags?: string[] };
 
 export default async function ContentPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [itemsResult, postsResult] = await Promise.all([
     supabase.from('marketing_content_items').select('*').is('deleted_at', null).order('publish_at', { ascending: true, nullsFirst: false }),
@@ -38,9 +40,9 @@ export default async function ContentPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         <div>
-          <h2 className="mb-2 font-semibold">Content pipeline</h2>
+          <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>
           {(items ?? []).length === 0 ? (
-            <EmptyState icon={FileText} title="No content planned" description="Add an idea or brief on the right." />
+            <EmptyState icon={FileText} title={t('adminMarketingContent.noContentPlanned')} description={t('content.addAnIdeaOrBrief')} />
           ) : (
             <div className="space-y-2">
               {(items ?? []).map((it) => {
@@ -71,31 +73,30 @@ export default async function ContentPage() {
                               {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <input name="author" defaultValue={blog.author ?? ''} placeholder="Author (default: The Bubaly Team)" className={smCls} />
-                            <input name="tags" defaultValue={(blog.tags ?? []).join(', ')} placeholder="Tags, comma-separated" className={smCls} />
+                            <input name="tags" defaultValue={(blog.tags ?? []).join(', ')} placeholder={t('content.tagsCommaSeparated')} className={smCls} />
                             <input name="excerpt" defaultValue={blog.excerpt ?? ''} placeholder="Excerpt (auto from body)" className={`${smCls} col-span-2`} />
-                            <label className="col-span-2 flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="featured" defaultChecked={blog.featured === true} className="h-4 w-4 accent-[var(--brand)]" /> Featured post</label>
+                            <label className="col-span-2 flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="featured" defaultChecked={blog.featured === true} className="h-4 w-4 accent-[var(--brand)]" />{' '}{t('content.featuredPost')}</label>
                           </div>
                         )}
                         <div className="flex items-center gap-2">
                           <select name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
                             {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
                           </select>
-                          <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">Save</button>
+                          <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</button>
                         </div>
                       </form>
                       {isBlog && canPublish && (
                         <form action={publishContentToBlogAction} className="mt-2">
                           <input type="hidden" name="id" value={it.id} />
                           <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
-                            <Send className="h-3.5 w-3.5" /> Publish to blog
-                          </button>
-                          <span className="ml-2 text-xs text-muted">Save the body first. Creates/updates the public /blog post.</span>
+                            <Send className="h-3.5 w-3.5" />{' '}{t('content.publishToBlog')}</button>
+                          <span className="ml-2 text-xs text-muted">{t('content.saveTheBodyFirstCreates')}</span>
                         </form>
                       )}
                     </details>
                     <form action={archiveContentAction} className="mt-2">
                       <input type="hidden" name="id" value={it.id} />
-                      <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive</button>
+                      <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.archive')}</button>
                     </form>
                   </Card>
                 );
@@ -105,9 +106,9 @@ export default async function ContentPage() {
         </div>
 
         <div>
-          <h2 className="mb-2 flex items-center gap-2 font-semibold"><BookOpen className="h-4 w-4" /> Published blog</h2>
+          <h2 className="mb-2 flex items-center gap-2 font-semibold"><BookOpen className="h-4 w-4" /> {t('adminMarketingContent.publishedBlog')}</h2>
           {(posts ?? []).length === 0 ? (
-            <p className="text-sm text-muted">No blog posts yet.</p>
+            <p className="text-sm text-muted">{t('adminMarketingContent.noBlogPostsYet')}</p>
           ) : (
             <div className="space-y-2">
               {(posts ?? []).map((p) => (
@@ -120,7 +121,7 @@ export default async function ContentPage() {
                     <Badge tone={p.published ? 'success' : 'neutral'}>{p.published ? 'Live' : 'Draft'}</Badge>
                     {p.published && (
                       <form action={unpublishBlogPostAction.bind(null, p.slug)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Unpublish</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.unpublish')}</button>
                       </form>
                     )}
                   </div>
@@ -132,29 +133,30 @@ export default async function ContentPage() {
       </div>
 
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New content idea</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingContent.newContentIdea')}</h2>
         <form action={createContentItem} className="space-y-3 text-sm">
-          <input name="title" required placeholder="Title or topic" className={inputCls} />
+          <input name="title" required placeholder={t('adminMarketingContent.titleOrTopic')} className={inputCls} />
           <select name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
           <input name="publish_at" type="date" className={inputCls} />
-          <textarea name="brief" rows={4} placeholder="Brief / notes…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Add to pipeline</button>
+          <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</button>
         </form>
-        <p className="mt-3 text-xs text-muted">Blog items: write the body, set category/author, then “Publish to blog” to push live at <code>/blog/&lt;slug&gt;</code>.</p>
+        <p className="mt-3 text-xs text-muted">{t('adminMarketingContent.blogItemsWriteTheBodySet')} <code>/blog/&lt;slug&gt;</code>.</p>
       </Card>
     </div>
   );
 }
 
-function AdminContentReadError() {
+async function AdminContentReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Content</h1>
-        <p className="mt-1 text-sm text-muted">Manage the content pipeline and published blog posts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('content.marketingContent')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('content.manageTheContentPipelineAnd')}</p>
       </div>
-      <ErrorState message="Could not load marketing content from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">Refresh content</Link>
+      <ErrorState message={t('content.couldNotLoadMarketingContent')} />
+      <Link href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">{t('content.refreshContent')}</Link>
     </div>
   );
 }

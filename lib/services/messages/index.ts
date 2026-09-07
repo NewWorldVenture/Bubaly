@@ -165,6 +165,7 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
       }
       await recordActivitySafely(scope, {
         agent: 'comms_assistant',
+        action: 'send',
         title: `Sent to the family chat: ${content.length > 80 ? `${content.slice(0, 77)}…` : content}`,
         href: '/dashboard/messages',
       });
@@ -224,6 +225,7 @@ export async function createAnnouncement(scope: ServiceScope, input: CreateAnnou
       }
       await recordActivitySafely(scope, {
         agent: 'comms_assistant',
+        action: 'create',
         title: `Posted the announcement "${title}"`,
         detail: body,
         href: '/dashboard/announcements',

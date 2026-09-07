@@ -6,8 +6,9 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'A/B Testing', robots: { index: false } };
+export const metadata: Metadata = { title: 'experiments.aBTesting', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -18,6 +19,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default async function ABTestingPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const { data: experiments, error: experimentsError } = await supabase
     .from('ab_experiments')
@@ -47,12 +49,12 @@ export default async function ABTestingPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">Run experiments with deterministic variant assignment and two-proportion significance testing.</p>
+        <p className="text-sm text-muted">{tr('adminMarketingExperiments.runExperimentsWithDeterministicVariantAssignment')}</p>
         <NewExperimentForm />
       </div>
 
       {(experiments ?? []).length === 0 ? (
-        <Card><p className="py-8 text-center text-sm text-muted">No experiments yet — create your first test.</p></Card>
+        <Card><p className="py-8 text-center text-sm text-muted">{tr('adminMarketingExperiments.noExperimentsYetCreateYourFirst')}</p></Card>
       ) : (
         <div className="space-y-4">
           {(experiments ?? []).map((exp) => {
@@ -82,7 +84,7 @@ export default async function ABTestingPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="text-left text-xs text-muted">
-                      <tr><th className="pb-2">Variant</th><th className="pb-2 text-right">Exposures</th><th className="pb-2 text-right">Conversions</th><th className="pb-2 text-right">Rate</th><th className="pb-2 text-right">Lift</th><th className="pb-2 text-right">Significance</th></tr>
+                      <tr><th className="pb-2">{tr('experiments.variant')}</th><th className="pb-2 text-right">{tr('experiments.exposures')}</th><th className="pb-2 text-right">{tr('experiments.conversions')}</th><th className="pb-2 text-right">{tr('experiments.rate')}</th><th className="pb-2 text-right">{tr('experiments.lift')}</th><th className="pb-2 text-right">{tr('experiments.significance')}</th></tr>
                     </thead>
                     <tbody>
                       {results.map((r) => (
@@ -107,15 +109,16 @@ export default async function ABTestingPage() {
   );
 }
 
-function AdminExperimentsReadError() {
+async function AdminExperimentsReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">A/B Testing</h1>
-        <p className="mt-1 text-sm text-muted">Run experiments with deterministic assignment and live results.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('experiments.aBTesting')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('experiments.runExperimentsWithDeterministicAssignment')}</p>
       </div>
-      <ErrorState message="Could not load experiment results from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/experiments" className="text-sm font-medium text-brand-text underline">Refresh experiments</Link>
+      <ErrorState message={tr('experiments.couldNotLoadExperimentResults')} />
+      <Link href="/admin/marketing/experiments" className="text-sm font-medium text-brand-text underline">{tr('experiments.refreshExperiments')}</Link>
     </div>
   );
 }

@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
+  // The browser tab title is copy too — a French visitor should not get an
+  // English <title> above a French page.
+  const t = await getTranslations();
   return resolveMarketingMetadata('/privacy', {
-  title: 'Privacy Policy',
+  title: t('privacy.privacyPolicy'),
   description:
     "How Bubaly collects, uses, and protects your family's information — including children's data, calendars, and the AI assistant.",
   });
@@ -125,12 +129,13 @@ const SECTIONS: LegalSection[] = [
   },
 ];
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const t = await getTranslations();
   return (
     <>
       <LegalPage
-        title="Privacy Policy"
-        summary="What we collect, why, and the choices you have — written for families, in plain language."
+        title={t('privacy.privacyPolicy')}
+        summary={t('privacy.whatWeCollectWhyAnd')}
         lastUpdated="June 24, 2026"
         path="/privacy"
         sections={SECTIONS}

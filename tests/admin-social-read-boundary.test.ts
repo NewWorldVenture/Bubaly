@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/admin/social/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/admin/social/page.tsx');
 
 describe('admin social read boundary', () => {
   it('does not render zero-valued social operations after a required read failure', () => {

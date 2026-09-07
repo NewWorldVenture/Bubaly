@@ -21,6 +21,7 @@ import {
 } from '@/lib/concierge-calls/brief';
 import { requestCallAction, cancelCallAction, requeueCallAction } from '@/app/(app)/dashboard/concierge-calls/actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Call = Tables<'concierge_calls'>;
 
@@ -40,6 +41,7 @@ const STATUS_ICON: Record<string, typeof Check> = {
 };
 
 export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: string; initialCalls: Call[] }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [calls, setCalls] = useState<Call[]>(initialCalls);
   const [composerOpen, setComposerOpen] = useState(initialCalls.length === 0);
@@ -68,41 +70,41 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 
   async function onCancel(id: string) {
     const res = await cancelCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Call cancelled');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.callCancelled'));
   }
   async function onRequeue(id: string) {
     const res = await requeueCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Back in the queue');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.backInTheQueue'));
   }
 
   return (
     <div className="space-y-5 pb-24">
       <PageHeader
-        title="AI Calls"
-        description="Bubaly makes the call for you — booking, rescheduling, confirming, chasing things down."
+        title={t('conciergeCalls.aiCalls')}
+        description={t('conciergeCallsModule.bubalyMakesTheCallFor')}
         action={
           <Button size="sm" onClick={() => setComposerOpen((v) => !v)}>
-            <Plus className="h-4 w-4" /> Request a call
+            <Plus className="h-4 w-4" /> {t('conciergeCalls.requestACall')}
           </Button>
         }
       />
 
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="In progress" value={stats.active} icon={PhoneOutgoing} accent="bg-blue-600" />
-        <StatTile label="Needs you" value={stats.needsYou} icon={AlertTriangle} accent="bg-amber-600" />
-        <StatTile label="Completed" value={stats.done} icon={Check} accent="bg-emerald-600" />
+        <StatTile label={t('conciergeCalls.inProgress')} value={stats.active} icon={PhoneOutgoing} accent="bg-blue-600" />
+        <StatTile label={t('conciergeCalls.needsYou')} value={stats.needsYou} icon={AlertTriangle} accent="bg-amber-600" />
+        <StatTile label={t('conciergeCalls.completed')} value={stats.done} icon={Check} accent="bg-emerald-600" />
       </div>
 
       {composerOpen && (
         <Composer
           onClose={() => setComposerOpen(false)}
-          onCreated={() => { setComposerOpen(false); success('On it — Bubaly will make the call.'); }}
+          onCreated={() => { setComposerOpen(false); success(t('conciergeCallsModule.onItBubalyWillMake')); }}
         />
       )}
 
       <div className="space-y-2.5">
         {calls.length === 0 && !composerOpen && (
-          <MiniEmpty icon={PhoneCall} text="No calls yet — ask Bubaly to make one for you." />
+          <MiniEmpty icon={PhoneCall} text={t('conciergeCallsModule.noCallsYetAskBubaly')} />
         )}
         {calls.map((c) => {
           const brief = (c.brief ?? {}) as Partial<CallBrief>;
@@ -133,7 +135,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
                 <div className="mt-3 space-y-3 border-t border-border pt-3 text-sm">
                   {c.outcome && (
                     <div className={cn('rounded-xl border p-3', TONE_CLS[tone])}>
-                      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Outcome</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{t('conciergeCalls.outcome')}</p>
                       <p className="mt-1">{c.outcome}</p>
                       {c.transcript_summary && <p className="mt-1.5 text-xs opacity-80">{c.transcript_summary}</p>}
                     </div>
@@ -141,7 +143,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 
                   <div className="rounded-xl border border-brand/25 bg-brand/5 p-3">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
-                      <Sparkles className="h-3.5 w-3.5" /> Bubaly’s call plan
+                      <Sparkles className="h-3.5 w-3.5" /> {t('conciergeCalls.bubalysCallPlan')}
                     </p>
                     {brief.opening && <p className="mt-2 text-sm italic text-fg/90">“{brief.opening}”</p>}
                     {!!brief.keyPoints?.length && (
@@ -151,7 +153,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
                     )}
                     {!!brief.questions?.length && (
                       <div className="mt-2">
-                        <p className="text-[11px] font-semibold text-fg/70">Questions to get answered</p>
+                        <p className="text-[11px] font-semibold text-fg/70">{t('conciergeCalls.questionsToGetAnswered')}</p>
                         <ul className="mt-1 space-y-1 text-xs text-muted">
                           {brief.questions.map((q, i) => <li key={i}>• {q}</li>)}
                         </ul>
@@ -164,13 +166,13 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
                     {['draft', 'queued', 'action_needed'].includes(c.status) && (
                       <button type="button" onClick={() => void onCancel(c.id)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-danger hover:border-danger/40">
-                        <X className="h-3.5 w-3.5" /> Cancel
+                        <X className="h-3.5 w-3.5" /> {t('conciergeCalls.cancel')}
                       </button>
                     )}
                     {['failed', 'action_needed', 'draft'].includes(c.status) && (
                       <button type="button" onClick={() => void onRequeue(c.id)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
-                        <RotateCcw className="h-3.5 w-3.5" /> Try again
+                        <RotateCcw className="h-3.5 w-3.5" /> {t('conciergeCalls.tryAgain')}
                       </button>
                     )}
                   </div>
@@ -185,6 +187,8 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 }
 
 function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const tr = useTranslations();
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [taskKind, setTaskKind] = useState<CallTaskKind>('book');
@@ -214,62 +218,62 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () =
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <p className="flex items-center gap-2 text-sm font-bold"><PhoneCall className="h-4 w-4 text-brand-text" /> Request a call</p>
-        <button type="button" onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+        <p className="flex items-center gap-2 text-sm font-bold"><PhoneCall className="h-4 w-4 text-brand-text" /> {t('conciergeCalls.requestACall')}</p>
+        <button type="button" onClick={onClose} aria-label={t('conciergeCalls.close')} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
       </div>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">What to do</span>
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.whatToDo')}</span>
             <select value={taskKind} onChange={(e) => setTaskKind(e.target.value as CallTaskKind)} className={inputCls}>
               {TASK_KINDS.map((k) => <option key={k} value={k}>{CALL_TASK_LABEL[k]}</option>)}
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Type of place</span>
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.typeOfPlace')}</span>
             <select value={calleeCategory} onChange={(e) => setCalleeCategory(e.target.value)} className={inputCls}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
             </select>
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Who to call <span className="text-brand-text">*</span></span>
-          <input value={calleeName} onChange={(e) => setCalleeName(e.target.value)} placeholder="Bright Smiles Dental" className={inputCls} />
+          <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.whoToCall')} <span className="text-brand-text">*</span></span>
+          <input value={calleeName} onChange={(e) => setCalleeName(e.target.value)} placeholder={t('conciergeCalls.brightSmilesDental')} className={inputCls} />
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Phone <span className="font-normal">(to auto-dial)</span></span>
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.phone')} <span className="font-normal">{t('conciergeCalls.toAutoDial')}</span></span>
             <input value={calleePhone} onChange={(e) => setCalleePhone(e.target.value)} inputMode="tel" placeholder="+1 555 010 0000" className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">For whom</span>
-            <input value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Emma" className={inputCls} />
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.forWhom')}</span>
+            <input value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder={t('conciergeCalls.emma')} className={inputCls} />
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Goal <span className="text-brand-text">*</span></span>
-          <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} placeholder="Book a cleaning, ideally a weekday morning in the next two weeks."
+          <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.goal')} <span className="text-brand-text">*</span></span>
+          <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} placeholder={t('conciergeCalls.bookACleaningIdeallyAWeekday')}
             className="w-full resize-y rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring" />
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Preferred times</span>
-            <input value={preferredTimes} onChange={(e) => setPreferredTimes(e.target.value)} placeholder="Weekday mornings" className={inputCls} />
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.preferredTimes')}</span>
+            <input value={preferredTimes} onChange={(e) => setPreferredTimes(e.target.value)} placeholder={t('conciergeCalls.weekdayMornings')} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Reference #</span>
-            <input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="Account / booking #" className={inputCls} />
+            <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.reference')}</span>
+            <input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder={t('conciergeCalls.accountBooking')} className={inputCls} />
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Anything else</span>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Don't agree to anything over $150." className={inputCls} />
+          <span className="mb-1 block text-xs font-medium text-muted">{t('conciergeCalls.anythingElse')}</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={tr('conciergeCalls.dontAgreeToAnythingOver150')} className={inputCls} />
         </label>
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>{t('conciergeCalls.cancel')}</Button>
           <Button size="sm" onClick={() => void submit()} disabled={saving || calleeName.trim().length < 2 || goal.trim().length < 4}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Ask Bubaly to call
+            {t('conciergeCalls.askBubalyToCall')}
           </Button>
         </div>
       </div>

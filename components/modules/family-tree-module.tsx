@@ -20,6 +20,7 @@ import {
   RELATIONSHIPS, type TreeNode,
 } from '@/lib/family-tree/tree';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Node = Tables<'family_tree_nodes'>;
 
@@ -42,6 +43,7 @@ const GEN_COLORS = [
 ];
 
 export function FamilyTreeModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -90,7 +92,7 @@ export function FamilyTreeModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Added to family tree');
+    success(t('familyTreeModule.addedToFamilyTree'));
     setForm(null);
   }
 
@@ -111,14 +113,14 @@ export function FamilyTreeModule() {
     }).eq('id', editNode.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Updated');
+    success(t('familyTreeModule.updated'));
     setEditNode(null); setForm(null);
   }
 
   async function remove(id: string) {
-    if (!confirm('Remove this person from the tree?')) return;
+    if (!confirm(t('familyTreeModule.removeThisPersonFromThe'))) return;
     const { error } = await createClient().from('family_tree_nodes').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('familyTreeModule.removed'));
   }
 
   function startEdit(n: Node) {
@@ -132,27 +134,27 @@ export function FamilyTreeModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the family tree. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('familyTreeModule.couldNotLoadTheFamily')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Tree"
-        description="Map your family history and preserve your heritage."
+        title={t('familyTree.familyTree')}
+        description={t('familyTreeModule.mapYourFamilyHistoryAnd')}
         action={
           <div className="flex items-center gap-2">
             {all.length > 0 && (
               <div className="flex rounded-xl border border-border bg-surface/60 text-xs">
                 <button onClick={() => setView('tree')} className={`px-3 py-1.5 rounded-l-xl transition ${view === 'tree' ? 'bg-brand text-white' : 'text-muted hover:text-fg'}`}>
-                  <TreePine className="inline h-3.5 w-3.5 mr-1" />Tree
+                  <TreePine className="inline h-3.5 w-3.5 mr-1" />{t('familyTree.tree')}
                 </button>
                 <button onClick={() => setView('generations')} className={`px-3 py-1.5 rounded-r-xl transition ${view === 'generations' ? 'bg-brand text-white' : 'text-muted hover:text-fg'}`}>
-                  <Users className="inline h-3.5 w-3.5 mr-1" />Generations
+                  <Users className="inline h-3.5 w-3.5 mr-1" />{t('familyTree.generations')}
                 </button>
               </div>
             )}
             <Button onClick={() => { setEditNode(null); setForm(blank()); }}>
-              <Plus className="h-4 w-4" /> Add person
+              <Plus className="h-4 w-4" /> {t('familyTree.addPerson')}
             </Button>
           </div>
         }
@@ -163,19 +165,19 @@ export function FamilyTreeModule() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
             <p className="text-2xl font-bold">{stats.total}</p>
-            <p className="text-xs text-muted">People</p>
+            <p className="text-xs text-muted">{t('familyTree.people')}</p>
           </div>
           <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
             <p className="text-2xl font-bold">{stats.generations}</p>
-            <p className="text-xs text-muted">Generations</p>
+            <p className="text-xs text-muted">{t('familyTree.generations')}</p>
           </div>
           <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
             <p className="text-2xl font-bold">{stats.living}</p>
-            <p className="text-xs text-muted">Living</p>
+            <p className="text-xs text-muted">{t('familyTree.living')}</p>
           </div>
           <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
             <p className="text-2xl font-bold">{stats.deceased}</p>
-            <p className="text-xs text-muted">Deceased</p>
+            <p className="text-xs text-muted">{t('familyTree.deceased')}</p>
           </div>
         </div>
       )}
@@ -183,9 +185,9 @@ export function FamilyTreeModule() {
       {all.length === 0 ? (
         <EmptyState
           icon={GitBranch}
-          title="Your family tree is empty"
-          description="Start by adding the oldest generation you know — grandparents, great-grandparents — and build down from there."
-          action={<Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> Add first person</Button>}
+          title={t('familyTree.yourFamilyTreeIsEmpty')}
+          description={t('familyTreeModule.startByAddingTheOldest')}
+          action={<Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('familyTree.addFirstPerson')}</Button>}
         />
       ) : view === 'tree' ? (
         /* Hierarchical tree view */
@@ -265,13 +267,13 @@ export function FamilyTreeModule() {
               {detail.birth_year && <div><span className="text-muted">Born:</span> {detail.birth_year}{detail.birth_place ? `, ${detail.birth_place}` : ''}</div>}
               {detail.death_year && <div><span className="text-muted">Died:</span> {detail.death_year}</div>}
               {detail.member_id && memberById.get(detail.member_id) && (
-                <div><span className="text-muted">Linked member:</span> {memberById.get(detail.member_id)!.display_name}</div>
+                <div><span className="text-muted">{t('familyTree.linkedMember')}</span> {memberById.get(detail.member_id)!.display_name}</div>
               )}
             </div>
             {detail.bio && <p className="text-sm text-fg/90">{detail.bio}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDetail(null)}>Close</Button>
-              <Button variant="secondary" onClick={() => { setDetail(null); startEdit(detail); }}><Edit2 className="h-4 w-4" /> Edit</Button>
+              <Button variant="ghost" onClick={() => setDetail(null)}>{t('familyTree.close')}</Button>
+              <Button variant="secondary" onClick={() => { setDetail(null); startEdit(detail); }}><Edit2 className="h-4 w-4" /> {t('familyTree.edit')}</Button>
             </div>
           </div>
         </Modal>
@@ -281,21 +283,21 @@ export function FamilyTreeModule() {
       {form && (
         <Modal open onClose={() => { setForm(null); setEditNode(null); }} title={editNode ? 'Edit person' : 'Add to family tree'}>
           <form onSubmit={editNode ? update : save} className="space-y-3">
-            <Field label="Name" required>
-              {(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Grandma Rose" required />}
+            <Field label={t('familyTree.name')} required>
+              {(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('familyTree.eGGrandmaRose')} required />}
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Relationship">
+              <Field label={t('familyTree.relationship')}>
                 {(id) => (
                   <Select id={id} value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
                     {RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}
                   </Select>
                 )}
               </Field>
-              <Field label="Parent in tree">
+              <Field label={t('familyTree.parentInTree')}>
                 {(id) => (
                   <Select id={id} value={form.parent_node_id} onChange={(e) => setForm({ ...form, parent_node_id: e.target.value })}>
-                    <option value="">— Root (no parent) —</option>
+                    <option value="">{t('familyTree.rootNoParent')}</option>
                     {all.filter((n) => editNode ? n.id !== editNode.id : true).map((n) => (
                       <option key={n.id} value={n.id}>{n.name}</option>
                     ))}
@@ -304,29 +306,29 @@ export function FamilyTreeModule() {
               </Field>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Birth year">
+              <Field label={t('familyTree.birthYear')}>
                 {(id) => <Input id={id} type="number" min="1800" max="2030" value={form.birth_year} onChange={(e) => setForm({ ...form, birth_year: e.target.value })} placeholder="1942" />}
               </Field>
-              <Field label="Death year">
+              <Field label={t('familyTree.deathYear')}>
                 {(id) => <Input id={id} type="number" min="1800" max="2030" value={form.death_year} onChange={(e) => setForm({ ...form, death_year: e.target.value })} />}
               </Field>
-              <Field label="Birthplace">
-                {(id) => <Input id={id} value={form.birth_place} onChange={(e) => setForm({ ...form, birth_place: e.target.value })} placeholder="Naples, Italy" />}
+              <Field label={t('familyTree.birthplace')}>
+                {(id) => <Input id={id} value={form.birth_place} onChange={(e) => setForm({ ...form, birth_place: e.target.value })} placeholder={t('familyTree.naplesItaly')} />}
               </Field>
             </div>
-            <Field label="Link to family member (optional)">
+            <Field label={t('familyTree.linkToFamilyMemberOptional')}>
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— None —</option>
+                  <option value="">{t('familyTree.none')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Bio / Notes">
-              {(id) => <Textarea id={id} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder="Tell their story…" rows={3} />}
+            <Field label={t('familyTree.bioNotes')}>
+              {(id) => <Textarea id={id} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder={t('familyTree.tellTheirStory')} rows={3} />}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => { setForm(null); setEditNode(null); }}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => { setForm(null); setEditNode(null); }}>{t('familyTree.cancel')}</Button>
               <Button type="submit" loading={saving}>{editNode ? 'Save' : 'Add person'}</Button>
             </div>
           </form>
@@ -348,6 +350,7 @@ function TreeBranch({
   onEdit: (n: any) => void;
   onDelete: (id: string) => void;
 }) {
+  const t = useTranslations();
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.id);
   const mem = node.member_id ? memberById.get(node.member_id) : null;
@@ -383,13 +386,13 @@ function TreeBranch({
         )}
 
         <div className="hidden shrink-0 gap-1 group-hover:flex">
-          <button onClick={() => onView(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title="View">
+          <button onClick={() => onView(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title={t('familyTree.view')}>
             <Eye className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => onEdit(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title="Edit">
+          <button onClick={() => onEdit(node)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" title={t('familyTree.edit')}>
             <Edit2 className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => onDelete(node.id)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-danger" title="Remove">
+          <button onClick={() => onDelete(node.id)} className="rounded-lg p-1 text-muted hover:bg-elevated hover:text-danger" title={t('familyTree.remove')}>
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>

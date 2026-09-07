@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const page = readFileSync('app/(app)/marketplace/community/page.tsx', 'utf8');
-const moduleSrc = readFileSync('components/marketplace/community-module.tsx', 'utf8');
+const page = readUiSource('app/(app)/marketplace/community/page.tsx');
+const moduleSrc = readUiSource('components/marketplace/community-module.tsx');
 
 describe('marketplace community read boundary', () => {
   it('distinguishes a missing migration from a transient read failure', () => {

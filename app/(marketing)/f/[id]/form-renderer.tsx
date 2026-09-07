@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { validateSubmission, fieldAutoComplete, inputType, type FormField } from '@/lib/marketing/forms';
 import { describeDbError } from '@/lib/supabase/errors';
 import { trackConversion } from '@/lib/marketing/visitor';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
  * Public form renderer. Validates locally (mirroring the server) for instant
@@ -21,6 +22,7 @@ export function PublicForm({ formId, fields, submitLabel, successMessage }: {
   submitLabel?: string;
   successMessage?: string;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -46,12 +48,12 @@ export function PublicForm({ formId, fields, submitLabel, successMessage }: {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.fields) setErrors(data.fields);
-        throw new Error(data.error ?? 'Something went wrong');
+        throw new Error(data.error ?? t('formRenderer.somethingWentWrong'));
       }
       setDone(true);
       void trackConversion();
     } catch (err) {
-      toastError(describeDbError(err, 'Something went wrong'));
+      toastError(describeDbError(err, t('formRenderer.somethingWentWrong')));
     } finally {
       setLoading(false);
     }
@@ -61,7 +63,7 @@ export function PublicForm({ formId, fields, submitLabel, successMessage }: {
     return (
       <div className="glass-card flex flex-col items-center p-10 text-center">
         <CheckCircle2 className="h-12 w-12 text-success" />
-        <h3 className="mt-4 text-lg font-semibold">Thank you!</h3>
+        <h3 className="mt-4 text-lg font-semibold">{t('fFormRenderer.thankYou')}</h3>
         <p className="mt-1 text-sm text-muted">{successMessage ?? 'Your submission has been received.'}</p>
       </div>
     );

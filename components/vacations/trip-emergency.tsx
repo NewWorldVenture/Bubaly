@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, type FieldDef } from './shared';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Contact = Tables<'vacation_emergency_contacts'>;
 type Medical = Tables<'vacation_medical_information'>;
@@ -40,6 +41,7 @@ const medicalFields: FieldDef[] = [
 ];
 
 function EmergencySummary({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   const { familyId, members } = useApp();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
@@ -53,19 +55,19 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
 
   if (contactsLoading || medicalLoading) return <LoadingBlock />;
   if (contactsError || medicalError) {
-    return <ErrorState message="Could not load the emergency summary. Refresh and try again." onRetry={() => { void Promise.all([refreshContacts(), refreshMedical()]); }} />;
+    return <ErrorState message={t('tripEmergency.couldNotLoadTheEmergency')} onRetry={() => { void Promise.all([refreshContacts(), refreshMedical()]); }} />;
   }
   if (contacts.length === 0 && medical.length === 0) return null;
 
   return (
     <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-5 print:border-black">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-rose-200"><ShieldAlert className="h-5 w-5" /> Emergency summary</h2>
-        <Button size="sm" variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" /> Print</Button>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-rose-200"><ShieldAlert className="h-5 w-5" /> {t('tripEmergency.emergencySummary')}</h2>
+        <Button size="sm" variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" /> {t('tripEmergency.print')}</Button>
       </div>
       {contacts.length > 0 && (
         <div className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Contacts</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('tripEmergency.contacts')}</p>
           <ul className="mt-1 space-y-1 text-sm">
             {contacts.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center gap-x-2">
@@ -79,7 +81,7 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
       )}
       {medical.length > 0 && (
         <div className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Medical</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('tripEmergency.medical')}</p>
           <ul className="mt-1 space-y-1 text-sm">
             {medical.map((m) => {
               const who = m.member_id ? memberMap.get(m.member_id)?.display_name : 'Traveler';
@@ -100,12 +102,13 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
 }
 
 export function TripEmergency({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <div className="space-y-8">
       <EmergencySummary vacationId={vacationId} />
       <TripCrudSection<Contact>
-        table="vacation_emergency_contacts" vacationId={vacationId} title="Emergency contacts" icon={ShieldAlert}
-        fields={contactFields} emptyText="No emergency contacts" addLabel="Add contact"
+        table="vacation_emergency_contacts" vacationId={vacationId} title={t('tripEmergency.emergencyContacts')} icon={ShieldAlert}
+        fields={contactFields} emptyText={t('tripEmergency.noEmergencyContacts')} addLabel="Add contact"
         renderRow={(c) => (
           <div>
             <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">· {c.category}</span> : null}</p>
@@ -114,8 +117,8 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
         )}
       />
       <TripCrudSection<Medical>
-        table="vacation_medical_information" vacationId={vacationId} title="Medical information" icon={HeartPulse}
-        fields={medicalFields} emptyText="No medical info" addLabel="Add medical info"
+        table="vacation_medical_information" vacationId={vacationId} title={t('tripEmergency.medicalInformation')} icon={HeartPulse}
+        fields={medicalFields} emptyText={t('tripEmergency.noMedicalInfo')} addLabel="Add medical info"
         renderRow={(m, members) => {
           const who = m.member_id ? members.get(m.member_id)?.display_name : 'Traveler';
           return (

@@ -13,23 +13,26 @@ import { SectionCard, MiniEmpty, StatTile, LevelBadge } from '@/components/famil
 import { RecommendationActions, AutomationApproval } from '@/components/family/record-actions';
 import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Autonomous Management' };
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = { high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500' };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Autonomous Family Management</h1>
-      <ErrorState message="Could not load autonomous family management data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">Refresh autonomous management</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('autonomousFamilyManagement.autonomousFamilyManagement')}</h1>
+      <ErrorState message={t('autonomousFamilyManagement.couldNotLoadAutonomousFamily')} />
+      <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">{t('autonomousFamilyManagement.refreshAutonomousManagement')}</Link>
     </div>
   );
 }
 
 export default async function AutonomousManagementPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -65,23 +68,23 @@ export default async function AutonomousManagementPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Autonomous Family Management"
-        description="The AI watches your real data, recommends the next move, and only acts on sensitive things with your approval."
+        title={t('dashboardAutonomousFamilyManagement.autonomousFamilyManagement')}
+        description={t('autonomousFamilyManagement.theAiWatchesYourReal')}
       />
 
       <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-blue-600"><Bot className="h-6 w-6 text-white" /></div>
           <div>
-            <p className="font-semibold">Bubaly is monitoring {monitoring.length} areas</p>
-            <p className="text-xs text-muted">Last evaluated just now · {rules.data?.length ?? 0} active automations</p>
+            <p className="font-semibold">{t('dashboardAutonomousFamilyManagement.bubalyIsMonitoring')} {monitoring.length} areas</p>
+            <p className="text-xs text-muted">{t('dashboardAutonomousFamilyManagement.lastEvaluatedJustNow')} {rules.data?.length ?? 0} {t('dashboardAutonomousFamilyManagement.activeAutomations')}</p>
           </div>
-          <div className="ml-auto flex items-center gap-2"><LevelBadge level={stress.level} /><span className="text-sm font-bold tabular-nums">{completion}% on track</span></div>
+          <div className="ml-auto flex items-center gap-2"><LevelBadge level={stress.level} /><span className="text-sm font-bold tabular-nums">{completion}{t('dashboardAutonomousFamilyManagement.onTrack')}</span></div>
         </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <SectionCard title="What AI Is Monitoring" className="lg:col-span-1">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiIsMonitoring')} className="lg:col-span-1">
           <ul className="space-y-2.5">
             {monitoring.map((m) => (
               <li key={m.label} className="flex items-center gap-3 text-sm">
@@ -93,7 +96,7 @@ export default async function AutonomousManagementPage() {
           </ul>
         </SectionCard>
 
-        <SectionCard title="What AI Recommends" description="Stored + derived next-best actions" className="lg:col-span-2">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiRecommends')} description={t('autonomousFamilyManagement.storedDerivedNextBestActions')} className="lg:col-span-2">
           {(recs.data && recs.data.length > 0) || actions.length > 0 ? (
             <ul className="space-y-2.5">
               {(recs.data ?? []).map((r) => (
@@ -116,41 +119,41 @@ export default async function AutonomousManagementPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Sparkles} text="Nothing needs attention — you're on top of it." />}
+          ) : <MiniEmpty icon={Sparkles} text={t('autonomousFamilyManagement.nothingNeedsAttentionYouRe')} />}
         </SectionCard>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <StatTile label="Active automations" value={rules.data?.length ?? 0} icon={Zap} accent="bg-violet-600" href="/dashboard/family-automation" sublabel="Manage" />
-        <StatTile label="Pending approvals" value={pendingRuns.data?.length ?? 0} icon={Lock} accent="bg-orange-500" />
-        <StatTile label="Risk alerts" value={risks.length} icon={ShieldAlert} accent="bg-rose-500" href="/dashboard/family-stress" sublabel="Stress" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.activeAutomations')} value={rules.data?.length ?? 0} icon={Zap} accent="bg-violet-600" href="/dashboard/family-automation" sublabel="Manage" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.pendingApprovals')} value={pendingRuns.data?.length ?? 0} icon={Lock} accent="bg-orange-500" />
+        <StatTile label={t('dashboardAutonomousFamilyManagement.riskAlerts')} value={risks.length} icon={ShieldAlert} accent="bg-rose-500" href="/dashboard/family-stress" sublabel="Stress" />
       </div>
 
-      <SectionCard title="Pending Approvals" description="Sensitive actions wait for a parent — never automatic">
+      <SectionCard title={t('dashboardAutonomousFamilyManagement.pendingApprovals')} description={t('autonomousFamilyManagement.sensitiveActionsWaitForA')}>
         {pendingRuns.data && pendingRuns.data.length > 0 ? (
           <ul className="space-y-2.5">
             {pendingRuns.data.map((run) => (
               <li key={run.id} className="flex items-center gap-3 rounded-xl border border-orange-400/20 bg-orange-500/5 p-3">
                 <Lock className="h-4 w-4 shrink-0 text-orange-300" />
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{run.summary ?? 'Proposed action'}</p><p className="text-xs text-muted">{fmtRelative(run.created_at)}</p></div>
-                {manager ? <AutomationApproval id={run.id} /> : <span className="text-xs text-muted">Awaiting parent</span>}
+                {manager ? <AutomationApproval id={run.id} /> : <span className="text-xs text-muted">{t('autonomousFamilyManagement.awaitingParent')}</span>}
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={CheckCircle2} text="No actions waiting on approval." />}
+        ) : <MiniEmpty icon={CheckCircle2} text={t('autonomousFamilyManagement.noActionsWaitingOnApproval')} />}
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Weekly Plan" description="AI-optimized focus for the week">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.weeklyPlan')} description={t('autonomousFamilyManagement.aiOptimizedFocusForThe')}>
           <ul className="space-y-2.5 text-sm">
-            <li className="flex items-center gap-3"><Gauge className="h-4 w-4 text-violet-400" /> Keep family load at or below <LevelBadge level="moderate" /></li>
+            <li className="flex items-center gap-3"><Gauge className="h-4 w-4 text-violet-400" /> {t('dashboardAutonomousFamilyManagement.keepFamilyLoadAtOrBelow')} <LevelBadge level="moderate" /></li>
             {stress.suggestions.map((s, i) => (
               <li key={i} className="flex items-start gap-3"><CalendarRange className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" /> {s}</li>
             ))}
           </ul>
         </SectionCard>
 
-        <SectionCard title="Completed Automations" viewAllHref="/dashboard/family-automation">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.completedAutomations')} viewAllHref="/dashboard/family-automation">
           {doneRuns.data && doneRuns.data.length > 0 ? (
             <ul className="divide-y divide-border">
               {doneRuns.data.map((run) => (
@@ -161,7 +164,7 @@ export default async function AutonomousManagementPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Zap} text="No automations have run yet." />}
+          ) : <MiniEmpty icon={Zap} text={t('autonomousFamilyManagement.noAutomationsHaveRunYet')} />}
         </SectionCard>
       </div>
     </div>

@@ -22,6 +22,7 @@ import { useToast } from '@/components/ui/toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function cacheAll(keys: string[], children: NavChildMap) {
   try {
@@ -37,6 +38,7 @@ function childArrayIsDefault(parent: string, arr: string[]): boolean {
 }
 
 export function NavigationChoices() {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
 
   // Seed from the localStorage cache for an instant render, then reconcile with
@@ -118,7 +120,7 @@ export function NavigationChoices() {
     void persist(next, childMap);
   }
   function remove(href: string) {
-    if (keys.length <= 1) { toastError('Keep at least one destination in your sidebar.'); return; }
+    if (keys.length <= 1) { toastError(t('navigationChoices.keepAtLeastOneDestination')); return; }
     // Drop any saved sub-page layout for a removed group so it doesn't linger.
     const { [href]: _gone, ...restChildren } = childMap;
     void persist(keys.filter((k) => k !== href), restChildren);
@@ -130,7 +132,7 @@ export function NavigationChoices() {
   function reset() {
     if (isDefault) return;
     void persist([...DEFAULT_SIDEBAR_NAV_KEYS], {});
-    success('Sidebar reset to the default layout');
+    success(t('navigationChoices.sidebarResetToTheDefault'));
   }
 
   // ── Sub-page (child) ops ─────────────────────────────────────────────────────
@@ -171,20 +173,20 @@ export function NavigationChoices() {
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Compass className="h-4 w-4 text-brand-text" /> Navigation Choices
+            <Compass className="h-4 w-4 text-brand-text" /> {t('navigationChoices.navigationChoices')}
           </h2>
           <p className="mt-1 text-sm text-muted">
             Choose which destinations appear in your sidebar and the order they show in — down to
             each group&apos;s sub-pages. Changes save automatically and sync across your devices.
           </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={reset} disabled={isDefault || saving} title="Reset to the default layout">
-          <RotateCcw className="h-4 w-4" /> Reset
+        <Button size="sm" variant="ghost" onClick={reset} disabled={isDefault || saving} title={t('navigationChoices.resetToTheDefaultLayout')}>
+          <RotateCcw className="h-4 w-4" /> {t('navigationChoices.reset')}
         </Button>
       </div>
 
       <p className="mb-4 text-xs text-muted/80">
-        AI Assistant, Settings, and Help &amp; Support are always available and can&apos;t be removed.
+        {t('navigationChoices.aiAssistantSettingsAndHelpAmp')}
       </p>
 
       {/* Current layout */}
@@ -233,7 +235,7 @@ export function NavigationChoices() {
               {hasGroup && open && (
                 <div className="ml-6 border-l border-border/60 px-3 pb-3 pl-3">
                   {kidItems.length === 0 ? (
-                    <p className="py-2 text-xs text-muted">No sub-pages — <span className="font-medium text-fg">{item.label}</span> shows as a plain link. Add some below.</p>
+                    <p className="py-2 text-xs text-muted">{t('navigationChoices.noSubPages')}{' '}<span className="font-medium text-fg">{item.label}</span>{' '}{t('navigationChoices.showsAsAPlainLink')}</p>
                   ) : (
                     <ul className="space-y-1 py-2">
                       {kidItems.map((kid, ki) => (
@@ -287,7 +289,7 @@ export function NavigationChoices() {
       {/* Add picker (top-level) */}
       {adding && available.length > 0 && (
         <div className="mt-3 rounded-xl border border-border bg-surface/30 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted/70">Add to sidebar</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted/70">{t('navigationChoices.addToSidebar')}</p>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {available.map((item) => (
               <button key={item.href} type="button" onClick={() => add(item.href)} disabled={saving || keys.length >= MAX_SIDEBAR_NAV}
@@ -303,7 +305,7 @@ export function NavigationChoices() {
 
       {isDefault && (
         <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted">
-          <Check className="h-3.5 w-3.5 text-brand-text" /> You&apos;re using the default layout.
+          <Check className="h-3.5 w-3.5 text-brand-text" /> {t('navigationChoices.youAposReUsingTheDefault')}
         </p>
       )}
     </Card>

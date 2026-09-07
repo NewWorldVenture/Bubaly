@@ -9,12 +9,15 @@
 // Either way the caller gets a reply + deep links; the UI never breaks on a
 // missing key. History is passed through for multi-turn context (LLM tier).
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import {
   answerMarketQuestion, marketSystemPrompt, routeMarketIntent,
   type AssistantLink, type MarketSnapshot,
 } from '@/lib/marketplace/assistant';
 import { isAIConfigured, resolveProvider, type AIMessage } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 
 export type MarketAssistantResult = {
   ok: true;
@@ -30,8 +33,9 @@ export async function askMarketAssistantAction(
   question: string,
   history: { role: 'user' | 'assistant'; content: string }[] = [],
 ): Promise<MarketAssistantResult> {
+  const t = await getTranslations();
   const q = question.trim().slice(0, 500);
-  if (!q) return { ok: false, error: 'Ask me anything about the marketplace' };
+  if (!q) return { ok: false, error: t('assistantActions.askMeAnythingAboutThe') };
 
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -59,18 +63,31 @@ export async function askMarketAssistantAction(
   // links still ride along so the UI always has somewhere to go.
   try {
     if (await isAIConfigured()) {
-      const provider = await resolveProvider();
-      const messages: AIMessage[] = [
-        ...history.slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.content } as AIMessage)),
-        { role: 'user', content: q },
-      ];
-      const completion = await provider.complete({
-        system: marketSystemPrompt(snapshot),
-        messages,
-        tools: [],
-        maxTokens: 400,
-      });
-      const text = completion.text.trim();
+      // Two ways this ends at `source: 'engine'` — the provider threw, or it
+      // answered with nothing usable — and the shopper sees the same
+      // deterministic reply either way, which is also what "no API key" looks
+      // like. The wrapper sits inside the swallow so the row separates them.
+      const text = await withAiRequest(
+        scopeFromUserContext(ctx, sb),
+        { feature: 'marketplace.assistant', text: q.slice(0, 200) },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const messages: AIMessage[] = [
+            ...history.slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.content } as AIMessage)),
+            { role: 'user', content: q },
+          ];
+          const completion = await provider.complete({
+            system: marketSystemPrompt(snapshot),
+            messages,
+            tools: [],
+            maxTokens: 400,
+          });
+          obs.used(provider.model, completion.usage);
+          const out = completion.text.trim();
+          if (!out) obs.failed(new Error('The marketplace assistant returned nothing; fell back to the grounded engine.'));
+          return out;
+        },
+      );
       if (text) return { ok: true, reply: text, links: grounded.links, source: 'llm' };
     }
   } catch { /* fall through to the grounded engine */ }

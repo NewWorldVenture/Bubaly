@@ -43,8 +43,17 @@ const record = (over: Partial<RelationshipGiftRecord> = {}): RelationshipGiftRec
 beforeEach(() => {
   vi.resetAllMocks();
   queries.length = 0;
+  // `role` and `family` are what `scopeFromUserContext` reads to build the
+  // service scope the route now opens its `ai_requests` row through. They are
+  // required fields on `FamilyMembership`, so production always has them; this
+  // stub was simply thinner than the type.
   mocks.context.mockResolvedValue({
-    user: { id: 'user-a' }, active: { familyId: 'family-a', member: { id: 'member-a' } },
+    user: { id: 'user-a' },
+    active: {
+      familyId: 'family-a', role: 'parent',
+      family: { name: 'Family A', timezone: 'America/Chicago' },
+      member: { id: 'member-a' },
+    },
   });
   mocks.server.mockResolvedValue({ from: (table: string) => new MockQuery(table) });
   mocks.rate.mockResolvedValue({ ok: true });

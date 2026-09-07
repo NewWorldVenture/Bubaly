@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-emergency/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('family-emergency page read boundary', () => {
   it('logs and returns an ErrorState on an emergency read failure', () => {
     expect(page).toContain('if (emergencyError) {');
     expect(page).toContain("console.error('[dashboard/family-emergency] emergency read failed', emergencyError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family emergency hub from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familyEmergency.couldNotLoadYourFamily', "Could not load your family emergency hub from Supabase. Refresh and try again.");
   });
 
   it('keeps the manager-gated medical_profiles branch error-shaped', () => {

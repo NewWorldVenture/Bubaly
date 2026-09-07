@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/memories/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('memories page read boundary', () => {
   it('logs and returns an ErrorState on a content read failure', () => {
     expect(page).toContain('if (contentError) {');
     expect(page).toContain("console.error('[dashboard/memories] memories read failed', contentError);");
-    expect(page).toContain('return <ErrorState message="Could not load your memories from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'memories.couldNotLoadYourMemories', "Could not load your memories from Supabase. Refresh and try again.");
   });
 
   it('derives albums/photos only after the fail-closed guard', () => {

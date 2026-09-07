@@ -20,6 +20,7 @@ import { controlRunAction, type RunActionResult } from '@/app/(app)/dashboard/co
 import { canTransitionRun, isTerminalRunState, type RunState } from '@/lib/ai/runs/states';
 import type { EditableField } from '@/lib/approvals/card-data';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EditableStep = { id: string; description: string; fields: EditableField[] };
 export type FailedStep = { id: string; description: string };
@@ -52,6 +53,7 @@ export function RunControls({
   onEditStep: EditStepAction;
   className?: string;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<Busy>(null);
@@ -107,24 +109,24 @@ export function RunControls({
       <div className="flex flex-wrap items-center gap-2">
         {showPause && (
           <Button type="button" variant="outline" size="sm" className={ACTION} loading={busy === 'pause'} disabled={busy !== null} onClick={() => control('pause')}>
-            {busy !== 'pause' && <Pause className="h-3.5 w-3.5" aria-hidden />} Pause
+            {busy !== 'pause' && <Pause className="h-3.5 w-3.5" aria-hidden />} {t('runControls.pause')}
           </Button>
         )}
         {showResume && (
           <Button type="button" variant="primary" size="sm" className={ACTION} loading={busy === 'resume'} disabled={busy !== null} onClick={() => control('resume')}>
-            {busy !== 'resume' && <Play className="h-3.5 w-3.5" aria-hidden />} Resume
+            {busy !== 'resume' && <Play className="h-3.5 w-3.5" aria-hidden />} {t('runControls.resume')}
           </Button>
         )}
         {showCancel && (
           <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'text-danger hover:bg-danger/10')} disabled={busy !== null} onClick={() => setConfirmCancel(true)}>
-            <Ban className="h-3.5 w-3.5" aria-hidden /> Cancel
+            <Ban className="h-3.5 w-3.5" aria-hidden /> {t('runControls.cancel')}
           </Button>
         )}
       </div>
 
       {showRerun && (
         <div className="rounded-2xl border border-danger/25 bg-danger/5 p-3">
-          <p className="text-xs font-semibold text-fg">Something did not go through</p>
+          <p className="text-xs font-semibold text-fg">{t('runControls.somethingDidNotGoThrough')}</p>
           <ul className="mt-2 space-y-1.5">
             {failedSteps.map((step) => (
               <li key={step.id} className="flex items-center justify-between gap-3">
@@ -146,25 +148,23 @@ export function RunControls({
       {showEdit && (
         <details className="rounded-2xl border border-border bg-surface/40">
           <summary className="flex min-h-11 cursor-pointer select-none items-center gap-2 px-3 text-sm font-medium text-fg focus-ring">
-            <Pencil className="h-4 w-4 text-muted" aria-hidden /> Change a step
+            <Pencil className="h-4 w-4 text-muted" aria-hidden /> {t('runControls.changeAStep')}
           </summary>
           <ul className="space-y-1.5 border-t border-border px-3 py-2">
             {editableSteps.map((step) => (
               <li key={step.id} className="flex items-center justify-between gap-3">
                 <span className="min-w-0 flex-1 truncate text-sm text-fg/90">{step.description}</span>
-                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={`Edit: ${step.description}`}>
-                  Edit
-                </Button>
+                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={`Edit: ${step.description}`}>{t('runControls.edit')}</Button>
               </li>
             ))}
           </ul>
         </details>
       )}
 
-      <Modal open={confirmCancel} onClose={() => { if (busy !== 'cancel') setConfirmCancel(false); }} title="Cancel this?" description="Bubaly will stop here. What is already done stays done; the steps that have not run will not run." className="max-w-sm">
+      <Modal open={confirmCancel} onClose={() => { if (busy !== 'cancel') setConfirmCancel(false); }} title={t('runControls.cancelThis')} description="Bubaly will stop here. What is already done stays done; the steps that have not run will not run." className="max-w-sm">
         <div className="flex items-center justify-end gap-2">
-          <Button type="button" variant="ghost" className={ACTION} onClick={() => setConfirmCancel(false)} disabled={busy === 'cancel'}>Keep going</Button>
-          <Button type="button" variant="danger" className={ACTION} loading={busy === 'cancel'} disabled={busy !== null} onClick={() => control('cancel')}>Cancel the run</Button>
+          <Button type="button" variant="ghost" className={ACTION} onClick={() => setConfirmCancel(false)} disabled={busy === 'cancel'}>{t('runControls.keepGoing')}</Button>
+          <Button type="button" variant="danger" className={ACTION} loading={busy === 'cancel'} disabled={busy !== null} onClick={() => control('cancel')}>{t('runControls.cancelTheRun')}</Button>
         </div>
       </Modal>
 
@@ -192,6 +192,7 @@ function EditStepModal({ step, busy, onClose, onSubmit }: {
   onClose: () => void;
   onSubmit: (edits: Record<string, string | number | boolean>) => void;
 }) {
+  const t = useTranslations();
   const [draft, setDraft] = useState<Record<string, string | number | boolean>>({});
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -215,7 +216,7 @@ function EditStepModal({ step, busy, onClose, onSubmit }: {
   const valueOf = (field: EditableField) => (draft[field.key] === undefined ? field.value : draft[field.key]);
 
   return (
-    <Modal open onClose={onClose} title="Change this step" description={step.description} className="max-w-md">
+    <Modal open onClose={onClose} title={t('runControls.changeThisStep')} description={step.description} className="max-w-md">
       <form onSubmit={submit} className="space-y-3">
         {step.fields.map((field) => (
           field.type === 'boolean' ? (
@@ -238,9 +239,9 @@ function EditStepModal({ step, busy, onClose, onSubmit }: {
             </Field>
           )
         ))}
-        <p className="text-xs text-muted">Bubaly will redo this step with your changes, and anything that depends on it.</p>
+        <p className="text-xs text-muted">{t('runControls.bubalyWillRedoThisStepWith')}</p>
         <div className="flex items-center justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" className={ACTION} onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="ghost" className={ACTION} onClick={onClose} disabled={busy}>{t('runControls.cancel')}</Button>
           <Button type="submit" variant="primary" className={ACTION} loading={busy} disabled={busy}>{busy ? 'Saving…' : 'Save & continue'}</Button>
         </div>
       </form>

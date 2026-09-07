@@ -411,6 +411,7 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   const dates = [...new Set(planned.map((p) => p.date))].sort();
   await recordActivitySafely(scope, {
     agent: 'meal_planner',
+    action: 'create',
     title: planned.length === 1
       ? `Planned ${planned[0].name ?? 'a meal'} for ${planned[0].date}`
       : `Planned ${planned.length} meals from ${dates[0]} to ${dates[dates.length - 1]}`,
@@ -432,6 +433,38 @@ export async function setSlot(scope: ServiceScope, input: PlanEntryInput): Promi
   const slot = res.data.planned[0];
   if (!slot) return fail('The meal plan did not record that slot.', { code: SERVICE_CODES.db });
   return ok({ ...slot, replaced: res.data.replaced > 0 });
+}
+
+/**
+ * Clear one planned meal.
+ *
+ * Family-scoped, where the module deleted on `id` alone and left tenancy to RLS.
+ * The meal itself survives — a plan slot is a placement, not the recipe.
+ */
+export async function removeSlot(scope: ServiceScope, planId: string): Promise<ServiceResult<{ id: string }>> {
+  const { data, error } = await scope.db
+    .from('meal_plans')
+    .delete()
+    .eq('id', planId)
+    .eq('family_id', scope.familyId)
+    // The slot it occupied, back with the deleted row: the trail says WHICH
+    // dinner was cleared, which is the only part a family would recognise.
+    .select('id, plan_date, meal_type')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:meals] remove slot failed', error);
+    return fail(describeDbError(error, 'Could not clear that meal.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That planned meal could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'meal_planner',
+    action: 'delete',
+    title: `Cleared the ${data.meal_type} planned for ${data.plan_date}`,
+    href: '/dashboard/meals',
+    resourceId: data.id,
+  });
+  return ok({ id: data.id });
 }
 
 // ── Recipes ─────────────────────────────────────────────────────────────────
@@ -570,7 +603,7 @@ export async function createRecipe(scope: ServiceScope, input: CreateRecipeInput
         console.error('[service:meals] recipe create failed', error);
         return fail(describeDbError(error, 'Could not save that recipe.'), { code: SERVICE_CODES.db });
       }
-      await recordActivitySafely(scope, { agent: 'meal_planner', title: `Saved the recipe ${name}`, href: '/dashboard/recipes' });
+      await recordActivitySafely(scope, { action: 'create', agent: 'meal_planner', title: `Saved the recipe ${name}`, href: '/dashboard/recipes' });
       return ok(toRecipeSummary(data));
     },
   );

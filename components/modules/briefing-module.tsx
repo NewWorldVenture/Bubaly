@@ -17,6 +17,7 @@ import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
   type BriefingData,
 } from '@/lib/briefing/cache-isolation';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,13 +109,14 @@ const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot
  * home, warranties, trips, pantry) into one prioritized, deterministic answer.
  */
 function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
+  const tr = useTranslations();
   const { counts, items, headline } = digest;
   return (
     <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/[0.04] border border-violet-500/20 p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <LayoutGrid className="h-4 w-4 text-violet-400" />
-          <span className="text-sm font-semibold text-fg uppercase tracking-wider">Needs Attention Today</span>
+          <span className="text-sm font-semibold text-fg uppercase tracking-wider">{tr('briefing.needsAttentionToday')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {counts.overdue > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-rose-400 bg-rose-500/10 border-rose-500/30">{counts.overdue} overdue</span>}
@@ -148,7 +150,7 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
             );
           })}
           {items.length > 8 && (
-            <li className="text-xs text-muted text-center pt-1">+{items.length - 8} more across bills, home, health &amp; travel</li>
+            <li className="text-xs text-muted text-center pt-1">+{items.length - 8} {tr('briefing.moreAcrossBillsHomeHealthAmp')}</li>
           )}
         </ul>
       )}
@@ -157,6 +159,7 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
 }
 
 function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; loading: boolean; type: TabType }) {
+  const tr = useTranslations();
   const cfg: Record<TabType, { icon: React.ReactNode; title: string; desc: string }> = {
     morning: { icon: <Sun className="h-8 w-8 text-amber-400" />,    title: 'Morning Briefing', desc: 'Start your day with a complete picture of what your family needs today.' },
     evening: { icon: <Moon className="h-8 w-8 text-indigo-400" />,  title: 'Evening Recap',   desc: 'Review what got done, what is outstanding, and preview tomorrow.' },
@@ -174,7 +177,7 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
         {loading ? 'Generating…' : `Generate ${title}`}
       </Button>
-      {loading && <p className="text-muted text-sm mt-4">Analyzing your family data with AI…</p>}
+      {loading && <p className="text-muted text-sm mt-4">{tr('briefing.analyzingYourFamilyDataWithAi')}</p>}
     </div>
   );
 }
@@ -182,6 +185,7 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
 // ─── Morning Content ──────────────────────────────────────────────────────────
 
 function MorningContent({ data, relationships }: { data: BriefingData; relationships?: React.ReactNode }) {
+  const tr = useTranslations();
   const ops = data.operationsScore;
   const stress = ops?.stressLevel ? STRESS_CONFIG[ops.stressLevel] : STRESS_CONFIG.low;
   return (
@@ -193,7 +197,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
         <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-border p-6">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp className="h-4 w-4 text-violet-400" />
-            <span className="text-sm font-semibold text-fg uppercase tracking-wider">Family Operations Score</span>
+            <span className="text-sm font-semibold text-fg uppercase tracking-wider">{tr('briefing.familyOperationsScore')}</span>
           </div>
           <div className="flex gap-8 items-center">
             <div className="relative flex-shrink-0">
@@ -217,7 +221,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
               )}
               {ops.recommendation && (
                 <div className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-3 text-sm">
-                  <span className="font-semibold text-violet-400">AI Tip: </span>
+                  <span className="font-semibold text-violet-400">{tr('briefing.aiTip')} </span>
                   <span className="text-fg/80">{ops.recommendation}</span>
                 </div>
               )}
@@ -230,10 +234,10 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
         {/* Schedule timeline */}
         <div className="lg:col-span-2 rounded-2xl bg-surface/50 border border-border p-5">
           <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-5 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-blue-400" /> Today&apos;s Schedule
+            <Clock className="h-4 w-4 text-blue-400" /> {tr('briefing.todayAposSSchedule')}
           </h3>
           {data.schedule.length === 0 ? (
-            <p className="text-muted text-sm py-8 text-center">No events scheduled — enjoy the open day!</p>
+            <p className="text-muted text-sm py-8 text-center">{tr('briefing.noEventsScheduledEnjoyTheOpen')}</p>
           ) : (
             <div className="relative pl-5">
               <div className="absolute left-1.5 top-2 bottom-2 w-px bg-elevated" />
@@ -265,7 +269,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
           {/* Family Summary */}
           <div className="rounded-2xl bg-surface/50 border border-border p-5">
             <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Star className="h-4 w-4 text-amber-400" /> Summary
+              <Star className="h-4 w-4 text-amber-400" /> {tr('briefing.summary')}
             </h3>
             <ul className="space-y-2.5">
               {(data.familySummary ?? []).map((item, i) => (
@@ -280,7 +284,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
           {/* Reminders */}
           {data.reminders.length > 0 && (
             <div className="rounded-2xl bg-surface/50 border border-border p-5">
-              <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3">Reminders</h3>
+              <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3">{tr('briefing.reminders')}</h3>
               <div className="space-y-2">
                 {data.reminders.map((r, i) => (
                   <div key={i} className={cn('text-xs rounded-lg border px-3 py-2', URGENCY_CLASSES[r.urgency])}>
@@ -297,7 +301,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
       {data.conflicts.length > 0 && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
           <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" /> Potential Conflicts
+            <AlertTriangle className="h-4 w-4" /> {tr('briefing.potentialConflicts')}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {data.conflicts.map((c, i) => (
@@ -316,7 +320,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
       {/* Kids Needs */}
       {data.kidsNeeds.length > 0 && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
-          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🎒 What Kids Need Today</h3>
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">{tr('briefing.whatKidsNeedToday')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {data.kidsNeeds.map((kid, i) => (
               <div key={i} className="rounded-xl bg-surface/50 border border-border p-4">
@@ -340,17 +344,17 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
       {/* Meals */}
       {data.meals.length > 0 && (
         <div className="rounded-2xl bg-surface/50 border border-border p-5">
-          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🍽️ Meals</h3>
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">{tr('briefing.meals')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {data.meals.map((meal, i) => (
               <div key={i} className={cn('rounded-xl border p-4', meal.status === 'planned' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-surface/50 border-border')}>
                 <div className="text-xs text-muted mb-1">{meal.meal}</div>
                 <div className="font-medium text-fg mb-2">
-                  {meal.name ?? <span className="text-muted italic text-sm">Not planned</span>}
+                  {meal.name ?? <span className="text-muted italic text-sm">{tr('briefing.notPlanned')}</span>}
                 </div>
                 {meal.missing && meal.missing.length > 0 && (
                   <div>
-                    <div className="text-xs text-amber-400 mb-1">Need to buy:</div>
+                    <div className="text-xs text-amber-400 mb-1">{tr('briefing.needToBuy')}</div>
                     {meal.missing.map((m, j) => <div key={j} className="text-xs text-muted">• {m}</div>)}
                   </div>
                 )}
@@ -366,16 +370,17 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
 // ─── Evening Content ──────────────────────────────────────────────────────────
 
 function EveningContent({ data, recap }: { data: BriefingData; recap?: React.ReactNode }) {
+  const tr = useTranslations();
   return (
     <div className="space-y-6">
       {recap}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl bg-emerald-500/5 border border-emerald-500/20 p-5">
           <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" /> Completed Today
+            <CheckCircle2 className="h-4 w-4" /> {tr('briefing.completedToday')}
           </h3>
           {(data.completed ?? []).length === 0 ? (
-            <p className="text-muted text-sm py-4">Nothing logged yet</p>
+            <p className="text-muted text-sm py-4">{tr('briefing.nothingLoggedYet')}</p>
           ) : (
             <ul className="space-y-2">
               {(data.completed ?? []).map((item, i) => (
@@ -388,10 +393,10 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
         </div>
         <div className="rounded-2xl bg-amber-500/5 border border-amber-500/20 p-5">
           <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" /> Still Outstanding
+            <AlertTriangle className="h-4 w-4" /> {tr('briefing.stillOutstanding')}
           </h3>
           {(data.outstanding ?? []).length === 0 ? (
-            <p className="text-muted text-sm py-4">All clear!</p>
+            <p className="text-muted text-sm py-4">{tr('briefing.allClear')}</p>
           ) : (
             <ul className="space-y-2">
               {(data.outstanding ?? []).map((item, i) => (
@@ -406,7 +411,7 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
       {data.tomorrowPreview && (
         <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-5">
           <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <ChevronRight className="h-4 w-4" /> Tomorrow Preview — {data.tomorrowPreview.events} events
+            <ChevronRight className="h-4 w-4" /> {tr('briefing.tomorrowPreview')} {data.tomorrowPreview.events} events
           </h3>
           <ul className="space-y-1.5">
             {(data.tomorrowPreview.notes ?? []).map((note, i) => (
@@ -424,6 +429,7 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
 // ─── Weekly Content ───────────────────────────────────────────────────────────
 
 function WeeklyContent({ data }: { data: BriefingData }) {
+  const tr = useTranslations();
   return (
     <div className="space-y-6">
       {(data.weeklyHighlights ?? []).length > 0 && (
@@ -445,7 +451,7 @@ function WeeklyContent({ data }: { data: BriefingData }) {
       {(data.weeklyConflicts ?? []).length > 0 && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
           <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" /> Scheduling Conflicts This Week
+            <AlertTriangle className="h-4 w-4" /> {tr('briefing.schedulingConflictsThisWeek')}
           </h3>
           <div className="space-y-3">
             {(data.weeklyConflicts ?? []).map((c, i) => (
@@ -473,6 +479,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   urgentReminders: ReminderRow[];
   now: Date;
 }) {
+  const tr = useTranslations();
   function memberStatus(memberId: string): { label: string; active: boolean; next: boolean } {
     const current = todayEvents.find(e => {
       if (e.assignee_id !== memberId) return false;
@@ -501,14 +508,14 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-fg" />
           </div>
-          <span className="font-semibold text-fg text-lg">Bubaly</span>
+          <span className="font-semibold text-fg text-lg">{tr('briefing.bubaly')}</span>
         </div>
         <div className="text-center">
           <div className="text-4xl font-bold text-fg tabular-nums tracking-tight">{clockStr}</div>
           <div className="text-sm text-muted mt-0.5">{dayStr}</div>
         </div>
         <button onClick={onExit} className="flex items-center gap-2 text-muted hover:text-fg transition-colors text-sm px-3 py-2 rounded-lg hover:bg-surface/50">
-          <X className="h-4 w-4" /> Exit Kitchen Mode
+          <X className="h-4 w-4" /> {tr('briefing.exitKitchenMode')}
         </button>
       </div>
 
@@ -516,7 +523,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
       <div className="flex-1 grid grid-cols-2 overflow-hidden">
         {/* Left: Who is Where */}
         <div className="border-r border-border p-8 overflow-y-auto">
-          <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">Who&apos;s Where Now</h2>
+          <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">{tr('briefing.whoAposSWhereNow')}</h2>
           <div className="space-y-3">
             {members.map((m, i) => {
               const status = memberStatus(m.id);
@@ -545,9 +552,9 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
         {/* Right: Coming Up + Don't Forget */}
         <div className="flex flex-col overflow-hidden">
           <div className="flex-1 p-8 overflow-y-auto">
-            <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">Coming Up Today</h2>
+            <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">{tr('briefing.comingUpToday')}</h2>
             {upcoming.length === 0 ? (
-              <p className="text-muted text-xl font-medium">Nothing more scheduled today</p>
+              <p className="text-muted text-xl font-medium">{tr('briefing.nothingMoreScheduledToday')}</p>
             ) : (
               <div className="space-y-3">
                 {upcoming.map((e, i) => {
@@ -572,7 +579,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
           {urgentReminders.length > 0 && (
             <div className="border-t border-amber-500/20 bg-amber-500/[0.04] px-8 py-5 flex-shrink-0">
-              <h2 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3">⚠ Don&apos;t Forget</h2>
+              <h2 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3">{tr('briefing.donAposTForget')}</h2>
               <div className="flex flex-wrap gap-2">
                 {urgentReminders.map((r, i) => (
                   <span key={i} className="bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-full px-4 py-2 text-sm font-medium">
@@ -593,6 +600,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.ReactNode };
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
+  const tr = useTranslations();
   const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [now, setNow] = useState(new Date());
@@ -611,7 +619,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
   }, [contextKey]);
 
   if (!contextKey) {
-    return <ErrorState message="Could not resolve your current household membership. Refresh and try again." />;
+    return <ErrorState message={tr('briefingModule.couldNotResolveYourCurrent')} />;
   }
 
   // A keyed boundary removes old content during rendering, before effect cleanup.
@@ -624,6 +632,7 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   tab: TabType;
   setTab: (tab: TabType) => void;
 }) {
+  const tr = useTranslations();
   const { familyId, members } = useApp();
   const [session] = useState(() => createBriefingSession());
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
@@ -686,7 +695,7 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 
   // Kitchen mode renders fullscreen
   if (tab === 'kitchen') {
-    if (kitchenError) return <ErrorState message="Could not load Kitchen Mode context. Refresh and try again." onRetry={refreshKitchen} />;
+    if (kitchenError) return <ErrorState message={tr('briefingModule.couldNotLoadKitchenMode')} onRetry={refreshKitchen} />;
     return (
       <KitchenMode
         onExit={() => setTab('morning')}
@@ -706,20 +715,20 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-violet-400" /> AI Daily Briefing
+            <Sparkles className="h-6 w-6 text-violet-400" /> {tr('briefing.aiDailyBriefing')}
           </h1>
-          <p className="text-muted text-sm mt-1">Your family&apos;s Chief of Staff</p>
+          <p className="text-muted text-sm mt-1">{tr('briefing.yourFamilyAposSChiefOf')}</p>
         </div>
         {currentBriefing && (
           <div className="flex items-center gap-3">
             {generatedAt && (
-              <span className="text-xs text-muted">Generated {fmtTime(generatedAt)}</span>
+              <span className="text-xs text-muted">{tr('briefing.generated')} {fmtTime(generatedAt)}</span>
             )}
             <Button variant="outline" size="sm"
               onClick={() => generate(tab as Exclude<TabType, 'kitchen'>)}
               disabled={loading}
               className="border-border hover:bg-elevated text-fg/80 gap-1.5">
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> {tr('briefing.refresh')}
             </Button>
           </div>
         )}

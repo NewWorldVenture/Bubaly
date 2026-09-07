@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // Mobile production-readiness (Phase 3 — responsive layout / content parity [M-029]):
@@ -8,7 +9,7 @@ import fs from 'node:fs';
 // links to the same h2 ids and 44px-compliant touch targets. Sidebar still owns lg+.
 // This guard locks the mobile ToC in.
 
-const page = fs.readFileSync('app/(marketing)/blog/[slug]/page.tsx', 'utf8');
+const page = readUiSource('app/(marketing)/blog/[slug]/page.tsx');
 
 describe('blog article exposes a Table of Contents on mobile (M-029)', () => {
   it('renders a native <details> ToC that is lg:hidden (mobile/tablet only)', () => {

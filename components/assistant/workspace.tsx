@@ -11,6 +11,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { LayoutList, MessageSquare, PanelRight } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type WorkspacePane = 'chat' | 'plan' | 'context';
 
@@ -51,8 +52,9 @@ export type SegmentedControlProps = {
 
 /** Chat | Plan | Context — a tablist, 44px targets, the brand pill on the active tab. */
 export function SegmentedControl({ value, onChange, counts, className }: SegmentedControlProps) {
+  const t = useTranslations();
   return (
-    <div role="tablist" aria-label="Assistant workspace" className={cn('grid grid-cols-3 gap-1 rounded-xl border border-border bg-surface/60 p-1', className)}>
+    <div role="tablist" aria-label={t('workspace.assistantWorkspace')} className={cn('grid grid-cols-3 gap-1 rounded-xl border border-border bg-surface/60 p-1', className)}>
       {WORKSPACE_PANES.map(({ key, label, icon: Icon }) => {
         const active = key === value;
         const count = counts?.[key] ?? 0;
@@ -104,6 +106,7 @@ export type AssistantWorkspaceProps = {
 };
 
 export function AssistantWorkspace({ pane, onPaneChange, conversation, plan, context, hero, counts, className }: AssistantWorkspaceProps) {
+  const t = useTranslations();
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
       {/* Phone / tablet: one pane at a time. */}
@@ -122,9 +125,9 @@ export function AssistantWorkspace({ pane, onPaneChange, conversation, plan, con
 
       {/* Desktop: three columns, all visible. */}
       <div className="hidden min-h-0 flex-1 gap-6 lg:grid lg:grid-cols-[320px_1fr_330px]">
-        <aside className="flex min-h-0 min-w-0 flex-col" aria-label="Conversation">{conversation}</aside>
-        <section className="min-h-0 min-w-0" aria-label="Plan and results">{hero ?? plan}</section>
-        <aside className="min-h-0 min-w-0 space-y-5" aria-label="Context">{context}</aside>
+        <aside className="flex min-h-0 min-w-0 flex-col" aria-label={t('workspace.conversation')}>{conversation}</aside>
+        <section className="min-h-0 min-w-0" aria-label={t('workspace.planAndResults')}>{hero ?? plan}</section>
+        <aside className="min-h-0 min-w-0 space-y-5" aria-label={t('workspace.context')}>{context}</aside>
       </div>
     </div>
   );

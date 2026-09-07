@@ -1,10 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -12,6 +16,7 @@ const PATH = '/dashboard/paperwork';
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<void> {
+  const tr = await getTranslations();
   const text = String(formData.get('text') ?? '').trim();
   const sender = String(formData.get('sender') ?? '').trim() || null;
   if (!text) return;
@@ -34,7 +39,7 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
     actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
     created_by: ctx.user.id,
   });
-  if (error) throw new Error(describeActionError(error, 'Could not save that paperwork.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')));
   revalidatePath(PATH);
 }
 
@@ -50,6 +55,7 @@ export async function materializePaperworkActionAction(input: {
   itemId: string;
   actionIndex: number;
 }): Promise<void> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -80,24 +86,26 @@ export async function materializePaperworkActionAction(input: {
       all_day: Boolean(dueOn),
       created_by: ctx.user.id,
     }).select('id').single();
-    if (error) throw new Error(describeActionError(error, 'Could not add that to your calendar.'));
+    if (error) throw new Error(describeActionError(error, tr('actions.couldNotAddThatTo')));
     materializedAs = 'calendar_event';
     materializedId = data?.id ?? null;
   } else {
     const amountBit = action.amount != null ? ` ($${action.amount})` : '';
-    const { data, error } = await supabase.from('family_reminders').insert({
-      family_id: ctx.active.familyId,
-      created_by: ctx.user.id,
+    // Through the service. This insert sent `status: 'pending'` and, off the
+    // urgent branch, `priority: 'normal'` — neither is in 0014's CHECK sets, so
+    // Postgres rejected it and materialising a sign/pay/provide action always
+    // threw. The service writes a legal status and maps an unknown priority onto
+    // the column default instead of sending it on.
+    const reminder = await createReminder(scopeFromUserContext(ctx, supabase), {
       title: `${action.label}${amountBit} — ${item.title}`.slice(0, 200),
       notes: `From Paperwork Inbox${item.sender ? ` · ${item.sender}` : ''}${dueOn ? ` · due ${dueOn}` : ''}`,
       kind: 'task',
-      priority: item.urgency === 'urgent' ? 'high' : 'normal',
-      status: 'pending',
-      ai_suggested: true,
-    }).select('id').single();
-    if (error) throw new Error(describeActionError(error, 'Could not create that reminder.'));
+      priority: item.urgency === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+    });
+    if (!reminder.ok) throw new Error(reminder.error);
     materializedAs = 'reminder';
-    materializedId = data?.id ?? null;
+    materializedId = reminder.data.id;
   }
 
   if (materializedId) {
@@ -124,17 +132,18 @@ type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
  * parent can copy/edit/send. Key-gated — an honest message when AI isn't set up.
  */
 export async function draftPaperworkReplyAction(itemId: string): Promise<DraftResult> {
-  if (!itemId) return { ok: false, error: 'Invalid item' };
+  const tr = await getTranslations();
+  if (!itemId) return { ok: false, error: tr('actions.invalidItem') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!item) return { ok: false, error: 'Paperwork not found' };
+  if (!item) return { ok: false, error: tr('actions.paperworkNotFound') };
 
   if (!(await isAIConfigured())) {
-    return { ok: false, error: 'AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft replies.' };
+    return { ok: false, error: tr('actions.aiIsnTConfiguredYet') };
   }
 
   const source = (item.raw_text || item.summary || item.title || '').slice(0, 6000);
@@ -156,13 +165,25 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
 
   let draft = '';
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });
-    draft = (completion.text || '').trim();
+    // Nothing from the document itself goes on the row. `source` is OCR of a
+    // letter somebody else wrote — the most literally untrusted text in the
+    // product, and not something to copy into a second table.
+    draft = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'paperwork.draft-reply', text: `Draft a reply to ${kindLabel(item.kind as PaperworkKind)}` },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });
+        obs.used(provider.model, completion.usage);
+        const out = (completion.text || '').trim();
+        if (!out) obs.failed(new Error('The model returned an empty draft.'));
+        return out;
+      },
+    );
   } catch (err) {
     return { ok: false, error: describeAIError(err).message };
   }
-  if (!draft) return { ok: false, error: 'Could not draft a reply. Please try again.' };
+  if (!draft) return { ok: false, error: tr('actions.couldNotDraftAReply') };
 
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
   // Persisting the draft is best-effort — it is returned to the caller regardless —
@@ -178,11 +199,12 @@ export async function setPaperworkStatusAction(input: {
   itemId: string;
   status: 'needs_action' | 'in_progress' | 'done' | 'archived';
 }): Promise<void> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not update that paperwork.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')));
   revalidatePath(PATH);
 }

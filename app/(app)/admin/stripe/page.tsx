@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { readMoneyFlagsWithError, readStripeEnv, resolveCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
 import { StripeSetupForm } from '@/components/admin/stripe-setup-form';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Money', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ function CapRow({ label, on }: { label: string; on: boolean }) {
 }
 
 export default async function AdminStripeMoneyPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { flags: moneyFlags, error: moneyFlagsError } = await readMoneyFlagsWithError(supabase);
   const stripeCfgResult = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
@@ -87,8 +89,8 @@ export default async function AdminStripeMoneyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Money — Stripe Financial Mode</h1>
-        <p className="mt-1 text-sm text-muted">Platform oversight for Bubaly Money. Capability detection decides ledger vs Stripe mode at runtime.</p>
+        <h1 className="text-2xl font-bold">{t('adminStripe.moneyStripeFinancialMode')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminStripe.platformOversightForBubalyMoneyCapability')}</p>
       </div>
 
       {/* Configurable Bubaly Stripe account + service fee */}
@@ -110,7 +112,7 @@ export default async function AdminStripeMoneyPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-brand-text" />
-            <span className="font-semibold">Runtime mode</span>
+            <span className="font-semibold">{t('adminStripe.runtimeMode')}</span>
           </div>
           <Badge tone={caps.mode === 'stripe' ? 'success' : 'neutral'}>
             {caps.mode === 'stripe' ? 'Stripe mode' : 'Virtual ledger'}
@@ -119,30 +121,30 @@ export default async function AdminStripeMoneyPage() {
         {caps.reason && <p className="mt-2 text-sm text-muted">{caps.reason}</p>}
         <div className="mt-3 grid gap-x-8 sm:grid-cols-2">
           <div>
-            <CapRow label="Funded payments (Checkout)" on={caps.payments} />
-            <CapRow label="Parent onboarding" on={caps.connectOnboarding} />
-            <CapRow label="Financial accounts" on={caps.treasury} />
+            <CapRow label={t('adminStripe.fundedPaymentsCheckout')} on={caps.payments} />
+            <CapRow label={t('adminStripe.parentOnboarding')} on={caps.connectOnboarding} />
+            <CapRow label={t('adminStripe.financialAccounts')} on={caps.treasury} />
           </div>
           <div>
-            <CapRow label="Card issuing" on={caps.issuing} />
-            <CapRow label="Physical cards" on={caps.physicalCards} />
-            <CapRow label="Custom card designs" on={caps.customCardDesigns} />
+            <CapRow label={t('adminStripe.cardIssuing')} on={caps.issuing} />
+            <CapRow label={t('adminStripe.physicalCards')} on={caps.physicalCards} />
+            <CapRow label={t('adminStripe.customCardDesigns')} on={caps.customCardDesigns} />
           </div>
         </div>
       </Card>
 
       {/* Aggregate stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Stat label="Onboarded families" value={`${enabledAccounts}/${acctRows.length}`} icon={ShieldCheck} tone="success" />
-        <Stat label="Financial accounts" value={financialCount ?? 0} icon={Landmark} />
-        <Stat label="Active cards" value={activeCards} icon={CreditCard} />
-        <Stat label="Declines (recent)" value={declined.length} icon={AlertTriangle} tone={declined.length ? 'warning' : 'neutral'} />
-        <Stat label="Webhook errors" value={webhookErrors} icon={Radio} tone={webhookErrors ? 'danger' : 'success'} />
+        <Stat label={t('adminStripe.onboardedFamilies')} value={`${enabledAccounts}/${acctRows.length}`} icon={ShieldCheck} tone="success" />
+        <Stat label={t('adminStripe.financialAccounts')} value={financialCount ?? 0} icon={Landmark} />
+        <Stat label={t('adminStripe.activeCards')} value={activeCards} icon={CreditCard} />
+        <Stat label={t('adminStripe.declinesRecent')} value={declined.length} icon={AlertTriangle} tone={declined.length ? 'warning' : 'neutral'} />
+        <Stat label={t('adminStripe.webhookErrors')} value={webhookErrors} icon={Radio} tone={webhookErrors ? 'danger' : 'success'} />
       </div>
 
       {/* Feature flags */}
       <Card className="p-5">
-        <h2 className="mb-3 font-semibold">Feature flags</h2>
+        <h2 className="mb-3 font-semibold">{t('adminStripe.featureFlags')}</h2>
         <div className="space-y-1">
           {MONEY_FLAG_KEYS.map((k) => {
             const on = flagOn.get(k) ?? false;
@@ -156,14 +158,14 @@ export default async function AdminStripeMoneyPage() {
             );
           })}
         </div>
-        <p className="mt-3 text-xs text-muted">Toggle these in the database (service role) once your Stripe account has the matching capability approved.</p>
+        <p className="mt-3 text-xs text-muted">{t('adminStripe.toggleTheseInTheDatabaseService')}</p>
       </Card>
 
       {/* Recent authorizations */}
       <Card className="p-5">
-        <h2 className="mb-3 font-semibold">Recent card authorizations</h2>
+        <h2 className="mb-3 font-semibold">{t('adminStripe.recentCardAuthorizations')}</h2>
         {authRows.length === 0 ? (
-          <p className="text-sm text-muted">No authorizations yet.</p>
+          <p className="text-sm text-muted">{t('adminStripe.noAuthorizationsYet')}</p>
         ) : (
           <div className="space-y-1">
             {authRows.map((a, i) => (
@@ -184,15 +186,16 @@ export default async function AdminStripeMoneyPage() {
   );
 }
 
-function AdminStripeReadError() {
+async function AdminStripeReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold">Money - Stripe Financial Mode</h1>
-        <p className="mt-1 text-sm text-muted">Platform oversight for Stripe financial capabilities.</p>
+        <h1 className="text-2xl font-bold">{t('stripe.moneyStripeFinancialMode')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('stripe.platformOversightForStripeFinancial')}</p>
       </div>
-      <ErrorState message="Could not load Stripe financial data from Supabase. Refresh and try again." />
-      <a href="/admin/stripe" className="text-sm font-medium text-brand-text underline">Refresh Stripe overview</a>
+      <ErrorState message={t('stripe.couldNotLoadStripeFinancial')} />
+      <a href="/admin/stripe" className="text-sm font-medium text-brand-text underline">{t('stripe.refreshStripeOverview')}</a>
     </div>
   );
 }

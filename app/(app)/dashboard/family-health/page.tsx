@@ -8,11 +8,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDateTime } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Health' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyHealthPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -40,7 +42,7 @@ export default async function FamilyHealthPage() {
     .find((e) => e && !isMissingTableError(e));
   if (healthError) {
     console.error('[dashboard/family-health] health read failed', healthError);
-    return <ErrorState message="Could not load your family health summary from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyHealth.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -53,17 +55,17 @@ export default async function FamilyHealthPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Family Health Coordinator" description="Appointments, medications, providers and emergency medical summaries." />
+      <PageHeader title={t('dashboardFamilyHealth.familyHealthCoordinator')} description={t('familyHealth.appointmentsMedicationsProvidersAndEmergency')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile href="/dashboard/medical" label="Appts (30d)" value={appts?.length ?? 0} icon={CalendarHeart} accent="bg-rose-500" sublabel="Medical" />
-        <StatTile href="/dashboard/medical" label="Active meds" value={meds?.length ?? 0} icon={Pill} accent="bg-violet-600" sublabel="Medications" />
-        <StatTile href="/dashboard/medical" label="Providers" value={providers?.length ?? 0} icon={Stethoscope} accent="bg-blue-600" sublabel="Doctors" />
-        <StatTile href="/dashboard/family-emergency" label="Emergency" value="Card" icon={ShieldPlus} accent="bg-emerald-600" sublabel="Med summary" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.appts30d')} value={appts?.length ?? 0} icon={CalendarHeart} accent="bg-rose-500" sublabel="Medical" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.activeMeds')} value={meds?.length ?? 0} icon={Pill} accent="bg-violet-600" sublabel="Medications" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.providers')} value={providers?.length ?? 0} icon={Stethoscope} accent="bg-blue-600" sublabel="Doctors" />
+        <StatTile href="/dashboard/family-emergency" label={t('dashboardFamilyHealth.emergency')} value="Card" icon={ShieldPlus} accent="bg-emerald-600" sublabel="Med summary" />
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="Upcoming Appointments" viewAllHref="/dashboard/medical">
+        <SectionCard title={t('dashboardFamilyHealth.upcomingAppointments')} viewAllHref="/dashboard/medical">
           {appts && appts.length > 0 ? (
             <ul className="divide-y divide-border">
               {appts.map((a) => (
@@ -77,10 +79,10 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarHeart} text="No upcoming appointments." />}
+          ) : <MiniEmpty icon={CalendarHeart} text={t('familyHealth.noUpcomingAppointments')} />}
         </SectionCard>
 
-        <SectionCard title="Active Medications" viewAllHref="/dashboard/medical">
+        <SectionCard title={t('dashboardFamilyHealth.activeMedications')} viewAllHref="/dashboard/medical">
           {meds && meds.length > 0 ? (
             <ul className="divide-y divide-border">
               {meds.map((m) => (
@@ -92,12 +94,12 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Pill} text="No active medications." />}
+          ) : <MiniEmpty icon={Pill} text={t('familyHealth.noActiveMedications')} />}
         </SectionCard>
       </div>
 
       {manager && (
-        <SectionCard title="Allergy & Condition Watch" description="Restricted summary — visible to parents and adults only">
+        <SectionCard title={t('dashboardFamilyHealth.allergyConditionWatch')} description={t('familyHealth.restrictedSummaryVisibleToParents')}>
           {profiles && profiles.length > 0 ? (
             <ul className="grid gap-3 sm:grid-cols-2">
               {profiles.filter((p) => p.allergies || p.conditions).map((p) => (
@@ -108,7 +110,7 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={ShieldPlus} text="No allergies or conditions recorded." />}
+          ) : <MiniEmpty icon={ShieldPlus} text={t('familyHealth.noAllergiesOrConditionsRecorded')} />}
         </SectionCard>
       )}
     </div>

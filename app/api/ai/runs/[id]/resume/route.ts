@@ -3,6 +3,7 @@
 // Unlike pause and cancel, a resume kicks execution, so the family must still
 // have the concierge (feature, plan, allowance) — the same gate as intake.
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { applyRunControl, statusForServiceCode } from '@/lib/ai/runs/intake';
 import { accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -11,12 +12,13 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const startedAt = Date.now();
   try {
     const authed = await authenticateAI(req);
     if (authed instanceof NextResponse) return authed;
     const { id } = await params;
-    if (!id) return NextResponse.json({ error: 'Run not found.', code: 'not_found' }, { status: 404 });
+    if (!id) return NextResponse.json({ error: t('resume.runNotFound'), code: 'not_found' }, { status: 404 });
 
     const access = await assertAIAccess(authed.ctx, { db: authed.supabase });
     if (!access.ok) return accessDeniedResponse(access);
@@ -27,6 +29,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(result.data);
   } catch (error) {
     console.error('[api/ai/runs/resume] control failed', error);
-    return NextResponse.json({ error: 'Bubaly could not update that run.', code: 'unknown' }, { status: 500 });
+    return NextResponse.json({ error: t('resume.bubalyCouldNotUpdateThat'), code: 'unknown' }, { status: 500 });
   }
 }

@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 
 export function SendCampaignButton({ id, disabled }: { id: string; disabled?: boolean }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState(false);
@@ -23,7 +25,7 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
     const ok = window.confirm(count > 0
       ? `Send this campaign to ${count} recipient${count === 1 ? '' : 's'}? This cannot be undone.`
       : 'No eligible recipients were found. Send anyway?');
-    if (!ok || count === 0) { if (count === 0) toastError('No eligible recipients.'); return; }
+    if (!ok || count === 0) { if (count === 0) toastError(t('sendCampaignButton.noEligibleRecipients')); return; }
 
     setBusy(true);
     try {
@@ -35,7 +37,7 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
       success(`Sent to ${json.sent} recipient${json.sent === 1 ? '' : 's'}.`);
       router.refresh();
     } catch {
-      toastError('Network error. Please try again.');
+      toastError(t('sendCampaignButton.networkErrorPleaseTryAgain'));
     } finally {
       setBusy(false);
     }

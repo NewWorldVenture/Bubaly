@@ -19,6 +19,7 @@ import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
 } from '@/lib/celebrations/dates';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type FamilyDate = Tables<'family_dates'>;
 
@@ -33,6 +34,7 @@ const KIND_TINT: Record<CelebrationKind, string> = {
 };
 
 export function CelebrationsModule() {
+  const t = useTranslations();
   const { familyId, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -72,21 +74,21 @@ export function CelebrationsModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Celebration added');
+    success(t('celebrationsModule.celebrationAdded'));
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
 
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('celebrationsModule.removed'));
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Celebrations"
-        description="Never miss a birthday or anniversary."
+        title={t('celebrations.celebrations')}
+        description={t('celebrationsModule.neverMissABirthdayOr')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="celebrations" iconOnly />
@@ -98,9 +100,9 @@ export function CelebrationsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load celebrations. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('celebrationsModule.couldNotLoadCelebrationsRefresh')} onRetry={refresh} />
       ) : upcoming.length === 0 ? (
-        <EmptyState icon={Gift} title="No upcoming celebrations" description="Add birthdays in family member profiles, or add a custom date here." />
+        <EmptyState icon={Gift} title={t('celebrations.noUpcomingCelebrations')} description={t('celebrationsModule.addBirthdaysInFamilyMember')} />
       ) : (
         <ul className="space-y-2">
           {upcoming.map((c) => {
@@ -111,7 +113,7 @@ export function CelebrationsModule() {
               <li key={c.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${soon ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40'}`}>
                 <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${KIND_TINT[c.kind]}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">· turning {c.turning}</span> : null}</p>
+                  <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">{t('celebrations.turning')} {c.turning}</span> : null}</p>
                   <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
@@ -125,20 +127,20 @@ export function CelebrationsModule() {
         </ul>
       )}
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add a celebration">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={t('celebrations.addACelebration')}>
         <form onSubmit={add} className="space-y-4">
-          <Field label="What are we celebrating?" required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mom & Dad's anniversary" required />}</Field>
-          <Field label="Type">{(id) => (
+          <Field label={t('celebrations.whatAreWeCelebrating')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('celebrationsModule.eGMomDadS')} required />}</Field>
+          <Field label={t('celebrations.type')}>{(id) => (
             <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as CelebrationKind)}>
-              <option value="birthday">Birthday</option>
-              <option value="anniversary">Anniversary</option>
-              <option value="holiday">Holiday</option>
-              <option value="other">Other</option>
+              <option value="birthday">{t('celebrations.birthday')}</option>
+              <option value="anniversary">{t('celebrations.anniversary')}</option>
+              <option value="holiday">{t('celebrations.holiday')}</option>
+              <option value="other">{t('celebrations.other')}</option>
             </Select>
           )}</Field>
-          <Field label="Date" required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}</Field>
+          <Field label={t('celebrations.date')} required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}</Field>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>{t('celebrations.cancel')}</Button>
             <Button type="submit" loading={saving}><Plus className="h-4 w-4" /> Add</Button>
           </div>
         </form>

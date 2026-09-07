@@ -5,6 +5,7 @@ import { PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -14,12 +15,14 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, budgetSpent, pct, type Period } from '@/lib/finance/hub';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Budget = Tables<'budgets'>;
 type Txn = Tables<'transactions'>;
 const CATEGORIES = ['Groceries', 'Dining', 'Transport', 'Entertainment', 'Shopping', 'Utilities', 'Health', 'Kids', 'Other'];
 
 export function BudgetsView() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -37,19 +40,19 @@ export function BudgetsView() {
   const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
 
   async function remove(id: string) {
-    if (!confirm('Delete this budget?')) return;
-    const { error } = await createClient().from('budgets').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (!confirm(t('budgetsView.deleteThisBudget'))) return;
+    const res = await deleteBudgetAction(id);
+    if (!res.ok) toastError(res.error); else success(t('budgetsView.deleted'));
   }
 
   return (
     <div className="module-page">
-      <PageHeader title="Budget Planner" description="Set category budgets and track spending against them."
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add budget</Button>} />
+      <PageHeader title={t('budgets.budgetPlanner')} description={t('budgetsView.setCategoryBudgetsAndTrack')}
+        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
 
       {loading ? <SkeletonList /> : rows.length === 0 ? (
-        <EmptyState icon={PiggyBank} title="No budgets yet" description="Create a budget for a spending category to track it."
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add budget</Button>} />
+        <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description={t('budgetsView.createABudgetForA')}
+          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map((b) => {
@@ -63,7 +66,7 @@ export function BudgetsView() {
                     <p className="font-semibold">{b.category}</p>
                     <p className="text-xs capitalize text-muted">{b.period}</p>
                   </div>
-                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('budgetsView.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
                   <span className={cn('font-bold tabular-nums', over ? 'text-rose-400' : 'text-fg')}>{usd(spent)}</span>
@@ -85,6 +88,7 @@ export function BudgetsView() {
 }
 
 function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string; userId: string; existing: string[]; onClose: () => void }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const avail = CATEGORIES.filter((c) => !existing.includes(c));
@@ -92,27 +96,28 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.amount) return toastError('Add an amount');
+    if (!v.amount) return toastError(t('budgetsView.addAnAmount'));
     setSaving(true);
-    const { error } = await createClient().from('budgets').insert({
-      family_id: familyId, category: v.category, amount: Math.abs(parseFloat(v.amount) || 0), period: v.period as Period, created_by: userId,
-    });
+    // SETS the category's budget rather than inserting another row: the raw
+    // insert let a family end up with two Groceries budgets, each reporting the
+    // other's spend as unbudgeted.
+    const res = await setBudgetAction(v.category, Math.abs(parseFloat(v.amount) || 0), v.period as Period);
     setSaving(false);
-    if (error) return toastError(error.message);
-    success('Budget added');
+    if (!res.ok) return toastError(res.error);
+    success(t('budgetsView.budgetAdded'));
     onClose();
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Budget">
+    <Modal open onClose={onClose} title={t('budgets.addBudget')}>
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{(avail.length ? avail : CATEGORIES).map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-          <Field label="Period">{(id) => <Select id={id} value={v.period} onChange={(e) => setV({ ...v, period: e.target.value })}>{['weekly', 'monthly', 'yearly'].map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}</Select>}</Field>
+          <Field label={t('budgets.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{(avail.length ? avail : CATEGORIES).map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+          <Field label={t('budgets.period')}>{(id) => <Select id={id} value={v.period} onChange={(e) => setV({ ...v, period: e.target.value })}>{['weekly', 'monthly', 'yearly'].map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}</Select>}</Field>
         </div>
-        <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="500" required autoFocus />}</Field>
+        <Field label={t('budgets.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="500" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('budgets.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.amount}>Add</Button>
         </div>
       </form>

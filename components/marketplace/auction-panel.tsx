@@ -15,6 +15,7 @@ import {
   type AuctionListing,
 } from '@/lib/marketplace/auction';
 import { placeBidAction, buyNowAction } from '@/app/(app)/marketplace/auctions/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Bid = { id: string; bidder_family_id: string; amount_cents: number; status: string; created_at: string; is_auto: boolean };
 
@@ -29,6 +30,7 @@ export function AuctionPanel({
   initial: AuctionListing & { highestBidderFamilyId: string | null };
   initialBids: Bid[];
 }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -93,7 +95,7 @@ export function AuctionPanel({
     startTransition(async () => {
       const res = await buyNowAction(listingId);
       if (!res.ok) { toastError(res.error); return; }
-      success('Bought! Check your orders to arrange pickup.');
+      success(tr('auctionPanel.boughtCheckYourOrdersTo'));
       router.refresh();
     });
   }
@@ -103,13 +105,13 @@ export function AuctionPanel({
   return (
     <div className={cn('rounded-2xl border-2 bg-gradient-to-br from-brand/[0.07] to-surface/40 p-5', toneRing)}>
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-        <Gavel className="h-4 w-4 text-brand-text" /> Auction
+        <Gavel className="h-4 w-4 text-brand-text" /> {tr('auction.auction')}
         {status === 'ending_soon' && (
           <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-400">
-            <Flame className="h-3 w-3" /> Ending soon
+            <Flame className="h-3 w-3" /> {tr('auction.endingSoon')}
           </span>
         )}
-        {status === 'scheduled' && <span className="ml-auto text-xs font-semibold text-muted">Starts soon</span>}
+        {status === 'scheduled' && <span className="ml-auto text-xs font-semibold text-muted">{tr('auction.startsSoon')}</span>}
       </div>
 
       {/* Current bid + countdown */}
@@ -131,7 +133,7 @@ export function AuctionPanel({
           <p className={cn('text-xl font-bold tabular-nums', status === 'ending_soon' ? 'text-rose-400' : 'text-fg')}>
             {status === 'ended' ? 'Ended' : timeLeft(a.auctionEndsAt, now)}
           </p>
-          {iLead && live && <p className="mt-0.5 text-xs font-bold text-emerald-400">You’re winning 🏆</p>}
+          {iLead && live && <p className="mt-0.5 text-xs font-bold text-emerald-400">{tr('auction.youreWinning')}</p>}
         </div>
       </div>
 
@@ -164,12 +166,12 @@ export function AuctionPanel({
             </button>
           </div>
           <p className="flex items-center gap-1 text-[11px] text-muted">
-            <ShieldCheck className="h-3 w-3" /> Enter your max — we bid the minimum to keep you ahead, and only reveal more if someone challenges.
+            <ShieldCheck className="h-3 w-3" /> {tr('auction.enterYourMaxWeBidThe')}
           </p>
           {a.buyNowCents != null && (
             <button onClick={buyNow} disabled={pending}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 text-sm font-bold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50">
-              <Zap className="h-4 w-4" /> Buy it now for {money(a.buyNowCents)}
+              <Zap className="h-4 w-4" /> {tr('auction.buyItNowFor')} {money(a.buyNowCents)}
             </button>
           )}
         </div>
@@ -177,7 +179,7 @@ export function AuctionPanel({
 
       {isOwner && live && (
         <p className="mt-4 rounded-xl border border-border bg-surface/50 p-3 text-xs text-muted">
-          This is your family’s auction — sit back and watch the bids come in.
+          {tr('auction.thisIsYourFamilysAuctionSit')}
         </p>
       )}
       {status === 'ended' && (
@@ -191,7 +193,7 @@ export function AuctionPanel({
       {/* Bid history */}
       {bids.length > 0 && (
         <div className="mt-4 border-t border-border/50 pt-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Bid history</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{tr('auction.bidHistory')}</p>
           <ul className="max-h-40 space-y-1 overflow-y-auto">
             {bids.map((b) => (
               <li key={b.id} className="flex items-center justify-between text-xs">

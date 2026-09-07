@@ -24,6 +24,7 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
@@ -77,6 +78,7 @@ function timeLeft(iso: string) {
 }
 
 export function TrustModule({ data, canManage }: { data: TrustData; canManage: boolean }) {
+  const tr = useTranslations();
   const [tab, setTab] = useState<Tab>('approvals');
   const pendingApprovals = data.approvals.filter(a => a.status === 'pending');
   const activeEmergency = data.emergencies[0] ?? null;
@@ -93,9 +95,9 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
   return (
     <div className="module-page">
       <PageHeader
-        title="Trust & Permissions"
-        description="The household policy engine that governs every AI action and family member — least-privilege by default, fully overridable."
-        action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text"><ShieldCheck className="h-3.5 w-3.5" /> Trust Engine</div>}
+        title={tr('trust.trustPermissions')}
+        description={tr('trustModule.theHouseholdPolicyEngineThat')}
+        action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text"><ShieldCheck className="h-3.5 w-3.5" /> {tr('trust.trustEngine')}</div>}
       />
 
       {/* Emergency banner */}
@@ -103,8 +105,8 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4">
           <Siren className="h-5 w-5 flex-shrink-0 text-rose-400 animate-pulse" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-rose-300">Emergency Mode active — {activeEmergency.kind.replace('_', ' ')}</p>
-            <p className="text-xs text-muted">Permissions are temporarily elevated for: {activeEmergency.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}. Every action is logged.</p>
+            <p className="text-sm font-bold text-rose-300">{tr('trust.emergencyModeActive')} {activeEmergency.kind.replace('_', ' ')}</p>
+            <p className="text-xs text-muted">{tr('trust.permissionsAreTemporarilyElevatedFor')} {activeEmergency.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}{tr('trust.everyActionIsLogged')}</p>
           </div>
           {canManage && <EndEmergencyButton id={activeEmergency.id} />}
         </div>
@@ -149,6 +151,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 
 // ─── Approvals inbox ──────────────────────────────────────────────────────────
 function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]; members: Member[]; canManage: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
   // re-syncs the counts and the "Recently decided" list from the server.
@@ -163,7 +166,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
   return (
     <div className="space-y-4">
       {pending.length === 0 ? (
-        <EmptyCard icon={Check} title="No approvals waiting" sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
+        <EmptyCard icon={Check} title={tr('trust.noApprovalsWaiting')} sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
       ) : (
         <div className="space-y-2.5">
           {pending.map(a => (
@@ -182,7 +185,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
 
       {decided.length > 0 && (
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recently decided</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{tr('trust.recentlyDecided')}</h3>
           <div className="space-y-1.5">
             {decided.map(a => (
               <div key={a.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5">
@@ -200,6 +203,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
 
 // ─── Policies ────────────────────────────────────────────────────────────────
 function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; members: Member[]; canManage: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<Policy | null>(null);
@@ -220,7 +224,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     const res = await deletePolicyAction({ id: p.id });
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not delete');
-    success('Policy deleted'); router.refresh();
+    success(tr('trustModule.policyDeleted')); router.refresh();
   }
 
   function subjectLabel(p: Policy) {
@@ -234,11 +238,11 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     <div className="space-y-4">
       {canManage && (
         <div className="flex justify-end">
-          <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> New Policy</Button>
+          <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {tr('trust.newPolicy')}</Button>
         </div>
       )}
       {policies.length === 0 ? (
-        <EmptyCard icon={Scale} title="No policies yet"
+        <EmptyCard icon={Scale} title={tr('trust.noPoliciesYet')}
           sub={'Define rules like "Auto-approve appointments under $50" or "Only Mom can approve overnight events." The AI evaluates them before every action.'} />
       ) : (
         <div className="space-y-2">
@@ -256,7 +260,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                     <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60 capitalize">{p.capability}</span>
                     <span>· {subjectLabel(p)}</span>
                     {p.effect === 'require_approval' && <span>· {p.required_approvals} approval{p.required_approvals > 1 ? 's' : ''} ({p.approval_model.replace('_', ' ')})</span>}
-                    <span>· priority {p.priority}</span>
+                    <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
                     <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions)}</div>
@@ -268,8 +272,8 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                       className={cn('relative h-5 w-9 rounded-full transition', p.enabled ? 'bg-brand' : 'bg-elevated')}>
                       <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all', p.enabled ? 'left-[18px]' : 'left-0.5')} />
                     </button>
-                    <button onClick={() => setEditing(p)} className="rounded p-1 text-muted hover:text-fg" title="Edit"><ChevronRight className="h-4 w-4" /></button>
-                    <button onClick={() => remove(p)} className="rounded p-1 text-muted hover:text-red-400" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setEditing(p)} className="rounded p-1 text-muted hover:text-fg" title={tr('trust.edit')}><ChevronRight className="h-4 w-4" /></button>
+                    <button onClick={() => remove(p)} className="rounded p-1 text-muted hover:text-red-400" title={tr('trust.delete')}><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </div>
@@ -297,6 +301,7 @@ function conditionSummary(c: Record<string, unknown>): string {
 function PolicyModal({ policy, members, onClose, onSaved }: {
   policy: Policy | null; members: Member[]; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [subjectKind, setSubjectKind] = useState(policy?.subject_kind ?? 'everyone');
@@ -340,49 +345,49 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
   return (
     <Modal open title={policy ? 'Edit Policy' : 'New Policy'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Name" required>{id => <Input id={id} name="name" autoFocus defaultValue={policy?.name ?? ''} placeholder="Auto-approve appointments under $50" />}</Field>
-        <Field label="Description">{id => <Input id={id} name="description" defaultValue={policy?.description ?? ''} placeholder="Optional — explain the intent" />}</Field>
+        <Field label={tr('trust.name')} required>{id => <Input id={id} name="name" autoFocus defaultValue={policy?.name ?? ''} placeholder={tr('trust.autoApproveAppointmentsUnder50')} />}</Field>
+        <Field label={tr('trust.description')}>{id => <Input id={id} name="description" defaultValue={policy?.description ?? ''} placeholder={tr('trust.optionalExplainTheIntent')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Domain">{id => (
+          <Field label={tr('trust.domain')}>{id => (
             <Select id={id} name="domain" defaultValue={policy?.domain ?? 'all'}>
-              <option value="all">All domains</option>
+              <option value="all">{tr('trust.allDomains')}</option>
               {TRUST_DOMAINS.map(d => <option key={d} value={d}>{DOMAIN_LABELS[d]}</option>)}
             </Select>
           )}</Field>
-          <Field label="Capability">{id => (
+          <Field label={tr('trust.capability')}>{id => (
             <Select id={id} name="capability" defaultValue={policy?.capability ?? 'automate'}>
-              <option value="all">All actions</option>
+              <option value="all">{tr('trust.allActions')}</option>
               {CAPABILITIES.map(cap => <option key={cap} value={cap}>{CAPABILITY_LABELS[cap]}</option>)}
             </Select>
           )}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Applies to">{id => (
+          <Field label={tr('trust.appliesTo')}>{id => (
             <Select id={id} name="subjectKind" value={subjectKind} onChange={e => setSubjectKind(e.target.value)}>
-              <option value="everyone">Everyone</option>
-              <option value="ai">AI agents</option>
-              <option value="role">A role</option>
-              <option value="member">A specific member</option>
+              <option value="everyone">{tr('trust.everyone')}</option>
+              <option value="ai">{tr('trust.aiAgents')}</option>
+              <option value="role">{tr('trust.aRole')}</option>
+              <option value="member">{tr('trust.aSpecificMember')}</option>
             </Select>
           )}</Field>
-          <Field label="Effect">{id => (
+          <Field label={tr('trust.effect')}>{id => (
             <Select id={id} name="effect" value={effect} onChange={e => setEffect(e.target.value)}>
-              <option value="allow">Allow</option>
+              <option value="allow">{tr('trust.allow')}</option>
               <option value="auto_approve">Auto-approve</option>
-              <option value="require_approval">Require approval</option>
-              <option value="deny">Deny</option>
+              <option value="require_approval">{tr('trust.requireApproval')}</option>
+              <option value="deny">{tr('trust.deny')}</option>
             </Select>
           )}</Field>
         </div>
         {subjectKind === 'role' && (
-          <Field label="Role">{id => (
+          <Field label={tr('trust.role')}>{id => (
             <Select id={id} name="subjectRole" defaultValue={policy?.subject_role ?? 'teen'}>
               {(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'] as TrustRole[]).map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
             </Select>
           )}</Field>
         )}
         {subjectKind === 'member' && (
-          <Field label="Member">{id => (
+          <Field label={tr('trust.member')}>{id => (
             <Select id={id} name="subjectMemberId" defaultValue={policy?.subject_member_id ?? members[0]?.id}>
               {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
@@ -393,31 +398,31 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
             {/* Only models the engine actually enforces are offered.
                 "First available" was the same rule as Single, and nothing has
                 ever ordered approvers, so Sequential was a label on a count. */}
-            <Field label="Approval model">{id => (
+            <Field label={tr('trust.approvalModel')}>{id => (
               <Select id={id} name="approvalModel" defaultValue={policy?.approval_model ?? 'single'}>
-                <option value="single">Single approver</option>
-                <option value="two_parent">Two parents</option>
-                <option value="consensus">Every parent and adult</option>
+                <option value="single">{tr('trust.singleApprover')}</option>
+                <option value="two_parent">{tr('trust.twoParents')}</option>
+                <option value="consensus">{tr('trust.everyParentAndAdult')}</option>
               </Select>
             )}</Field>
             {/* The model sets the floor; this can only raise it. */}
-            <Field label="At least this many">{id => <Input id={id} name="requiredApprovals" type="number" min="1" max="5" defaultValue={policy?.required_approvals ?? 1} />}</Field>
+            <Field label={tr('trust.atLeastThisMany')}>{id => <Input id={id} name="requiredApprovals" type="number" min="1" max="5" defaultValue={policy?.required_approvals ?? 1} />}</Field>
           </div>
         )}
         <div className="rounded-xl border border-border bg-surface/40 p-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Conditions (optional)</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{tr('trust.conditionsOptional')}</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Max amount ($)">{id => <Input id={id} name="maxAmount" type="number" min="0" step="5" defaultValue={typeof c.maxAmountCents === 'number' ? (c.maxAmountCents / 100).toString() : ''} placeholder="50" />}</Field>
-            <Field label="Min AI confidence (%)">{id => <Input id={id} name="minConfidence" type="number" min="0" max="100" defaultValue={typeof c.minConfidence === 'number' ? Math.round((c.minConfidence as number) * 100).toString() : ''} placeholder="95" />}</Field>
+            <Field label={tr('trust.maxAmount')}>{id => <Input id={id} name="maxAmount" type="number" min="0" step="5" defaultValue={typeof c.maxAmountCents === 'number' ? (c.maxAmountCents / 100).toString() : ''} placeholder="50" />}</Field>
+            <Field label={tr('trust.minAiConfidence')}>{id => <Input id={id} name="minConfidence" type="number" min="0" max="100" defaultValue={typeof c.minConfidence === 'number' ? Math.round((c.minConfidence as number) * 100).toString() : ''} placeholder="95" />}</Field>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-3">
-            <Field label="Time from">{id => <Input id={id} name="timeStart" type="time" defaultValue={typeof c.timeStart === 'string' ? c.timeStart : ''} />}</Field>
-            <Field label="Time to">{id => <Input id={id} name="timeEnd" type="time" defaultValue={typeof c.timeEnd === 'string' ? c.timeEnd : ''} />}</Field>
+            <Field label={tr('trust.timeFrom')}>{id => <Input id={id} name="timeStart" type="time" defaultValue={typeof c.timeStart === 'string' ? c.timeStart : ''} />}</Field>
+            <Field label={tr('trust.timeTo')}>{id => <Input id={id} name="timeEnd" type="time" defaultValue={typeof c.timeEnd === 'string' ? c.timeEnd : ''} />}</Field>
           </div>
         </div>
-        <Field label="Priority (higher wins)">{id => <Input id={id} name="priority" type="number" min="0" max="1000" defaultValue={policy?.priority ?? 100} />}</Field>
+        <Field label={tr('trust.priorityHigherWins')}>{id => <Input id={id} name="priority" type="number" min="0" max="1000" defaultValue={policy?.priority ?? 100} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('trust.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : policy ? 'Save Policy' : 'Create Policy'}</Button>
         </div>
       </form>
@@ -430,6 +435,7 @@ const KEY_DOMAINS = ['medical', 'finances', 'calendar', 'transportation', 'docum
 const KEY_CAPS: Capability[] = ['view', 'edit', 'approve', 'automate'];
 
 function PermissionsTab({ members, grants, canManage }: { members: Member[]; grants: Grant[]; canManage: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
   const [selected, setSelected] = useState<string>(members[0]?.id ?? '');
@@ -480,7 +486,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-muted">
-                <th className="px-3 py-2.5 text-left font-semibold">Domain</th>
+                <th className="px-3 py-2.5 text-left font-semibold">{tr('trust.domain')}</th>
                 {KEY_CAPS.map(c => <th key={c} className="px-2 py-2.5 text-center font-semibold">{CAPABILITY_LABELS[c]}</th>)}
               </tr>
             </thead>
@@ -520,8 +526,8 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
       <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted">
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-green-500/40 bg-green-500/15 text-green-400"><Check className="h-3 w-3" /></span> allowed</span>
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-red-500/40 bg-red-500/15 text-red-400"><X className="h-3 w-3" /></span> blocked</span>
-        <span className="flex items-center gap-1"><span className="text-amber-400/60">~</span> needs approval (role default)</span>
-        <span>· faded = role default, solid = explicit override{canManage ? ' (tap to change)' : ''}</span>
+        <span className="flex items-center gap-1"><span className="text-amber-400/60">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
+        <span>{tr('trust.fadedRoleDefaultSolidExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
       </div>
     </div>
   );
@@ -529,6 +535,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
 // ─── Delegations ─────────────────────────────────────────────────────────────
 function DelegationsTab({ delegations, members, canManage }: { delegations: Delegation[]; members: Member[]; canManage: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [adding, setAdding] = useState(false);
@@ -540,14 +547,14 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
     const res = await revokeDelegationAction({ id });
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not revoke');
-    success('Delegation revoked'); router.refresh();
+    success(tr('trustModule.delegationRevoked')); router.refresh();
   }
 
   return (
     <div className="space-y-4">
-      {canManage && <div className="flex justify-end"><Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> New Delegation</Button></div>}
+      {canManage && <div className="flex justify-end"><Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {tr('trust.newDelegation')}</Button></div>}
       {delegations.length === 0 ? (
-        <EmptyCard icon={Share2} title="No active delegations"
+        <EmptyCard icon={Share2} title={tr('trust.noActiveDelegations')}
           sub={'Temporarily hand off authority — e.g. "Grandma manages transportation until Friday." Delegations always expire automatically.'} />
       ) : (
         <div className="space-y-2">
@@ -560,7 +567,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
                   {d.domains.length ? d.domains.map(x => DOMAIN_LABELS[x] ?? x).join(', ') : 'All delegable domains'}
                   {d.reason ? ` · ${d.reason}` : ''}
                 </p>
-                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400"><Clock className="h-3 w-3" /> {timeLeft(d.expires_at)} · expires {fmtWhen(d.expires_at)}</p>
+                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400"><Clock className="h-3 w-3" /> {timeLeft(d.expires_at)} {tr('trust.expires')} {fmtWhen(d.expires_at)}</p>
               </div>
               {canManage && (
                 <button onClick={() => revoke(d.id)} disabled={busy === d.id} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition">
@@ -577,6 +584,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
 }
 
 function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
@@ -593,8 +601,8 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
     const toMemberId = String(form.get('to') ?? '');
     const reason = String(form.get('reason') ?? '').trim();
     const expiresAt = String(form.get('expiresAt') ?? '');
-    if (!fromMemberId || !toMemberId) return toastError('Pick both members');
-    if (!expiresAt) return toastError('Pick an expiry');
+    if (!fromMemberId || !toMemberId) return toastError(tr('trustModule.pickBothMembers'));
+    if (!expiresAt) return toastError(tr('trustModule.pickAnExpiry'));
     setLoading(true);
     const res = await createDelegationAction({ fromMemberId, toMemberId, domains, reason, expiresAt: new Date(expiresAt).toISOString() });
     setLoading(false);
@@ -603,14 +611,14 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
   }
 
   return (
-    <Modal open title="New Delegation" onClose={onClose}>
+    <Modal open title={tr('trust.newDelegation')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From">{id => <Select id={id} name="from" defaultValue={members[0]?.id}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</Select>}</Field>
+          <Field label={tr('trust.from')}>{id => <Select id={id} name="from" defaultValue={members[0]?.id}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</Select>}</Field>
           <Field label="To">{id => <Select id={id} name="to" defaultValue={members[1]?.id ?? members[0]?.id}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</Select>}</Field>
         </div>
         <div>
-          <p className="mb-1.5 text-sm font-medium">Domains <span className="text-xs text-muted">(none = all delegable)</span></p>
+          <p className="mb-1.5 text-sm font-medium">{tr('trust.domains')} <span className="text-xs text-muted">{tr('trust.noneAllDelegable')}</span></p>
           <div className="flex flex-wrap gap-1.5">
             {['transportation', 'medical', 'calendar', 'chores', 'shopping', 'meal_planning', 'school_forms', 'pets'].map(d => (
               <button key={d} type="button" onClick={() => toggleDomain(d)}
@@ -621,10 +629,10 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
             ))}
           </div>
         </div>
-        <Field label="Reason">{id => <Input id={id} name="reason" placeholder="Business trip, hospital stay…" />}</Field>
-        <Field label="Expires" required>{id => <Input id={id} name="expiresAt" type="datetime-local" />}</Field>
+        <Field label={tr('trust.reason')}>{id => <Input id={id} name="reason" placeholder={tr('trust.businessTripHospitalStay')} />}</Field>
+        <Field label={tr('trust.expires')} required>{id => <Input id={id} name="expiresAt" type="datetime-local" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('trust.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Creating…' : 'Delegate'}</Button>
         </div>
       </form>
@@ -634,6 +642,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
 function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -648,7 +657,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     const res = await activateEmergencyAction({ kind, reason: undefined, elevatedDomains: domains });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not activate');
-    success('Emergency mode activated'); router.refresh();
+    success(tr('trustModule.emergencyModeActivated')); router.refresh();
   }
   async function end() {
     if (!active || loading) return;
@@ -656,20 +665,20 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     const res = await endEmergencyAction({ id: active.id });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not end');
-    success('Emergency mode ended'); router.refresh();
+    success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
 
   if (active) {
     return (
       <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
         <Siren className="mx-auto mb-3 h-10 w-10 text-rose-400 animate-pulse" />
-        <p className="text-lg font-bold text-rose-300">Emergency Mode is active</p>
-        <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} · since {fmtWhen(active.activated_at)}</p>
+        <p className="text-lg font-bold text-rose-300">{tr('trust.emergencyModeIsActive')}</p>
+        <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
         <p className="mt-2 text-xs text-muted">Elevated: {active.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}</p>
         {/* Elevation outranks every other rule, so when it stops is part of what
             is active — not a detail to discover later. */}
-        {active.expires_at && <p className="mt-1 text-xs text-muted">Ends on its own {fmtWhen(active.expires_at)}</p>}
-        {canManage && <button onClick={end} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} End Emergency Mode</button>}
+        {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at)}</p>}
+        {canManage && <button onClick={end} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} {tr('trust.endEmergencyMode')}</button>}
       </div>
     );
   }
@@ -679,21 +688,21 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="flex items-center gap-2 mb-1">
           <Siren className="h-5 w-5 text-rose-400" />
-          <p className="text-sm font-bold">Emergency Operations Mode</p>
+          <p className="text-sm font-bold">{tr('trust.emergencyOperationsMode')}</p>
         </div>
-        <p className="text-xs text-muted">Temporarily elevate permissions so the family can act fast during a crisis. Every action taken under Emergency Mode is fully logged and reviewable.</p>
+        <p className="text-xs text-muted">{tr('trustModule.temporarilyElevatePermissionsSoThe')}</p>
         {!canManage ? (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> Only a parent or adult can activate Emergency Mode.</p>
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {tr('trust.onlyAParentOrAdultCan')}</p>
         ) : (
           <>
             <div className="mt-4">
-              <p className="mb-1.5 text-xs font-semibold">Type</p>
+              <p className="mb-1.5 text-xs font-semibold">{tr('trust.type')}</p>
               <Select value={kind} onChange={e => setKind(e.target.value)}>
                 {[['medical', 'Medical emergency'], ['missing_person', 'Missing person'], ['severe_weather', 'Severe weather'], ['natural_disaster', 'Natural disaster'], ['vehicle_accident', 'Vehicle accident'], ['general', 'General']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </Select>
             </div>
             <div className="mt-3">
-              <p className="mb-1.5 text-xs font-semibold">Elevate these domains</p>
+              <p className="mb-1.5 text-xs font-semibold">{tr('trust.elevateTheseDomains')}</p>
               <div className="flex flex-wrap gap-1.5">
                 {['medical', 'transportation', 'phone_calls', 'documents', 'calendar', 'finances', 'emergency'].map(d => (
                   <button key={d} type="button" onClick={() => toggleDomain(d)}
@@ -706,7 +715,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
             </div>
             <button onClick={activate} disabled={loading || domains.length === 0}
               className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600 transition disabled:opacity-50">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Siren className="h-4 w-4" />} Activate Emergency Mode
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Siren className="h-4 w-4" />} {tr('trust.activateEmergencyMode')}
             </button>
           </>
         )}
@@ -717,8 +726,9 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
 function AuditTab({ audit, members }: { audit: Audit[]; members: Member[] }) {
+  const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
-  if (audit.length === 0) return <EmptyCard icon={ScrollText} title="No activity yet" sub="Every trust decision — allow, deny, approval, emergency override — is recorded here with its reasoning." />;
+  if (audit.length === 0) return <EmptyCard icon={ScrollText} title={tr('trust.noActivityYet')} sub="Every trust decision — allow, deny, approval, emergency override — is recorded here with its reasoning." />;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface/30 divide-y divide-border/50">
       {audit.map(a => (
@@ -751,6 +761,7 @@ function EmptyCard({ icon: Icon, title, sub }: { icon: React.ComponentType<{ cla
 }
 
 function EndEmergencyButton({ id }: { id: string }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -759,7 +770,7 @@ function EndEmergencyButton({ id }: { id: string }) {
     const res = await endEmergencyAction({ id });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not end');
-    success('Emergency mode ended'); router.refresh();
+    success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
   return (
     <button onClick={end} disabled={loading} className="flex-shrink-0 rounded-lg bg-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/30 transition">

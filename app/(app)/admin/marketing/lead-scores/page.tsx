@@ -5,8 +5,9 @@ import { Card } from '@/components/ui/card';
 import { CONTACT_BAND_META, type ContactBand, type ContactScoreFactor } from '@/lib/marketing/contact-score';
 import { RecomputeButton, LeadRow } from './lead-scores-client';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Lead Scores', robots: { index: false } };
+export const metadata: Metadata = { title: 'leadScores.leadScores', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type ScoredContact = {
@@ -19,17 +20,19 @@ type ScoredContact = {
   lifecycle: string;
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5 p-4 sm:p-6">
-      <h1 className="text-xl font-black sm:text-2xl">Lead Scores</h1>
-      <ErrorState message="Could not load lead scores from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/lead-scores" className="text-sm font-medium text-brand-text underline">Refresh lead scores</a>
+      <h1 className="text-xl font-black sm:text-2xl">{t('leadScores.leadScores')}</h1>
+      <ErrorState message={t('leadScores.couldNotLoadLeadScores')} />
+      <a href="/admin/marketing/lead-scores" className="text-sm font-medium text-brand-text underline">{t('leadScores.refreshLeadScores')}</a>
     </div>
   );
 }
 
 export default async function LeadScoresPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   // Ranked scores joined to their contact. Degrades to an empty state before 0172.
@@ -83,12 +86,8 @@ export default async function LeadScoresPage() {
     <div className="space-y-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black sm:text-2xl">Lead Scores</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            Every contact scored 0–100 from the signals we collect — site engagement, recency,
-            conversions, demo, consent, and profile depth. Each score is fully itemized: expand a
-            row to see exactly why.
-          </p>
+          <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingLeadScores.leadScores')}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted">{t('leadScores.everyContactScored0100')}</p>
         </div>
         <RecomputeButton />
       </header>
@@ -110,8 +109,7 @@ export default async function LeadScoresPage() {
       <Card className="overflow-hidden p-0">
         {rows.length === 0 ? (
           <p className="p-8 text-center text-sm text-muted">
-            No scores yet. Click <span className="font-semibold text-fg">Recompute</span> to score contacts
-            from the current signals{totalScored === 0 ? ' (or apply migration 0172 first)' : ''}.
+            {t('adminMarketingLeadScores.noScoresYetClick')} <span className="font-semibold text-fg">{t('adminMarketingLeadScores.recompute')}</span> {t('adminMarketingLeadScores.toScoreContactsFromTheCurrent')}{totalScored === 0 ? ' (or apply migration 0172 first)' : ''}.
           </p>
         ) : (
           <ul className="divide-y divide-border">

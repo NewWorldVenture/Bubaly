@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const assets = readFileSync('app/(app)/admin/marketing/assets/page.tsx', 'utf8');
@@ -12,20 +13,20 @@ describe('admin marketing asset and messaging read boundaries', () => {
     expect(assets).toContain('assetsError');
     expect(assets).toContain('signedError');
     expect(assets).toContain("console.error('[admin-marketing-assets] asset preview read failed'");
-    expect(assets).toContain('Could not load marketing assets from Supabase. Refresh and try again.');
+    expectSays(assets, 'assets.couldNotLoadMarketingAssets', 'Could not load marketing assets from Supabase. Refresh and try again.');
   });
 
   it('does not turn email and SMS read failures into empty campaign states', () => {
     expect(email).toContain('emailsResult.error ?? segmentsResult.error');
-    expect(email).toContain('Could not load marketing email data from Supabase. Refresh and try again.');
+    expectSays(email, 'email.couldNotLoadMarketingEmail', 'Could not load marketing email data from Supabase. Refresh and try again.');
     expect(sms).toContain('smsResult.error ?? segmentsResult.error');
-    expect(sms).toContain('Could not load marketing SMS data from Supabase. Refresh and try again.');
+    expectSays(sms, 'sms.couldNotLoadMarketingSms', 'Could not load marketing SMS data from Supabase. Refresh and try again.');
   });
 
   it('preserves social post and form submission read failures', () => {
     expect(social).toContain('postsError');
-    expect(social).toContain('Could not load marketing social posts from Supabase. Refresh and try again.');
+    expectSays(social, 'social.couldNotLoadMarketingSocial', 'Could not load marketing social posts from Supabase. Refresh and try again.');
     expect(forms).toContain('formsResult.error ?? submissionsResult.error');
-    expect(forms).toContain('Could not load marketing forms from Supabase. Refresh and try again.');
+    expectSays(forms, 'forms.couldNotLoadMarketingForms', 'Could not load marketing forms from Supabase. Refresh and try again.');
   });
 });

@@ -21,6 +21,7 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary,
 } from '@/lib/inventory/finder';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
@@ -37,6 +38,7 @@ function photoUrl(path: string | null): string | null {
 }
 
 export function InventoryModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -87,7 +89,7 @@ export function InventoryModule() {
     if (!confirm(`Remove ${item.name} from the inventory?`)) return;
     const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
-    success('Item removed');
+    success(tr('inventoryModule.itemRemoved'));
   }
 
   async function setStatus(item: Item, status: InventoryStatus) {
@@ -103,25 +105,25 @@ export function InventoryModule() {
     if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
-    success('Location deleted');
+    success(tr('inventoryModule.locationDeleted'));
   }
 
   const loading = locations.loading || items.loading || moves.loading;
   const error = locations.error || items.error || moves.error;
   const refresh = () => { void locations.refresh(); void items.refresh(); void moves.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the home inventory. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('inventoryModule.couldNotLoadTheHome')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Home Inventory"
-        description="Where everything lives. Ask “where is the…?”, track what’s lent out, keep serials and warranties, and know what the home is worth."
+        title={tr('inventory.homeInventory')}
+        description={tr('inventoryModule.whereEverythingLivesAskWhere')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="inventory" iconOnly />
-            <Button variant="secondary" onClick={() => setLocationForm({ open: true, parent: null, location: null })}><DoorOpen className="h-4 w-4" /> Add room</Button>
-            <Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> Add item</Button>
+            <Button variant="secondary" onClick={() => setLocationForm({ open: true, parent: null, location: null })}><DoorOpen className="h-4 w-4" /> {tr('inventory.addRoom')}</Button>
+            <Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addItem')}</Button>
           </div>
         }
       />
@@ -131,14 +133,14 @@ export function InventoryModule() {
         <label className="flex items-center gap-3 rounded-xl border border-border bg-surface/70 px-3 py-2">
           <Search className="h-5 w-5 shrink-0 text-brand-text" />
           <input
-            value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Where is the… passport, ski helmet, spare key?"
-            aria-label="Search the inventory" className="min-h-10 w-full bg-transparent text-base outline-none placeholder:text-muted"
+            value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr('inventory.whereIsThePassportSkiHelmet')}
+            aria-label={tr('inventory.searchTheInventory')} className="min-h-10 w-full bg-transparent text-base outline-none placeholder:text-muted"
           />
-          {query && <button onClick={() => setQuery('')} className="text-xs text-muted hover:text-fg">Clear</button>}
+          {query && <button onClick={() => setQuery('')} className="text-xs text-muted hover:text-fg">{tr('inventory.clear')}</button>}
         </label>
         {query.trim() && (
           <ul className="mt-3 space-y-1.5">
-            {hits.length === 0 ? <li className="text-sm text-muted">Nothing matches “{query}”. Try a brand, tag, serial or room name.</li> : null}
+            {hits.length === 0 ? <li className="text-sm text-muted">{tr('inventory.nothingMatches')}{query}{tr('inventory.tryABrandTagSerialOr')}</li> : null}
             {hits.slice(0, 6).map((h) => (
               <li key={h.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
                 <span className="text-xl">{categoryMeta(h.item.category).emoji}</span>
@@ -146,7 +148,7 @@ export function InventoryModule() {
                   <p className="truncate text-sm font-semibold">{h.item.name}{h.item.quantity > 1 ? ` ×${h.item.quantity}` : ''}</p>
                   <p className="truncate text-xs text-muted"><MapPin className="mr-1 inline h-3 w-3" />{h.where}{h.item.status !== 'in_place' ? ` · ${statusMeta(h.item.status).label}${h.item.lent_to ? ` to ${h.item.lent_to}` : ''}` : ''}</p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => setMoveFor(h.item)}><ArrowRightLeft className="h-3.5 w-3.5" /> Moved</Button>
+                <Button size="sm" variant="secondary" onClick={() => setMoveFor(h.item)}><ArrowRightLeft className="h-3.5 w-3.5" /> {tr('inventory.moved')}</Button>
               </li>
             ))}
           </ul>
@@ -156,21 +158,21 @@ export function InventoryModule() {
       {/* Summary + alerts */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> Catalog</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> {tr('inventory.catalog')}</div>
           <p className="mt-2 text-xl font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.rooms} rooms · {summary.unlocated} without a location{summary.overdueLoans ? ` · ${summary.overdueLoans} loan${summary.overdueLoans === 1 ? '' : 's'} overdue` : ''}</p>
+          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${summary.overdueLoans} loan${summary.overdueLoans === 1 ? '' : 's'} overdue` : ''}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> Replacement value</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
           <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents) : '—'}</p>
           <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
         </div>
         <div className={cn('rounded-2xl border p-5', loans.some((l) => l.overdue) || warranties.length ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
-          <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> Needs attention</div>
-          {loans.length === 0 && warranties.length === 0 ? <p className="mt-2 text-sm text-muted">No open loans or expiring warranties.</p> : (
+          <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> {tr('inventory.needsAttention')}</div>
+          {loans.length === 0 && warranties.length === 0 ? <p className="mt-2 text-sm text-muted">{tr('inventory.noOpenLoansOrExpiringWarranties')}</p> : (
             <ul className="mt-2 space-y-1 text-xs">
               {loans.slice(0, 3).map((l) => <li key={l.item.id} className={l.overdue ? 'text-amber-200' : 'text-muted'}><Handshake className="mr-1 inline h-3 w-3" />{l.item.name} → {l.item.lent_to || 'someone'}{l.days !== null ? ` · ${l.days}d` : ''}{l.overdue ? ' · overdue' : ''}</li>)}
-              {warranties.slice(0, 3).map((w) => <li key={w.item.id} className={w.state === 'expired' ? 'text-muted' : 'text-amber-200'}><ShieldCheck className="mr-1 inline h-3 w-3" />{w.item.name}: warranty {w.state === 'expired' ? `expired ${Math.abs(w.days)}d ago` : `ends in ${w.days}d`}</li>)}
+              {warranties.slice(0, 3).map((w) => <li key={w.item.id} className={w.state === 'expired' ? 'text-muted' : 'text-amber-200'}><ShieldCheck className="mr-1 inline h-3 w-3" />{w.item.name}{tr('inventory.warranty')} {w.state === 'expired' ? `expired ${Math.abs(w.days)}d ago` : `ends in ${w.days}d`}</li>)}
             </ul>
           )}
         </div>
@@ -180,10 +182,10 @@ export function InventoryModule() {
         {/* Rooms + containers */}
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold">Rooms</span>
-            <button onClick={() => setLocationFilter('all')} className={cn('text-xs', locationFilter === 'all' ? 'text-brand-text' : 'text-muted hover:text-fg')}>All items</button>
+            <span className="text-sm font-semibold">{tr('inventory.rooms')}</span>
+            <button onClick={() => setLocationFilter('all')} className={cn('text-xs', locationFilter === 'all' ? 'text-brand-text' : 'text-muted hover:text-fg')}>{tr('inventory.allItems')}</button>
           </div>
-          {tree.length === 0 ? <p className="text-xs text-muted">Add rooms, then shelves, bins and drawers inside them.</p> : (
+          {tree.length === 0 ? <p className="text-xs text-muted">{tr('inventory.addRoomsThenShelvesBinsAnd')}</p> : (
             <ul className="space-y-1">
               {tree.map(({ location, children }) => (
                 <li key={location.id}>
@@ -209,7 +211,7 @@ export function InventoryModule() {
                   )}
                 </li>
               ))}
-              <li><button onClick={() => setLocationFilter('none')} className={cn('flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm', locationFilter === 'none' ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>❓ No location <span className="ml-auto text-xs">{owned.filter((i) => !i.location_id).length}</span></button></li>
+              <li><button onClick={() => setLocationFilter('none')} className={cn('flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm', locationFilter === 'none' ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>{tr('inventory.noLocation')} <span className="ml-auto text-xs">{owned.filter((i) => !i.location_id).length}</span></button></li>
             </ul>
           )}
         </div>
@@ -217,20 +219,20 @@ export function InventoryModule() {
         {/* Items */}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as 'all' | InventoryCategory)} aria-label="Category" className="w-auto">
-              <option value="all">All categories</option>
+            <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as 'all' | InventoryCategory)} aria-label={tr('inventory.category')} className="w-auto">
+              <option value="all">{tr('inventory.allCategories')}</option>
               {ITEM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
             </Select>
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | InventoryStatus)} aria-label="Status" className="w-auto">
-              <option value="all">Owned</option>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | InventoryStatus)} aria-label={tr('inventory.status')} className="w-auto">
+              <option value="all">{tr('inventory.owned')}</option>
               {ITEM_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
             </Select>
             <span className="text-xs text-muted">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
           </div>
           {items.data.length === 0 ? (
-            <EmptyState icon={PackageSearch} title="Nothing catalogued yet" description="Start with the things you keep losing: passports, spare keys, seasonal gear. Add a photo and a location and you’ll never hunt again." action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> Add the first item</Button>} />
+            <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description={tr('inventoryModule.startWithTheThingsYou')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />
           ) : filtered.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No items match these filters.</p>
+            <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{tr('inventory.noItemsMatchTheseFilters')}</p>
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
@@ -247,10 +249,10 @@ export function InventoryModule() {
                       {item.status !== 'in_place' && <p className="text-[11px] text-amber-300">{statusMeta(item.status).emoji} {statusMeta(item.status).label}{item.lent_to ? ` to ${item.lent_to}` : ''}{item.lent_on ? ` since ${fmtDate(item.lent_on)}` : ''}</p>}
                     </div>
                     <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
-                      <button onClick={() => setMoveFor(item)} aria-label={`Move ${item.name}`} title="Moved to…" className="rounded-lg p-1.5 text-muted hover:text-fg"><ArrowRightLeft className="h-4 w-4" /></button>
+                      <button onClick={() => setMoveFor(item)} aria-label={`Move ${item.name}`} title={tr('inventory.movedTo')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ArrowRightLeft className="h-4 w-4" /></button>
                       {item.status === 'lent'
-                        ? <button onClick={() => setStatus(item, 'in_place')} aria-label={`${item.name} returned`} title="Returned" className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>
-                        : <button onClick={() => setLendFor(item)} aria-label={`Lend ${item.name}`} title="Lend out" className="rounded-lg p-1.5 text-muted hover:text-fg"><Handshake className="h-4 w-4" /></button>}
+                        ? <button onClick={() => setStatus(item, 'in_place')} aria-label={`${item.name} returned`} title={tr('inventory.returned')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>
+                        : <button onClick={() => setLendFor(item)} aria-label={`Lend ${item.name}`} title={tr('inventory.lendOut')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Handshake className="h-4 w-4" /></button>}
                       <button onClick={() => setItemForm({ open: true, item })} aria-label={`Edit ${item.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                       <button onClick={() => deleteItem(item)} aria-label={`Remove ${item.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                     </div>
@@ -264,7 +266,7 @@ export function InventoryModule() {
 
       {moves.data.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ArrowRightLeft className="h-4 w-4 text-brand-text" /> Recent moves</div>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ArrowRightLeft className="h-4 w-4 text-brand-text" /> {tr('inventory.recentMoves')}</div>
           <ul className="space-y-1.5">
             {moves.data.slice(0, 6).map((m) => {
               const item = items.data.find((i) => i.id === m.item_id);
@@ -290,7 +292,7 @@ export function InventoryModule() {
       )}
       {moveFor && (
         <MoveForm familyId={familyId} userId={userId} memberId={selfMember?.id ?? null} item={moveFor} locations={locations.data}
-          onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success('Move logged'); }} />
+          onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success(tr('inventoryModule.moveLogged')); }} />
       )}
       {lendFor && (
         <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(`${lendFor.name} marked as lent out`); }} />
@@ -300,9 +302,10 @@ export function InventoryModule() {
 }
 
 function LocationOptions({ locations }: { locations: Location[] }) {
+  const tr = useTranslations();
   return (
     <>
-      <option value="">No location</option>
+      <option value="">{tr('inventory.noLocation')}</option>
       {locationTree(locations).flatMap(({ location, children }) => [
         <option key={location.id} value={location.id}>{locationKindMeta(location.kind).emoji} {location.name}</option>,
         ...children.map((c) => <option key={c.id} value={c.id}>&nbsp;&nbsp;› {c.name}</option>),
@@ -315,6 +318,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   familyId: string; userId: string; members: Tables<'family_members'>[]; locations: Location[]; item: Item | null; defaultLocationId: string | null;
   onClose: () => void; onSaved: (message: string) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -338,7 +342,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(tr('inventoryModule.nameIsRequired'));
     setLoading(true);
     const payload = {
       name,
@@ -370,26 +374,26 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder="Ski helmet" />}</Field>
-          <Field label="Category">{(id) => <Select id={id} name="category" defaultValue={item?.category ?? 'other'}>{ITEM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
+          <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder={tr('inventory.skiHelmet')} />}</Field>
+          <Field label={tr('inventory.category')}>{(id) => <Select id={id} name="category" defaultValue={item?.category ?? 'other'}>{ITEM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Where" hint="Room › container">{(id) => <Select id={id} name="location_id" defaultValue={item?.location_id ?? defaultLocationId ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
-          <Field label="Whose">{(id) => <Select id={id} name="owner_member_id" defaultValue={item?.owner_member_id ?? ''}><option value="">The family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('inventory.where')} hint={tr('inventoryModule.roomContainer')}>{(id) => <Select id={id} name="location_id" defaultValue={item?.location_id ?? defaultLocationId ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
+          <Field label={tr('inventory.whose')}>{(id) => <Select id={id} name="owner_member_id" defaultValue={item?.owner_member_id ?? ''}><option value="">{tr('inventory.theFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Quantity">{(id) => <Input id={id} name="quantity" type="number" min={0} defaultValue={item?.quantity ?? 1} />}</Field>
-          <Field label="Value ($)" hint="For insurance">{(id) => <Input id={id} name="value" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.value_cents != null ? (item.value_cents / 100).toFixed(2) : ''} />}</Field>
-          <Field label="Purchased">{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
+          <Field label={tr('inventory.quantity')}>{(id) => <Input id={id} name="quantity" type="number" min={0} defaultValue={item?.quantity ?? 1} />}</Field>
+          <Field label={tr('inventory.value')} hint={tr('inventoryModule.forInsurance')}>{(id) => <Input id={id} name="value" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.value_cents != null ? (item.value_cents / 100).toFixed(2) : ''} />}</Field>
+          <Field label={tr('inventory.purchased')}>{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Brand">{(id) => <Input id={id} name="brand" defaultValue={item?.brand ?? ''} />}</Field>
-          <Field label="Model">{(id) => <Input id={id} name="model" defaultValue={item?.model ?? ''} />}</Field>
-          <Field label="Serial #">{(id) => <Input id={id} name="serial_number" defaultValue={item?.serial_number ?? ''} />}</Field>
+          <Field label={tr('inventory.brand')}>{(id) => <Input id={id} name="brand" defaultValue={item?.brand ?? ''} />}</Field>
+          <Field label={tr('inventory.model')}>{(id) => <Input id={id} name="model" defaultValue={item?.model ?? ''} />}</Field>
+          <Field label={tr('inventory.serial')}>{(id) => <Input id={id} name="serial_number" defaultValue={item?.serial_number ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Warranty until">{(id) => <Input id={id} name="warranty_until" type="date" defaultValue={item?.warranty_until ?? ''} />}</Field>
-          <Field label="Tags" hint="Comma-separated">{(id) => <Input id={id} name="tags" defaultValue={item?.tags.join(', ') ?? ''} placeholder="travel, insured" />}</Field>
+          <Field label={tr('inventory.warrantyUntil')}>{(id) => <Input id={id} name="warranty_until" type="date" defaultValue={item?.warranty_until ?? ''} />}</Field>
+          <Field label={tr('inventory.tags')} hint="Comma-separated">{(id) => <Input id={id} name="tags" defaultValue={item?.tags.join(', ') ?? ''} placeholder={tr('inventory.travelInsured')} />}</Field>
         </div>
         <div className="flex items-center gap-3">
           {url ? (
@@ -400,11 +404,11 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />
           </label>
-          {photoPath && <button type="button" onClick={() => setPhotoPath(null)} className="text-xs text-muted hover:text-rose-400">Remove</button>}
+          {photoPath && <button type="button" onClick={() => setPhotoPath(null)} className="text-xs text-muted hover:text-rose-400">{tr('inventory.remove')}</button>}
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder="Receipt in the warranty folder; charger in the same bin…" />}</Field>
+        <Field label={tr('inventory.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={tr('inventory.receiptInTheWarrantyFolderCharger')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>
           <Button type="submit" loading={loading || uploading}>{item ? 'Save changes' : 'Add item'}</Button>
         </div>
       </form>
@@ -415,6 +419,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
 function LocationForm({ familyId, userId, locations, parent, location, onClose, onSaved }: {
   familyId: string; userId: string; locations: Location[]; parent: Location | null; location: Location | null; onClose: () => void; onSaved: (message: string) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const rooms = locations.filter((l) => !l.parent_id && l.id !== location?.id);
@@ -423,7 +428,7 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(tr('inventoryModule.nameIsRequired'));
     setLoading(true);
     const payload = { name, kind: String(f.get('kind') ?? 'room') as HomeLocationKind, parent_id: String(f.get('parent_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
@@ -439,13 +444,13 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     <Modal open title={location ? `Edit · ${location.name}` : parent ? `Add a container in ${parent.name}` : 'Add a room or area'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>
-          <Field label="Kind">{(id) => <Select id={id} name="kind" defaultValue={location?.kind ?? (parent ? 'box' : 'room')}>{LOCATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+          <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>
+          <Field label={tr('inventory.kind')}>{(id) => <Select id={id} name="kind" defaultValue={location?.kind ?? (parent ? 'box' : 'room')}>{LOCATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
         </div>
-        <Field label="Inside" hint="Leave empty for a top-level room or area">{(id) => <Select id={id} name="parent_id" defaultValue={location?.parent_id ?? parent?.id ?? ''}><option value="">— top level —</option>{rooms.map((r) => <option key={r.id} value={r.id}>{locationKindMeta(r.kind).emoji} {r.name}</option>)}</Select>}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={location?.notes ?? ''} placeholder="Key is on the hook by the door…" />}</Field>
+        <Field label={tr('inventory.inside')} hint={tr('inventoryModule.leaveEmptyForATop')}>{(id) => <Select id={id} name="parent_id" defaultValue={location?.parent_id ?? parent?.id ?? ''}><option value="">{tr('inventory.topLevel')}</option>{rooms.map((r) => <option key={r.id} value={r.id}>{locationKindMeta(r.kind).emoji} {r.name}</option>)}</Select>}</Field>
+        <Field label={tr('inventory.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={location?.notes ?? ''} placeholder={tr('inventory.keyIsOnTheHookBy')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>
           <Button type="submit" loading={loading}>{location ? 'Save' : 'Add'}</Button>
         </div>
       </form>
@@ -456,6 +461,7 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
 function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSaved }: {
   familyId: string; userId: string; memberId: string | null; item: Item; locations: Location[]; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -479,11 +485,11 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
   return (
     <Modal open title={`Moved · ${item.name}`} description={`Currently: ${locationLabel(locations, item.location_id)}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Now in">{(id) => <Select id={id} name="to_location_id" defaultValue={item.location_id ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
-        <Field label="Why">{(id) => <Input id={id} name="reason" placeholder="Spring clean, back from repair…" />}</Field>
+        <Field label={tr('inventory.nowIn')}>{(id) => <Select id={id} name="to_location_id" defaultValue={item.location_id ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
+        <Field label="Why">{(id) => <Input id={id} name="reason" placeholder={tr('inventory.springCleanBackFromRepair')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><ArrowRightLeft className="h-4 w-4" /> Log move</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>
+          <Button type="submit" loading={loading}><ArrowRightLeft className="h-4 w-4" /> {tr('inventory.logMove')}</Button>
         </div>
       </form>
     </Modal>
@@ -491,6 +497,7 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
 }
 
 function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -498,7 +505,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const to = String(f.get('lent_to') ?? '').trim();
-    if (!to) return toastError('Who has it?');
+    if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
     const { error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id);
     setLoading(false);
@@ -510,12 +517,12 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     <Modal open title={`Lend out · ${item.name}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder="The Nguyens next door" />}</Field>
-          <Field label="Since">{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayIso()} />}</Field>
+          <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder={tr('inventory.theNguyensNextDoor')} />}</Field>
+          <Field label={tr('inventory.since')}>{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayIso()} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Handshake className="h-4 w-4" /> Mark as lent</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>
+          <Button type="submit" loading={loading}><Handshake className="h-4 w-4" /> {tr('inventory.markAsLent')}</Button>
         </div>
       </form>
     </Modal>

@@ -1,5 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
+// Re-exported so the many server consumers of this module keep one import.
+// They LIVE in `primitives.tsx` because client components need them too, and
+// this file imports `lib/i18n/server` — which pulls `next/headers` into any
+// bundle that reaches it. See the note at the top of that file.
+import { Container, GradientText, IconOrb, PageWrap, TrustStrip } from './primitives';
+
+export { Container, GradientText, IconOrb, PageWrap, TrustStrip };
 import {
   Apple,
   Bot,
@@ -26,17 +34,8 @@ import {
 import { AssistantConversation } from '@/components/marketing/homepage-interactions';
 import { cn } from '@/lib/utils/cn';
 
-export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('homepage-reference-bg min-h-dvh overflow-x-clip text-fg transition-colors duration-300', className)}>{children}</div>;
-}
 
-export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('mx-auto max-w-[1360px] px-6 sm:px-10 lg:px-12', className)}>{children}</div>;
-}
 
-export function GradientText({ children }: { children: React.ReactNode }) {
-  return <span className="gradient-text-violet">{children}</span>;
-}
 
 export function Pill({
   children,
@@ -90,29 +89,6 @@ export function OutlineLink({ href, children }: { href: string; children: React.
   );
 }
 
-export function IconOrb({
-  icon: Icon,
-  tone = 'violet',
-  className,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  tone?: 'violet' | 'green' | 'orange' | 'blue' | 'pink';
-  className?: string;
-}) {
-  const tones = {
-    violet: 'text-violet-400 bg-violet-500/12',
-    green: 'text-emerald-400 bg-emerald-500/12',
-    orange: 'text-orange-400 bg-orange-500/12',
-    blue: 'text-blue-400 bg-blue-500/12',
-    pink: 'text-rose-400 bg-rose-500/12',
-  };
-
-  return (
-    <span className={cn('icon-orb h-16 w-16', tones[tone], className)}>
-      <Icon className="h-8 w-8" />
-    </span>
-  );
-}
 
 const FACE_POSITIONS = ['54% 34%', '67% 38%', '79% 31%', '91% 40%', '72% 36%'] as const;
 
@@ -130,7 +106,10 @@ function FaceAvatar({ index, className }: { index: number; className?: string })
   );
 }
 
-export function PlatformBadges() {
+export async function PlatformBadges() {
+  const t = await getTranslations();
+  // Platform names are product names, not copy — iOS and Android read the same
+  // in every language. "Designed for" is the only translatable word here.
   const platforms = [
     { icon: Apple, label: 'iOS' },
     { icon: Bot, label: 'Android' },
@@ -139,7 +118,7 @@ export function PlatformBadges() {
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <span className="w-full text-[10px] text-white/55">Designed for</span>
+      <span className="w-full text-[10px] text-white/55">{t('visualMocks.designedFor')}</span>
       {platforms.map(({ icon: Icon, label }) => (
         <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -150,7 +129,8 @@ export function PlatformBadges() {
   );
 }
 
-export function HeroPhoneMockup({ className }: { className?: string }) {
+export async function HeroPhoneMockup({ className }: { className?: string }) {
+  const t = await getTranslations();
   const schedule = [
     { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', avatar: 3, color: 'bg-rose-400' },
     { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', avatar: 0, color: 'bg-blue-400' },
@@ -183,8 +163,8 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             {/* Greeting */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[14px] font-bold text-white">Good Morning, Sarah! <span className="text-amber-300">☀</span></p>
-                <p className="text-[10px] text-white/55">Thursday, May 16</p>
+                <p className="text-[14px] font-bold text-white">{t('visualMocks.goodMorningSarah')}{' '}<span className="text-amber-300">☀</span></p>
+                <p className="text-[10px] text-white/55">{t('visualMocks.thursdayMay16')}</p>
               </div>
               <div className="relative shrink-0">
                 <FaceAvatar index={2} className="h-9 w-9 border border-white/20" />
@@ -196,7 +176,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-3 flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-violet-400" />
-                <span className="text-[11px] font-semibold text-white">AI Daily Briefing</span>
+                <span className="text-[11px] font-semibold text-white">{t('visualMocks.aiDailyBriefing')}</span>
               </div>
               <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-bold text-white">New</span>
             </div>
@@ -221,7 +201,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-4 flex-1">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[11px] font-bold text-white">Today&apos;s Schedule</p>
-                <span className="text-[9px] text-violet-400">View all</span>
+                <span className="text-[9px] text-violet-400">{t('visualMocks.viewAll')}</span>
               </div>
               <div className="space-y-3.5">
                 {schedule.map(({ time, title, person, avatar, color }) => (
@@ -239,13 +219,13 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
 
             {/* Bottom nav */}
             <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/55">
-              <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />Home</span>
-              <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />Calendar</span>
+              <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />{t('visualMocks.home')}</span>
+              <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />{t('visualMocks.calendar')}</span>
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg">
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
-              <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />Tasks</span>
-              <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />More</span>
+              <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />{t('visualMocks.tasks')}</span>
+              <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />{t('visualMocks.more')}</span>
             </div>
           </div>
         </div>
@@ -254,7 +234,8 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
   );
 }
 
-export function ProductMockup() {
+export async function ProductMockup() {
+  const t = await getTranslations();
   const schedule = [
     ['8:00 AM', 'School Drop-off'],
     ['10:00 AM', 'Math Meeting'],
@@ -271,9 +252,8 @@ export function ProductMockup() {
         <div className="mt-3 grid min-h-[460px] grid-cols-[120px_1fr] gap-4 rounded-2xl bg-[#0b121d] p-4">
           <aside className="space-y-2 border-r border-white/8 pr-3">
             <div className="mb-5 flex items-center gap-2 text-xs font-bold">
-              <Sparkles className="h-4 w-4 text-violet-400" /> Bubaly
-            </div>
-            {['Home', 'Calendar', 'Chores', 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
+              <Sparkles className="h-4 w-4 text-violet-400" />{' '}{t('visualMocks.bubaly')}</div>
+            {[t('visualMocks.home'), t('visualMocks.calendar'), t('visualMocks.chores'), 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
               <div key={item} className={cn('rounded-lg px-3 py-2 text-[11px] text-white/65', index === 0 && 'bg-violet-600 text-white')}>
                 {item}
               </div>
@@ -281,7 +261,7 @@ export function ProductMockup() {
           </aside>
           <main>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold">Welcome back, Sarah!</h3>
+              <h3 className="text-lg font-bold">{t('visualMocks.welcomeBackSarah')}</h3>
               <div className="flex gap-2">
                 <span className="h-7 w-7 rounded-full bg-amber-300" />
                 <span className="h-7 w-7 rounded-full bg-cyan-300" />
@@ -289,7 +269,7 @@ export function ProductMockup() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <MiniPanel title="Today's Schedule">
+              <MiniPanel title={t('visualMocks.todaySSchedule')}>
                 {schedule.map(([time, label]) => (
                   <div key={label} className="flex justify-between border-b border-white/5 py-2 text-xs">
                     <span className="text-white/50">{time}</span>
@@ -297,15 +277,15 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Upcoming">
+              <MiniPanel title={t('visualMocks.upcoming')}>
                 {['Math Test', 'Doctor Appointment', 'Field Trip'].map((item) => (
                   <div key={item} className="py-2 text-xs">
                     <p className="font-semibold">{item}</p>
-                    <p className="text-white/55">This week</p>
+                    <p className="text-white/55">{t('visualMocks.thisWeek')}</p>
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Chores">
+              <MiniPanel title={t('visualMocks.chores')}>
                 {chores.map((item) => (
                   <div key={item} className="flex items-center gap-2 py-2 text-xs">
                     <span className="h-6 w-6 rounded-full bg-gradient-to-br from-amber-200 to-rose-300" />
@@ -314,7 +294,7 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Meal Plan">
+              <MiniPanel title={t('visualMocks.mealPlan')}>
                 {meals.map((item) => (
                   <div key={item} className="flex items-center gap-2 py-2 text-xs">
                     <UtensilsCrossed className="h-4 w-4 text-orange-400" />
@@ -322,14 +302,14 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Grocery List">
+              <MiniPanel title={t('visualMocks.groceryList')}>
                 {['Milk', 'Eggs', 'Bread', 'Avocados'].map((item) => (
                   <div key={item} className="flex items-center gap-2 py-1.5 text-xs text-white/70">
                     <Circle className="h-3.5 w-3.5" /> {item}
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Family AI Assistant">
+              <MiniPanel title={t('visualMocks.familyAiAssistant')}>
                 <div className="grid min-h-28 place-items-center">
                   <div className="glow-dot h-12 w-12" />
                 </div>
@@ -344,7 +324,8 @@ export function ProductMockup() {
   );
 }
 
-export function PhoneMockup({ className }: { className?: string }) {
+export async function PhoneMockup({ className }: { className?: string }) {
+  const t = await getTranslations();
   const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', 'Family Dinner'];
   return (
     <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
@@ -353,8 +334,8 @@ export function PhoneMockup({ className }: { className?: string }) {
           <span>9:41</span>
           <span className="h-3 w-12 rounded-full bg-black" />
         </div>
-        <h4 className="text-lg font-bold">Hi, Sarah</h4>
-        <MiniPanel title="Today" className="mt-4 p-3">
+        <h4 className="text-lg font-bold">{t('visualMocks.hiSarah')}</h4>
+        <MiniPanel title={t('visualMocks.today')} className="mt-4 p-3">
           {items.map((item, index) => (
             <div key={item} className="flex justify-between border-l-2 border-violet-500 py-1.5 pl-2 text-[10px]">
               <span>{item}</span>
@@ -362,7 +343,7 @@ export function PhoneMockup({ className }: { className?: string }) {
             </div>
           ))}
         </MiniPanel>
-        <MiniPanel title="Chores" className="mt-3 p-3">
+        <MiniPanel title={t('visualMocks.chores')} className="mt-3 p-3">
           {['Tidy Living Room', 'Take Out Trash'].map((item) => (
             <div key={item} className="flex items-center justify-between py-1.5 text-[10px]">
               <span>{item}</span>
@@ -382,7 +363,7 @@ export function PhoneMockup({ className }: { className?: string }) {
   );
 }
 
-export function MiniPanel({
+export async function MiniPanel({
   title,
   children,
   className,
@@ -391,43 +372,51 @@ export function MiniPanel({
   children: React.ReactNode;
   className?: string;
 }) {
+  const t = await getTranslations();
   return (
     <div className={cn('rounded-xl border border-white/8 bg-white/[0.045] p-4', className)}>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-bold">{title}</p>
-        <span className="text-[10px] text-violet-300">View all</span>
+        <span className="text-[10px] text-violet-300">{t('visualMocks.viewAll')}</span>
       </div>
       {children}
     </div>
   );
 }
 
-export function FamilyAiPanel() {
+export async function FamilyAiPanel() {
+  const t = await getTranslations();
+  // The heading splits into a lead-in and an emphasised TAIL, not three pieces
+  // around a middle. English "Your [AI Family] Assistant" puts the accent in
+  // the middle, which no other language here reproduces — French wants "Votre
+  // assistant familial IA" and German "Dein KI-Familienassistent". Two keys let
+  // each language put the break where its own grammar puts it; three would have
+  // forced English word order onto all of them.
   return (
     <section className="showcase-panel overflow-hidden p-5 sm:p-8 lg:p-9">
       <div className="grid items-stretch gap-8 lg:grid-cols-[300px_1fr] lg:gap-8">
         <div className="flex flex-col justify-center lg:px-2">
           <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-            Your <GradientText>AI Family</GradientText> Assistant
+            {t('visualMocks.aiPanelTitleBefore')} <GradientText>{t('visualMocks.aiPanelTitleAccent')}</GradientText>
           </h2>
           <p className="mt-5 text-base leading-7 text-white/72 sm:text-lg sm:leading-8">
-            Your built-in family assistant handles the planning, organizing, and everyday coordination — so you spend less time managing life and more time living it.
+            {t('visualMocks.aiPanelBody')}
           </p>
           <ul className="mt-6 space-y-3 text-sm text-white/86">
-            {['Create schedules instantly', 'Plan meals and generate grocery lists', 'Get reminders and helpful suggestions', 'Answers tailored to your family'].map((item) => (
-              <li key={item} className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {item}
+            {['visualMocks.aiPanelBullet1', 'visualMocks.aiPanelBullet2', 'visualMocks.aiPanelBullet3', 'visualMocks.aiPanelBullet4'].map((key) => (
+              <li key={key} className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {t(key)}
               </li>
             ))}
           </ul>
           <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
-            Try the AI Assistant
+            {t('visualMocks.tryTheAiAssistant')}
           </Link>
         </div>
         <div className="dark relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
           <Image
             src="/images/family-ai-lifestyle.png"
-            alt="A family enjoying time together with Bubaly"
+            alt={t('visualMocks.familyLifestyleAlt')}
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 760px"
@@ -442,17 +431,17 @@ export function FamilyAiPanel() {
   );
 }
 
-export function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
+export async function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
+  const t = await getTranslations();
   const moments = [
-    ['Morning handoffs', 'See schedules, tasks, reminders, and what each person needs before the day starts.'],
-    ['After-school logistics', 'Keep pickups, activities, homework, forms, and dinner plans in one shared flow.'],
-    ['Weekend planning', 'Turn everyone\'s ideas and commitments into a plan the whole family can follow.'],
+    [t('visualMocks.momentMorning'), t('visualMocks.momentMorningBody')],
+    [t('visualMocks.momentAfterSchool'), t('visualMocks.momentAfterSchoolBody')],
+    [t('visualMocks.momentWeekend'), t('visualMocks.momentWeekendBody')],
   ];
   return (
     <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
       <div className="grid gap-7 lg:grid-cols-[270px_1fr]">
-        <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">
-          Built for the moments that keep <GradientText>family life moving</GradientText>
+        <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">{t('visualMocks.builtForTheMomentsThat')}{' '}<GradientText>{t('visualMocks.familyLifeMoving')}</GradientText>
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
           {moments.map(([title, body]) => (
@@ -468,13 +457,15 @@ export function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function DeviceShowcase() {
+export async function DeviceShowcase() {
+  const t = await getTranslations();
+  // Device names are product names — the same word in every language.
   const devices = ['iPhone', 'Android', 'iPad', 'Web App'] as const;
 
   return (
     <section className="py-10 sm:py-12">
       <h2 className="mb-8 text-center text-xl font-semibold sm:text-2xl">
-        One seamless experience across all your devices
+        {t('visualMocks.oneSeamlessExperience')}
       </h2>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
@@ -505,11 +496,12 @@ export function DeviceShowcase() {
 
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
 
-function ScheduleScreen() {
+async function ScheduleScreen() {
+  const t = await getTranslations();
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <div className="mt-1.5 rounded-md bg-gradient-to-r from-violet-500/20 to-blue-500/20 px-1.5 py-1">
@@ -540,11 +532,12 @@ function ScheduleScreen() {
   );
 }
 
-function TasksScreen() {
+async function TasksScreen() {
+  const t = await getTranslations();
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <p className="mt-1.5 text-[5px] font-semibold text-white/70">Today&apos;s Tasks</p>
@@ -574,17 +567,18 @@ function TasksScreen() {
   );
 }
 
-function DashboardScreen() {
+async function DashboardScreen() {
+  const t = await getTranslations();
   return (
     <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <div className="mt-1.5 grid grid-cols-4 gap-1">
         {[
           { value: '5', label: 'Events', color: 'text-violet-400' },
-          { value: '3', label: 'Tasks', color: 'text-emerald-400' },
+          { value: '3', label: t('visualMocks.tasks'), color: 'text-emerald-400' },
           { value: '72°', label: 'Weather', color: 'text-blue-400' },
           { value: '2', label: 'Alerts', color: 'text-rose-400' },
         ].map(({ value, label, color }) => (
@@ -596,9 +590,9 @@ function DashboardScreen() {
       </div>
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         <div className="space-y-0.5">
-          <p className="text-[5px] font-semibold text-white/60">Schedule</p>
+          <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.schedule')}</p>
           {[
-            { title: 'Dentist 8:00', color: 'bg-rose-400' },
+            { title: t('visualMocks.dentist800'), color: 'bg-rose-400' },
             { title: 'Soccer 3:30', color: 'bg-emerald-400' },
             { title: 'Dinner 6:00', color: 'bg-violet-400' },
           ].map(({ title, color }) => (
@@ -609,7 +603,7 @@ function DashboardScreen() {
           ))}
         </div>
         <div className="space-y-0.5">
-          <p className="text-[5px] font-semibold text-white/60">Tasks</p>
+          <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.tasks')}</p>
           {[
             { text: 'Pack lunches', done: true },
             { text: 'Walk dog', done: true },
@@ -626,7 +620,8 @@ function DashboardScreen() {
   );
 }
 
-function WebAppScreen() {
+async function WebAppScreen() {
+  const t = await getTranslations();
   return (
     <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-1">
       <div className="flex h-full gap-0.5">
@@ -637,13 +632,13 @@ function WebAppScreen() {
         </div>
         <div className="flex-1 overflow-hidden">
           <div className="flex items-center justify-between px-0.5">
-            <span className="text-[4.5px] font-bold text-white">Dashboard</span>
+            <span className="text-[4.5px] font-bold text-white">{t('visualMocks.dashboard')}</span>
             <span className="h-1 w-1 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
           </div>
           <div className="mt-0.5 grid grid-cols-3 gap-0.5 px-0.5">
             {[
               { v: '5', l: 'Events', c: 'text-violet-400' },
-              { v: '3', l: 'Tasks', c: 'text-emerald-400' },
+              { v: '3', l: t('visualMocks.tasks'), c: 'text-emerald-400' },
               { v: '72°', l: 'Weather', c: 'text-blue-400' },
             ].map(({ v, l, c }) => (
               <div key={l} className="rounded-sm bg-white/[0.06] py-0.5 text-center">
@@ -653,7 +648,7 @@ function WebAppScreen() {
             ))}
           </div>
           <div className="mt-0.5 space-y-[2px] px-0.5">
-            {['Dentist 8:00', 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
+            {[t('visualMocks.dentist800'), 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
               <div key={item} className="flex items-center gap-0.5 rounded-sm bg-white/[0.04] px-0.5 py-[2px]">
                 <span className={cn('h-1 w-1 shrink-0 rounded-full', i === 0 ? 'bg-rose-400' : i === 1 ? 'bg-emerald-400' : 'bg-violet-400')} />
                 <span className="text-[3.5px] text-white/70">{item}</span>
@@ -666,7 +661,8 @@ function WebAppScreen() {
   );
 }
 
-function DeviceArtwork({ device }: { device: DeviceName }) {
+async function DeviceArtwork({ device }: { device: DeviceName }) {
+  const t = await getTranslations();
   if (device === 'iPhone' || device === 'Android') {
     return (
       <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
@@ -714,7 +710,7 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
               </div>
             </div>
             <div className="mt-1 w-full rounded bg-violet-500/25 px-1 py-0.5 text-center">
-              <span className="text-[4px] font-medium text-violet-300">Dentist 8:00</span>
+              <span className="text-[4px] font-medium text-violet-300">{t('visualMocks.dentist800')}</span>
             </div>
           </div>
         </div>
@@ -726,9 +722,9 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   return (
     <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
       <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[rgb(var(--device-bezel))] bg-black shadow-2xl sm:h-[104px]">
-        <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
+        <Image src="/images/family-ai-lifestyle.png" alt={t('visualMocks.bubalySmartDisplay')} fill sizes="160px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
-        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
+        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">{t('visualMocks.goodEveningFamily')}</span>
       </div>
       <div className="h-3 w-8 bg-[rgb(var(--device-bezel))]" />
       <div className="h-1.5 w-16 rounded-full bg-[rgb(var(--device-accent))]" />
@@ -736,27 +732,6 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   );
 }
 
-export function TrustStrip({ familiesNote = 'Built for modern family life' }: { familiesNote?: string }) {
-  const items = [
-    [Shield, 'Private by Design', 'Family-scoped access controls'],
-    [Home, 'Responsive by Design', 'Web, iOS, and Android layouts'],
-    [Sparkles, 'Shared Updates', 'Family changes stay in sync'],
-    [Heart, 'Family Community', familiesNote],
-  ] as const;
-  return (
-    <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">
-      {items.map(([Icon, title, body]) => (
-        <div key={title} className="flex items-start gap-4">
-          <IconOrb icon={Icon} className="h-12 w-12" />
-          <div>
-            <h3 className="font-bold">{title}</h3>
-            <p className="mt-1 text-sm leading-6 text-white/65">{body}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function FeaturePreviewCard({
   icon,
@@ -784,11 +759,12 @@ export function FeaturePreviewCard({
   );
 }
 
-export function MiniCalendar() {
+export async function MiniCalendar() {
+  const t = await getTranslations();
   return (
     <div className="space-y-3 text-xs">
       <div className="flex items-center justify-between text-white/75">
-        <span>May 2024</span>
+        <span>{t('visualMocks.may2024')}</span>
         <span>+</span>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-white/55">
@@ -816,20 +792,21 @@ export function CheckList({ items, color = 'text-emerald-400' }: { items: string
   );
 }
 
-export function SmallCtaBand() {
+export async function SmallCtaBand() {
+  const t = await getTranslations();
   return (
     <section className="showcase-card grid items-center gap-6 rounded-2xl p-8 lg:grid-cols-[1fr_auto_auto] lg:p-10">
       <div className="flex items-center gap-6">
         <IconOrb icon={Sparkles} className="hidden h-16 w-16 sm:inline-flex" />
         <div>
-          <h2 className="text-2xl font-bold">One app. Every part of your family life.</h2>
+          <h2 className="text-2xl font-bold">{t('visualMocks.oneAppEveryPart')}</h2>
           <p className="mt-2 max-w-2xl text-white/68">
-            From daily routines to life&apos;s big moments, Bubaly brings it all together so you can focus on what really matters.
+            {t('visualMocks.oneAppEveryPartBody')}
           </p>
         </div>
       </div>
-      <PrimaryLink href="/signup">Get Started Free</PrimaryLink>
-      <OutlineLink href="/how-it-works">See How It Works</OutlineLink>
+      <PrimaryLink href="/signup">{t('visualMocks.getStartedFree')}</PrimaryLink>
+      <OutlineLink href="/how-it-works">{t('visualMocks.seeHowItWorks')}</OutlineLink>
     </section>
   );
 }
@@ -838,35 +815,34 @@ export function SmallCtaBand() {
  * The Bubaly brand manifesto — an editorial, emotional closing statement. Centered
  * long-form copy with the key beats emphasized and the tagline as the payoff.
  */
-export function ManifestoBand() {
+export async function ManifestoBand() {
+  const t = await getTranslations();
   return (
     <section className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-violet-500/[0.06] via-transparent to-blue-500/[0.05] px-6 py-14 sm:px-10 sm:py-20">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
       <div className="mx-auto max-w-3xl text-center">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Our Manifesto</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">{t('visualMocks.ourManifesto')}</span>
 
         <p className="mx-auto mt-6 max-w-2xl text-balance text-xl font-medium leading-snug text-white/75 sm:text-2xl sm:leading-snug">
-          Life isn&apos;t meant to be spent coordinating schedules, answering emails, filling out forms,
-          returning phone calls, or remembering every detail.
+          {t('visualMocks.manifestoLead')}
         </p>
 
         <p className="mt-7 text-3xl font-extrabold tracking-tight sm:text-5xl">
-          Life is meant to be <GradientText>lived</GradientText>.
+          {t('visualMocks.manifestoLifeMeant')} <GradientText>{t('visualMocks.manifestoLived')}</GradientText>.
         </p>
 
         <p className="mx-auto mt-8 max-w-2xl text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
-          Bubaly exists to quietly handle the work behind everyday family life—anticipating needs,
-          coordinating responsibilities, and reducing the invisible workload that steals time and attention.
+          {t('visualMocks.manifestoBody')}
         </p>
 
         <p className="mx-auto mt-6 max-w-xl text-base font-semibold leading-7 text-white/80 sm:text-lg">
-          Because every minute spent managing life is a minute not spent living it.
+          {t('visualMocks.manifestoBecause')}
         </p>
 
         <div className="mt-10">
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/55">Our mission is simple</p>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/55">{t('visualMocks.ourMissionIsSimple')}</p>
           <p className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
-            Less Managing Life. <GradientText>More Living It.</GradientText>
+            {t('visualMocks.lessManagingLife')} <GradientText>{t('visualMocks.moreLivingIt')}</GradientText>
           </p>
         </div>
       </div>
@@ -874,13 +850,17 @@ export function ManifestoBand() {
   );
 }
 
+// `title` and `body` are CATALOGUE KEYS, not copy. They used to be English
+// literals, which is why the homepage feature rail stayed English on a French
+// page while the nav around it translated: a string that never reaches the
+// catalogue cannot be translated by filling the catalogue.
 export const FEATURE_RAIL = [
-  { icon: CalendarDays, title: 'Shared Calendar', body: "See everyone's schedule in one beautiful view.", tone: 'violet', href: '/features#smart-calendar' },
-  { icon: CheckSquare2, title: 'Chores & Rewards', body: 'Assign chores, earn points, build habits.', tone: 'green', href: '/features#tasks-chores' },
-  { icon: UtensilsCrossed, title: 'Meal Planning', body: 'Plan meals, build grocery lists, save time.', tone: 'orange', href: '/features#meal-planning' },
-  { icon: GraduationCap, title: 'School & Sports', body: 'Stay on top of school and activities.', tone: 'blue', href: '/features#school-hub' },
-  { icon: Heart, title: 'Health & Reminders', body: 'Medications, appointments, and important reminders.', tone: 'pink', href: '/features#health-medications' },
-  { icon: Folder, title: 'Documents & Notes', body: 'Store what matters, access anywhere.', tone: 'violet', href: '/features#home-management' },
+  { icon: CalendarDays, title: 'featureRail.sharedCalendar', body: 'featureRail.sharedCalendarBody', tone: 'violet', href: '/features#smart-calendar' },
+  { icon: CheckSquare2, title: 'featureRail.choresRewards', body: 'featureRail.choresRewardsBody', tone: 'green', href: '/features#tasks-chores' },
+  { icon: UtensilsCrossed, title: 'featureRail.mealPlanning', body: 'featureRail.mealPlanningBody', tone: 'orange', href: '/features#meal-planning' },
+  { icon: GraduationCap, title: 'featureRail.schoolSports', body: 'featureRail.schoolSportsBody', tone: 'blue', href: '/features#school-hub' },
+  { icon: Heart, title: 'featureRail.healthReminders', body: 'featureRail.healthRemindersBody', tone: 'pink', href: '/features#health-medications' },
+  { icon: Folder, title: 'featureRail.documentsNotes', body: 'featureRail.documentsNotesBody', tone: 'violet', href: '/features#home-management' },
 ] as const;
 
 export const FEATURE_TOPICS = [

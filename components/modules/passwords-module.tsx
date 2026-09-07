@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Credential = Tables<'family_credentials'>;
 
@@ -46,6 +47,7 @@ const blankForm = { id: '', category: 'wifi', label: '', username: '', secret: '
 type Form = typeof blankForm;
 
 export function PasswordsModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -87,7 +89,7 @@ export function PasswordsModule() {
   async function copy(text: string, what: string) {
     if (!text) return;
     try { await navigator.clipboard.writeText(text); success(`${what} copied`); }
-    catch { toastError('Could not copy'); }
+    catch { toastError(t('passwordsModule.couldNotCopy')); }
   }
 
   function toggleReveal(id: string) {
@@ -109,7 +111,7 @@ export function PasswordsModule() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.label.trim()) { toastError('A name/label is required'); return; }
+    if (!form.label.trim()) { toastError(t('passwordsModule.aNameLabelIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const payload = {
@@ -139,7 +141,7 @@ export function PasswordsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('family_credentials').update({ deleted_at: new Date().toISOString() }).eq('id', c.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Entry deleted'); refresh();
+    success(t('passwordsModule.entryDeleted')); refresh();
   }
 
   if (loading) return <SkeletonList />;
@@ -148,22 +150,22 @@ export function PasswordsModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Wi-Fi & Passwords"
-        description="Shared family logins, Wi-Fi, PINs and cards — in one safe place."
-        action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> Add Entry</Button>}
+        title={t('passwords.wiFiPasswords')}
+        description={t('passwordsModule.sharedFamilyLoginsWiFi')}
+        action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addEntry')}</Button>}
       />
 
       {/* Search + category filter */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative w-full lg:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search entries…" aria-label="Search entries"
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('passwords.searchEntries')} aria-label={t('passwords.searchEntries')}
             className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50" />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button onClick={() => setCatFilter(null)}
             className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === null ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}>
-            All ({data.length})
+            {t('passwords.all')}{data.length})
           </button>
           {CATEGORIES.filter((c) => counts[c.value]).map((c) => (
             <button key={c.value} onClick={() => setCatFilter(catFilter === c.value ? null : c.value)}
@@ -176,16 +178,16 @@ export function PasswordsModule() {
 
       {/* Security note */}
       <p className="flex items-center gap-1.5 text-xs text-muted">
-        <Shield className="h-3.5 w-3.5 text-emerald-400" /> Visible only to your family. Secrets stay hidden until you reveal them.
+        <Shield className="h-3.5 w-3.5 text-emerald-400" /> {t('passwords.visibleOnlyToYourFamilySecrets')}
       </p>
 
       {filtered.length === 0 ? (
         data.length === 0 ? (
-          <EmptyState icon={KeyRound} title="No entries yet"
-            description="Save your family Wi-Fi, streaming logins, door codes and more — everyone can find them, no one has to text “what’s the password?” again."
-            action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> Add your first entry</Button>} />
+          <EmptyState icon={KeyRound} title={t('passwords.noEntriesYet')}
+            description={t('passwordsModule.saveYourFamilyWiFi')}
+            action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addYourFirstEntry')}</Button>} />
         ) : (
-          <EmptyState icon={Search} title="No matches" description="Try a different search or clear the filter." />
+          <EmptyState icon={Search} title={t('passwords.noMatches')} description={t('passwordsModule.tryADifferentSearchOr')} />
         )
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -213,8 +215,8 @@ export function PasswordsModule() {
                         <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setMenuId(null)} />
                         <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-surface text-left shadow-lg">
                           <button onClick={() => { setMenuId(null); toggleFavorite(c); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Star className="h-3.5 w-3.5" /> {c.is_favorite ? 'Unstar' : 'Star'}</button>
-                          <button onClick={() => { setMenuId(null); openEdit(c); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                          <button onClick={() => { setMenuId(null); setConfirmDel(c); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                          <button onClick={() => { setMenuId(null); openEdit(c); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Pencil className="h-3.5 w-3.5" /> {t('passwords.edit')}</button>
+                          <button onClick={() => { setMenuId(null); setConfirmDel(c); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> {t('passwords.delete')}</button>
                         </div>
                       </>
                     )}
@@ -231,7 +233,7 @@ export function PasswordsModule() {
                     <button onClick={() => toggleReveal(c.id)} aria-label={isRevealed ? 'Hide' : 'Reveal'} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
                       {isRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                    <button onClick={() => copy(c.secret, 'Secret')} disabled={!c.secret} aria-label="Copy secret" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg disabled:opacity-40">
+                    <button onClick={() => copy(c.secret, 'Secret')} disabled={!c.secret} aria-label={t('passwords.copySecret')} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg disabled:opacity-40">
                       <Copy className="h-4 w-4" />
                     </button>
                   </div>
@@ -253,15 +255,15 @@ export function PasswordsModule() {
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title={form.id ? 'Edit entry' : 'Add entry'}>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category">{(id) => (
+            <Field label={t('passwords.category')}>{(id) => (
               <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
                 {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </Select>
             )}</Field>
-            <Field label="Name" required>{(id) => <Input id={id} value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="e.g. Home Wi-Fi" required />}</Field>
+            <Field label={t('passwords.name')} required>{(id) => <Input id={id} value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder={t('passwords.eGHomeWiFi')} required />}</Field>
           </div>
           <Field label={form.category === 'wifi' ? 'Network name' : form.category === 'card' ? 'Card number' : 'Username / email'}>
-            {(id) => <Input id={id} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder="Optional" autoComplete="off" />}
+            {(id) => <Input id={id} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder={t('passwords.optional')} autoComplete="off" />}
           </Field>
           <Field label={form.category === 'wifi' ? 'Password' : form.category === 'pin' ? 'Code' : 'Secret / password'}>
             {(id) => (
@@ -273,29 +275,29 @@ export function PasswordsModule() {
               </div>
             )}
           </Field>
-          <Field label="Link (optional)">{(id) => <Input id={id} value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="netflix.com" autoComplete="off" />}</Field>
-          <Field label="Belongs to (optional)">{(id) => (
+          <Field label={t('passwords.linkOptional')}>{(id) => <Input id={id} value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="netflix.com" autoComplete="off" />}</Field>
+          <Field label={t('passwords.belongsToOptional')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-              <option value="">Whole family</option>
+              <option value="">{t('passwords.wholeFamily')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
-          <Field label="Notes (optional)">{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="e.g. Guest network, resets monthly" />}</Field>
+          <Field label={t('passwords.notesOptional')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder={t('passwords.eGGuestNetworkResetsMonthly')} />}</Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_favorite} onChange={(e) => setForm((f) => ({ ...f, is_favorite: e.target.checked }))} className="h-4 w-4 rounded border-border" />
-            Pin to top (favorite)
+            {t('passwords.pinToTopFavorite')}
           </label>
           <Button type="submit" className="w-full" loading={saving} disabled={saving || !form.label.trim()}>{form.id ? 'Save changes' : 'Save entry'}</Button>
         </form>
       </Modal>
 
       {/* Delete confirm */}
-      <Modal open={!!confirmDel} onClose={() => setConfirmDel(null)} title="Delete entry?">
+      <Modal open={!!confirmDel} onClose={() => setConfirmDel(null)} title={t('passwords.deleteEntry')}>
         <div className="space-y-4">
-          <p className="text-sm text-muted">Delete <span className="font-semibold text-fg">{confirmDel?.label}</span>? This removes it for the whole family.</p>
+          <p className="text-sm text-muted">{t('passwords.delete')} <span className="font-semibold text-fg">{confirmDel?.label}</span>{t('passwords.thisRemovesItForTheWhole')}</p>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setConfirmDel(null)}>Cancel</Button>
-            <Button variant="danger" onClick={() => confirmDel && remove(confirmDel)}>Delete</Button>
+            <Button variant="secondary" onClick={() => setConfirmDel(null)}>{t('passwords.cancel')}</Button>
+            <Button variant="danger" onClick={() => confirmDel && remove(confirmDel)}>{t('passwords.delete')}</Button>
           </div>
         </div>
       </Modal>

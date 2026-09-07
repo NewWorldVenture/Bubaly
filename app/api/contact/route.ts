@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { contactSchema, contactTopicLabel, fieldErrors } from '@/lib/validation';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -12,12 +13,13 @@ export const runtime = 'nodejs';
 const MAX_CONTACT_REQUEST_BYTES = 16_384;
 
 export async function POST(req: Request) {
+  const t = await getTranslations();
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `contact:${ip}`, { limit: 5 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many messages. Please try again shortly.' },
+      { error: t('contact.tooManyMessagesPleaseTry') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
 
   const parsed = contactSchema.safeParse(body.value);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Validation failed', fields: fieldErrors(parsed.error) }, { status: 422 });
+    return NextResponse.json({ error: t('contact.validationFailed'), fields: fieldErrors(parsed.error) }, { status: 422 });
   }
 
   const { name, email, topic, message } = parsed.data;
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: 'We couldn’t send your message. Please try again.' }, { status: 502 });
+    return NextResponse.json({ error: t('contact.weCouldnTSendYour') }, { status: 502 });
   }
   return NextResponse.json({ ok: true });
 }

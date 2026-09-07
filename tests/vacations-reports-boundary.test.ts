@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/vacations/vacations-reports.tsx', 'utf8');
@@ -16,7 +17,7 @@ describe('vacation reports read boundary', () => {
   });
 
   it('fails closed instead of rendering partial financial reports', () => {
-    expect(source).toContain('Could not load complete vacation reports. Refresh and try again.');
+    expectSays(source, 'vacationsReports.couldNotLoadCompleteVacation', 'Could not load complete vacation reports. Refresh and try again.');
     expect(source).toContain('onRetry={refreshAll}');
   });
 });

@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { Send, Ban } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { adminResendInviteAction, adminRevokeInviteAction } from '@/app/(app)/admin/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function InviteRowActions({ inviteId }: { inviteId: string }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<'resend' | 'revoke' | null>(null);
 
@@ -14,24 +16,24 @@ export function InviteRowActions({ inviteId }: { inviteId: string }) {
     const res = await adminResendInviteAction(inviteId);
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Invite re-sent');
+    success(t('inviteRowActions.inviteReSent'));
   }
 
   async function revoke() {
-    if (!confirm('Revoke this invite? The link will stop working.')) return;
+    if (!confirm(t('inviteRowActions.revokeThisInviteTheLink'))) return;
     setBusy('revoke');
     const res = await adminRevokeInviteAction(inviteId);
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Invite revoked');
+    success(t('inviteRowActions.inviteRevoked'));
   }
 
   return (
     <div className="flex items-center gap-1">
-      <button onClick={resend} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand-text disabled:opacity-50" aria-label="Resend invite" title="Resend">
+      <button onClick={resend} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand-text disabled:opacity-50" aria-label={t('inviteRowActions.resendInvite')} title={t('inviteRowActions.resend')}>
         <Send className="h-4 w-4" />
       </button>
-      <button onClick={revoke} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label="Revoke invite" title="Revoke">
+      <button onClick={revoke} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label={t('inviteRowActions.revokeInvite')} title={t('inviteRowActions.revoke')}>
         <Ban className="h-4 w-4" />
       </button>
     </div>

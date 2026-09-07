@@ -7,11 +7,13 @@ import { isMissingTableError } from '@/lib/supabase/errors';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
 import { fmtTime, firstName } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'My Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const me = ctx.active.member;
   const familyId = ctx.active.familyId;
@@ -35,7 +37,7 @@ export default async function KidsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (kidsError) {
     console.error('[kids] kids dashboard read failed', kidsError);
-    return <ErrorState message="We couldn't load your day right now. Try again in a moment!" />;
+    return <ErrorState message={tr('kids.weCouldnTLoadYour')} />;
   }
 
   const myTasks = myTasksRes.data;
@@ -55,18 +57,18 @@ export default async function KidsPage() {
         <Avatar name={me.display_name} color={me.color} size={56} />
         <div>
           <h1 className="text-2xl font-black">Hi {firstName(me.display_name)}! 👋</h1>
-          <p className="text-sm text-muted">Here&apos;s your day.</p>
+          <p className="text-sm text-muted">{tr('kids.hereAposSYourDay')}</p>
         </div>
       </div>
 
       <div className="flex items-center gap-3 rounded-3xl bg-gradient-to-r from-amber-500/20 to-pink-500/20 p-5">
         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-amber-400"><Star className="h-7 w-7 text-white" /></div>
-        <div><p className="text-3xl font-black tabular-nums">{points}</p><p className="text-sm font-semibold text-muted">points earned</p></div>
+        <div><p className="text-3xl font-black tabular-nums">{points}</p><p className="text-sm font-semibold text-muted">{tr('kids.pointsEarned')}</p></div>
         <PartyPopper className="ml-auto h-8 w-8 text-pink-400" />
       </div>
 
       <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><CheckCircle2 className="h-5 w-5 text-emerald-400" /> My Jobs</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><CheckCircle2 className="h-5 w-5 text-emerald-400" /> {tr('kids.myJobs')}</h2>
         {myTasks && myTasks.length > 0 ? (
           <ul className="space-y-3">
             {myTasks.map((t) => {
@@ -85,14 +87,14 @@ export default async function KidsPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center">
             <Trophy className="mx-auto h-10 w-10 text-amber-400" />
-            <p className="mt-2 text-lg font-bold">All done! 🎉</p>
-            <p className="text-sm text-muted">No jobs left today.</p>
+            <p className="mt-2 text-lg font-bold">{tr('kids.allDone')}</p>
+            <p className="text-sm text-muted">{tr('kids.noJobsLeftToday')}</p>
           </div>
         )}
       </section>
 
       <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><CalendarDays className="h-5 w-5 text-violet-400" /> Today</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><CalendarDays className="h-5 w-5 text-violet-400" /> {tr('kids.today')}</h2>
         {events && events.length > 0 ? (
           <ul className="space-y-3">
             {events.map((e) => (
@@ -103,7 +105,7 @@ export default async function KidsPage() {
             ))}
           </ul>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted">Nothing on the calendar today.</div>
+          <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted">{tr('kids.nothingOnTheCalendarToday')}</div>
         )}
       </section>
     </div>

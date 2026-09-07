@@ -7,6 +7,7 @@
 // frame still protects the panel and looks intentional.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AmbientClock } from './ambient-clock';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ROTATE_MS = 20_000;
 
@@ -16,6 +17,7 @@ export function PhotoFrame({ photos, idleMinutes, clock24, nextLine }: {
   clock24: boolean;
   nextLine: string | null;
 }) {
+  const t = useTranslations();
   const [idle, setIdle] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,7 +53,7 @@ export function PhotoFrame({ photos, idleMinutes, clock24, nextLine }: {
     <div
       className="fixed inset-0 z-50 animate-fade-in overflow-hidden bg-black"
       role="button"
-      aria-label="Wake display"
+      aria-label={t('photoFrame.wakeDisplay')}
       tabIndex={0}
     >
       {photos.length > 0 ? (

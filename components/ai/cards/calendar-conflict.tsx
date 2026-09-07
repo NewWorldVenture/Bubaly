@@ -2,12 +2,14 @@
 // — one row per double-booking, who it affects, and a one-tap way to ask
 // Bubaly to move one of them. No conflicts is good news and says so.
 import { CalendarX2, CheckCircle2 } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import type { CalendarConflictCard } from '@/lib/ai/result-cards';
 import { CardFrame, MoreRow } from './index';
 
 const COMPACT_ROWS = 3;
 
 export function CalendarConflictCardView({ card, compact = false, onAsk, className }: { card: CalendarConflictCard; compact?: boolean; onAsk?: (text: string) => void; className?: string }) {
+  const t = useTranslations();
   const rows = compact ? card.conflicts.slice(0, COMPACT_ROWS) : card.conflicts;
   const clear = card.conflicts.length === 0;
   return (
@@ -22,7 +24,7 @@ export function CalendarConflictCardView({ card, compact = false, onAsk, classNa
       className={className}
     >
       {clear ? (
-        <p className="text-sm text-muted">Nobody is double-booked.</p>
+        <p className="text-sm text-muted">{t('calendarConflict.nobodyIsDoubleBooked')}</p>
       ) : (
         <ul className="space-y-1.5">
           {rows.map((c, i) => (

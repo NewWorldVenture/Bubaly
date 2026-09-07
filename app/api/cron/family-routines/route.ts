@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -42,8 +43,9 @@ function systemScope(db: DB, familyId: string, tz: string, now: Date): ServiceSc
 }
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('familyRoutines.unauthorized') }, { status: 401 });
   }
 
   const startedAt = Date.now();
@@ -72,7 +74,7 @@ export async function GET(req: NextRequest) {
     .limit(MAX_ROUTINES_PER_TICK);
   if (error) {
     console.error('[cron:family-routines] could not read due routines', error);
-    return NextResponse.json({ error: 'Could not read routines' }, { status: 500 });
+    return NextResponse.json({ error: t('familyRoutines.couldNotReadRoutines') }, { status: 500 });
   }
 
   let filed = 0;

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { parseFormFields } from '@/lib/marketing/forms';
@@ -42,6 +43,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function PublicFormPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const form = await getForm(id);
   if (!form) notFound();
@@ -57,7 +59,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
           <SectionHeading
             eyebrow="Form unavailable"
             title={title}
-            description="This form is temporarily unavailable because it has no usable fields. Please try again later or contact us directly."
+            description={t('f.thisFormIsTemporarilyUnavailable')}
           />
         </Section>
         <MarketingAeoSection path={`/f/${id}`} name={title} description={description} />

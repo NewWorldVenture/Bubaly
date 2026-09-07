@@ -25,6 +25,7 @@ import { routeCommand, type CommandResult } from '@/lib/command-bar/route';
 import { submitAIRequest } from '@/lib/ai/chat-request';
 import { moduleFromPathname } from '@/lib/concierge/suggested-prompts';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -40,6 +41,7 @@ export function toCommandBarResults(results: CommandResult[]): CommandBarResult[
 const TOAST_ANSWER_CHARS = 160;
 
 export function CommandBar() {
+  const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const { familyId, userId, selfMember } = useApp();
@@ -107,14 +109,14 @@ export function CommandBar() {
       setOpen(false);
       success(
         res.count > 1 ? `${res.count} items added` : r.label,
-        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo')); } },
+        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
-      toastError(describeDbError(err, 'Could not save that.'));
+      toastError(describeDbError(err, t('commandBar.couldNotSaveThat')));
     } finally {
       setBusy(false);
     }
-  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError]);
+  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { setOpen(false); return; }
@@ -131,7 +133,7 @@ export function CommandBar() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Command bar"
+        aria-label={t('commandBar.commandBar')}
         className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl popover-surface shadow-glass animate-fade-in"
         onKeyDown={onKeyDown}
       >
@@ -141,17 +143,15 @@ export function CommandBar() {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search, add a task, or ask anything…"
-            aria-label="Command input"
+            placeholder={t('commandBar.searchAddATaskOrAsk')}
+            aria-label={t('commandBar.commandInput')}
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted"
           />
           <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted sm:block">esc</kbd>
         </div>
 
         {query.trim() === '' ? (
-          <p className="px-4 py-6 text-center text-xs text-muted">
-            Jump to a page, capture a task/note/event, or ask Bubaly. Try “plan our week”, “remind me to…”, “add milk to the list”, or a page name.
-          </p>
+          <p className="px-4 py-6 text-center text-xs text-muted">{t('commandBar.jumpToAPageCapture')}</p>
         ) : (
           <ul className="max-h-[52vh] overflow-y-auto py-1">
             {results.map((r, i) => {

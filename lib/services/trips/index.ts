@@ -251,7 +251,7 @@ export async function findOrCreateVacation(scope: ServiceScope, input: FindOrCre
         console.error('[service:trips] trip insert failed', error);
         return fail(describeDbError(error, 'Could not create that trip.'), { code: SERVICE_CODES.db });
       }
-      await recordActivitySafely(scope, { agent: 'trips', title: `Started planning ${data.title}`, href: `/dashboard/vacations/${data.id}` });
+      await recordActivitySafely(scope, { action: 'create', agent: 'trips', title: `Started planning ${data.title}`, href: `/dashboard/vacations/${data.id}` });
       return ok({ vacation: data, created: true });
     },
   );
@@ -436,6 +436,7 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
 
   await recordActivitySafely(scope, {
     agent: 'trips',
+    action: 'create',
     title: `Drafted a plan for ${trip.title}: ${added.activities} activities, ${added.items} itinerary entries, ${added.budget} budget lines`,
     href: `/dashboard/vacations/${trip.id}`,
   });
@@ -561,6 +562,7 @@ export async function generatePackingList(scope: ServiceScope, vacationId: strin
   if (total > 0) {
     await recordActivitySafely(scope, {
       agent: 'trips',
+      action: 'update',
       title: `Packed ${total} items across ${results.length} ${results.length === 1 ? 'list' : 'lists'} for ${trip.title}`,
       href: `/dashboard/vacations/${trip.id}`,
     });

@@ -16,10 +16,12 @@ import {
   getAnonymousId, detectGPC, readLocalConsent, writeLocalConsent,
   initialConsent, postConsent, trackTouchOnce,
 } from '@/lib/marketing/visitor';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export const OPEN_CONSENT_EVENT = 'bubaly:open-consent';
 
 export function ConsentManager() {
+  const t = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [gpc, setGpc] = useState(false);
   const [anonId, setAnonId] = useState('');
@@ -75,7 +77,7 @@ export function ConsentManager() {
       {bannerOpen && !prefsOpen && (
         <div
           role="dialog"
-          aria-label="Cookie consent"
+          aria-label={t('consentManager.cookieConsent')}
           className="animate-fade-in-up fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-2xl border border-border bg-surface/95 p-4 shadow-glass backdrop-blur sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-5"
         >
           <div className="flex items-start gap-3">
@@ -83,33 +85,33 @@ export function ConsentManager() {
               <Cookie className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">We value your privacy</p>
+              <p className="text-sm font-semibold">{t('consentManager.weValueYourPrivacy')}</p>
               <p className="mt-1 text-xs leading-5 text-muted">
                 We use strictly-necessary cookies to run Bubaly, plus optional first-party
                 analytics to improve it. No ad trackers, no fingerprinting. Choose what you
                 allow — see our{' '}
-                <Link href="/cookies" className="font-medium text-brand-text hover:underline">Cookie Policy</Link>{' '}
+                <Link href="/cookies" className="font-medium text-brand-text hover:underline">{t('consentManager.cookiePolicy')}</Link>{' '}
                 and{' '}
-                <Link href="/privacy" className="font-medium text-brand-text hover:underline">Privacy Policy</Link>.
+                <Link href="/privacy" className="font-medium text-brand-text hover:underline">{t('consentManager.privacyPolicy')}</Link>.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => void commit(presetAcceptAll(), 'banner_accept_all')}
                   className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:opacity-90"
                 >
-                  Accept all
+                  {t('consentManager.acceptAll')}
                 </button>
                 <button
                   onClick={() => void commit(presetRejectNonEssential(), 'banner_reject')}
                   className="rounded-lg border border-border px-4 py-2 text-xs font-semibold transition hover:bg-elevated"
                 >
-                  Reject non-essential
+                  {t('consentManager.rejectNonEssential')}
                 </button>
                 <button
                   onClick={() => setPrefsOpen(true)}
                   className="rounded-lg px-3 py-2 text-xs font-semibold text-muted transition hover:text-fg"
                 >
-                  Manage preferences
+                  {t('consentManager.managePreferences')}
                 </button>
               </div>
             </div>
@@ -142,27 +144,26 @@ function PreferenceCenter({
   onReject: () => void;
   onSave: (s: ConsentState) => void;
 }) {
+  const t = useTranslations();
   const [state, setState] = useState<ConsentState>(initial);
   const toggle = (key: ConsentCategory) => setState((s) => ({ ...s, [key]: !s[key], necessary: true }));
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Privacy preferences">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true" aria-label={t('consentManager.privacyPreferences')}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div className="animate-fade-in-up relative w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-glass sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><ShieldCheck className="h-4 w-4" /></span>
-            <h2 className="text-base font-bold">Privacy preferences</h2>
+            <h2 className="text-base font-bold">{t('consentManager.privacyPreferences')}</h2>
           </div>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
+          <button onClick={onClose} aria-label={t('consentManager.close')} className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {gpc && (
-          <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
-            Your browser sends a Global Privacy Control signal — we’ve turned optional categories off by default. You can still turn them on below.
-          </p>
+          <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">{t('consentManager.yourBrowserSendsAGlobal')}</p>
         )}
 
         <div className="mt-4 space-y-2.5">
@@ -200,13 +201,13 @@ function PreferenceCenter({
 
         <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
           <button onClick={onReject} className="rounded-lg px-3 py-2 text-xs font-semibold text-muted transition hover:text-fg">
-            Reject non-essential
+            {t('consentManager.rejectNonEssential')}
           </button>
           <button onClick={onAcceptAll} className="rounded-lg border border-border px-4 py-2 text-xs font-semibold transition hover:bg-elevated">
-            Accept all
+            {t('consentManager.acceptAll')}
           </button>
           <button onClick={() => onSave({ ...state, necessary: true })} className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg transition hover:opacity-90">
-            Save choices
+            {t('consentManager.saveChoices')}
           </button>
         </div>
       </div>
@@ -216,13 +217,14 @@ function PreferenceCenter({
 
 /** Footer / anywhere trigger to re-open the preference center. */
 export function ConsentReopenLink({ className }: { className?: string }) {
+  const t = useTranslations();
   return (
     <button
       type="button"
       onClick={() => window.dispatchEvent(new CustomEvent(OPEN_CONSENT_EVENT))}
       className={className ?? 'transition hover:text-fg'}
     >
-      Privacy choices
+      {t('consentManager.privacyChoices')}
     </button>
   );
 }

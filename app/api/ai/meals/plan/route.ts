@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
@@ -28,20 +31,21 @@ function logDatabaseFailure(operation: string, error: unknown) {
  * and clearing the targeted slots first), so it's a true one-click planner.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('plan.unauthorized') }, { status: 401 }); }
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: t('plan.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('plan.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const weekStart = String(body.weekStart ?? '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-    return NextResponse.json({ error: 'A valid weekStart (YYYY-MM-DD) is required.' }, { status: 400 });
+    return NextResponse.json({ error: t('plan.aValidWeekstartYyyyMm') }, { status: 400 });
   }
   const mealTypes = (Array.isArray(body.mealTypes) ? body.mealTypes : ['dinner'])
     .filter((t: string): t is MealType => PLAN_MEAL_TYPES.includes(t as MealType));
@@ -54,7 +58,7 @@ export async function POST(req: Request) {
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-meals-plan:${userId}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many meal-plan requests. Please try again shortly.' },
+    { error: t('plan.tooManyMealPlanRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
@@ -66,7 +70,7 @@ export async function POST(req: Request) {
   const candidateError = candidateResults.find((result) => result.error)?.error;
   if (candidateError) {
     logDatabaseFailure('candidate read', candidateError);
-    return databaseUnavailable('Meal planning data is temporarily unavailable.');
+    return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
   }
   const [{ data: meals }, { data: recipes }] = candidateResults;
 
@@ -79,7 +83,7 @@ export async function POST(req: Request) {
       .select('name,expires_at').eq('family_id', familyId).not('expires_at', 'is', null);
     if (pantryError) {
       logDatabaseFailure('pantry read', pantryError);
-      return databaseUnavailable('Meal planning data is temporarily unavailable.');
+      return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
     }
     expiring = expiringSoon(pantry ?? [], 7).map((p) => p.name).slice(0, 12);
   }
@@ -92,12 +96,19 @@ export async function POST(req: Request) {
   // Ask the model ---------------------------------------------------------
   let text: string;
   try {
-    const completion = await (await resolveProvider()).complete({
-      system: buildPlannerSystem(),
-      messages: [{ role: 'user', content: buildPlannerUser(request) }],
-      tools: [], maxTokens: 2000,
-    });
-    text = completion.text;
+    text = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'meals.plan', text: 'Plan the week\u2019s meals' },
+      async (obs) => {
+        const completion = await (await resolveProvider()).complete({
+          system: buildPlannerSystem(),
+          messages: [{ role: 'user', content: buildPlannerUser(request) }],
+          tools: [], maxTokens: 2000,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    );
   } catch (err) {
     console.error('Meal plan generation error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
@@ -105,7 +116,7 @@ export async function POST(req: Request) {
 
   const assignments = parsePlan(text, request);
   if (assignments.length === 0) {
-    return NextResponse.json({ error: 'The planner could not produce a plan. Try adding a few meals or recipes first.' }, { status: 422 });
+    return NextResponse.json({ error: t('plan.thePlannerCouldNotProduce') }, { status: 422 });
   }
 
   if (!write) return NextResponse.json({ assignments, written: false });
@@ -154,7 +165,7 @@ export async function POST(req: Request) {
   if (persistenceError || rows.length !== assignments.length) {
     await cleanupCreatedMeals();
     logDatabaseFailure('meal resolution', persistenceError ?? new Error('Meal plan contains unresolved assignments.'));
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   const { data: existingPlans, error: existingPlansError } = await supabase.from('meal_plans')
@@ -163,7 +174,7 @@ export async function POST(req: Request) {
   if (existingPlansError) {
     await cleanupCreatedMeals();
     logDatabaseFailure('existing plan read', existingPlansError);
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   const restorePreviousPlans = async () => {
@@ -183,7 +194,7 @@ export async function POST(req: Request) {
   if (deleteError) {
     await cleanupCreatedMeals();
     logDatabaseFailure('targeted plan cleanup', deleteError);
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   if (rows.length) {
@@ -191,7 +202,7 @@ export async function POST(req: Request) {
     if (error || !inserted || inserted.length !== rows.length) {
       await restorePreviousPlans();
       logDatabaseFailure('meal plan write', error ?? new Error('Meal plan insert returned an incomplete result.'));
-      return databaseUnavailable('Could not save the meal plan.');
+      return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
     }
   }
 

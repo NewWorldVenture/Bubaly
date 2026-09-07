@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button';
 import { buildAppLockConfig, isValidPin, isAppLockConfig, unlockKey, type AppLockConfig } from '@/lib/security/app-lock';
 import { saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function AppLockSettings() {
+  const t = useTranslations();
   const { userId } = useApp();
   const { success, error: toastError } = useToast();
   // undefined = loading, null = no PIN ever set, otherwise the stored config.
@@ -89,18 +91,15 @@ export function AppLockSettings() {
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold">App Lock</h3>
-            <p className="mt-0.5 max-w-md text-xs text-muted">
-              Require a 4-digit PIN to open Bubaly on this browser. Handy when you share a device.
-              You can always sign out from the lock screen if you forget it.
-            </p>
+            <h3 className="text-sm font-semibold">{t('appLockSettings.appLock')}</h3>
+            <p className="mt-0.5 max-w-md text-xs text-muted">{t('appLockSettings.requireA4DigitPin')}</p>
             {enabled ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" /> On
               </p>
             ) : hasPin ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted">
-                <ShieldCheck className="h-3.5 w-3.5" /> PIN ready — App Lock is off
+                <ShieldCheck className="h-3.5 w-3.5" /> {t('appLockSettings.pinReadyAppLockIsOff')}
               </p>
             ) : null}
           </div>
@@ -110,17 +109,17 @@ export function AppLockSettings() {
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
             <>
-              <Button size="sm" variant="outline" onClick={lockNow} disabled={saving}>Lock now</Button>
-              <Button size="sm" variant="outline" onClick={() => setModalOpen(true)} disabled={saving}>Change PIN</Button>
-              <button onClick={() => setEnabled(false)} disabled={saving} className="text-xs font-medium text-muted hover:text-rose-400 disabled:opacity-50">Turn off</button>
+              <Button size="sm" variant="outline" onClick={lockNow} disabled={saving}>{t('appLockSettings.lockNow')}</Button>
+              <Button size="sm" variant="outline" onClick={() => setModalOpen(true)} disabled={saving}>{t('appLockSettings.changePin')}</Button>
+              <button onClick={() => setEnabled(false)} disabled={saving} className="text-xs font-medium text-muted hover:text-rose-400 disabled:opacity-50">{t('appLockSettings.turnOff')}</button>
             </>
           ) : hasPin ? (
             <>
-              <Button size="sm" onClick={() => setEnabled(true)} disabled={saving}>Turn on</Button>
-              <button onClick={() => setModalOpen(true)} disabled={saving} className="text-xs font-medium text-muted hover:text-fg disabled:opacity-50">Change PIN</button>
+              <Button size="sm" onClick={() => setEnabled(true)} disabled={saving}>{t('appLockSettings.turnOn')}</Button>
+              <button onClick={() => setModalOpen(true)} disabled={saving} className="text-xs font-medium text-muted hover:text-fg disabled:opacity-50">{t('appLockSettings.changePin')}</button>
             </>
           ) : (
-            <Button size="sm" onClick={() => setModalOpen(true)} disabled={saving}>Set up PIN</Button>
+            <Button size="sm" onClick={() => setModalOpen(true)} disabled={saving}>{t('appLockSettings.setUpPin')}</Button>
           )}
         </div>
       </div>
@@ -138,6 +137,7 @@ export function AppLockSettings() {
 }
 
 function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: () => void; onConfirm: (pin: string) => void; saving: boolean; confirmLabel: string }) {
+  const t = useTranslations();
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [first, setFirst] = useState('');
   const [val, setVal] = useState('');
@@ -162,7 +162,7 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
         />
         {err && <p className={cn('text-xs font-medium', 'text-rose-400')}>{err}</p>}
         <div className="flex w-full justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('appLockSettings.cancel')}</Button>
           <Button type="button" size="sm" loading={saving} disabled={saving || val.length !== 4} onClick={() => next(val)}>
             {step === 'enter' ? 'Next' : confirmLabel}
           </Button>

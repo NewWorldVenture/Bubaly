@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/contacts/[id]/page.tsx', 'utf8');
@@ -10,6 +11,6 @@ describe('contact timeline read boundary', () => {
     expect(page).toContain('const { data, error } = await supabase');
     expect(page).toContain('if (interactionsError)');
     expect(page).toContain('if (communicationsError)');
-    expect(page).toContain('Could not load this contact timeline from Supabase. Refresh and try again.');
+    expectSays(page, 'contacts.couldNotLoadThisContact', 'Could not load this contact timeline from Supabase. Refresh and try again.');
   });
 });

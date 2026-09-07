@@ -11,8 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { completeTodoAction } from '@/app/(app)/dashboard/todos/actions';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
@@ -23,6 +22,7 @@ import {
   type ActionInput, type ActionSource, type ActionPriority,
 } from '@/lib/opportunities/next-actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 type Task = Tables<'todo_items'>;
@@ -43,6 +43,8 @@ const OPEN_OPP = new Set(['interested', 'registered', 'waitlisted']);
 const PRIORITIES = new Set<ActionPriority>(['low', 'medium', 'high']);
 
 export function NextActionsModule() {
+  const i18nT = useTranslations();
+  const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const journey = useJourney('next_actions');
@@ -115,34 +117,42 @@ export function NextActionsModule() {
   const needAttention = attentionCount(ranked);
 
   async function completeTask(taskId: string) {
-    const sb = createClient();
-    const { error: err } = await sb.from('todo_items')
-      .update({ is_done: true, completed_at: new Date().toISOString() }).eq('id', taskId);
-    if (err) { toastError(describeDbError(err)); return; }
+    // Was a direct update filtering `id` alone, with no family filter — the same
+    // shape §7 keeps finding, and it slipped past the to-dos tranche because that
+    // tranche's guard only read `todos-module`. `completeTodo` writes the same
+    // two columns, adds the family filter, and reports a row it cannot find
+    // instead of succeeding silently.
+    //
+    // It does NOT reach the household trail: no `complete`/`assign`/`progress`
+    // function in this service records one, so the trail carries creates and
+    // deletes but not the DOING. Recorded in the ledger rather than half-fixed
+    // here — it spans five functions across to-dos and chores.
+    const result = await completeTodoAction(taskId, true);
+    if (!result.ok) { toastError(result.error); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
-    success('Nice — one less thing');
+    success(i18nT('nextActionsModule.niceOneLessThing'));
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (error) return <ErrorState message="Could not load next actions. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={i18nT('nextActionsModule.couldNotLoadNextActions')} onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
-        title="Next Best Actions"
-        description="Everything that needs the family, ranked by what matters most right now."
+        title={tr('nextActions.nextBestActions')}
+        description={i18nT('nextActionsModule.everythingThatNeedsTheFamily')}
       />
 
       {ranked.length === 0 ? (
-        <EmptyState icon={Sparkles} title="You're all caught up"
-          description="No overdue tasks, upcoming events, or closing opportunities need attention. Enjoy it." />
+        <EmptyState icon={Sparkles} title={i18nT('nextActions.youreAllCaughtUp')}
+          description={i18nT('nextActionsModule.noOverdueTasksUpcomingEvents')} />
       ) : (
         <>
           <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
             <Target className="h-4 w-4 text-brand-text" />
             {needAttention > 0
-              ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} attention today. {ranked.length} total in your queue.</span>
-              : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming — nothing overdue. Nicely ahead.</span>}
+              ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} {tr('nextActions.attentionToday')} {ranked.length} {tr('nextActions.totalInYourQueue')}</span>
+              : <span><span className="font-semibold text-fg">{ranked.length}</span> {tr('nextActions.upcomingNothingOverdueNicelyAhead')}</span>}
           </div>
 
           <div className="space-y-6">
@@ -172,12 +182,12 @@ export function NextActionsModule() {
                             <p className={cn('text-xs', urgent ? 'text-rose-300' : 'text-muted')}>{meta.label} · {a.reason}</p>
                           </div>
                           {isTask && (
-                            <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label="Mark done" title="Mark done"
+                            <button onClick={() => completeTask(a.id.replace('task:', ''))} aria-label={tr('nextActions.markDone')} title={tr('nextActions.markDone')}
                               className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:border-emerald-500/40 hover:text-emerald-300">
                               <Check className="h-4 w-4" />
                             </button>
                           )}
-                          <Link href={a.href} aria-label="Open" title="Open"
+                          <Link href={a.href} aria-label={tr('nextActions.open')} title={tr('nextActions.open')}
                             className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-brand-text">
                             <ArrowRight className="h-4 w-4" />
                           </Link>

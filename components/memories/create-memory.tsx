@@ -19,10 +19,12 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Pick = { file: File; preview: string };
 
 export function CreateMemory() {
+  const t = useTranslations();
   const router = useRouter();
   const { familyId, userId } = useApp();
   const { error: toastError, success } = useToast();
@@ -52,7 +54,7 @@ export function CreateMemory() {
   function addFiles(list: FileList | null) {
     if (!list) return;
     const images = Array.from(list).filter((f) => f.type.startsWith('image/'));
-    if (!images.length) { toastError('Please choose image files.'); return; }
+    if (!images.length) { toastError(t('createMemory.pleaseChooseImageFiles')); return; }
     // Drop anything over the family-media bucket limit before it can fail mid-upload.
     const { ok, tooBig } = partitionBySize(images);
     const msg = oversizeMessage(tooBig.length);
@@ -112,13 +114,13 @@ export function CreateMemory() {
           media_type: 'image',
         }).select('id').single();
         if (insErr || !row) {
-          toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
+          toastError(describeDbError(insErr ?? { message: t('createMemory.couldNotSaveMemory') }));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
-          if (cleanupError) toastError('The uploaded photo could not be cleaned up.');
+          if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
           const { error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
-          if (favoriteError) toastError('The memory was saved, but could not be added to Favorites.');
+          if (favoriteError) toastError(t('createMemory.theMemoryWasSavedBut'));
           createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }
@@ -157,12 +159,12 @@ export function CreateMemory() {
     // Rows are gone; best-effort remove the now-orphaned storage objects.
     if (paths.length) {
       const { error: rmErr } = await supabase.storage.from('family-media').remove(paths);
-      if (rmErr) toastError('The memory was undone, but its photo files could not be cleaned up.');
+      if (rmErr) toastError(t('createMemory.theMemoryWasUndoneBut'));
     }
     setCreated([]);
     setUndoing(false);
     setDone(false);
-    success('Memory undone — nothing was saved.');
+    success(t('createMemory.memoryUndoneNothingWasSaved'));
   }
 
   // ── Memory Created (screen 10) ───────────────────────────────
@@ -180,20 +182,20 @@ export function CreateMemory() {
             <Check className="h-4 w-4" />
           </span>
         </div>
-        <h1 className="mt-5 text-2xl font-bold">Memory created!</h1>
+        <h1 className="mt-5 text-2xl font-bold">{t('createMemory.memoryCreated')}</h1>
         <p className="mx-auto mt-2 max-w-xs text-sm text-muted">
-          “{title.trim()}” is saved to your family memories{picks.length > 1 ? ` (${picks.length} photos)` : ''}.
+          “{title.trim()}{t('createMemory.isSavedToYourFamilyMemories')}{picks.length > 1 ? ` (${picks.length} photos)` : ''}.
         </p>
         <div className="mt-8 space-y-3">
           <Button className="w-full" onClick={() => { router.push('/dashboard/memories'); router.refresh(); }}>
-            View memories
+            {t('createMemory.viewMemories')}
           </Button>
           <Button
             variant="outline"
             className="w-full"
             onClick={() => { setPicks([]); setTitle(''); setNote(''); setCreated([]); setDone(false); }}
           >
-            <Plus className="h-4 w-4" /> Create another
+            <Plus className="h-4 w-4" /> {t('createMemory.createAnother')}
           </Button>
           {created.length > 0 && (
             <button
@@ -214,12 +216,12 @@ export function CreateMemory() {
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-6 sm:py-8">
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/dashboard/memories" className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label="Back to memories">
+        <Link href="/dashboard/memories" className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={t('createMemory.backToMemories')}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Create memory</h1>
-          <p className="text-sm text-muted">Add photos, a title, and a note to remember the moment.</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t('createMemory.createMemory')}</h1>
+          <p className="text-sm text-muted">{t('createMemory.addPhotosATitleAndA')}</p>
         </div>
       </div>
 
@@ -233,7 +235,7 @@ export function CreateMemory() {
               type="button"
               onClick={() => removeAt(i)}
               className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
-              aria-label="Remove photo"
+              aria-label={t('createMemory.removePhoto')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -245,7 +247,7 @@ export function CreateMemory() {
           className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand-text"
         >
           <Camera className="h-7 w-7" />
-          <span className="text-xs font-medium">Take photo</span>
+          <span className="text-xs font-medium">{t('createMemory.takePhoto')}</span>
         </button>
         <button
           type="button"
@@ -253,7 +255,7 @@ export function CreateMemory() {
           className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand-text"
         >
           <Plus className="h-7 w-7" />
-          <span className="text-xs font-medium">Upload</span>
+          <span className="text-xs font-medium">{t('createMemory.upload')}</span>
         </button>
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
@@ -265,11 +267,11 @@ export function CreateMemory() {
 
       {/* Details */}
       <div className="mt-6 space-y-4">
-        <Field label="Title" required>
-          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Beach day, first steps, Grandma’s visit…" maxLength={120} />}
+        <Field label={t('createMemory.title')} required>
+          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('createMemory.beachDayFirstStepsGrandma')} maxLength={120} />}
         </Field>
-        <Field label="Note (optional)">
-          {(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What made this moment special?" className="min-h-[96px]" maxLength={1000} />}
+        <Field label={t('createMemory.noteOptional')}>
+          {(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('createMemory.whatMadeThisMomentSpecial')} className="min-h-[96px]" maxLength={1000} />}
         </Field>
       </div>
 
@@ -301,7 +303,7 @@ export function CreateMemory() {
       )}
 
       {picks.length === 0 && (
-        <p className="mt-2 text-center text-xs text-muted">Add at least one photo to save a memory.</p>
+        <p className="mt-2 text-center text-xs text-muted">{t('createMemory.addAtLeastOnePhotoTo')}</p>
       )}
     </div>
   );

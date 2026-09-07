@@ -28,6 +28,7 @@ import {
   type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod, type ListingLike,
 } from '@/lib/marketplace/listings';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Listing = Tables<'marketplace_listings'>;
 type Offer = Tables<'marketplace_offers'>;
@@ -65,6 +66,7 @@ export function MarketplaceModule({
   initialQuery?: string;
   autoOpenPost?: ListingKind | null;
 }) {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -117,7 +119,7 @@ export function MarketplaceModule({
   async function cleanupOwnedPhoto(path = ownedPhotoPath) {
     if (!path) return;
     const { error } = await removeMarketplacePhotoPath(createClient(), path);
-    if (error) toastError('The uploaded photo could not be cleaned up.');
+    if (error) toastError(t('marketplaceModule.theUploadedPhotoCouldNot'));
     setOwnedPhotoPath((current) => (current === path ? null : current));
   }
 
@@ -128,7 +130,7 @@ export function MarketplaceModule({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Give your listing a title'); return; }
+    if (!form.title.trim()) { toastError(t('marketplaceModule.giveYourListingATitle')); return; }
     setSaving(true);
     const sb = createClient();
     const priced = kindHasPrice(form.kind);
@@ -164,16 +166,16 @@ export function MarketplaceModule({
     if (err) { toastError(describeDbError(err)); return; }
     if (l.photo_url) {
       const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
-      if (photoError) toastError('Listing removed, but its uploaded photo could not be cleaned up.');
+      if (photoError) toastError(t('marketplaceModule.listingRemovedButItsUploaded'));
     }
-    success('Removed');
+    success(t('marketplaceModule.removed'));
   }
 
   async function withdraw(l: Listing) {
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Listing withdrawn');
+    success(t('marketplaceModule.listingWithdrawn'));
   }
 
   // A member expresses interest / claims → creates an open offer + flips the
@@ -190,7 +192,7 @@ export function MarketplaceModule({
         family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
       });
       if (err) {
-        if (err.code === '23505') { success('You already reached out about this'); return; }
+        if (err.code === '23505') { success(t('marketplaceModule.youAlreadyReachedOutAbout')); return; }
         toastError(describeDbError(err)); return;
       }
       success(kind === 'claim' ? 'You claimed this — the owner will confirm' : 'Interest sent to the owner');
@@ -213,14 +215,14 @@ export function MarketplaceModule({
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Offer declined');
+    success(t('marketplaceModule.offerDeclined'));
   }
 
   async function markCompleted(l: Listing) {
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'completed' });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Marked complete 🎉');
+    success(t('marketplaceModule.markedComplete'));
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -231,17 +233,17 @@ export function MarketplaceModule({
   return (
     <div>
       <PageHeader
-        title="Family Marketplace"
-        description="Buy, sell, rent, borrow or give away within the family. Post an item and everyone can claim it."
+        title={t('marketplace.familyMarketplace')}
+        description={t('marketplaceModule.buySellRentBorrowOr')}
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
               <Link href="/marketplace/seed"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
-                <Database className="h-4 w-4" /> Seed test data
+                <Database className="h-4 w-4" /> {t('marketplace.seedTestData')}
               </Link>
             )}
-            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>
           </div>
         }
       />
@@ -250,7 +252,7 @@ export function MarketplaceModule({
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder="Search listings…" className="pl-9" />
+          <Input value={q} inputMode="search" enterKeyHint="search" onChange={(e) => setQ(e.target.value)} placeholder={t('marketplace.searchListings')} className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>All</FilterChip>
@@ -259,7 +261,7 @@ export function MarketplaceModule({
           ))}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={catFilter === 'all'} onClick={() => setCatFilter('all')} subtle>All categories</FilterChip>
+          <FilterChip active={catFilter === 'all'} onClick={() => setCatFilter('all')} subtle>{t('marketplace.allCategories')}</FilterChip>
           {(Object.keys(CATEGORY_LABELS) as ListingCategory[]).map((c) => (
             <FilterChip key={c} active={catFilter === c} onClick={() => setCatFilter(c)} subtle>{CATEGORY_LABELS[c]}</FilterChip>
           ))}
@@ -267,12 +269,12 @@ export function MarketplaceModule({
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={Store} title="Nothing on the board yet"
-          description="Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs."
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>} />
+        <EmptyState icon={Store} title={t('marketplace.nothingOnTheBoardYet')}
+          description={t('marketplaceModule.postTheFirstItemSell')}
+          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>} />
       ) : (
         <>
-          <p className="mb-3 text-xs text-muted">{availableCount(listings as ListingLike[])} available · {visible.length} shown</p>
+          <p className="mb-3 text-xs text-muted">{availableCount(listings as ListingLike[])} {t('marketplace.available')} {visible.length} shown</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((l) => {
               const kind = l.kind as ListingKind;
@@ -318,7 +320,7 @@ export function MarketplaceModule({
                     <Avatar name={memberName(l.member_id)} size={20} />
                     <span className="text-xs text-muted">{memberName(l.member_id)}{owner ? ' (you)' : ''}</span>
                     {l.status === 'claimed' && (
-                      <span className="ml-auto text-[11px] text-emerald-300">Claimed by {memberName(l.claimed_by)}</span>
+                      <span className="ml-auto text-[11px] text-emerald-300">{t('marketplace.claimedBy')} {memberName(l.claimed_by)}</span>
                     )}
                   </div>
 
@@ -333,14 +335,14 @@ export function MarketplaceModule({
                         )}
                         {l.status === 'claimed' && (
                           <Button size="sm" variant="outline" onClick={() => markCompleted(l)} className="h-7 gap-1 text-xs">
-                            <Check className="h-3.5 w-3.5" /> Mark complete
+                            <Check className="h-3.5 w-3.5" /> {t('marketplace.markComplete')}
                           </Button>
                         )}
-                        <button onClick={() => openEdit(l)} aria-label="Edit" className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => openEdit(l)} aria-label={t('marketplace.edit')} className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                         {l.status !== 'withdrawn' && (
-                          <button onClick={() => withdraw(l)} aria-label="Withdraw" className="rounded p-1 text-muted hover:bg-elevated hover:text-amber-300"><X className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => withdraw(l)} aria-label={t('marketplace.withdraw')} className="rounded p-1 text-muted hover:bg-elevated hover:text-amber-300"><X className="h-3.5 w-3.5" /></button>
                         )}
-                        <button onClick={() => remove(l)} aria-label="Remove" className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => remove(l)} aria-label={t('marketplace.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                       </>
                     ) : alreadyOffered ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> {kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent'}</span>
@@ -363,18 +365,18 @@ export function MarketplaceModule({
       {/* Post / edit listing */}
       <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit listing' : 'Post a listing'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What is it?" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Kids' balance bike" autoFocus />}
+          <Field label={t('marketplace.whatIsIt')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('marketplaceModule.eGKidsBalanceBike')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">
+            <Field label={t('marketplace.type')}>
               {(id) => (
                 <Select id={id} value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as ListingKind }))}>
                   {KIND_ORDER.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Category">
+            <Field label={t('marketplace.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as ListingCategory }))}>
                   {(Object.keys(CATEGORY_LABELS) as ListingCategory[]).map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
@@ -401,7 +403,7 @@ export function MarketplaceModule({
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Condition">
+            <Field label={t('marketplace.condition')}>
               {(id) => (
                 <Select id={id} value={form.condition} onChange={(e) => setForm((f) => ({ ...f, condition: e.target.value as '' | ListingCondition }))}>
                   <option value="">—</option>
@@ -409,12 +411,12 @@ export function MarketplaceModule({
                 </Select>
               )}
             </Field>
-            <Field label="Where">
-              {(id) => <Input id={id} value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Garage shelf" />}
+            <Field label={t('marketplace.where')}>
+              {(id) => <Input id={id} value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder={t('marketplace.eGGarageShelf')} />}
             </Field>
           </div>
 
-          <Field label="Photo">
+          <Field label={t('marketplace.photo')}>
             {() => <PhotoUpload
               value={form.photo_url}
               onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
@@ -423,12 +425,12 @@ export function MarketplaceModule({
             />}
           </Field>
 
-          <Field label="Details">
-            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
+          <Field label={t('marketplace.details')}>
+            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('marketplaceModule.sizeAgeWhyYouRe')} />}
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={closeModal}>{t('marketplace.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Post it'}</Button>
           </div>
         </form>
@@ -437,7 +439,7 @@ export function MarketplaceModule({
       {/* Review offers (owner) */}
       <Modal open={!!offersFor} onClose={() => setOffersFor(null)} title={offersFor ? `Offers on "${offersFor.title}"` : 'Offers'}>
         {dialogOffers.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No open offers right now.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('marketplace.noOpenOffersRightNow')}</p>
         ) : (
           <ul className="space-y-2">
             {dialogOffers.map((o) => (
@@ -447,8 +449,8 @@ export function MarketplaceModule({
                   <div className="text-sm font-medium text-fg">{memberName(o.member_id)}</div>
                   {o.message && <p className="truncate text-xs text-muted">{o.message}</p>}
                 </div>
-                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> Accept</Button>
-                <button onClick={() => declineOffer(o as Offer)} aria-label="Decline" className="rounded p-1 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
+                <button onClick={() => declineOffer(o as Offer)} aria-label={t('marketplace.decline')} className="rounded p-1 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>

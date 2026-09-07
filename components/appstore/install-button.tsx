@@ -5,16 +5,18 @@ import { Check, Plus, Loader2 } from 'lucide-react';
 import { installAppAction, uninstallAppAction } from '@/app/(app)/dashboard/app-store/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function InstallButton({ appId, installed: initial, available = true }: {
   appId: string; installed: boolean; available?: boolean;
 }) {
+  const t = useTranslations();
   const [installed, setInstalled] = useState(initial);
   const [pending, start] = useTransition();
   const { success, error: toastError } = useToast();
 
   if (!available) {
-    return <span className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted">Unavailable</span>;
+    return <span className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted">{t('installButton.unavailable')}</span>;
   }
 
   const toggle = () => {

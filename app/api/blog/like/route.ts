@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -36,25 +37,27 @@ async function likeState(supabase: ReturnType<typeof createServiceClient>, postI
 }
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   const slug = normalizeSlug(req.nextUrl.searchParams.get('slug'));
-  if (!slug) return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
+  if (!slug) return NextResponse.json({ error: t('like.invalidSlug') }, { status: 400 });
   const visitorId = normalizeVisitorId(req.nextUrl.searchParams.get('visitorId'));
 
   const supabase = createServiceClient();
   const postId = await loadPostId(supabase, slug);
-  if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!postId) return NextResponse.json({ error: t('like.notFound') }, { status: 404 });
 
   const state = await likeState(supabase, postId, visitorId);
   return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `bloglike:${ip}`, { limit: 60 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('like.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -70,10 +73,10 @@ export async function POST(req: NextRequest) {
 
   const slug = normalizeSlug(body.slug);
   const visitorId = normalizeVisitorId(body.visitorId);
-  if (!slug || !visitorId) return NextResponse.json({ error: 'slug and visitorId required' }, { status: 400 });
+  if (!slug || !visitorId) return NextResponse.json({ error: t('like.slugAndVisitoridRequired') }, { status: 400 });
 
   const postId = await loadPostId(supabase, slug);
-  if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!postId) return NextResponse.json({ error: t('like.notFound') }, { status: 404 });
 
   // Toggle: insert wins the ♥; a unique-violation means it existed → remove it.
   const { error: insertError } = await supabase
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
     if (insertError.code === '23505') {
       await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
     } else {
-      return NextResponse.json({ error: 'Could not record the like' }, { status: 500 });
+      return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 500 });
     }
   }
 

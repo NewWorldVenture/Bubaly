@@ -21,10 +21,12 @@ import {
 } from '@/lib/network/insights';
 import type { ContributionBucket } from '@/lib/network/contribution';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Consent = Tables<'network_consent'>;
 
 export function IntelligenceModule({ contribution = [], candidates = [] }: { contribution?: ContributionBucket[]; candidates?: InsightCandidate[] }) {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -64,24 +66,24 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
   const toggleScope = (k: ConsentScope) =>
     persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
 
-  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading intelligence preferences...</div>;
-  if (error) return <ErrorState message="Could not load intelligence preferences. Refresh and try again." onRetry={refresh} />;
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
+  if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Intelligence Network" description="Opt in to learn from anonymized patterns across similar families — or stay fully private. Your choice, always reversible." />
+      <PageHeader title={t('intelligence.intelligenceNetwork')} description={t('intelligenceModule.optInToLearnFrom')} />
 
       {/* Privacy promise */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <ShieldCheck className="size-5 text-emerald-400" />
-          <h3 className="font-semibold">How your privacy is protected</h3>
+          <h3 className="font-semibold">{t('intelligence.howYourPrivacyIsProtected')}</h3>
         </div>
         <ul className="grid gap-2 text-sm text-muted sm:grid-cols-2">
-          <li className="flex items-start gap-2"><Lock className="mt-0.5 size-4 shrink-0" /> Off by default. Nothing is shared unless you turn it on.</li>
-          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> Only aggregate patterns from at least {K_ANONYMITY_FLOOR} families — never an individual.</li>
-          <li className="flex items-start gap-2"><Info className="mt-0.5 size-4 shrink-0" /> Granular: pick exactly what you contribute.</li>
-          <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> Reversible anytime — leaving stops all sharing immediately.</li>
+          <li className="flex items-start gap-2"><Lock className="mt-0.5 size-4 shrink-0" /> {t('intelligence.offByDefaultNothingIsShared')}</li>
+          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> {t('intelligence.onlyAggregatePatternsFromAtLeast')} {K_ANONYMITY_FLOOR} {t('intelligence.familiesNeverAnIndividual')}</li>
+          <li className="flex items-start gap-2"><Info className="mt-0.5 size-4 shrink-0" /> {t('intelligence.granularPickExactlyWhatYouContribute')}</li>
+          <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> {t('intelligence.reversibleAnytimeLeavingStopsAllSharing')}</li>
         </ul>
       </div>
 
@@ -90,12 +92,9 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-1 flex items-center gap-2">
             <Info className="size-5 text-brand-text" />
-            <h3 className="font-semibold">What you’d contribute</h3>
+            <h3 className="font-semibold">{t('intelligence.whatYoudContribute')}</h3>
           </div>
-          <p className="mb-3 text-sm text-muted">
-            Only these coarse, anonymized bands — never names, exact ages, or precise counts. Shown
-            here from your own data so you can decide with your eyes open. Nothing is shared unless you join.
-          </p>
+          <p className="mb-3 text-sm text-muted">{t('intelligenceModule.onlyTheseCoarseAnonymizedBands')}</p>
           <div className="flex flex-wrap gap-2">
             {contribution.map((b) => (
               <span key={b.label} className="rounded-full border border-border px-3 py-1 text-xs">
@@ -109,10 +108,10 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       {/* Master toggle */}
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div>
-          <h3 className="font-semibold">Join the Intelligence Network</h3>
+          <h3 className="font-semibold">{t('intelligence.joinTheIntelligenceNetwork')}</h3>
           <p className="text-sm text-muted">{contributing ? 'You’re contributing anonymized patterns and can see network insights.' : 'Currently private — you’re not sharing or receiving anything.'}</p>
         </div>
-        <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label="Join the network" />
+        <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
       </div>
 
       {/* Scopes */}
@@ -133,11 +132,10 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       {/* Insights (k-anonymity gated; empty until the aggregation pipeline exists) */}
       {contributing && (
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand-text" /><h3 className="font-semibold">Network insights</h3></div>
+          <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand-text" /><h3 className="font-semibold">{t('intelligence.networkInsights')}</h3></div>
           {insights.length === 0 ? (
             <p className="text-sm text-muted">
-              No insights for families like yours yet. A pattern appears here only once it&apos;s backed
-              by at least {K_ANONYMITY_FLOOR} similar families (and the network as a whole is large
+              {t('intelligence.noInsightsForFamiliesLikeYours')} {K_ANONYMITY_FLOOR} similar families (and the network as a whole is large
               enough) — so nothing can ever be traced back to one household. Check back as more families join.
             </p>
           ) : (

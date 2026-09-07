@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync('app/(app)/admin/content/page.tsx', 'utf8');
@@ -9,6 +10,6 @@ describe('admin content read boundary', () => {
     expect(source).toContain('error: familiesError');
     expect(source).toContain('error: profilesError');
     expect(source).toContain('const readError = documentsError ?? familiesError ?? profilesError');
-    expect(source).toContain('Could not load content from Supabase. Refresh and try again.');
+    expectSays(source, 'content.couldNotLoadContentFrom', 'Could not load content from Supabase. Refresh and try again.');
   });
 });

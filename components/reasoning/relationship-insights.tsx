@@ -2,6 +2,7 @@
 // Server-compatible (no hooks) so pages can compute `reasoningInsights` and pass
 // the rendered card straight into a client module as a node.
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { Network, GitBranch, Zap, Link2Off, ShieldAlert } from 'lucide-react';
 import type { ReasoningInsight, ReasoningInsightKind } from '@/lib/reasoning/insights';
 
@@ -12,13 +13,14 @@ const KIND_ICON: Record<ReasoningInsightKind, typeof Network> = {
   fragility: ShieldAlert,
 };
 
-export function RelationshipInsights({ insights }: { insights: ReasoningInsight[] }) {
+export async function RelationshipInsights({ insights }: { insights: ReasoningInsight[] }) {
+  const t = await getTranslations();
   if (insights.length === 0) return null;
   return (
     <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/[0.07] to-surface/40 p-5">
       <div className="mb-3 flex items-center gap-2">
         <Network className="h-4 w-4 text-brand-text" />
-        <span className="text-sm font-semibold uppercase tracking-wider text-fg">Relationships</span>
+        <span className="text-sm font-semibold uppercase tracking-wider text-fg">{t('relationshipInsights.relationships')}</span>
       </div>
       <ul className="space-y-2.5">
         {insights.map((i) => {

@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Reviews · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ function Stars({ n }: { n: number }) {
 }
 
 export default async function MarketplaceReviewsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const selfId = ctx.active.member.id;
@@ -38,8 +40,8 @@ export default async function MarketplaceReviewsPage() {
   if (reviewsError) {
     return (
       <div>
-        <PageHeader title="Reviews" description="Two-sided reviews — both parties rate every completed exchange." />
-        <ErrorState message="Couldn’t load your reviews. Refresh and try again." />
+        <PageHeader title={t('marketplaceReviews.reviews')} description={t('reviews.twoSidedReviewsBothParties')} />
+        <ErrorState message={t('reviews.couldnTLoadYourReviews')} />
       </div>
     );
   }
@@ -55,7 +57,7 @@ export default async function MarketplaceReviewsPage() {
     <section className="mt-5">
       <h2 className="mb-2 text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">None yet.</p>
+        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('reviews.noneYet')}</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (
@@ -74,11 +76,11 @@ export default async function MarketplaceReviewsPage() {
 
   return (
     <div>
-      <PageHeader title="Reviews" description="Two-sided reviews — both parties rate every completed exchange." />
+      <PageHeader title={t('marketplaceReviews.reviews')} description={t('reviews.twoSidedReviewsBothParties')} />
       <div className="rounded-2xl border border-border bg-surface/60 p-4">
-        <p className="text-sm font-semibold">Your rating</p>
+        <p className="text-sm font-semibold">{t('marketplaceReviews.yourRating')}</p>
         {summary.count === 0 ? (
-          <p className="mt-1 text-xs text-muted">No reviews received yet — complete an exchange to earn your first.</p>
+          <p className="mt-1 text-xs text-muted">{t('marketplaceReviews.noReviewsReceivedYetCompleteAn')}</p>
         ) : (
           <p className="mt-1 flex items-center gap-2 text-sm">
             <span className="text-xl font-bold text-amber-500">★ {summary.avg.toFixed(1)}</span>
@@ -86,8 +88,8 @@ export default async function MarketplaceReviewsPage() {
           </p>
         )}
       </div>
-      <Section title="Received" rows={received} whoOf={(r) => `from ${nameOf(r.reviewer_member)}`} />
-      <Section title="Given" rows={given} whoOf={(r) => `to ${nameOf(r.reviewee_member)}`} />
+      <Section title={t('marketplaceReviews.received')} rows={received} whoOf={(r) => `from ${nameOf(r.reviewer_member)}`} />
+      <Section title={t('marketplaceReviews.given')} rows={given} whoOf={(r) => `to ${nameOf(r.reviewee_member)}`} />
     </div>
   );
 }

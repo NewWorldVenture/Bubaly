@@ -17,11 +17,13 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Announcement = Tables<'family_announcements'>;
 type Read = Tables<'announcement_reads'>;
 
 export function AnnouncementsModule() {
+  const t = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -81,7 +83,7 @@ export function AnnouncementsModule() {
     });
     setSaving(false);
     if (err) return toastError(describeDbError(err));
-    success('Announcement posted');
+    success(t('announcementsModule.announcementPosted'));
     setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
   }
 
@@ -95,14 +97,14 @@ export function AnnouncementsModule() {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
     if (err) toastError(describeDbError(err));
-    else success('Announcement removed');
+    else success(t('announcementsModule.announcementRemoved'));
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Announcements"
-        description="Broadcast updates to the whole family."
+        title={t('announcements.announcements')}
+        description={t('announcementsModule.broadcastUpdatesToTheWhole')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="announcements" iconOnly />
@@ -114,11 +116,11 @@ export function AnnouncementsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load announcements. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('announcementsModule.couldNotLoadAnnouncementsRefresh')} onRetry={refresh} />
       ) : (announcements ?? []).length === 0 ? (
         <EmptyState
           icon={Megaphone}
-          title="No announcements yet"
+          title={t('announcements.noAnnouncementsYet')}
           description={admin ? 'Post the first family update — everyone will see it here.' : 'Family updates from your parents will appear here.'}
         />
       ) : (
@@ -146,7 +148,7 @@ export function AnnouncementsModule() {
                       <button onClick={() => togglePin(a)} title={a.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {a.is_pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       </button>
-                      <button onClick={() => remove(a.id)} title="Delete" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
+                      <button onClick={() => remove(a.id)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -158,17 +160,17 @@ export function AnnouncementsModule() {
         </ul>
       )}
 
-      <Modal open={showCompose} onClose={() => setShowCompose(false)} title="New announcement">
+      <Modal open={showCompose} onClose={() => setShowCompose(false)} title={t('announcements.newAnnouncement')}>
         <form onSubmit={post} className="space-y-4">
-          <Field label="Title" required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Early dismissal Friday" required />}</Field>
-          <Field label="Details">{(id) => <Textarea id={id} value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Add any details…" />}</Field>
+          <Field label={t('announcements.title')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('announcements.eGEarlyDismissalFriday')} required />}</Field>
+          <Field label={t('announcements.details')}>{(id) => <Textarea id={id} value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder={t('announcements.addAnyDetails')} />}</Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
-            Pin to top
+            {t('announcements.pinToTop')}
           </label>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setShowCompose(false)}>Cancel</Button>
-            <Button type="submit" loading={saving}><Check className="h-4 w-4" /> Post</Button>
+            <Button type="button" variant="ghost" onClick={() => setShowCompose(false)}>{t('announcements.cancel')}</Button>
+            <Button type="submit" loading={saving}><Check className="h-4 w-4" /> {t('announcements.post')}</Button>
           </div>
         </form>
       </Modal>

@@ -2,6 +2,7 @@
 // TwiML for outbound emergency alert calls to parents.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { wrapTwiml, twimlSay, twimlPause, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
@@ -20,16 +21,17 @@ function authorized(req: NextRequest, params: Record<string, string>): boolean {
   return validateTwilioSignature(sig, url, params);
 }
 
-function render(req: NextRequest): NextResponse {
+async function render(req: NextRequest): Promise<NextResponse> {
+  const t = await getTranslations();
   const { searchParams } = new URL(req.url);
   const msg = searchParams.get('msg') ?? 'Your family has an emergency call that needs attention.';
 
   const twiml = wrapTwiml(
-    twimlSay('This is an emergency alert from Bubaly, your family AI assistant.'),
+    twimlSay(t('twiml.thisIsAnEmergencyAlert')),
     twimlPause(1),
     twimlSay(msg),
     twimlPause(1),
-    twimlSay('Please check your Bubaly app or call your family immediately. This message will repeat once.'),
+    twimlSay(t('twiml.pleaseCheckYourBubalyApp')),
     twimlPause(2),
     twimlSay(msg),
     twimlHangup(),

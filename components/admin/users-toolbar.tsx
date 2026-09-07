@@ -9,6 +9,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { ROLE_LABELS, INVITABLE_ROLES, type MemberRole } from '@/lib/constants/roles';
 import { adminCreateUserAction, adminCreateFamilyAction } from '@/app/(app)/admin/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type ExportRow = { name: string; email: string; family: string; role: string; plan: string; status: string; joined: string };
 
@@ -30,6 +31,7 @@ export function UsersToolbar({ families, exportRows }: {
   families: { id: string; name: string }[];
   exportRows: ExportRow[];
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [modal, setModal] = useState<'user' | 'family' | null>(null);
@@ -45,7 +47,7 @@ export function UsersToolbar({ families, exportRows }: {
     const res = await adminCreateUserAction({ email, familyId: familyId || undefined, role: familyId ? role : undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Invite sent — they’ll get a Supabase sign-in email');
+    success(t('usersToolbar.inviteSentTheyLlGet'));
     setModal(null);
     router.refresh();
   }
@@ -61,7 +63,7 @@ export function UsersToolbar({ families, exportRows }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Family created');
+    success(t('usersToolbar.familyCreated'));
     setModal(null);
     router.refresh();
   }
@@ -69,28 +71,28 @@ export function UsersToolbar({ families, exportRows }: {
   return (
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" size="sm" onClick={() => downloadCsv(exportRows)}>
-        <Download className="h-4 w-4" /> Export
+        <Download className="h-4 w-4" /> {t('usersToolbar.export')}
       </Button>
       <Button variant="secondary" size="sm" onClick={() => setModal('family')}>
-        <Home className="h-4 w-4" /> Create Family
+        <Home className="h-4 w-4" /> {t('usersToolbar.createFamily')}
       </Button>
       <Button size="sm" onClick={() => setModal('user')}>
-        <Plus className="h-4 w-4" /> Add User
+        <Plus className="h-4 w-4" /> {t('usersToolbar.addUser')}
       </Button>
 
       {modal === 'user' && (
-        <Modal open onClose={() => setModal(null)} title="Add new user" description="Sends a real Supabase sign-in invite to this email.">
+        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.addNewUser')} description={t('usersToolbar.sendsARealSupabaseSign')}>
           <form onSubmit={onCreateUser} className="space-y-4">
-            <Field label="Email" required>{(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}</Field>
-            <Field label="Add directly to a family (optional)">
+            <Field label={t('usersToolbar.email')} required>{(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}</Field>
+            <Field label={t('usersToolbar.addDirectlyToAFamilyOptional')}>
               {(id) => (
                 <Select id={id} name="familyId" defaultValue="">
-                  <option value="">Don’t add to a family yet</option>
+                  <option value="">{t('usersToolbar.donTAddToA')}</option>
                   {families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Role in that family">
+            <Field label={t('usersToolbar.roleInThatFamily')}>
               {(id) => (
                 <Select id={id} name="role" defaultValue="adult">
                   {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -98,24 +100,24 @@ export function UsersToolbar({ families, exportRows }: {
               )}
             </Field>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
-              <Button type="submit" loading={loading}>Send invite</Button>
+              <Button type="button" variant="ghost" onClick={() => setModal(null)}>{t('usersToolbar.cancel')}</Button>
+              <Button type="submit" loading={loading}>{t('usersToolbar.sendInvite')}</Button>
             </div>
           </form>
         </Modal>
       )}
 
       {modal === 'family' && (
-        <Modal open onClose={() => setModal(null)} title="Create a family" description="Creates the family with an existing user as its parent/admin.">
+        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.createAFamily')} description={t('usersToolbar.createsTheFamilyWithAn')}>
           <form onSubmit={onCreateFamily} className="space-y-4">
-            <Field label="Family name" required>{(id) => <Input id={id} name="name" placeholder="The Rivera Family" autoFocus />}</Field>
-            <Field label="Owner’s email" hint="They must already have an account." required>
+            <Field label={t('usersToolbar.familyName')} required>{(id) => <Input id={id} name="name" placeholder={t('usersToolbar.theRiveraFamily')} autoFocus />}</Field>
+            <Field label={t('usersToolbar.ownersEmail')} hint={t('usersToolbar.theyMustAlreadyHaveAn')} required>
               {(id) => <Input id={id} name="ownerEmail" type="email" placeholder="owner@example.com" />}
             </Field>
-            <Field label="Time zone">{(id) => <Input id={id} name="timezone" defaultValue="America/New_York" />}</Field>
+            <Field label={t('usersToolbar.timeZone')}>{(id) => <Input id={id} name="timezone" defaultValue="America/New_York" />}</Field>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setModal(null)}>Cancel</Button>
-              <Button type="submit" loading={loading}>Create family</Button>
+              <Button type="button" variant="ghost" onClick={() => setModal(null)}>{t('usersToolbar.cancel')}</Button>
+              <Button type="submit" loading={loading}>{t('usersToolbar.createFamily')}</Button>
             </div>
           </form>
         </Modal>

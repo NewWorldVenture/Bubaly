@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -16,6 +19,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -27,7 +31,7 @@ export async function POST(req: NextRequest) {
     const key = `ai-chat:${ctx.user.id}`;
     const limited = rateLimit(key, { limit: 20, windowMs: 60_000 });
     const rejected = (retryAfter: number) => NextResponse.json(
-      { error: 'Too many AI chat requests. Please try again shortly.' },
+      { error: t('chat.tooManyAiChatRequests') },
       { status: 429, headers: { 'Retry-After': String(retryAfter) } },
     );
     if (!limited.ok) return rejected(limited.retryAfter);
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
     const { conversationId, message } = parsed.value;
 
     if (!(await isAIConfigured())) {
-      return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.' }, { status: 503 });
+      return NextResponse.json({ error: t('chat.theAiEngineIsnT') }, { status: 503 });
     }
 
     // Ensure the conversation row exists (the client generates its UUID up front)
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
     );
     if (conversationUpsertError) {
       console.error('[ai-chat] conversation initialization failed', conversationUpsertError);
-      return NextResponse.json({ error: describeActionError(conversationUpsertError, 'Could not start this conversation.') }, { status: 500 });
+      return NextResponse.json({ error: describeActionError(conversationUpsertError, t('chat.couldNotStartThisConversation')) }, { status: 500 });
     }
 
     // The client owns the UUID, but never the conversation's authorization
@@ -75,9 +79,9 @@ export async function POST(req: NextRequest) {
       .select('id').eq('id', conversationId).eq('family_id', familyId).eq('user_id', ctx.user.id).maybeSingle();
     if (conversationReadError) {
       console.error('[ai-chat] conversation ownership read failed', conversationReadError);
-      return NextResponse.json({ error: 'Could not open this conversation.' }, { status: 503 });
+      return NextResponse.json({ error: t('chat.couldNotOpenThisConversation') }, { status: 503 });
     }
-    if (!conversation) return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+    if (!conversation) return NextResponse.json({ error: t('chat.conversationNotFound') }, { status: 404 });
 
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
     const contextError = historyError ?? membersError ?? eventsError ?? choresError ?? mealsError;
     if (contextError) {
       console.error('[ai-chat] family context load failed', contextError);
-      return NextResponse.json({ error: describeActionError(contextError, 'Could not load the family assistant context.') }, { status: 500 });
+      return NextResponse.json({ error: describeActionError(contextError, t('chat.couldNotLoadTheFamily')) }, { status: 500 });
     }
 
     const memberRows = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
@@ -148,6 +152,15 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+        // §33: the chat assistant is the other surface the row names by name.
+        // It catches its own stream errors and falls back, so nothing ever
+        // reached a wrapper's catch — a turn the family watched break recorded
+        // nothing at all. `obs.failed` is how a surface that handles its own
+        // errors still leaves the evidence.
+        await withAiRequest(
+          scopeFromUserContext(ctx, supabase),
+          { feature: 'chat.assistant', text: message, kind: 'feature', conversationId },
+          async (obs) => {
         let content = '';
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
@@ -161,6 +174,10 @@ export async function POST(req: NextRequest) {
           }
         } catch (streamErr) {
           console.error('AI stream error:', streamErr);
+          // Recorded now, before the fallback: what broke FIRST is the diagnosis,
+          // and `partial` distinguishes "the stream died having said nothing"
+          // from "the family got half an answer".
+          obs.failed(streamErr, { partial: Boolean(content) });
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
@@ -171,6 +188,7 @@ export async function POST(req: NextRequest) {
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
             } catch (fallbackErr) {
               console.error('AI fallback error:', fallbackErr);
+              obs.failed(fallbackErr);
               send({ type: 'error', error: describeAIError(fallbackErr).message });
               controller.close();
               return;
@@ -210,11 +228,14 @@ export async function POST(req: NextRequest) {
           }
         }
         if (persistenceError) {
-          send({ type: 'error', error: describeActionError(persistenceError, 'I generated a response, but could not save this conversation.') });
+          send({ type: 'error', error: describeActionError(persistenceError, t('chat.iGeneratedAResponseBut')) });
         }
 
+        obs.used(provider.model, undefined);
         send({ type: 'done', content: assistantContent, persisted: !persistenceError });
         controller.close();
+          },
+        );
       },
     });
 

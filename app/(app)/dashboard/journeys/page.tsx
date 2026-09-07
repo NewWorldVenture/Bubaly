@@ -9,11 +9,13 @@ import {
   summarizeJourneys, formatDuration, formatRate,
   type JourneyEventLike,
 } from '@/lib/analytics/journey';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Journey Analytics' };
 export const dynamic = 'force-dynamic';
 
 export default async function JourneysPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   // Raw product telemetry is an admin-only view.
   if (!(await isSuperAdmin())) notFound();
@@ -37,32 +39,32 @@ export default async function JourneysPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Journey Analytics"
-        description="Real completion rates and times per user journey — the live source for the Experience Scorecard (this family)."
+        title={t('dashboardJourneys.journeyAnalytics')}
+        description={t('journeys.realCompletionRatesAndTimes')}
       />
 
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Journeys started" value={totalStarts} icon={Activity} accent="bg-blue-600" />
-        <StatTile label="Completed" value={totalCompletions} icon={CheckCircle2} accent="bg-emerald-600" />
-        <StatTile label="Completion" value={formatRate(overallRate)} icon={Timer} accent="bg-violet-600" />
+        <StatTile label={t('dashboardJourneys.journeysStarted')} value={totalStarts} icon={Activity} accent="bg-blue-600" />
+        <StatTile label={t('dashboardJourneys.completed')} value={totalCompletions} icon={CheckCircle2} accent="bg-emerald-600" />
+        <StatTile label={t('dashboardJourneys.completion')} value={formatRate(overallRate)} icon={Timer} accent="bg-violet-600" />
       </div>
 
-      <SectionCard title="Per-journey medians" description="Measured from journey_events (0124) — no estimates.">
+      <SectionCard title={t('dashboardJourneys.perJourneyMedians')} description="Measured from journey_events (0124) — no estimates.">
         {error ? (
-          <MiniError text="Couldn’t load journey telemetry. Refresh to try again." />
+          <MiniError text={t('journeys.couldnTLoadJourneyTelemetry')} />
         ) : rows.length === 0 ? (
-          <MiniEmpty icon={Activity} text="No journey events yet. Use the app (e.g. Quick Capture) to generate telemetry, then refresh." />
+          <MiniEmpty icon={Activity} text={t('journeys.noJourneyEventsYetUse')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-3 font-medium">Journey</th>
-                  <th className="py-2 px-3 font-medium">Starts</th>
-                  <th className="py-2 px-3 font-medium">Completed</th>
-                  <th className="py-2 px-3 font-medium">Rate</th>
-                  <th className="py-2 px-3 font-medium">Median time</th>
-                  <th className="py-2 pl-3 font-medium">Median steps</th>
+                  <th className="py-2 pr-3 font-medium">{t('dashboardJourneys.journey')}</th>
+                  <th className="py-2 px-3 font-medium">{t('dashboardJourneys.starts')}</th>
+                  <th className="py-2 px-3 font-medium">{t('dashboardJourneys.completed')}</th>
+                  <th className="py-2 px-3 font-medium">{t('dashboardJourneys.rate')}</th>
+                  <th className="py-2 px-3 font-medium">{t('dashboardJourneys.medianTime')}</th>
+                  <th className="py-2 pl-3 font-medium">{t('dashboardJourneys.medianSteps')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,8 +89,7 @@ export default async function JourneysPage() {
       </SectionCard>
 
       <p className="text-xs text-muted">
-        Scope: this family only (RLS). Cross-family aggregate medians for the Scorecard would use a
-        service-role read. Instrument more flows by calling <code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
+        {t('journeys.scopeThisFamilyOnly')}{' '}<code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
       </p>
     </div>
   );

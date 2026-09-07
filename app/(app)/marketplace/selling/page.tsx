@@ -12,6 +12,7 @@ import {
   type ListingSignals, type AttentionTone,
 } from '@/lib/marketplace/selling';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Selling · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -23,12 +24,13 @@ const CHIP_TONE: Record<AttentionTone, string> = {
   muted: 'bg-border/60 text-muted',
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title="Selling" description="Your seller cockpit is temporarily unavailable." />
-      <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
-      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">Refresh selling</Link>
+      <PageHeader title={t('selling.selling')} description={t('selling.yourSellerCockpitIsTemporarily')} />
+      <ErrorState message={t('selling.couldNotLoadSellerActivity')} />
+      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">{t('selling.refreshSelling')}</Link>
     </div>
   );
 }
@@ -37,6 +39,8 @@ function ReadFailure() {
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
 export default async function SellingPage() {
+  const t = await getTranslations();
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -126,11 +130,11 @@ export default async function SellingPage() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Selling"
-        description="Everything you're selling, ranked by what needs you — answer questions, reply to offers, confirm pickups, chase returns."
+        title={tr('marketplaceSelling.selling')}
+        description={t('selling.everythingYouReSellingRanked')}
         action={
           <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
-            <Plus className="h-4 w-4" /> Post an item
+            <Plus className="h-4 w-4" /> {tr('marketplaceSelling.postAnItem')}
           </Link>
         }
       />
@@ -147,8 +151,8 @@ export default async function SellingPage() {
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <LayoutDashboard className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">You’re not selling anything yet</p>
-          <p className="mt-1 text-sm text-muted">Post your first item and this becomes your command center — watchers, offers, questions, and pickups all in one place.</p>
+          <p className="mt-3 text-sm font-semibold">{tr('marketplaceSelling.youreNotSellingAnythingYet')}</p>
+          <p className="mt-1 text-sm text-muted">{tr('marketplaceSelling.postYourFirstItemAndThis')}</p>
         </div>
       ) : (
         <ul className="space-y-2">
@@ -175,7 +179,7 @@ export default async function SellingPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-1 text-xs text-muted">No activity yet</p>
+                      <p className="mt-1 text-xs text-muted">{t('selling.noActivityYet')}</p>
                     )}
                   </div>
                   <ArrowRight className="h-4 w-4 shrink-0 text-muted" />

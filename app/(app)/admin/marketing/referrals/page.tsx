@@ -8,21 +8,24 @@ import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { getReferralConfigResult } from '@/lib/referrals/server';
 import { ReferralSettingsForm } from './settings-form';
 import { saveReferralConfigAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Referrals', robots: { index: false } };
+export const metadata: Metadata = { title: 'referrals.referrals', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight">Referrals</h1>
-      <ErrorState message="Could not load referral settings and activity from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/referrals" className="text-sm font-medium text-brand-text underline">Refresh referrals</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('referrals.referrals')}</h1>
+      <ErrorState message={t('referrals.couldNotLoadReferralSettings')} />
+      <Link href="/admin/marketing/referrals" className="text-sm font-medium text-brand-text underline">{t('referrals.refreshReferrals')}</Link>
     </div>
   );
 }
 
 export default async function AdminReferralsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [configResult, referralsResult] = await Promise.all([
     getReferralConfigResult(supabase),
@@ -58,7 +61,7 @@ export default async function AdminReferralsPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Viral referral loop — families invite families and both earn a credit on conversion.</p>
+      <p className="text-sm text-muted">{t('adminMarketingReferrals.viralReferralLoopFamiliesInviteFamilies')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -74,12 +77,12 @@ export default async function AdminReferralsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold">Recent referrals</h2>
+          <h2 className="mb-4 text-base font-semibold">{t('adminMarketingReferrals.recentReferrals')}</h2>
           {rows.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted">
-                  <tr><th className="pb-2">Code</th><th className="pb-2">Referred</th><th className="pb-2">Status</th><th className="pb-2 text-right">Reward</th><th className="pb-2 text-right">Date</th></tr>
+                  <tr><th className="pb-2">{t('adminMarketingReferrals.code')}</th><th className="pb-2">{t('adminMarketingReferrals.referred')}</th><th className="pb-2">{t('adminMarketingReferrals.status')}</th><th className="pb-2 text-right">{t('adminMarketingReferrals.reward')}</th><th className="pb-2 text-right">{t('adminMarketingReferrals.date')}</th></tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, 25).map((r) => (
@@ -95,18 +98,18 @@ export default async function AdminReferralsPage() {
               </table>
             </div>
           ) : (
-            <p className="py-6 text-center text-sm text-muted">No referrals yet.</p>
+            <p className="py-6 text-center text-sm text-muted">{t('adminMarketingReferrals.noReferralsYet')}</p>
           )}
         </Card>
 
         <div className="space-y-4">
           <Card>
-            <h2 className="mb-4 text-base font-semibold">Program settings</h2>
+            <h2 className="mb-4 text-base font-semibold">{t('adminMarketingReferrals.programSettings')}</h2>
             <ReferralSettingsForm config={config} action={saveReferralConfigAction} />
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-base font-semibold">Top referrers</h2>
+            <h2 className="mb-3 text-base font-semibold">{t('adminMarketingReferrals.topReferrers')}</h2>
             {topReferrers.length ? (
               <ul className="space-y-2 text-sm">
                 {topReferrers.map(([fam, n], i) => (
@@ -118,7 +121,7 @@ export default async function AdminReferralsPage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">No referrers yet.</p>
+              <p className="text-sm text-muted">{t('adminMarketingReferrals.noReferrersYet')}</p>
             )}
           </Card>
         </div>

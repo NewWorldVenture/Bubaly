@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import {
   summarizeUtilities, deterministicSavingsFindings, utilityLabel, usd,
@@ -20,13 +23,14 @@ export const dynamic = 'force-dynamic';
  * sees only the computed figures and is told to reuse them verbatim.
  */
 export async function POST() {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('utilitySavings.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-home-utility-savings:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many utility-savings requests. Please try again shortly.' },
+    { error: t('utilitySavings.tooManyUtilitySavingsRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const { data: rows } = await supabase
@@ -38,7 +42,7 @@ export async function POST() {
 
   const bills = (rows ?? []) as BillLike[];
   if (bills.length === 0) {
-    return NextResponse.json({ error: 'Add a few utility bills first so we can analyse your costs.' }, { status: 400 });
+    return NextResponse.json({ error: t('utilitySavings.addAFewUtilityBills') }, { status: 400 });
   }
 
   const summary = summarizeUtilities(bills);
@@ -72,8 +76,19 @@ export async function POST() {
       `Pre-computed flags:\n${findings.map((f) => `- ${f.title}: ${f.detail}`).join('\n') || '- none'}`;
 
     try {
-      const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
-      recommendations = completion.text.trim() || null;
+      // Inside the try that falls back to the deterministic findings, so the
+      // failure is on the row before it is swallowed. This route returns 200
+      // either way — `aiUsed: false` is the only outward sign, and nobody
+      // reading a support ticket can tell it from "AI wasn't configured".
+      recommendations = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'home.utility-savings', text: `Utility savings across ${bills.length} bills` },
+        async (obs) => {
+          const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
+          obs.used(completion.model ?? 'unknown', completion.usage);
+          return completion.text.trim() || null;
+        },
+      );
       aiUsed = true;
     } catch {
       recommendations = null; // fall back to deterministic findings only

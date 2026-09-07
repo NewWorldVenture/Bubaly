@@ -30,6 +30,7 @@ import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import { NavigationChoices } from '@/components/settings/navigation-choices';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SETTINGS_TABS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -57,6 +58,7 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
 };
 
 export function SettingsModule() {
+  const t = useTranslations();
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -130,7 +132,7 @@ export function SettingsModule() {
       setDashboardView(previous);
       return toastError(res.error ?? 'Could not update dashboard');
     }
-    success('Default dashboard updated');
+    success(t('settingsModule.defaultDashboardUpdated'));
   }
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
@@ -142,28 +144,28 @@ export function SettingsModule() {
     const res = await updateMyProfileAction(profileForm);
     setSavingProfile(false);
     if (!res.ok) return toastError(res.error ?? 'Could not update profile');
-    success('Profile updated');
+    success(t('settingsModule.profileUpdated'));
   }
 
   async function saveFamilyName(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
     const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
-    success('Family name updated');
+    success(t('settingsModule.familyNameUpdated'));
   }
 
   async function removeMember(memberId: string) {
-    if (!confirm('Remove this member from the family?')) return;
+    if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
     const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
     if (error) return toastError(describeDbError(error));
-    success('Member removed');
+    success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
 
@@ -171,10 +173,10 @@ export function SettingsModule() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Settings" description="Manage your profile, family, and members." action={<AiInsight kind="settings" />} />
+      <PageHeader title={t('settings.settings')} description={t('settingsModule.manageYourProfileFamilyAnd')} action={<AiInsight kind="settings" />} />
 
       {/* Tab switcher */}
-      <div className="tab-bar" role="tablist" aria-label="Settings sections">
+      <div className="tab-bar" role="tablist" aria-label={t('settings.settingsSections')}>
         {SETTINGS_TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -194,16 +196,16 @@ export function SettingsModule() {
       {tab === 'profile' && (<>
       {/* Profile */}
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Your profile</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('settings.yourProfile')}</h2>
         {profileError && (
           <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
-            <span className="min-w-0 flex-1">Couldn’t load your profile. Editing is disabled so your saved phone and photo aren’t overwritten with blanks.</span>
+            <span className="min-w-0 flex-1">{t('settings.couldntLoadYourProfileEditingIs')}</span>
             <button
               type="button"
               onClick={() => { setProfileError(false); setProfileReloadKey((k) => k + 1); }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 font-medium hover:bg-danger/10"
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
+              <RefreshCw className="h-3.5 w-3.5" /> {t('settings.tryAgain')}
             </button>
           </div>
         )}
@@ -216,21 +218,21 @@ export function SettingsModule() {
             />
           )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="First name" required>
+            <Field label={t('settings.firstName')} required>
               {(id) => (
                 <Input id={id} value={profileForm.firstName}
                   onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))}
-                  placeholder="Jordan" disabled={!profileLoaded} />
+                  placeholder={t('settings.jordan')} disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Last name" required>
+            <Field label={t('settings.lastName')} required>
               {(id) => (
                 <Input id={id} value={profileForm.lastName}
                   onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Rivera" disabled={!profileLoaded} />
+                  placeholder={t('settings.rivera')} disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Contact phone" hint="Optional">
+            <Field label={t('settings.contactPhone')} hint={t('settingsModule.optional')}>
               {() => (
                 profileLoaded ? (
                   <PhoneInput
@@ -245,21 +247,21 @@ export function SettingsModule() {
                 )
               )}
             </Field>
-            <Field label="Email" hint="Managed by your sign-in">
+            <Field label={t('settings.email')} hint={t('settingsModule.managedByYourSignIn')}>
               {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="opacity-60" />}
             </Field>
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={savingProfile} disabled={!profileLoaded}>Save profile</Button>
+            <Button type="submit" loading={savingProfile} disabled={!profileLoaded}>{t('settings.saveProfile')}</Button>
           </div>
         </form>
       </Card>
 
       {/* Default dashboard */}
       <Card>
-        <h2 className="mb-1 text-base font-semibold">Default dashboard</h2>
+        <h2 className="mb-1 text-base font-semibold">{t('settings.defaultDashboard')}</h2>
         <p className="mb-4 text-sm text-muted">
-          Choose which dashboard opens by default. You can always switch from the account menu.
+          {t('settings.chooseWhichDashboardOpensByDefault')}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {DASHBOARD_VIEWS.map((view) => {
@@ -298,13 +300,13 @@ export function SettingsModule() {
       {/* Family */}
       {admin && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Family settings</h2>
+          <h2 className="mb-4 text-base font-semibold">{t('settings.familySettings')}</h2>
           <form onSubmit={saveFamilyName} className="space-y-4">
-            <Field label="Family name" required>
+            <Field label={t('settings.familyName')} required>
               {(id) => <Input id={id} name="name" defaultValue={family.name} />}
             </Field>
             <div className="flex justify-end">
-              <Button type="submit" loading={savingFamily}>Save</Button>
+              <Button type="submit" loading={savingFamily}>{t('settings.save')}</Button>
             </div>
           </form>
         </Card>
@@ -314,11 +316,11 @@ export function SettingsModule() {
       <Card id="members">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Users className="h-4 w-4 text-brand-text" /> Family members
+            <Users className="h-4 w-4 text-brand-text" /> {t('settings.familyMembers')}
           </h2>
           {admin && (
             <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <Plus className="h-4 w-4" /> Invite
+              <Plus className="h-4 w-4" /> {t('settings.invite')}
             </Button>
           )}
         </div>
@@ -331,12 +333,12 @@ export function SettingsModule() {
                 <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
               </div>
               {admin && (
-                <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-fg" aria-label="Edit member">
+                <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-fg" aria-label={t('settings.editMember')}>
                   <Pencil className="h-4 w-4" />
                 </button>
               )}
               {admin && m.user_id !== userId && (
-                <button onClick={() => removeMember(m.id)} className="rounded-lg p-2 text-muted hover:text-danger" aria-label="Remove member">
+                <button onClick={() => removeMember(m.id)} className="rounded-lg p-2 text-muted hover:text-danger" aria-label={t('settings.removeMember')}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
@@ -368,7 +370,7 @@ export function SettingsModule() {
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); success('Invite sent!'); }}
+          onSent={() => { setInviteOpen(false); success(t('settingsModule.inviteSent')); }}
         />
       )}
 
@@ -386,6 +388,7 @@ export function SettingsModule() {
 function EditMemberModal({ member, isSelf, onClose }: {
   member: Tables<'family_members'>; isSelf: boolean; onClose: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
 
@@ -395,24 +398,24 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const display_name = String(form.get('display_name') ?? '').trim();
     const role = String(form.get('role') ?? member.role) as MemberRole;
     const birthday = String(form.get('birthday') ?? '').trim();
-    if (!display_name) { toastError('Name is required'); return; }
+    if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
     const { error } = await createClient().from('family_members')
       .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Member updated');
+    success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
   }
 
   return (
-    <Modal open onClose={onClose} title="Edit family member" description={isSelf ? 'Changing your own role can affect your admin access.' : undefined}>
+    <Modal open onClose={onClose} title={t('settings.editFamilyMember')} description={isSelf ? 'Changing your own role can affect your admin access.' : undefined}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Name" required>
+        <Field label={t('settings.name')} required>
           {(id) => <Input id={id} name="display_name" defaultValue={member.display_name} autoFocus />}
         </Field>
-        <Field label="Role">
+        <Field label={t('settings.role')}>
           {(id) => (
             <Select id={id} name="role" defaultValue={member.role}>
               {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
@@ -421,11 +424,11 @@ function EditMemberModal({ member, isSelf, onClose }: {
             </Select>
           )}
         </Field>
-        <Field label="Birthday" hint="Powers birthday reminders, gift ideas, and celebrations.">
+        <Field label={t('settings.birthday')} hint={t('settingsModule.powersBirthdayRemindersGiftIdeas')}>
           {(id) => <Input id={id} name="birthday" type="date" defaultValue={member.birthday ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('settings.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </form>
@@ -437,6 +440,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
   familyId: string; userId: string;
   onClose: () => void; onSent: () => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -445,7 +449,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
     const form = new FormData(e.currentTarget);
     const email = String(form.get('email') ?? '').trim().toLowerCase();
     const role = String(form.get('role') ?? 'adult') as MemberRole;
-    if (!email) return toastError('Email is required');
+    if (!email) return toastError(t('settingsModule.emailIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { data: invite, error } = await supabase.from('invites').insert({
@@ -454,7 +458,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
       role,
       invited_by: userId,
     }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, 'Failed')); }
+    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, t('settingsModule.failed'))); }
 
     // Fire invite email (non-blocking — don't fail UI if email fails)
     void fetch('/api/email/invite', {
@@ -468,12 +472,12 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Invite family member" description="They'll receive an email with a link to join your family.">
+    <Modal open onClose={onClose} title={t('settings.inviteFamilyMember')} description={t('settingsModule.theyLlReceiveAnEmail')}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Email address" required>
+        <Field label={t('settings.emailAddress')} required>
           {(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}
         </Field>
-        <Field label="Role">
+        <Field label={t('settings.role')}>
           {(id) => (
             <Select id={id} name="role" defaultValue="adult">
               {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -481,8 +485,8 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Mail className="h-4 w-4" /> Send invite</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>
+          <Button type="submit" loading={loading}><Mail className="h-4 w-4" /> {t('settings.sendInvite')}</Button>
         </div>
       </form>
     </Modal>

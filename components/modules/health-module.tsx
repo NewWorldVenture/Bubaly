@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -92,6 +93,7 @@ function workoutIcon(activity: string) {
 }
 
 export function HealthModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
@@ -353,8 +355,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save appointment'); return; }
-    success('Appointment added!');
+    if (err) { toastError(tr('healthModule.failedToSaveAppointment')); return; }
+    success(tr('healthModule.appointmentAdded'));
     setApptOpen(false);
     setApptForm({ title: '', starts_at: '', member_id: '', provider: '', location: '', notes: '' });
   }
@@ -373,8 +375,8 @@ export function HealthModule() {
       recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
     });
     setSaving(false);
-    if (err) { toastError('Failed to log metric'); return; }
-    success('Metric logged!');
+    if (err) { toastError(tr('healthModule.failedToLogMetric')); return; }
+    success(tr('healthModule.metricLogged'));
     setMetricOpen(false);
     setMetricForm({ member_id: '', type: 'steps', value: '', recorded_at: '' });
   }
@@ -395,8 +397,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log workout'); return; }
-    success('Workout logged!');
+    if (err) { toastError(tr('healthModule.failedToLogWorkout')); return; }
+    success(tr('healthModule.workoutLogged'));
     setWorkoutOpen(false);
     setWorkoutForm({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
   }
@@ -416,8 +418,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log symptom'); return; }
-    success('Symptom logged!');
+    if (err) { toastError(tr('healthModule.failedToLogSymptom')); return; }
+    success(tr('healthModule.symptomLogged'));
     setSymptomOpen(false);
     setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
   }
@@ -425,21 +427,21 @@ export function HealthModule() {
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
-    if (err) { toastError('Failed to update symptom'); return; }
-    success('Marked resolved.');
+    if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
-    if (err) { toastError('Failed to delete symptom'); return; }
-    success('Symptom removed.');
+    if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    success(tr('healthModule.symptomRemoved'));
   }
 
   async function saveGoal() {
     if (!goalForm.member_id || !goalForm.target) return;
     const target = parseFloat(goalForm.target);
-    if (!(target > 0)) { toastError('Target must be greater than 0.'); return; }
+    if (!(target > 0)) { toastError(tr('healthModule.targetMustBeGreaterThan')); return; }
     setSaving(true);
     const sb = createClient();
     const typeInfo = METRIC_TYPES.find((t) => t.value === goalForm.metric_type);
@@ -454,8 +456,8 @@ export function HealthModule() {
       created_by: userId,
     }, { onConflict: 'member_id,metric_type,period' });
     setSaving(false);
-    if (err) { toastError('Failed to save goal'); return; }
-    success('Goal saved!');
+    if (err) { toastError(tr('healthModule.failedToSaveGoal')); return; }
+    success(tr('healthModule.goalSaved'));
     setGoalOpen(false);
     setGoalForm({ member_id: '', metric_type: 'steps', target: '', period: 'daily' });
   }
@@ -500,12 +502,12 @@ export function HealthModule() {
     <div className="module-with-sidebar">
       <div className="module-main space-y-5">
         <PageHeader
-          title="Health"
-          description="Track fitness, wellness, and health across your whole family."
+          title={tr('health.health')}
+          description={tr('healthModule.trackFitnessWellnessAndHealth')}
           action={
             <div className="flex gap-2">
-              <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>
-              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> Log Workout</Button>
+              <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
+              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
             </div>
           }
         />
@@ -536,11 +538,11 @@ export function HealthModule() {
           {/* Activity Summary */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Activity Summary</h2>
-              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> Set goals</button>
+              <h2 className="font-semibold">{tr('health.activitySummary')}</h2>
+              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> {tr('health.setGoals')}</button>
             </div>
             {metrics.length === 0 ? (
-              <EmptyState icon={Activity} title="No activity data yet" description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
+              <EmptyState icon={Activity} title={tr('health.noActivityDataYet')} description={tr('healthModule.logYourFirstHealthMetric')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <>
                 <div className="flex items-center gap-6">
@@ -552,7 +554,7 @@ export function HealthModule() {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-2xl font-black">{goalPct}%</span>
-                      <span className="text-[10px] text-muted">Goal Met</span>
+                      <span className="text-[10px] text-muted">{tr('health.goalMet')}</span>
                     </div>
                   </div>
                   <div className="space-y-3 flex-1">
@@ -570,7 +572,7 @@ export function HealthModule() {
                   </div>
                 </div>
                 <div className="mt-5">
-                  <p className="mb-3 text-xs text-muted">This Week</p>
+                  <p className="mb-3 text-xs text-muted">{tr('health.thisWeek')}</p>
                   <div className="flex items-end gap-1.5 h-16">
                     {weeklyBars.map(({ day, pct }) => (
                       <div key={day} className="flex flex-1 flex-col items-center gap-1">
@@ -587,10 +589,10 @@ export function HealthModule() {
           {/* Family Health at a Glance */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Family Health at a Glance</h2>
+              <h2 className="font-semibold">{tr('health.familyHealthAtAGlance')}</h2>
             </div>
             {memberStats.every((ms) => ms.steps === 0 && ms.sleep === 0 && ms.hr === 0) ? (
-              <EmptyState icon={Heart} title="No member health data" description="Log metrics for family members to see their health at a glance." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
+              <EmptyState icon={Heart} title={tr('health.noMemberHealthData')} description={tr('healthModule.logMetricsForFamilyMembers')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <div className="max-h-[32rem] space-y-3 overflow-y-auto">
                 {memberStats.map(({ member: m, steps, sleep, hr, pct }) => (
@@ -604,9 +606,9 @@ export function HealthModule() {
                       <span className="text-xs font-bold" style={{ color: m.color ?? undefined }}>{pct}%</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div><p className="font-bold">{steps.toLocaleString()}</p><p className="text-muted">Steps</p></div>
-                      <div><p className="font-bold">{formatSleepHours(sleep)}</p><p className="text-muted">Sleep</p></div>
-                      <div><p className="font-bold">{hr > 0 ? `${hr} bpm` : '--'}</p><p className="text-muted">Heart Rate</p></div>
+                      <div><p className="font-bold">{steps.toLocaleString()}</p><p className="text-muted">{tr('health.steps')}</p></div>
+                      <div><p className="font-bold">{formatSleepHours(sleep)}</p><p className="text-muted">{tr('health.sleep')}</p></div>
+                      <div><p className="font-bold">{hr > 0 ? `${hr} bpm` : '--'}</p><p className="text-muted">{tr('health.heartRate')}</p></div>
                     </div>
                     <div className="mt-2.5 h-1.5 rounded-full bg-border">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.color ?? undefined }} />
@@ -623,11 +625,11 @@ export function HealthModule() {
           {/* Recent Workouts */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Recent Workouts</h2>
-              <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">+ Log workout</button>
+              <h2 className="font-semibold">{tr('health.recentWorkouts')}</h2>
+              <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">{tr('health.logWorkout')}</button>
             </div>
             {workouts.length === 0 ? (
-              <EmptyState icon={Dumbbell} title="No workouts logged" description="Track runs, swims, bike rides, and more." action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Workout</Button>} />
+              <EmptyState icon={Dumbbell} title={tr('health.noWorkoutsLogged')} description={tr('healthModule.trackRunsSwimsBikeRides')} action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logWorkout')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {workouts.slice(0, 5).map((w) => {
@@ -657,7 +659,7 @@ export function HealthModule() {
           {/* Health Insights */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Health Insights</h2>
+              <h2 className="font-semibold">{tr('health.healthInsights')}</h2>
               <span className="flex items-center gap-1 text-xs text-brand-text"><Sparkles className="h-3 w-3" /> Data-driven</span>
             </div>
             <div className="space-y-3">
@@ -676,15 +678,15 @@ export function HealthModule() {
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Thermometer className="h-4 w-4 text-rose-300" />
-              <h2 className="font-semibold">Symptom Journal</h2>
+              <h2 className="font-semibold">{tr('health.symptomJournal')}</h2>
               {activeSymptomCount > 0 && (
                 <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{activeSymptomCount} active</span>
               )}
             </div>
-            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> Log symptom</Button>
+            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
-            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
+            <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />
           ) : (
             <div className="space-y-2.5">
               {sortedSymptoms.slice(0, 12).map((s) => {
@@ -696,7 +698,7 @@ export function HealthModule() {
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-semibold">{s.symptom}</p>
                         <span className={cn('text-[10px] font-bold uppercase', SEVERITY_COLORS[s.severity] ?? 'text-muted')}>{SEVERITY_LABELS[s.severity] ?? `Lvl ${s.severity}`}</span>
-                        {s.status === 'resolved' && <span className="text-[10px] font-semibold text-emerald-300">Resolved</span>}
+                        {s.status === 'resolved' && <span className="text-[10px] font-semibold text-emerald-300">{tr('health.resolved')}</span>}
                       </div>
                       <p className="truncate text-xs text-muted">
                         {member?.display_name ?? 'Unknown'}
@@ -707,9 +709,9 @@ export function HealthModule() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {s.status === 'active' && (
-                        <button onClick={() => resolveSymptom(s)} title="Mark resolved" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-emerald-300"><CheckCircle2 className="h-4 w-4" /></button>
+                        <button onClick={() => resolveSymptom(s)} title={tr('health.markResolved')} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-emerald-300"><CheckCircle2 className="h-4 w-4" /></button>
                       )}
-                      <button onClick={() => deleteSymptom(s)} title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => deleteSymptom(s)} title={tr('health.delete')} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                 );
@@ -723,7 +725,7 @@ export function HealthModule() {
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Health Summary */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Health Summary</h2>
+          <h2 className="mb-4 font-semibold">{tr('health.healthSummary')}</h2>
           <div className="space-y-4">
             {healthSummary.map(({ label, value, sub, color }) => (
               <div key={label} className="flex items-center justify-between">
@@ -737,10 +739,10 @@ export function HealthModule() {
         {/* Upcoming Checkups */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Upcoming Checkups</h2>
+            <h2 className="font-semibold">{tr('health.upcomingCheckups')}</h2>
           </div>
           {appointments.length === 0 ? (
-            <p className="text-sm text-muted text-center py-4">No upcoming checkups.</p>
+            <p className="text-sm text-muted text-center py-4">{tr('health.noUpcomingCheckups')}</p>
           ) : (
             <div className="space-y-3">
               {appointments.slice(0, 4).map((a, i) => {
@@ -765,17 +767,17 @@ export function HealthModule() {
             </div>
           )}
           <button onClick={() => setApptOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
-            <Plus className="h-3.5 w-3.5" /> Add Checkup
+            <Plus className="h-3.5 w-3.5" /> {tr('health.addCheckup')}
           </button>
         </div>
 
         {/* Health Reminders */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Health Reminders</h2>
+            <h2 className="font-semibold">{tr('health.healthReminders')}</h2>
           </div>
           {reminders.length === 0 ? (
-            <p className="text-sm text-muted text-center py-4">No active reminders.</p>
+            <p className="text-sm text-muted text-center py-4">{tr('health.noActiveReminders')}</p>
           ) : (
             <div className="space-y-3">
               {reminders.slice(0, 4).map((r) => (
@@ -796,95 +798,95 @@ export function HealthModule() {
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15">
             <Sparkles className="h-6 w-6 text-brand-text" />
           </div>
-          <h3 className="font-bold">AI Health Coach</h3>
-          <p className="mt-2 text-xs leading-5 text-muted">Get personalized health tips and wellness insights for your family.</p>
-          <Button onClick={() => setCoachOpen(true)} className="btn-cta mt-4 w-full justify-center">Ask AI</Button>
+          <h3 className="font-bold">{tr('health.aiHealthCoach')}</h3>
+          <p className="mt-2 text-xs leading-5 text-muted">{tr('health.getPersonalizedHealthTipsAndWellness')}</p>
+          <Button onClick={() => setCoachOpen(true)} className="btn-cta mt-4 w-full justify-center">{tr('health.askAi')}</Button>
         </div>
       </aside>
 
       {/* ── Modals ──────────────────────────────────────────── */}
 
       {/* Add Appointment Modal */}
-      <Modal open={apptOpen} title="Add Appointment" onClose={() => setApptOpen(false)}>
+      <Modal open={apptOpen} title={tr('health.addAppointment')} onClose={() => setApptOpen(false)}>
         <div className="space-y-4">
-          <Field label="Title">{(id) => <Input id={id} value={apptForm.title} onChange={(e) => setApptForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Annual Physical" />}</Field>
-          <Field label="Member">{(id) => <Select id={id} value={apptForm.member_id} onChange={(e) => setApptForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={apptForm.starts_at} onChange={(e) => setApptForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
+          <Field label={tr('health.title')}>{(id) => <Input id={id} value={apptForm.title} onChange={(e) => setApptForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('health.eGAnnualPhysical')} />}</Field>
+          <Field label={tr('health.member')}>{(id) => <Select id={id} value={apptForm.member_id} onChange={(e) => setApptForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.dateTime')}>{(id) => <Input id={id} type="datetime-local" value={apptForm.starts_at} onChange={(e) => setApptForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Provider">{(id) => <Input id={id} value={apptForm.provider} onChange={(e) => setApptForm((f) => ({ ...f, provider: e.target.value }))} placeholder="e.g. Dr. Martinez" />}</Field>
-            <Field label="Location">{(id) => <Input id={id} value={apptForm.location} onChange={(e) => setApptForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Oak Medical" />}</Field>
+            <Field label={tr('health.provider')}>{(id) => <Input id={id} value={apptForm.provider} onChange={(e) => setApptForm((f) => ({ ...f, provider: e.target.value }))} placeholder={tr('health.eGDrMartinez')} />}</Field>
+            <Field label={tr('health.location')}>{(id) => <Input id={id} value={apptForm.location} onChange={(e) => setApptForm((f) => ({ ...f, location: e.target.value }))} placeholder={tr('health.eGOakMedical')} />}</Field>
           </div>
-          <Field label="Notes">{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional details" />}</Field>
+          <Field label={tr('health.notes')}>{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.optionalDetails')} />}</Field>
           <Button onClick={saveAppointment} disabled={saving || !apptForm.title || !apptForm.starts_at} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Appointment'}</Button>
         </div>
       </Modal>
 
       {/* Log Metric Modal */}
-      <Modal open={metricOpen} title="Log Health Metric" onClose={() => setMetricOpen(false)}>
+      <Modal open={metricOpen} title={tr('health.logHealthMetric')} onClose={() => setMetricOpen(false)}>
         <div className="space-y-4">
-          <Field label="Family Member">{(id) => <Select id={id} value={metricForm.member_id} onChange={(e) => setMetricForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Metric Type">{(id) => <Select id={id} value={metricForm.type} onChange={(e) => setMetricForm((f) => ({ ...f, type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label} ({t.unit})</option>)}</Select>}</Field>
-          <Field label="Value">{(id) => <Input id={id} type="number" value={metricForm.value} onChange={(e) => setMetricForm((f) => ({ ...f, value: e.target.value }))} placeholder={`e.g. ${metricForm.type === 'steps' ? '10000' : metricForm.type === 'sleep_hours' ? '7.5' : '72'}`} />}</Field>
-          <Field label="Date & Time (optional)">{(id) => <Input id={id} type="datetime-local" value={metricForm.recorded_at} onChange={(e) => setMetricForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
+          <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={metricForm.member_id} onChange={(e) => setMetricForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.metricType')}>{(id) => <Select id={id} value={metricForm.type} onChange={(e) => setMetricForm((f) => ({ ...f, type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label} ({t.unit})</option>)}</Select>}</Field>
+          <Field label={tr('health.value')}>{(id) => <Input id={id} type="number" value={metricForm.value} onChange={(e) => setMetricForm((f) => ({ ...f, value: e.target.value }))} placeholder={`e.g. ${metricForm.type === 'steps' ? '10000' : metricForm.type === 'sleep_hours' ? '7.5' : '72'}`} />}</Field>
+          <Field label={tr('health.dateTimeOptional')}>{(id) => <Input id={id} type="datetime-local" value={metricForm.recorded_at} onChange={(e) => setMetricForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
           <Button onClick={saveMetric} disabled={saving || !metricForm.member_id || !metricForm.value} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Metric'}</Button>
         </div>
       </Modal>
 
       {/* Log Workout Modal */}
-      <Modal open={workoutOpen} title="Log Workout" onClose={() => setWorkoutOpen(false)}>
+      <Modal open={workoutOpen} title={tr('health.logWorkout')} onClose={() => setWorkoutOpen(false)}>
         <div className="space-y-4">
-          <Field label="Family Member">{(id) => <Select id={id} value={workoutForm.member_id} onChange={(e) => setWorkoutForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Activity">{(id) => <Input id={id} value={workoutForm.activity} onChange={(e) => setWorkoutForm((f) => ({ ...f, activity: e.target.value }))} placeholder="e.g. Morning Run, Swim Practice" />}</Field>
+          <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={workoutForm.member_id} onChange={(e) => setWorkoutForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.activity')}>{(id) => <Input id={id} value={workoutForm.activity} onChange={(e) => setWorkoutForm((f) => ({ ...f, activity: e.target.value }))} placeholder={tr('health.eGMorningRunSwimPractice')} />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Duration (min)">{(id) => <Input id={id} type="number" value={workoutForm.duration_minutes} onChange={(e) => setWorkoutForm((f) => ({ ...f, duration_minutes: e.target.value }))} placeholder="e.g. 30" />}</Field>
-            <Field label="Calories">{(id) => <Input id={id} type="number" value={workoutForm.calories} onChange={(e) => setWorkoutForm((f) => ({ ...f, calories: e.target.value }))} placeholder="e.g. 285" />}</Field>
+            <Field label={tr('health.durationMin')}>{(id) => <Input id={id} type="number" value={workoutForm.duration_minutes} onChange={(e) => setWorkoutForm((f) => ({ ...f, duration_minutes: e.target.value }))} placeholder={tr('health.eG30')} />}</Field>
+            <Field label={tr('health.calories')}>{(id) => <Input id={id} type="number" value={workoutForm.calories} onChange={(e) => setWorkoutForm((f) => ({ ...f, calories: e.target.value }))} placeholder={tr('health.eG285')} />}</Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Distance (miles)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={workoutForm.distance} onChange={(e) => setWorkoutForm((f) => ({ ...f, distance: e.target.value }))} placeholder="e.g. 3.2" />}</Field>
-            <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={workoutForm.recorded_at} onChange={(e) => setWorkoutForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
+            <Field label={tr('health.distanceMiles')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={workoutForm.distance} onChange={(e) => setWorkoutForm((f) => ({ ...f, distance: e.target.value }))} placeholder={tr('health.eG32')} />}</Field>
+            <Field label={tr('health.dateTime')}>{(id) => <Input id={id} type="datetime-local" value={workoutForm.recorded_at} onChange={(e) => setWorkoutForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
           </div>
-          <Field label="Notes (optional)">{(id) => <Input id={id} value={workoutForm.notes} onChange={(e) => setWorkoutForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Felt great, PR pace" />}</Field>
+          <Field label={tr('health.notesOptional')}>{(id) => <Input id={id} value={workoutForm.notes} onChange={(e) => setWorkoutForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.eGFeltGreatPrPace')} />}</Field>
           <Button onClick={saveWorkout} disabled={saving || !workoutForm.member_id || !workoutForm.activity} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Workout'}</Button>
         </div>
       </Modal>
 
       {/* Log Symptom Modal */}
-      <Modal open={symptomOpen} title="Log Symptom" onClose={() => setSymptomOpen(false)}>
+      <Modal open={symptomOpen} title={tr('health.logSymptom')} onClose={() => setSymptomOpen(false)}>
         <div className="space-y-4">
-          <Field label="Family Member">{(id) => <Select id={id} value={symptomForm.member_id} onChange={(e) => setSymptomForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Symptom">{(id) => <Input id={id} value={symptomForm.symptom} onChange={(e) => setSymptomForm((f) => ({ ...f, symptom: e.target.value }))} placeholder="e.g. Headache, Sore throat, Fever" />}</Field>
+          <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={symptomForm.member_id} onChange={(e) => setSymptomForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.symptom')}>{(id) => <Input id={id} value={symptomForm.symptom} onChange={(e) => setSymptomForm((f) => ({ ...f, symptom: e.target.value }))} placeholder={tr('health.eGHeadacheSoreThroatFever')} />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 — Mild</option><option value="2">2 — Mild</option><option value="3">3 — Moderate</option><option value="4">4 — Severe</option><option value="5">5 — Severe</option></Select>}</Field>
-            <Field label="Body Area (optional)">{(id) => <Input id={id} value={symptomForm.body_area} onChange={(e) => setSymptomForm((f) => ({ ...f, body_area: e.target.value }))} placeholder="e.g. Head, Stomach" />}</Field>
+            <Field label={tr('health.severity')}>{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">{tr('health.1Mild')}</option><option value="2">{tr('health.2Mild')}</option><option value="3">{tr('health.3Moderate')}</option><option value="4">{tr('health.4Severe')}</option><option value="5">{tr('health.5Severe')}</option></Select>}</Field>
+            <Field label={tr('health.bodyAreaOptional')}>{(id) => <Input id={id} value={symptomForm.body_area} onChange={(e) => setSymptomForm((f) => ({ ...f, body_area: e.target.value }))} placeholder={tr('health.eGHeadStomach')} />}</Field>
           </div>
-          <Field label="Started (optional)">{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>
-          <Field label="Notes (optional)">{(id) => <Textarea id={id} value={symptomForm.notes} onChange={(e) => setSymptomForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Started after lunch, took ibuprofen" />}</Field>
+          <Field label={tr('health.startedOptional')}>{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>
+          <Field label={tr('health.notesOptional')}>{(id) => <Textarea id={id} value={symptomForm.notes} onChange={(e) => setSymptomForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.eGStartedAfterLunchTook')} />}</Field>
           <Button onClick={saveSymptom} disabled={saving || !symptomForm.member_id || !symptomForm.symptom.trim()} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Symptom'}</Button>
         </div>
       </Modal>
 
       {/* Set Goal Modal */}
-      <Modal open={goalOpen} title="Set Health Goal" onClose={() => setGoalOpen(false)}>
+      <Modal open={goalOpen} title={tr('health.setHealthGoal')} onClose={() => setGoalOpen(false)}>
         <div className="space-y-4">
-          <p className="text-xs text-muted">Set a per-member daily or weekly target. Progress rings and insights use these goals (steps default to 10,000 when no goal is set).</p>
-          <Field label="Family Member">{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <p className="text-xs text-muted">{tr('healthModule.setAPerMemberDaily')}</p>
+          <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Metric">{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
-            <Field label="Period">{(id) => <Select id={id} value={goalForm.period} onChange={(e) => setGoalForm((f) => ({ ...f, period: e.target.value as 'daily' | 'weekly' }))}><option value="daily">Daily</option><option value="weekly">Weekly</option></Select>}</Field>
+            <Field label={tr('health.metric')}>{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
+            <Field label={tr('health.period')}>{(id) => <Select id={id} value={goalForm.period} onChange={(e) => setGoalForm((f) => ({ ...f, period: e.target.value as 'daily' | 'weekly' }))}><option value="daily">{tr('health.daily')}</option><option value="weekly">{tr('health.weekly')}</option></Select>}</Field>
           </div>
-          <Field label="Target">{(id) => <Input id={id} type="number" value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: e.target.value }))} placeholder={`e.g. ${goalForm.metric_type === 'steps' ? '10000' : goalForm.metric_type === 'sleep_hours' ? '8' : '60'}`} />}</Field>
+          <Field label={tr('health.target')}>{(id) => <Input id={id} type="number" value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: e.target.value }))} placeholder={`e.g. ${goalForm.metric_type === 'steps' ? '10000' : goalForm.metric_type === 'sleep_hours' ? '8' : '60'}`} />}</Field>
           <Button onClick={saveGoal} disabled={saving || !goalForm.member_id || !goalForm.target} loading={saving} className="w-full">{saving ? 'Saving...' : 'Save Goal'}</Button>
         </div>
       </Modal>
 
       {/* AI Health Coach Modal */}
-      <Modal open={coachOpen} title="AI Health Coach" onClose={() => setCoachOpen(false)}>
+      <Modal open={coachOpen} title={tr('health.aiHealthCoach')} onClose={() => setCoachOpen(false)}>
         <div className="space-y-4">
           <p className="text-xs leading-5 text-muted">Ask a wellness question. The coach uses your family&rsquo;s own health data (profile, active meds, recent symptoms) to give grounded, safety-first guidance. This is general wellness information, not medical advice.</p>
-          <Field label="About (optional)">{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">General / whole family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Question">{(id) => <Textarea id={id} value={coachForm.question} onChange={(e) => setCoachForm((f) => ({ ...f, question: e.target.value }))} placeholder="e.g. What can help with a lingering cough and when should we see a doctor?" />}</Field>
+          <Field label={tr('health.aboutOptional')}>{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.generalWholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.question')}>{(id) => <Textarea id={id} value={coachForm.question} onChange={(e) => setCoachForm((f) => ({ ...f, question: e.target.value }))} placeholder={tr('health.eGWhatCanHelpWith')} />}</Field>
           <Button onClick={askCoach} disabled={coachLoading || !coachForm.question.trim()} loading={coachLoading} className="w-full">
-            {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Thinking...</> : <><Sparkles className="h-4 w-4" /> Ask the Coach</>}
+            {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Thinking...</> : <><Sparkles className="h-4 w-4" /> {tr('health.askTheCoach')}</>}
           </Button>
           {coachError && <p className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">{coachError}</p>}
           {coachAnswer && (

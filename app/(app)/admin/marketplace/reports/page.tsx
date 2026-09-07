@@ -9,6 +9,7 @@ import {
   type ReportStatus, type ReportFilter,
 } from '@/lib/marketplace/reports';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 type Params = { searchParams: Promise<{ status?: string }> };
 
@@ -19,7 +20,7 @@ const FILTERS: { key: ReportFilter; label: string }[] = [
   { key: 'dismissed', label: 'Dismissed' },
 ];
 
-export const metadata: Metadata = { title: 'Marketplace reports', robots: { index: false } };
+export const metadata: Metadata = { title: 'reports.marketplaceReports', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const STATUS_CHIP: Record<string, string> = {
@@ -32,6 +33,7 @@ const STATUS_CHIP: Record<string, string> = {
 /** Super-admin marketplace safety queue (gated by the /admin layout). Reads via
  *  the service role, oversees every family, open reports first. */
 export default async function AdminMarketplaceReportsPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const filter: ReportFilter = isReportFilter(sp.status) ? sp.status : 'all';
   const admin = createServiceClient();
@@ -80,9 +82,9 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
     <div className="space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <ShieldAlert className="h-6 w-6 text-rose-500" /> Marketplace reports
+          <ShieldAlert className="h-6 w-6 text-rose-500" /> {tr('adminMarketplaceReports.marketplaceReports')}
         </h1>
-        <p className="mt-1 text-sm text-muted">Community safety flags across every family. Action the real problems (optionally withdrawing the listing) or dismiss the noise.</p>
+        <p className="mt-1 text-sm text-muted">{tr('reports.communitySafetyFlagsAcrossEvery')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -148,15 +150,16 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
   );
 }
 
-function AdminReadError() {
+async function AdminReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Marketplace reports</h1>
-        <p className="mt-1 text-sm text-muted">Community safety flags across every family.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{tr('reports.marketplaceReports')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('reports.communitySafetyFlagsAcrossEvery2')}</p>
       </div>
-      <ErrorState message="Could not load marketplace reports. Refresh and try again." />
-      <a href="/admin/marketplace/reports" className="text-sm font-medium text-brand-text underline">Refresh reports</a>
+      <ErrorState message={tr('reports.couldNotLoadMarketplaceReports')} />
+      <a href="/admin/marketplace/reports" className="text-sm font-medium text-brand-text underline">{tr('reports.refreshReports')}</a>
     </div>
   );
 }

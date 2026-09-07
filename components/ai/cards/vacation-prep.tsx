@@ -1,6 +1,7 @@
 // Vacation preparation card: where and when, what is in place and what still
 // clashes or needs doing, and the next steps — the trip's checklist as a card.
 import { Check, Circle, Plane } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import type { VacationPrepCard } from '@/lib/ai/result-cards';
 import { CardFrame, MoreRow } from './index';
 
@@ -8,6 +9,7 @@ const COMPACT_ROWS = 4;
 const FULL_ROWS = 10;
 
 export function VacationPrepCardView({ card, compact = false, className }: { card: VacationPrepCard; compact?: boolean; className?: string }) {
+  const t = useTranslations();
   const items = card.items.slice(0, compact ? COMPACT_ROWS : FULL_ROWS);
   const subtitle = card.subtitle ?? ([card.destination, card.dates].filter(Boolean).join(' · ') || null);
   return (
@@ -26,14 +28,14 @@ export function VacationPrepCardView({ card, compact = false, className }: { car
       ) : undefined}
     >
       {items.length === 0 ? (
-        <p className="text-sm text-muted">Nothing to prepare yet.</p>
+        <p className="text-sm text-muted">{t('vacationPrep.nothingToPrepareYet')}</p>
       ) : (
         <ul className="space-y-1">
           {items.map((item, i) => (
             <li key={`${item.label}-${i}`} className="flex items-start gap-2 text-sm">
               {item.done
-                ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-label="Done" />
-                : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-label="Open" />}
+                ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-label={t('vacationPrep.done')} />
+                : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-label={t('vacationPrep.open')} />}
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{item.label}</span>
                 {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}

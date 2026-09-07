@@ -11,6 +11,7 @@ import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ const STATUS_CHIP: Record<string, string> = {
 };
 
 export default async function MarketplaceOrdersPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -49,7 +51,7 @@ export default async function MarketplaceOrdersPage() {
 
   if (ordersError) {
     console.error('[marketplace-orders] Orders read failed', ordersError);
-    return <ErrorState message="Could not load your marketplace orders. Refresh and try again." />;
+    return <ErrorState message={t('orders.couldNotLoadYourMarketplace')} />;
   }
 
   // Honest fee disclosure: the Bubaly service fee is applied only when Super
@@ -125,17 +127,17 @@ export default async function MarketplaceOrdersPage() {
 
   return (
     <div>
-      <PageHeader title="Orders" description="Every exchange you’re part of — confirm, hand off, complete, and review." />
+      <PageHeader title={t('marketplaceOrders.orders')} description={t('orders.everyExchangeYouRePart')} />
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Marketplace orders data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('marketplaceOrders.marketplaceOrdersDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some order details are temporarily unavailable: {dataWarnings.join(', ')}. The order list remains available.</p>
+          <p>{t('marketplaceOrders.someOrderDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}{t('marketplaceOrders.theOrderListRemainsAvailable')}</p>
         </div>
       )}
       {mine.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Receipt className="mx-auto mb-2 h-6 w-6" />
-          No orders yet — accept an offer on one of your listings, or claim something on the board.
+          {t('marketplaceOrders.noOrdersYetAcceptAnOffer')}
         </div>
       ) : (
         <ul className="space-y-2.5">
@@ -163,15 +165,13 @@ export default async function MarketplaceOrdersPage() {
                 {fee && (
                   <p className="mt-1 text-xs text-muted">
                     {role === 'buyer' ? (
-                      <>
-                        You pay <span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
+                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
                         {fee.serviceFeeCents > 0 && (
                           <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
                         )}
                       </>
                     ) : (
-                      <>
-                        You receive <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
+                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
                         <span> · Bubaly takes {formatCents(fee.platformReceivesCents)}</span>
                       </>
                     )}
@@ -181,7 +181,7 @@ export default async function MarketplaceOrdersPage() {
                   <OrderControls orderId={o.id} status={o.status} />
                   {o.status === 'completed' && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
                   {o.status === 'completed' && reviewed.has(o.id) && (
-                    <p className="text-xs text-muted">You reviewed this exchange ✓</p>
+                    <p className="text-xs text-muted">{t('orders.youReviewedThisExchange')}</p>
                   )}
                 </div>
                 {/* Pickup coordination for physical exchanges still in flight. */}

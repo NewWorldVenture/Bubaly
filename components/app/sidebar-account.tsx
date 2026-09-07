@@ -10,8 +10,10 @@ import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SidebarAccount() {
+  const t = useTranslations();
   const { userEmail, selfMember, role, planLevel, isSuperAdmin } = useApp();
 
   const name = selfMember?.display_name ?? userEmail?.split('@')[0] ?? 'You';
@@ -46,7 +48,7 @@ export function SidebarAccount() {
           href="/dashboard/profile"
           className="mt-3 flex w-full items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-fg transition hover:bg-elevated"
         >
-          View Profile
+          {t('sidebarAccount.viewProfile')}
         </Link>
       </div>
 

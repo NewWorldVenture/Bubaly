@@ -23,6 +23,7 @@ import {
 } from '@/lib/location/overview';
 import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofenceEnabled } from '@/app/(app)/dashboard/locator/actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
@@ -65,6 +66,7 @@ function geoErrorMessage(err: unknown): string {
 }
 
 export function LocatorModule() {
+  const tr = useTranslations();
   const { familyId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canManage = isManager(role);
@@ -163,12 +165,12 @@ export function LocatorModule() {
   async function toggleShareOff() {
     const res = await setLocationSharing(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    setSharing(false); void refreshLocations(); success('Location sharing off');
+    setSharing(false); void refreshLocations(); success(tr('locatorModule.locationSharingOff'));
   }
 
   function refreshAll() {
     void refreshLocations(); void refreshPlaces(); void refreshEvents();
-    setNow(new Date()); success('Locations refreshed');
+    setNow(new Date()); success(tr('locatorModule.locationsRefreshed'));
   }
 
   // ── Places / geofences ────────────────────────────────────
@@ -181,14 +183,14 @@ export function LocatorModule() {
     try {
       const pos = await getPosition();
       setPlaceForm((f) => ({ ...f, latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) }));
-      success('Filled in your current coordinates');
+      success(tr('locatorModule.filledInYourCurrentCoordinates'));
     } catch (e) { toastError(geoErrorMessage(e)); }
   }
   async function submitPlace(e: React.FormEvent) {
     e.preventDefault();
     const lat = Number(placeForm.latitude); const lng = Number(placeForm.longitude);
-    if (!placeForm.name.trim()) { toastError('Name is required'); return; }
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) { toastError('Valid coordinates are required'); return; }
+    if (!placeForm.name.trim()) { toastError(tr('locatorModule.nameIsRequired')); return; }
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) { toastError(tr('locatorModule.validCoordinatesAreRequired')); return; }
     setSavingPlace(true);
     const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name.trim(), icon: placeForm.icon, address: placeForm.address.trim() || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
     setSavingPlace(false);
@@ -199,7 +201,7 @@ export function LocatorModule() {
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
     const res = await deletePlace(p.id);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    success('Place deleted'); void refreshPlaces();
+    success(tr('locatorModule.placeDeleted')); void refreshPlaces();
   }
   async function toggleGeofence(p: Place) {
     if (togglingGeo) return;
@@ -211,7 +213,7 @@ export function LocatorModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (readError) return <ErrorState message="Could not load family location data. Refresh and try again." onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
+  if (readError) return <ErrorState message={tr('locatorModule.couldNotLoadFamilyLocation')} onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
 
   const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
@@ -219,24 +221,24 @@ export function LocatorModule() {
     <div className="module-with-sidebar" onClick={() => { setStyleOpen(false); setMoreOpen(false); }}>
       <div className="module-main module-page">
         <PageHeader
-          title="Location"
-          description="See where your family is and keep everyone safe."
+          title={tr('locator.location')}
+          description={tr('locatorModule.seeWhereYourFamilyIs')}
           action={
             <div className="flex items-center gap-2">
-              {canManage && <Button onClick={openNewPlace}><Plus className="h-4 w-4" /> Add Place</Button>}
+              {canManage && <Button onClick={openNewPlace}><Plus className="h-4 w-4" /> {tr('locator.addPlace')}</Button>}
               <Button variant="outline" onClick={() => sharing ? toggleShareOff() : shareNow()} disabled={updating}>
                 {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
                 {sharing ? 'Stop Sharing' : 'Share Location'}
               </Button>
               <div className="relative">
-                <Button variant="outline" size="icon" aria-label="More options" onClick={(e) => { e.stopPropagation(); setMoreOpen((o) => !o); }}>
+                <Button variant="outline" size="icon" aria-label={tr('locator.moreOptions')} onClick={(e) => { e.stopPropagation(); setMoreOpen((o) => !o); }}>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
                 {moreOpen && (
                   <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => { setMoreOpen(false); refreshAll(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><RefreshCw className="h-3.5 w-3.5" /> Refresh locations</button>
-                    <button onClick={() => { setMoreOpen(false); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Clock className="h-3.5 w-3.5" /> Location history</button>
-                    {canManage && <button onClick={() => { setMoreOpen(false); openNewPlace(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Plus className="h-3.5 w-3.5" /> Add geofence</button>}
+                    <button onClick={() => { setMoreOpen(false); refreshAll(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><RefreshCw className="h-3.5 w-3.5" /> {tr('locator.refreshLocations')}</button>
+                    <button onClick={() => { setMoreOpen(false); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Clock className="h-3.5 w-3.5" /> {tr('locator.locationHistory')}</button>
+                    {canManage && <button onClick={() => { setMoreOpen(false); openNewPlace(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Plus className="h-3.5 w-3.5" /> {tr('locator.addGeofence')}</button>}
                   </div>
                 )}
               </div>
@@ -267,7 +269,7 @@ export function LocatorModule() {
           <button onClick={() => setFocusMember(null)}
             className={cn('flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition',
               focusMember === null ? 'border-brand/50 text-fg' : 'border-border text-muted hover:text-fg')}>
-            <Users className="h-4 w-4" /> All Family
+            <Users className="h-4 w-4" /> {tr('locator.allFamily')}
           </button>
         </div>
 
@@ -299,9 +301,9 @@ export function LocatorModule() {
 
           {/* Zoom + locate */}
           <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
-            <button onClick={() => setZoom((z) => Math.min(2, +(z + 0.2).toFixed(2)))} aria-label="Zoom in" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Plus className="h-4 w-4" /></button>
-            <button onClick={() => setZoom((z) => Math.max(1, +(z - 0.2).toFixed(2)))} aria-label="Zoom out" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Minus className="h-4 w-4" /></button>
-            <button onClick={shareNow} disabled={updating} aria-label="Locate me" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated">{updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}</button>
+            <button onClick={() => setZoom((z) => Math.min(2, +(z + 0.2).toFixed(2)))} aria-label={tr('locator.zoomIn')} className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Plus className="h-4 w-4" /></button>
+            <button onClick={() => setZoom((z) => Math.max(1, +(z - 0.2).toFixed(2)))} aria-label={tr('locator.zoomOut')} className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Minus className="h-4 w-4" /></button>
+            <button onClick={shareNow} disabled={updating} aria-label={tr('locator.locateMe')} className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated">{updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}</button>
           </div>
 
           {/* Pins */}
@@ -331,16 +333,16 @@ export function LocatorModule() {
             })}
           </div>
 
-          <span className="absolute bottom-2 left-3 text-[10px] text-white/50"> Maps</span>
-          <span className="absolute bottom-2 right-3 text-[10px] text-white/40">Legal</span>
+          <span className="absolute bottom-2 left-3 text-[10px] text-white/50"> {tr('locator.maps')}</span>
+          <span className="absolute bottom-2 right-3 text-[10px] text-white/40">{tr('locator.legal')}</span>
         </div>
 
         {/* Live Locations */}
         <section>
-          <h2 className="mb-3 text-base font-semibold">Live Locations</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('locator.liveLocations')}</h2>
           <div className="overflow-hidden rounded-2xl border border-border bg-surface/30 divide-y divide-border/50">
             {liveMembers.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-muted">No one is sharing their location yet. Tap <span className="font-medium text-fg">Share Location</span> to start.</div>
+              <div className="px-4 py-10 text-center text-sm text-muted">{tr('locator.noOneIsSharingTheirLocation')} <span className="font-medium text-fg">{tr('locator.shareLocation')}</span> {tr('locator.toStart')}</div>
             ) : liveMembers.map((m) => {
               const l = locByMember.get(m.id)!;
               const tone = batteryTone(l.battery);
@@ -373,7 +375,7 @@ export function LocatorModule() {
         <a href="#geofence-history" onClick={(e) => { e.preventDefault(); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 transition hover:bg-elevated/40 xl:hidden">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand-text"><Clock className="h-4 w-4" /></span>
-          <div className="flex-1"><p className="text-sm font-semibold">Location History</p><p className="text-xs text-muted">See where your family has been</p></div>
+          <div className="flex-1"><p className="text-sm font-semibold">{tr('locator.locationHistory')}</p><p className="text-xs text-muted">{tr('locator.seeWhereYourFamilyHasBeen')}</p></div>
           <ChevronDown className="h-4 w-4 -rotate-90 text-muted" />
         </a>
       </div>
@@ -383,11 +385,11 @@ export function LocatorModule() {
         {/* Place Alerts */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Place Alerts</p>
-            <button onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-xs font-medium text-brand-text hover:underline">View all</button>
+            <p className="text-sm font-semibold">{tr('locator.placeAlerts')}</p>
+            <button onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-xs font-medium text-brand-text hover:underline">{tr('locator.viewAll')}</button>
           </div>
           <div className="space-y-2.5">
-            {alerts.length === 0 ? <p className="text-xs text-muted">No arrivals yet today.</p> : alerts.map((ev) => {
+            {alerts.length === 0 ? <p className="text-xs text-muted">{tr('locator.noArrivalsYetToday')}</p> : alerts.map((ev) => {
               const p = ev.place_id ? placeById.get(ev.place_id) : null;
               const Icon = placeIconFor(p?.icon ?? 'other');
               return (
@@ -407,12 +409,12 @@ export function LocatorModule() {
         {/* Geofences */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Geofences</p>
-            {canManage && <button onClick={openNewPlace} className="text-xs font-medium text-brand-text hover:underline">Manage</button>}
+            <p className="text-sm font-semibold">{tr('locator.geofences')}</p>
+            {canManage && <button onClick={openNewPlace} className="text-xs font-medium text-brand-text hover:underline">{tr('locator.manage')}</button>}
           </div>
           <div className="space-y-2.5">
             {(places ?? []).length === 0 ? (
-              <p className="text-xs text-muted">No geofences yet.</p>
+              <p className="text-xs text-muted">{tr('locator.noGeofencesYet')}</p>
             ) : (places ?? []).map((p) => {
               const Icon = placeIconFor(p.icon);
               return (
@@ -435,7 +437,7 @@ export function LocatorModule() {
           </div>
           {canManage && (
             <button onClick={openNewPlace} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-medium text-muted hover:text-fg">
-              <Plus className="h-3.5 w-3.5" /> Add Geofence
+              <Plus className="h-3.5 w-3.5" /> {tr('locator.addGeofence')}
             </button>
           )}
         </div>
@@ -443,10 +445,10 @@ export function LocatorModule() {
         {/* Location History */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand-text" /> Location History</p>
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand-text" /> {tr('locator.locationHistory')}</p>
           </div>
           {history.length === 0 ? (
-            <p className="text-xs text-muted">No history yet.</p>
+            <p className="text-xs text-muted">{tr('locator.noHistoryYet')}</p>
           ) : (
             <div className="space-y-4">
               {history.slice(0, 3).map((day) => (
@@ -480,10 +482,10 @@ export function LocatorModule() {
       <Modal open={placeModal} onClose={() => setPlaceModal(false)} title={placeForm.id ? 'Edit place' : 'Add place'}>
         <form onSubmit={submitPlace} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Name" required>
-              {(id) => <Input id={id} value={placeForm.name} onChange={(e) => setPlaceForm((f) => ({ ...f, name: e.target.value }))} placeholder="Home" autoFocus />}
+            <Field label={tr('locator.name')} required>
+              {(id) => <Input id={id} value={placeForm.name} onChange={(e) => setPlaceForm((f) => ({ ...f, name: e.target.value }))} placeholder={tr('locator.home')} autoFocus />}
             </Field>
-            <Field label="Type">
+            <Field label={tr('locator.type')}>
               {(id) => (
                 <Select id={id} value={placeForm.icon} onChange={(e) => setPlaceForm((f) => ({ ...f, icon: e.target.value }))}>
                   {PLACE_KINDS.map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}
@@ -491,23 +493,23 @@ export function LocatorModule() {
               )}
             </Field>
           </div>
-          <Field label="Address">
-            {(id) => <Input id={id} value={placeForm.address} onChange={(e) => setPlaceForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Family Way, Austin, TX" />}
+          <Field label={tr('locator.address')}>
+            {(id) => <Input id={id} value={placeForm.address} onChange={(e) => setPlaceForm((f) => ({ ...f, address: e.target.value }))} placeholder={tr('locator.123FamilyWayAustinTx')} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Latitude" required>
+            <Field label={tr('locator.latitude')} required>
               {(id) => <Input id={id} value={placeForm.latitude} onChange={(e) => setPlaceForm((f) => ({ ...f, latitude: e.target.value }))} placeholder="30.2672" />}
             </Field>
-            <Field label="Longitude" required>
+            <Field label={tr('locator.longitude')} required>
               {(id) => <Input id={id} value={placeForm.longitude} onChange={(e) => setPlaceForm((f) => ({ ...f, longitude: e.target.value }))} placeholder="-97.7431" />}
             </Field>
           </div>
           <div className="flex items-center justify-between">
             <button type="button" onClick={useCurrentForPlace} className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-              <LocateFixed className="h-3.5 w-3.5" /> Use my current location
+              <LocateFixed className="h-3.5 w-3.5" /> {tr('locator.useMyCurrentLocation')}
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted">Radius</span>
+              <span className="text-xs text-muted">{tr('locator.radius')}</span>
               <Input type="number" min={50} step={50} value={placeForm.radius_m} onChange={(e) => setPlaceForm((f) => ({ ...f, radius_m: Number(e.target.value) }))} className="h-9 w-24" />
               <span className="text-xs text-muted">m</span>
             </div>
@@ -515,10 +517,10 @@ export function LocatorModule() {
           <div className="flex justify-end gap-2 pt-2">
             {placeForm.id && canManage && (
               <Button type="button" variant="ghost" className="mr-auto text-rose-400" onClick={() => { const p = placeById.get(placeForm.id); if (p) { setPlaceModal(false); void removePlace(p); } }}>
-                <Trash2 className="h-4 w-4" /> Delete
+                <Trash2 className="h-4 w-4" /> {tr('locator.delete')}
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => setPlaceModal(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setPlaceModal(false)}>{tr('locator.cancel')}</Button>
             <Button type="submit" loading={savingPlace}>{savingPlace ? 'Saving…' : placeForm.id ? 'Save changes' : 'Add place'}</Button>
           </div>
         </form>

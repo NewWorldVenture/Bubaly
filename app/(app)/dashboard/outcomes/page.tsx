@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { OutcomesLauncher, type OutcomePlan } from '@/components/modules/outcomes-launcher';
@@ -16,6 +17,7 @@ export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function OutcomesPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -72,7 +74,7 @@ export default async function OutcomesPage() {
     <>
       {reasoningError && (
         <div className="mx-auto mb-4 max-w-5xl px-4 pt-2">
-          <ErrorState message="Relationship insights are temporarily unavailable from Supabase. Refresh and try again." />
+          <ErrorState message={t('outcomes.relationshipInsightsAreTemporarilyUnavailable')} />
         </div>
       )}
       <ActivationBeacon milestone="first_outcome_viewed" familyId={familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />

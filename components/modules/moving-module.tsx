@@ -21,6 +21,7 @@ import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
   nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
@@ -38,6 +39,7 @@ export function MovingModule() {
 }
 
 export function MovingWorkspace() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
@@ -91,7 +93,7 @@ export function MovingWorkspace() {
 
   async function generateTasks() {
     if (!move) return;
-    if (!plan.length) return toastError('The full checklist for this move is already here.');
+    if (!plan.length) return toastError(tr('movingModule.theFullChecklistForThis'));
     setPlanning(true);
     const { error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
       family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, date_mode: 'relative' as const, template_key: p.key, status: 'todo' as const, created_by: userId,
@@ -104,14 +106,14 @@ export function MovingWorkspace() {
   async function setTaskStatus(t: Task, status: Task['status']) {
     const { error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    if (status === 'done') success('Done ✓');
+    if (status === 'done') success(tr('movingModule.done'));
   }
 
   async function deleteTask(t: Task) {
     if (!confirm(`Delete “${t.title}”?`)) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    success('Task deleted');
+    success(tr('movingModule.taskDeleted'));
   }
 
   async function advanceBox(b: Box) {
@@ -126,7 +128,7 @@ export function MovingWorkspace() {
     if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
-    success('Box deleted');
+    success(tr('movingModule.boxDeleted'));
   }
 
   async function setMoveStatus(status: MoveStatus) {
@@ -141,16 +143,17 @@ export function MovingWorkspace() {
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');
-    success('Move deleted');
+    success(tr('movingModule.moveDeleted'));
   }
 
   const loading = moves.loading || tasks.loading || boxes.loading;
   const error = moves.error || tasks.error || boxes.error;
   const refresh = () => { void moves.refresh(); void tasks.refresh(); void boxes.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load your move. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('movingModule.couldNotLoadYourMove')} onRetry={refresh} />;
 
   const TaskRow = ({ t }: { t: Task }) => {
+  const tr = useTranslations();
     const overdue = t.status !== 'done' && t.status !== 'skipped' && t.due_date && t.due_date < todayIso;
     const meta = categoryMeta(t.category);
     return (
@@ -168,7 +171,7 @@ export function MovingWorkspace() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {t.status === 'todo' && <button onClick={() => setTaskStatus(t, 'doing')} aria-label="Mark in progress" title="In progress" className="rounded-lg p-1.5 text-muted hover:text-fg"><ChevronRight className="h-4 w-4" /></button>}
+          {t.status === 'todo' && <button onClick={() => setTaskStatus(t, 'doing')} aria-label={tr('moving.markInProgress')} title={tr('moving.inProgress')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ChevronRight className="h-4 w-4" /></button>}
           {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={`Skip ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
           {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={`Restore ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
           <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={`Edit ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
@@ -199,24 +202,24 @@ export function MovingWorkspace() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Move Planner"
-        description="One workflow from “we’re moving” to “settled”: an eight-week checklist built for your family, a numbered box inventory you can search on day one, and a budget that counts the mover’s quote before you spend it."
+        title={tr('moving.movePlanner')}
+        description={tr('movingModule.oneWorkflowFromWeRe')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="moving" iconOnly />
             {move && <Button variant="secondary" onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> Box</Button>}
-            {move && <Button variant="secondary" onClick={() => setTaskForm({ open: true, task: null })}><Plus className="h-4 w-4" /> Task</Button>}
-            <Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> New move</Button>
+            {move && <Button variant="secondary" onClick={() => setTaskForm({ open: true, task: null })}><Plus className="h-4 w-4" /> {tr('moving.task')}</Button>}
+            <Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.newMove')}</Button>
           </div>
         }
       />
 
       {moves.data.length === 0 || !move || !summary || !budget ? (
-        <EmptyState icon={Truck} title="No move planned" description="Add the move date and whether kids, pets or a rental are involved. The eight-week checklist and box inventory follow." action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> Plan a move</Button>} />
+        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description={tr('movingModule.addTheMoveDateAnd')} action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
       ) : (
         <>
           {moves.data.length > 1 && (
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Move">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label={tr('moving.move')}>
               {moves.data.map((m) => (
                 <button key={m.id} role="tab" aria-selected={m.id === moveId} onClick={() => setMoveId(m.id)}
                   className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', m.id === moveId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
@@ -234,7 +237,7 @@ export function MovingWorkspace() {
                   <h2 className="text-lg font-semibold">{move.title}</h2>
                   <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(move.status)}</span>
                   {suggested && suggested !== move.status && move.status !== 'done' && move.status !== 'cancelled' && (
-                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">Mark {statusLabel(suggested).toLowerCase()} →</button>
+                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(suggested).toLowerCase()} →</button>
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted"><CalendarClock className="mr-1 inline h-3.5 w-3.5" />{fmtLong(move.move_date)} · {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label}</p>
@@ -242,9 +245,9 @@ export function MovingWorkspace() {
                 {move.mover_name && <p className="mt-1 text-xs text-muted">Movers: {move.mover_name}{move.mover_phone ? ` · ${move.mover_phone}` : ''}{move.mover_quote_cents ? ` · quote ${money(move.mover_quote_cents)}` : ''}</p>}
               </div>
               <div className="flex items-center gap-1">
-                {canRecalculate && move.status !== 'done' && move.status !== 'cancelled' && <Button size="sm" variant="secondary" onClick={() => setDateMoveId(move.id)}>Change date</Button>}
-                <button onClick={() => setMoveForm({ open: true, move })} aria-label="Edit move" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => deleteMove(move)} aria-label="Delete move" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                {canRecalculate && move.status !== 'done' && move.status !== 'cancelled' && <Button size="sm" variant="secondary" onClick={() => setDateMoveId(move.id)}>{tr('moving.changeDate')}</Button>}
+                <button onClick={() => setMoveForm({ open: true, move })} aria-label={tr('moving.editMove')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => deleteMove(move)} aria-label={tr('moving.deleteMove')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
@@ -259,27 +262,27 @@ export function MovingWorkspace() {
           {/* Summary */}
           <div className="grid gap-4 md:grid-cols-4">
             <div className={cn('rounded-2xl border p-5', summary.overdue ? 'border-rose-500/30 bg-rose-500/10' : summary.onTrack ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10')}>
-              <div className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> Countdown</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> {tr('moving.countdown')}</div>
               <p className="mt-2 text-lg font-bold">{summary.text}</p>
-              <p className="mt-1 text-xs text-muted">{summary.dueThisWeek} task{summary.dueThisWeek === 1 ? '' : 's'} due this week</p>
+              <p className="mt-1 text-xs text-muted">{summary.dueThisWeek} task{summary.dueThisWeek === 1 ? '' : 's'} {tr('moving.dueThisWeek')}</p>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Check className="h-4 w-4 text-brand-text" /> Checklist</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Check className="h-4 w-4 text-brand-text" /> {tr('moving.checklist')}</div>
               <p className="mt-2 text-2xl font-bold">{summary.pct}%</p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-brand transition-all" style={{ width: `${summary.pct}%` }} /></div>
               <p className="mt-1 text-xs text-muted">{summary.done} of {summary.total} done</p>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> Boxes</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> {tr('moving.boxes')}</div>
               <p className="mt-2 text-2xl font-bold">{summary.boxes.packed}<span className="text-sm font-normal text-muted"> / {summary.boxes.total} packed</span></p>
-              <p className="mt-1 text-xs text-muted">{summary.boxes.unpacked} unpacked · {summary.boxes.fragile} fragile · {summary.boxes.essentials} essentials</p>
+              <p className="mt-1 text-xs text-muted">{summary.boxes.unpacked} {tr('moving.unpacked')} {summary.boxes.fragile} {tr('moving.fragile')} {summary.boxes.essentials} essentials</p>
             </div>
             <div className={cn('rounded-2xl border p-5', budget.status === 'over' ? 'border-rose-500/30 bg-rose-500/10' : budget.status === 'near' ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
-              <div className="flex items-center gap-2 text-sm font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> Budget</div>
+              <div className="flex items-center gap-2 text-sm font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> {tr('moving.budget')}</div>
               {budget.status === 'no_budget' ? (
-                <><p className="mt-2 text-2xl font-bold">{money(budget.committedCents)}</p><p className="mt-1 text-xs text-muted">committed · set a budget to track it</p></>
+                <><p className="mt-2 text-2xl font-bold">{money(budget.committedCents)}</p><p className="mt-1 text-xs text-muted">{tr('moving.committedSetABudgetToTrack')}</p></>
               ) : (
-                <><p className="mt-2 text-2xl font-bold">{budget.pct}%<span className="text-sm font-normal text-muted"> of {money(move.budget_cents)}</span></p><p className="mt-1 text-xs text-muted">{money(budget.committedCents)} committed incl. mover quote · {budget.remainingCents !== null && budget.remainingCents < 0 ? `${money(-budget.remainingCents)} over` : `${money(budget.remainingCents)} left`}</p></>
+                <><p className="mt-2 text-2xl font-bold">{budget.pct}%<span className="text-sm font-normal text-muted"> of {money(move.budget_cents)}</span></p><p className="mt-1 text-xs text-muted">{money(budget.committedCents)} {tr('moving.committedInclMoverQuote')} {budget.remainingCents !== null && budget.remainingCents < 0 ? `${money(-budget.remainingCents)} over` : `${money(budget.remainingCents)} left`}</p></>
               )}
             </div>
           </div>
@@ -290,7 +293,7 @@ export function MovingWorkspace() {
               <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cn('-mb-px border-b-2 px-3 py-2 text-sm capitalize coarse:min-h-11', tab === t ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>{t === 'timeline' ? `Timeline (${summary.total})` : `Boxes (${summary.boxes.total})`}</button>
             ))}
             <div className="ml-auto flex items-center gap-2 pb-1">
-              {tab === 'timeline' && <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-brand" /> Show done</label>}
+              {tab === 'timeline' && <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-brand" /> {tr('moving.showDone')}</label>}
               {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? `Add the ${plan.length}-step checklist` : 'Checklist complete'}</Button>}
             </div>
           </div>
@@ -298,9 +301,9 @@ export function MovingWorkspace() {
           {tab === 'timeline' && (
             groups.length === 0 ? (
               <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
-                <p className="text-sm font-semibold text-brand-text">No tasks yet</p>
-                <p className="mt-1 text-sm text-muted">The template has {plan.length} steps for a {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label.toLowerCase()} move{move.has_kids ? ' with kids' : ''}{move.has_pets ? ' and pets' : ''}, from eight weeks out to two weeks after. Add it, then edit freely.</p>
-                <Button className="mt-3" onClick={generateTasks} loading={planning}><Wand2 className="h-4 w-4" /> Add the checklist</Button>
+                <p className="text-sm font-semibold text-brand-text">{tr('moving.noTasksYet')}</p>
+                <p className="mt-1 text-sm text-muted">{tr('moving.theTemplateHas')} {plan.length} {tr('moving.stepsForA')} {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label.toLowerCase()} move{move.has_kids ? ' with kids' : ''}{move.has_pets ? ' and pets' : ''}{tr('moving.fromEightWeeksOutToTwo')}</p>
+                <Button className="mt-3" onClick={generateTasks} loading={planning}><Wand2 className="h-4 w-4" /> {tr('moving.addTheChecklist')}</Button>
               </div>
             ) : (
               <div className="space-y-5">
@@ -326,12 +329,12 @@ export function MovingWorkspace() {
             <div className="space-y-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Which box is the kettle in?" className="pl-9" aria-label="Search boxes" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr('moving.whichBoxIsTheKettleIn')} className="pl-9" aria-label={tr('moving.searchBoxes')} />
               </div>
               {query.trim() ? (
-                found.length ? <ul className="grid gap-2 sm:grid-cols-2">{found.map((b) => <BoxCard key={b.id} b={b} />)}</ul> : <p className="text-sm text-muted">Nothing labelled or listed as “{query}”.</p>
+                found.length ? <ul className="grid gap-2 sm:grid-cols-2">{found.map((b) => <BoxCard key={b.id} b={b} />)}</ul> : <p className="text-sm text-muted">{tr('moving.nothingLabelledOrListedAs')}{query}”.</p>
               ) : rooms.length === 0 ? (
-                <EmptyState icon={Package} title="No boxes yet" description="Number every box, name its destination room and list what is inside. On day one, search instead of opening boxes." action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> Add box #1</Button>} />
+                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description={tr('movingModule.numberEveryBoxNameIts')} action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
               ) : (
                 rooms.map(({ room, boxes: list }) => (
                   <section key={room}>
@@ -347,16 +350,16 @@ export function MovingWorkspace() {
 
       {dateMove && (
         <MoveDateRecalculation key={JSON.stringify([moveDateContextKey(context), dateMove.id])} context={context} move={dateMove}
-          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success('Move date and reviewed deadlines saved'); }} />
+          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success(tr('movingModule.moveDateAndReviewedDeadlines')); }} />
       )}
       {moveForm.open && (
-        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success('Move saved'); }} />
+        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success(tr('movingModule.moveSaved')); }} />
       )}
       {taskForm.open && move && (
-        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success('Task saved'); }} />
+        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success(tr('movingModule.taskSaved')); }} />
       )}
       {boxForm.open && move && (
-        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success('Box saved'); }} />
+        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success(tr('movingModule.boxSaved')); }} />
       )}
     </div>
   );
@@ -366,6 +369,7 @@ const dollarsToCents = (v: FormDataEntryValue | null) => { const n = Number(Stri
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 
 function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: string; userId: string; move: Move | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kids, setKids] = useState(move?.has_kids ?? true);
@@ -377,9 +381,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
     const moveDate = String(f.get('move_date') ?? '');
-    if (!title) return toastError('Name the move');
-    if (!isMoveDate(moveDate)) return toastError('Pick a valid move date');
-    if (move && moveDate !== move.move_date) return toastError('Use Change date to review the existing deadlines first.');
+    if (!title) return toastError(tr('movingModule.nameTheMove'));
+    if (!isMoveDate(moveDate)) return toastError(tr('movingModule.pickAValidMoveDate'));
+    if (move && moveDate !== move.move_date) return toastError(tr('movingModule.useChangeDateToReview'));
     setLoading(true);
     const payload = {
       title, from_address: String(f.get('from_address') ?? '').trim() || null, to_address: String(f.get('to_address') ?? '').trim() || null,
@@ -402,39 +406,39 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
   );
 
   return (
-    <Modal open title={move ? 'Edit move' : 'Plan a move'} description="The date and the family’s situation decide which checklist steps you get." onClose={onClose}>
+    <Modal open title={move ? 'Edit move' : 'Plan a move'} description={tr('movingModule.theDateAndTheFamily')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Move" required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder="Move to Maple Street" autoFocus />}</Field>
-          <Field label="Move day" required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
+          <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
+          <Field label={tr('moving.moveDay')} required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
         </div>
-        {move && <p className="text-xs text-muted">Use Change date on the move to review task deadlines before changing this date.</p>}
+        {move && <p className="text-xs text-muted">{tr('movingModule.useChangeDateOnThe')}</p>}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From">{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder="12 Old Road" />}</Field>
-          <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder="34 Maple Street" />}</Field>
+          <Field label={tr('moving.from')}>{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder={tr('moving.12OldRoad')} />}</Field>
+          <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder={tr('moving.34MapleStreet')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Kind of move">{(id) => <Select id={id} name="move_kind" defaultValue={move?.move_kind ?? 'local'}>{MOVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</Select>}</Field>
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.kindOfMove')}>{(id) => <Select id={id} name="move_kind" defaultValue={move?.move_kind ?? 'local'}>{MOVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Toggle label="🎒 Kids in school / childcare" value={kids} onChange={setKids} />
-          <Toggle label="🐾 Pets" value={pets} onChange={setPets} />
-          <Toggle label="🏠 Renting out the old place" value={renting} onChange={setRenting} />
+          <Toggle label={tr('moving.kidsInSchoolChildcare')} value={kids} onChange={setKids} />
+          <Toggle label={tr('moving.pets')} value={pets} onChange={setPets} />
+          <Toggle label={tr('moving.rentingOutTheOldPlace')} value={renting} onChange={setRenting} />
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Budget ($)">{(id) => <Input id={id} name="budget" type="number" min={0} step={50} defaultValue={centsToDollars(move?.budget_cents)} placeholder="5000" />}</Field>
-          <Field label="Spent so far ($)">{(id) => <Input id={id} name="spent" type="number" min={0} step={10} defaultValue={centsToDollars(move?.spent_cents ?? 0)} />}</Field>
-          <Field label="Mover quote ($)">{(id) => <Input id={id} name="mover_quote" type="number" min={0} step={50} defaultValue={centsToDollars(move?.mover_quote_cents)} />}</Field>
+          <Field label={tr('moving.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step={50} defaultValue={centsToDollars(move?.budget_cents)} placeholder="5000" />}</Field>
+          <Field label={tr('moving.spentSoFar')}>{(id) => <Input id={id} name="spent" type="number" min={0} step={10} defaultValue={centsToDollars(move?.spent_cents ?? 0)} />}</Field>
+          <Field label={tr('moving.moverQuote')}>{(id) => <Input id={id} name="mover_quote" type="number" min={0} step={50} defaultValue={centsToDollars(move?.mover_quote_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Movers">{(id) => <Input id={id} name="mover_name" defaultValue={move?.mover_name ?? ''} placeholder="Two Guys & a Truck" />}</Field>
-          <Field label="Mover phone">{(id) => <Input id={id} name="mover_phone" defaultValue={move?.mover_phone ?? ''} />}</Field>
+          <Field label={tr('moving.movers')}>{(id) => <Input id={id} name="mover_name" defaultValue={move?.mover_name ?? ''} placeholder={tr('moving.twoGuysATruck')} />}</Field>
+          <Field label={tr('moving.moverPhone')}>{(id) => <Input id={id} name="mover_phone" defaultValue={move?.mover_phone ?? ''} />}</Field>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={move?.notes ?? ''} rows={2} placeholder="Elevator booked 8–12, keys from the agent at 2pm…" />}</Field>
+        <Field label={tr('moving.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={move?.notes ?? ''} rows={2} placeholder={tr('moving.elevatorBooked812KeysFrom')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save move</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('moving.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('moving.saveMove')}</Button>
         </div>
       </form>
     </Modal>
@@ -442,6 +446,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [followDate, setFollowDate] = useState(task?.date_mode === 'relative');
@@ -450,11 +455,11 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Give the task a title');
+    if (!title) return toastError(tr('movingModule.giveTheTaskATitle'));
     const dueDate = String(f.get('due_date') ?? '') || null;
-    if (dueDate && !isMoveDate(dueDate)) return toastError('Pick a valid task date.');
+    if (dueDate && !isMoveDate(dueDate)) return toastError(tr('movingModule.pickAValidTaskDate'));
     const offset = dueDate ? dayDiff(move.move_date, dueDate) : (task?.offset_days ?? 0);
-    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError('A following deadline needs a date within 365 days of the move. Otherwise keep a fixed date.');
+    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError(tr('movingModule.aFollowingDeadlineNeedsA'));
     setLoading(true);
     const payload = {
       title, category: String(f.get('category') ?? 'other') as MoveTaskCategory, due_date: dueDate,
@@ -473,18 +478,18 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
   return (
     <Modal open title={task ? 'Edit task' : 'Add a task'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Task" required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder="Return the cable box" autoFocus />}</Field>
+        <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.category')}>{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
           <Field label="Due" hint={`Move day is ${fmtDate(move.move_date)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
         </div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> Follow the move date</label>
-        <p className="text-xs text-muted">Fixed dates, including older tasks, stay unchanged. Turn this on only when the deadline should move with the move date. Completed and skipped tasks are always kept.</p>
-        <Field label="Who">{(id) => <Select id={id} name="assignee_id" defaultValue={task?.assignee_id ?? ''}><option value="">Anyone</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={task?.notes ?? ''} rows={2} />}</Field>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> {tr('moving.followTheMoveDate')}</label>
+        <p className="text-xs text-muted">{tr('moving.fixedDatesIncludingOlderTasks')}</p>
+        <Field label="Who">{(id) => <Select id={id} name="assignee_id" defaultValue={task?.assignee_id ?? ''}><option value="">{tr('moving.anyone')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+        <Field label={tr('moving.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={task?.notes ?? ''} rows={2} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save task</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('moving.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('moving.saveTask')}</Button>
         </div>
       </form>
     </Modal>
@@ -492,6 +497,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
 }
 
 function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPacker, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; box: Box | null; nextNumber: number; defaultPacker: string | null; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [fragile, setFragile] = useState(box?.is_fragile ?? false);
@@ -501,7 +507,7 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const label = String(f.get('label') ?? '').trim();
-    if (!label) return toastError('Give the box a label');
+    if (!label) return toastError(tr('movingModule.giveTheBoxALabel'));
     const boxNumber = Math.max(1, Math.round(Number(f.get('box_number') ?? nextNumber)));
     const contents = String(f.get('contents') ?? '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     setLoading(true);
@@ -520,29 +526,29 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
   }
 
   return (
-    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description="Write the number and destination room on two sides of the box. List the contents here, not on the cardboard." onClose={onClose}>
+    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-[6rem_1fr] gap-3">
-          <Field label="Number" required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>
-          <Field label="Label" required>{(id) => <Input id={id} name="label" defaultValue={box?.label ?? ''} placeholder="Kitchen — everyday plates" autoFocus />}</Field>
+          <Field label={tr('moving.number')} required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>
+          <Field label={tr('moving.label')} required>{(id) => <Input id={id} name="label" defaultValue={box?.label ?? ''} placeholder={tr('moving.kitchenEverydayPlates')} autoFocus />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From room">{(id) => <Input id={id} name="from_room" defaultValue={box?.from_room ?? ''} placeholder="Kitchen" />}</Field>
-          <Field label="To room">{(id) => <Input id={id} name="to_room" defaultValue={box?.to_room ?? ''} placeholder="Kitchen" />}</Field>
+          <Field label={tr('moving.fromRoom')}>{(id) => <Input id={id} name="from_room" defaultValue={box?.from_room ?? ''} placeholder={tr('moving.kitchen')} />}</Field>
+          <Field label={tr('moving.toRoom')}>{(id) => <Input id={id} name="to_room" defaultValue={box?.to_room ?? ''} placeholder={tr('moving.kitchen')} />}</Field>
         </div>
-        <Field label="Contents (comma or line separated)">{(id) => <Textarea id={id} name="contents" defaultValue={box?.contents.join(', ') ?? ''} rows={3} placeholder="Kettle, mugs, coffee, the good knife" />}</Field>
+        <Field label={tr('moving.contentsCommaOrLineSeparated')}>{(id) => <Textarea id={id} name="contents" defaultValue={box?.contents.join(', ') ?? ''} rows={3} placeholder={tr('moving.kettleMugsCoffeeTheGoodKnife')} />}</Field>
         <div className="flex flex-wrap gap-2">
-          <button type="button" aria-pressed={fragile} onClick={() => setFragile(!fragile)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', fragile ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>🥂 Fragile</button>
-          <button type="button" aria-pressed={essential} onClick={() => setEssential(!essential)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', essential ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>⭐ First-night essentials</button>
+          <button type="button" aria-pressed={fragile} onClick={() => setFragile(!fragile)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', fragile ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{tr('moving.fragile')}</button>
+          <button type="button" aria-pressed={essential} onClick={() => setEssential(!essential)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', essential ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{tr('moving.firstNightEssentials')}</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={box?.status ?? 'packed'}>{BOX_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
-          <Field label="Packed by">{(id) => <Select id={id} name="packed_by" defaultValue={box?.packed_by ?? defaultPacker ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={box?.status ?? 'packed'}>{BOX_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.packedBy')}>{(id) => <Select id={id} name="packed_by" defaultValue={box?.packed_by ?? defaultPacker ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={box?.notes ?? ''} rows={2} />}</Field>
+        <Field label={tr('moving.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={box?.notes ?? ''} rows={2} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save box</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('moving.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {tr('moving.saveBox')}</Button>
         </div>
       </form>
     </Modal>

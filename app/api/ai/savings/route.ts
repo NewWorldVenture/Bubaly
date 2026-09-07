@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -17,12 +20,13 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
  * AI is unconfigured — never fabricates numbers.
  */
 export async function POST() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-savings:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many savings requests. Please try again shortly.' },
+    { error: tr('savings.tooManySavingsRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
@@ -61,17 +65,39 @@ export async function POST() {
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({
-      system: 'You are a practical family financial coach. Use ONLY the data given; never invent numbers. Reply ONLY as compact JSON: {"summary": string (1-2 sentences), "suggestions": [{"title": string, "detail": string}] (up to 4, most impactful first)}.',
-      messages: [{ role: 'user', content: `Family finance snapshot:\n${context}\n\nGive prioritised, concrete savings suggestions.` }],
-      tools: [],
-      maxTokens: 600,
-    });
-    const m = completion.text.match(/\{[\s\S]*\}/);
-    const parsed = m ? JSON.parse(m[0]) : {};
-    const suggestions = Array.isArray(parsed.suggestions) && parsed.suggestions.length ? parsed.suggestions.slice(0, 4) : fallback;
-    return NextResponse.json({ summary: typeof parsed.summary === 'string' ? parsed.summary : 'Here are the biggest opportunities to save.', suggestions, wastedMonthlyCents: wasted });
+    const result = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'finances.savings', text: 'Savings suggestions' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({
+          system: 'You are a practical family financial coach. Use ONLY the data given; never invent numbers. Reply ONLY as compact JSON: {"summary": string (1-2 sentences), "suggestions": [{"title": string, "detail": string}] (up to 4, most impactful first)}.',
+          messages: [{ role: 'user', content: `Family finance snapshot:\n${context}\n\nGive prioritised, concrete savings suggestions.` }],
+          tools: [],
+          maxTokens: 600,
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const m = completion.text.match(/\{[\s\S]*\}/);
+        const parsed = m ? JSON.parse(m[0]) : {};
+        const suggestions = Array.isArray(parsed.suggestions)
+          ? parsed.suggestions.filter((s: unknown) =>
+            s !== null && typeof s === 'object'
+            && 'title' in s && typeof s.title === 'string' && s.title.trim().length > 0
+            && 'detail' in s && typeof s.detail === 'string' && s.detail.trim().length > 0,
+          ).slice(0, 4)
+          : [];
+        const hasSummary = typeof parsed.summary === 'string' && parsed.summary.trim().length > 0;
+        if (!hasSummary && suggestions.length === 0) {
+          obs.failed(new Error('The savings response contained no usable summary or suggestions.'));
+        }
+        return {
+          summary: hasSummary ? parsed.summary : 'Here are the biggest opportunities to save.',
+          suggestions: suggestions.length ? suggestions : fallback,
+          wastedMonthlyCents: wasted,
+        };
+      },
+    );
+    return NextResponse.json(result);
   } catch {
     return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
   }

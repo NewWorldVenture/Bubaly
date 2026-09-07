@@ -7,22 +7,25 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Providers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('providers.providers')}</h1>
       <AdminSocialSubnav active="/admin/social/providers" />
-      <ErrorState message="Could not load social providers from Supabase. Refresh and try again." />
-      <Link href="/admin/social/providers" className="text-sm font-medium text-brand-text underline">Refresh social providers</Link>
+      <ErrorState message={t('providers.couldNotLoadSocialProviders')} />
+      <Link href="/admin/social/providers" className="text-sm font-medium text-brand-text underline">{t('providers.refreshSocialProviders')}</Link>
     </div>
   );
 }
 
 export default async function AdminProvidersPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: rows, error } = await supabase.from('social_providers').select('platform, label, is_enabled, needs_app_review, char_limit');
   if (error) {
@@ -33,11 +36,11 @@ export default async function AdminProvidersPage() {
 
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('adminSocialProviders.providers')}</h1>
       <AdminSocialSubnav active="/admin/social/providers" />
       <p className="text-sm text-muted">
-        The provider catalog and capability matrix (source of truth: <code>lib/social/capabilities.ts</code>, mirrored into{' '}
-        <code>social_providers</code>). Credential readiness is read from the environment server-side.
+        {t('adminSocialProviders.theProviderCatalogAndCapabilityMatrix')} <code>lib/social/capabilities.ts</code>{t('adminSocialProviders.mirroredInto')}{' '}
+        <code>social_providers</code>{t('adminSocialProviders.credentialReadinessIsReadFromThe')}
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         {PLATFORMS.map((p) => {
@@ -48,7 +51,7 @@ export default async function AdminProvidersPage() {
               <div className="mb-2 flex items-center gap-2">
                 <PlatformDot platform={p} />
                 <span className="text-sm font-semibold">{d.label}</span>
-                {configured ? <Badge tone="success" className="ml-auto">Configured</Badge> : <Badge tone="neutral" className="ml-auto">Missing creds</Badge>}
+                {configured ? <Badge tone="success" className="ml-auto">{t('providers.configured')}</Badge> : <Badge tone="neutral" className="ml-auto">{t('providers.missingCreds')}</Badge>}
               </div>
               <div className="grid grid-cols-2 gap-1 text-xs text-muted">
                 <span>Auth: {d.auth}</span>

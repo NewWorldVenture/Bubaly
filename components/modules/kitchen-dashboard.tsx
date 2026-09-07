@@ -26,6 +26,7 @@ import type { ChefReply } from '@/lib/food/chef';
 import {
   addLeftoverAction, updateLeftoverStatusAction, deleteLeftoverAction, snapshotFoodScoreAction,
 } from '@/app/(app)/dashboard/kitchen/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type KitchenData = {
   tonight: string | null;
@@ -58,15 +59,16 @@ function scoreRing(n: number): string {
 }
 
 export function KitchenDashboard({ data }: { data: KitchenData }) {
+  const tr = useTranslations();
   const [addingLeftover, setAddingLeftover] = useState(false);
   const [chefOpen, setChefOpen] = useState(false);
 
   return (
     <div className="module-page">
       <PageHeader
-        title="Smart Kitchen"
-        description="Your family's food, all in one place — tonight's plan, what's expiring, and your AI Chef."
-        action={<Button onClick={() => setChefOpen(true)}><ChefHat className="h-4 w-4" /> Ask the Chef</Button>}
+        title={tr('kitchenDashboard.smartKitchen')}
+        description={tr('kitchenDashboard.yourFamilySFoodAll')}
+        action={<Button onClick={() => setChefOpen(true)}><ChefHat className="h-4 w-4" /> {tr('kitchenDashboard.askTheChef')}</Button>}
       />
 
       {/* Hero row: tonight + food score */}
@@ -76,7 +78,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
           <div className="flex items-start justify-between">
             <div>
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text/70">
-                <Flame className="h-3.5 w-3.5" /> Tonight&apos;s dinner
+                <Flame className="h-3.5 w-3.5" /> {tr('kitchenDashboard.tonightAposSDinner')}
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">{data.tonight ?? 'Nothing planned yet'}</p>
               {data.leftoverNudge && (
@@ -89,16 +91,16 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {!data.tonight && (
-              <Button size="sm" onClick={() => setChefOpen(true)}><Sparkles className="h-4 w-4" /> Plan with AI Chef</Button>
+              <Button size="sm" onClick={() => setChefOpen(true)}><Sparkles className="h-4 w-4" /> {tr('kitchenDashboard.planWithAiChef')}</Button>
             )}
             <Link href="/dashboard/meals" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-              <CalendarDays className="h-4 w-4" /> Meal plan
+              <CalendarDays className="h-4 w-4" /> {tr('kitchenDashboard.mealPlan')}
             </Link>
             <Link href="/dashboard/grocery" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-              <ShoppingCart className="h-4 w-4" /> Grocery {data.groceryOpen > 0 && <span className="rounded-full bg-brand/15 px-1.5 text-xs font-bold text-brand-text">{data.groceryOpen}</span>}
+              <ShoppingCart className="h-4 w-4" /> {tr('kitchenDashboard.grocery')} {data.groceryOpen > 0 && <span className="rounded-full bg-brand/15 px-1.5 text-xs font-bold text-brand-text">{data.groceryOpen}</span>}
             </Link>
             <Link href="/dashboard/fridge-chef" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-              <Refrigerator className="h-4 w-4" /> Fridge Chef
+              <Refrigerator className="h-4 w-4" /> {tr('kitchenDashboard.fridgeChef')}
             </Link>
           </div>
         </div>
@@ -111,7 +113,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
       {data.upcoming.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-            <CalendarDays className="h-4 w-4" /> This week
+            <CalendarDays className="h-4 w-4" /> {tr('kitchenDashboard.thisWeek')}
           </h2>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {data.upcoming.map((m, i) => (
@@ -132,12 +134,12 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         <section className="rounded-2xl border border-border bg-surface/40 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-              <Apple className="h-4 w-4" /> Use it up
+              <Apple className="h-4 w-4" /> {tr('kitchenDashboard.useItUp')}
             </h2>
-            <Link href="/dashboard/pantry" className="text-xs font-semibold text-brand-text hover:underline">Pantry →</Link>
+            <Link href="/dashboard/pantry" className="text-xs font-semibold text-brand-text hover:underline">{tr('kitchenDashboard.pantry')}</Link>
           </div>
           {data.expiring.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">Nothing expiring soon. 👍</p>
+            <p className="py-4 text-center text-sm text-muted">{tr('kitchenDashboard.nothingExpiringSoon')}</p>
           ) : (
             <div className="space-y-1.5">
               {data.expiring.map((e, i) => {
@@ -166,6 +168,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
 // ─── Food Score Card ──────────────────────────────────────────────────────────
 
 function FoodScoreCard({ score }: { score: FoodScore }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -179,7 +182,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Food score saved');
+    success(tr('kitchenDashboard.foodScoreSaved'));
     router.refresh();
   }
 
@@ -199,7 +202,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
         </div>
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted">
-            <TrendingUp className="h-3.5 w-3.5" /> Food Health
+            <TrendingUp className="h-3.5 w-3.5" /> {tr('kitchenDashboard.foodHealth')}
           </p>
           <p className="mt-1 text-sm font-medium leading-snug">{score.headline}</p>
         </div>
@@ -233,7 +236,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
 
       <button onClick={save} disabled={saving}
         className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-semibold hover:bg-elevated transition disabled:opacity-60">
-        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Save today&apos;s score
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {tr('kitchenDashboard.saveTodayAposSScore')}
       </button>
     </div>
   );
@@ -242,6 +245,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
 // ─── Leftover Section ─────────────────────────────────────────────────────────
 
 function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -266,7 +270,7 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
     <section className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-          <Refrigerator className="h-4 w-4" /> Leftovers
+          <Refrigerator className="h-4 w-4" /> {tr('kitchenDashboard.leftovers')}
         </h2>
         <button onClick={onAdd} disabled={data.leftoversMissing}
           className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition disabled:opacity-50">
@@ -275,10 +279,10 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
       </div>
       {data.leftoversMissing ? (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted">
-          Leftover tracking turns on once the food migration is applied.
+          {tr('kitchenDashboard.leftoverTrackingTurnsOnOnceThe')}
         </p>
       ) : data.leftovers.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted">No leftovers logged. Log one after dinner to cut waste.</p>
+        <p className="py-4 text-center text-sm text-muted">{tr('kitchenDashboard.noLeftoversLoggedLogOneAfter')}</p>
       ) : (
         <div className="space-y-1.5">
           {data.leftovers.map((l) => {
@@ -290,15 +294,15 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
                   <p className={cn('text-[11px] font-semibold', TONE[u.tone])}>{u.label}</p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-0.5">
-                  <button onClick={() => setStatus(l.id, 'eaten')} disabled={busy === l.id} title="Mark eaten"
+                  <button onClick={() => setStatus(l.id, 'eaten')} disabled={busy === l.id} title={tr('kitchenDashboard.markEaten')}
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-emerald-500 transition">
                     {busy === l.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   </button>
-                  <button onClick={() => setStatus(l.id, 'frozen')} disabled={busy === l.id} title="Freeze"
+                  <button onClick={() => setStatus(l.id, 'frozen')} disabled={busy === l.id} title={tr('kitchenDashboard.freeze')}
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-sky-500 transition">
                     <Snowflake className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => remove(l.id)} disabled={busy === l.id} title="Remove"
+                  <button onClick={() => remove(l.id)} disabled={busy === l.id} title={tr('kitchenDashboard.remove')}
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-rose-500 transition">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -313,6 +317,7 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
 }
 
 function AddLeftoverModal({ onClose }: { onClose: () => void }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -321,7 +326,7 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Give the leftover a name.');
+    if (!name) return toastError(tr('kitchenDashboard.giveTheLeftoverAName'));
     setLoading(true);
     const res = await addLeftoverAction({
       name,
@@ -332,33 +337,33 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Leftover logged');
+    success(tr('kitchenDashboard.leftoverLogged'));
     onClose();
     router.refresh();
   }
 
   return (
-    <Modal open onClose={onClose} title="Log a leftover">
+    <Modal open onClose={onClose} title={tr('kitchenDashboard.logALeftover')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="What is it?" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Roast chicken" />}</Field>
+        <Field label={tr('kitchenDashboard.whatIsIt')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('kitchenDashboard.roastChicken')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From which meal?">{(id) => <Input id={id} name="source" placeholder="Sunday dinner" />}</Field>
-          <Field label="How much?">{(id) => <Input id={id} name="qty" placeholder="2 servings" />}</Field>
+          <Field label={tr('kitchenDashboard.fromWhichMeal')}>{(id) => <Input id={id} name="source" placeholder={tr('kitchenDashboard.sundayDinner')} />}</Field>
+          <Field label={tr('kitchenDashboard.howMuch')}>{(id) => <Input id={id} name="qty" placeholder={tr('kitchenDashboard.2Servings')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Eat by">{(id) => <Input id={id} name="useBy" type="date" />}</Field>
-          <Field label="Where">{(id) => (
+          <Field label={tr('kitchenDashboard.eatBy')}>{(id) => <Input id={id} name="useBy" type="date" />}</Field>
+          <Field label={tr('kitchenDashboard.where')}>{(id) => (
             <select id={id} name="location" className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring">
-              <option value="fridge">Fridge</option>
-              <option value="freezer">Freezer</option>
-              <option value="counter">Counter</option>
-              <option value="other">Other</option>
+              <option value="fridge">{tr('kitchenDashboard.fridge')}</option>
+              <option value="freezer">{tr('kitchenDashboard.freezer')}</option>
+              <option value="counter">{tr('kitchenDashboard.counter')}</option>
+              <option value="other">{tr('kitchenDashboard.other')}</option>
             </select>
           )}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Log leftover</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('kitchenDashboard.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('kitchenDashboard.logLeftover')}</Button>
         </div>
       </form>
     </Modal>
@@ -375,6 +380,8 @@ const CHEF_PROMPTS = [
 ];
 
 function ChefModal({ onClose }: { onClose: () => void }) {
+  const i18nT = useTranslations();
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
@@ -396,14 +403,14 @@ function ChefModal({ onClose }: { onClose: () => void }) {
       setReply(json.reply);
       setSource(json.source);
     } catch {
-      toastError('Network problem — please try again.');
+      toastError(tr('kitchenDashboard.networkProblemPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title="AI Family Chef" className="max-w-2xl">
+    <Modal open onClose={onClose} title={tr('kitchenDashboard.aiFamilyChef')} className="max-w-2xl">
       <div className="space-y-4">
         {!reply && (
           <div className="flex flex-wrap gap-1.5">
@@ -418,7 +425,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-end gap-2">
           <textarea value={request} onChange={(e) => setRequest(e.target.value)} rows={2}
-            placeholder="Ask the chef anything… e.g. plan dinners with the leftover chicken"
+            placeholder={tr('kitchenDashboard.askTheChefAnythingEG')}
             className="flex-1 rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring"
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(); }} />
           <Button onClick={() => ask()} loading={loading} className="flex-shrink-0">
@@ -430,7 +437,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-4 border-t border-border pt-4">
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
-                AI isn&apos;t configured — showing a plan from your own recipes & leftovers. Connect a provider for fully tailored weeks.
+                {i18nT('kitchenDashboard.aiIsntConfiguredShowingAPlan')}
               </p>
             )}
             {reply.message && <p className="text-sm font-medium">{reply.message}</p>}
@@ -447,8 +454,8 @@ function ChefModal({ onClose }: { onClose: () => void }) {
                     <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
                       {m.estCostCents != null && m.estCostCents > 0 && <span className="text-xs font-semibold">${(m.estCostCents / 100).toFixed(0)}</span>}
                       <div className="flex gap-1">
-                        {m.quick && <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-bold uppercase text-emerald-500">Quick</span>}
-                        {m.usesExpiring && <span className="rounded bg-amber-500/15 px-1 text-[9px] font-bold uppercase text-amber-500">Uses up</span>}
+                        {m.quick && <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-bold uppercase text-emerald-500">{tr('kitchenDashboard.quick')}</span>}
+                        {m.usesExpiring && <span className="rounded bg-amber-500/15 px-1 text-[9px] font-bold uppercase text-amber-500">{tr('kitchenDashboard.usesUp')}</span>}
                       </div>
                     </div>
                   </div>
@@ -458,7 +465,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
             {reply.groceryAdds.length > 0 && (
               <div>
-                <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted"><ShoppingCart className="h-3.5 w-3.5" /> Add to grocery</h4>
+                <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted"><ShoppingCart className="h-3.5 w-3.5" /> {tr('kitchenDashboard.addToGrocery')}</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {reply.groceryAdds.map((g, i) => <span key={i} className="rounded-full border border-border bg-bg/40 px-2.5 py-1 text-xs">{g}</span>)}
                 </div>
@@ -472,9 +479,9 @@ function ChefModal({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="flex justify-between border-t border-border pt-3">
-              <Button variant="ghost" onClick={() => { setReply(null); setSource(null); }}>Ask again</Button>
+              <Button variant="ghost" onClick={() => { setReply(null); setSource(null); }}>{tr('kitchenDashboard.askAgain')}</Button>
               <Link href="/dashboard/meals" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition" onClick={onClose}>
-                <CalendarDays className="h-4 w-4" /> Open meal plan
+                <CalendarDays className="h-4 w-4" /> {tr('kitchenDashboard.openMealPlan')}
               </Link>
             </div>
           </div>

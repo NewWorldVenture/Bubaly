@@ -94,6 +94,23 @@ describe('reachable', () => {
 });
 
 describe('propagateImpact', () => {
+  const competingPaths: Graph = {
+    entities: [
+      { id: 'source', kind: 'topic', name: 'Source' },
+      { id: 'bridge', kind: 'other', name: 'Bridge' },
+      { id: 'junction', kind: 'other', name: 'Junction' },
+      { id: 'downstream', kind: 'other', name: 'Downstream' },
+      { id: 'outside', kind: 'other', name: 'Outside depth limit' },
+    ],
+    edges: [
+      { id: 'p1', sourceId: 'source', targetId: 'bridge', relation: 'affects', weight: 1 },
+      { id: 'p2', sourceId: 'bridge', targetId: 'junction', relation: 'via_bridge', weight: 1 },
+      { id: 'p3', sourceId: 'source', targetId: 'junction', relation: 'direct', weight: 0.5 },
+      { id: 'p4', sourceId: 'junction', targetId: 'downstream', relation: 'affects', weight: 0.8 },
+      { id: 'p5', sourceId: 'downstream', targetId: 'outside', relation: 'affects', weight: 1 },
+    ],
+  };
+
   it('scores downstream blast radius from a change (weather rains out the field)', () => {
     const idx = buildIndex(g);
     const impact = propagateImpact(idx, 'weather');
@@ -113,6 +130,43 @@ describe('propagateImpact', () => {
     // emma->soccer (0.9) kept; soccer->cleats (0.9*0.6=0.54) kept; soccer->field (0.72) kept;
     // field has no outgoing edges so chain stops. All above 0.5.
     expect(impact.every((i) => i.score >= 0.5)).toBe(true);
+  });
+
+  it('follows a weaker shorter path while retaining the strongest reported impact', () => {
+    const impact = propagateImpact(buildIndex(competingPaths), 'source', { maxDepth: 2 });
+    expect(impact.map((i) => i.entity.id).sort()).toEqual(['bridge', 'downstream', 'junction']);
+    expect(impact.find((i) => i.entity.id === 'junction')).toMatchObject({ score: 1, via: 'via_bridge' });
+    expect(impact.find((i) => i.entity.id === 'downstream')).toMatchObject({ score: 0.4, via: 'affects' });
+  });
+
+  it('finds the same competing-path impacts regardless of edge order', () => {
+    const impactsById = (edges: Graph['edges']) =>
+      propagateImpact(buildIndex({ ...competingPaths, edges }), 'source', { maxDepth: 2 })
+        .map((i) => ({ id: i.entity.id, score: i.score, via: i.via }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    expect(impactsById([...competingPaths.edges].reverse())).toEqual(impactsById(competingPaths.edges));
+  });
+
+  it('prunes cycles and self-loops without losing downstream impact or reporting the source', () => {
+    const cyclic: Graph = {
+      entities: [
+        { id: 'source', kind: 'topic', name: 'Source' },
+        { id: 'a', kind: 'other', name: 'A' },
+        { id: 'b', kind: 'other', name: 'B' },
+        { id: 'c', kind: 'other', name: 'C' },
+      ],
+      edges: [
+        { id: 'c1', sourceId: 'source', targetId: 'a', relation: 'affects', weight: 0.8 },
+        { id: 'c2', sourceId: 'a', targetId: 'b', relation: 'affects', weight: 1 },
+        { id: 'c3', sourceId: 'b', targetId: 'a', relation: 'affects', weight: 1 },
+        { id: 'c4', sourceId: 'b', targetId: 'source', relation: 'affects', weight: 1 },
+        { id: 'c5', sourceId: 'b', targetId: 'c', relation: 'affects', weight: 0.5 },
+        { id: 'c6', sourceId: 'c', targetId: 'c', relation: 'affects', weight: 1 },
+      ],
+    };
+    const impact = propagateImpact(buildIndex(cyclic), 'source', { maxDepth: 1000 });
+    expect(impact.map((i) => ({ id: i.entity.id, score: i.score })).sort((a, b) => a.id.localeCompare(b.id)))
+      .toEqual([{ id: 'a', score: 0.8 }, { id: 'b', score: 0.8 }, { id: 'c', score: 0.4 }]);
   });
 });
 

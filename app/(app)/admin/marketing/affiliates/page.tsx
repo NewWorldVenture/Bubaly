@@ -8,8 +8,9 @@ import { formatCents } from '@/lib/marketing/crm';
 import { summarizeReferrals, payoutByAffiliate, type ReferralLike } from '@/lib/marketing/affiliates';
 import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Affiliates', robots: { index: false } };
+export const metadata: Metadata = { title: 'affiliates.affiliates', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Affiliate = Tables<'affiliates'>;
@@ -18,6 +19,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm'
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 export default async function AffiliatesPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [affiliatesResult, referralsResult] = await Promise.all([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
@@ -36,7 +38,7 @@ export default async function AffiliatesPage() {
   const byAffiliate = payoutByAffiliate(refs);
 
   const stats = [
-    { label: 'Affiliates', value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: t('affiliates.affiliates'), value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
     { label: 'Conversions', value: overall.conversions, icon: BadgeCheck, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Owed (unpaid)', value: formatCents(overall.pendingPayoutCents), icon: Wallet, tint: 'text-amber-400 bg-amber-500/15' },
     { label: 'Paid out', value: formatCents(overall.paidCents), icon: DollarSign, tint: 'text-blue-400 bg-blue-500/15' },
@@ -44,7 +46,7 @@ export default async function AffiliatesPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">External partners who earn commission on conversions — low-cost acquisition with transparent payouts. Each partner drives traffic with <code className="rounded bg-elevated px-1 py-0.5 text-xs">?via=CODE</code>.</p>
+      <p className="text-sm text-muted">{t('affiliates.externalPartnersWhoEarnCommission')}{' '}<code className="rounded bg-elevated px-1 py-0.5 text-xs">?via=CODE</code>.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -56,27 +58,27 @@ export default async function AffiliatesPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Add an affiliate</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('adminMarketingAffiliates.addAnAffiliate')}</h2>
         <form action={saveAffiliateAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <input name="name" required placeholder="Partner name" className={inputCls} />
-          <input name="email" type="email" placeholder="Email" className={inputCls} />
-          <input name="code" placeholder="Code (e.g. COOLBLOG)" className={inputCls} />
-          <input name="commission_rate" type="number" min="0" max="100" step="1" placeholder="Commission %" className={inputCls} />
-          <button type="submit" className={btnCls}>Add affiliate</button>
+          <input name="name" required placeholder={t('adminMarketingAffiliates.partnerName')} className={inputCls} />
+          <input name="email" type="email" placeholder={t('adminMarketingAffiliates.email')} className={inputCls} />
+          <input name="code" placeholder={t('adminMarketingAffiliates.codeEGCoolblog')} className={inputCls} />
+          <input name="commission_rate" type="number" min="0" max="100" step="1" placeholder={t('adminMarketingAffiliates.commission')} className={inputCls} />
+          <button type="submit" className={btnCls}>{t('adminMarketingAffiliates.addAffiliate')}</button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Affiliates</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminMarketingAffiliates.affiliates')}</h2>
         {list.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No affiliates yet.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('adminMarketingAffiliates.noAffiliatesYet')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
-                  <th className="pb-2">Partner</th><th className="pb-2">Code</th><th className="pb-2">Rate</th>
-                  <th className="pb-2">Conversions</th><th className="pb-2">Owed</th><th className="pb-2">Status</th><th className="pb-2 text-right">Actions</th>
+                  <th className="pb-2">{t('adminMarketingAffiliates.partner')}</th><th className="pb-2">{t('adminMarketingAffiliates.code')}</th><th className="pb-2">{t('adminMarketingAffiliates.rate')}</th>
+                  <th className="pb-2">{t('adminMarketingAffiliates.conversions')}</th><th className="pb-2">{t('adminMarketingAffiliates.owed')}</th><th className="pb-2">{t('adminMarketingAffiliates.status')}</th><th className="pb-2 text-right">{t('adminMarketingAffiliates.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,7 +96,7 @@ export default async function AffiliatesPage() {
                         <div className="flex items-center justify-end gap-1">
                           {(sum?.pendingPayoutCents ?? 0) > 0 && (
                             <form action={markAffiliatePaidAction.bind(null, a.id)}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">Pay out</button>
+                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('affiliates.payOut')}</button>
                             </form>
                           )}
                           <form action={toggleAffiliateStatusAction.bind(null, a.id, a.status === 'active' ? 'paused' : 'active')}>
@@ -117,15 +119,16 @@ export default async function AffiliatesPage() {
   );
 }
 
-function AdminAffiliatesReadError() {
+async function AdminAffiliatesReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Affiliates</h1>
-        <p className="mt-1 text-sm text-muted">Manage partner conversions and payouts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('affiliates.affiliates')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('affiliates.managePartnerConversionsAndPayouts')}</p>
       </div>
-      <ErrorState message="Could not load affiliate payout data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/affiliates" className="text-sm font-medium text-brand-text underline">Refresh affiliates</Link>
+      <ErrorState message={t('affiliates.couldNotLoadAffiliatePayout')} />
+      <Link href="/admin/marketing/affiliates" className="text-sm font-medium text-brand-text underline">{t('affiliates.refreshAffiliates')}</Link>
     </div>
   );
 }

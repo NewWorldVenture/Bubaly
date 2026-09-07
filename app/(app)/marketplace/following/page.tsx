@@ -8,11 +8,13 @@ import { SaveButton } from '@/components/marketplace/save-button';
 import { buildFollowingFeed, newFromFollowingCount, type FeedListing, type StoreRow } from '@/lib/marketplace/following';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Following · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceFollowingPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -26,7 +28,7 @@ export default async function MarketplaceFollowingPage() {
 
   if (followsError) {
     console.error('[marketplace-following] Follows read failed', followsError);
-    return <ErrorState message="Could not load the creators you follow. Refresh and try again." />;
+    return <ErrorState message={t('following.couldNotLoadTheCreators')} />;
   }
   if (savesError) {
     console.error('[marketplace-following] Saved listings read failed', savesError);
@@ -60,32 +62,32 @@ export default async function MarketplaceFollowingPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Following"
-        description="The latest from the creators you follow — all in one feed."
+        title={t('marketplaceFollowing.following')}
+        description={t('following.theLatestFromTheCreators')}
       />
 
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Marketplace following data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('marketplaceFollowing.marketplaceFollowingDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some following details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{t('marketplaceFollowing.someFollowingDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
 
       {storeIds.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <UserCheck className="mx-auto mb-2 h-6 w-6" />
-          You’re not following anyone yet.
-          <div className="mt-2"><Link href="/marketplace/creators" className="text-brand-text hover:underline">Find creators to follow</Link></div>
+          {t('marketplaceFollowing.youreNotFollowingAnyoneYet')}
+          <div className="mt-2"><Link href="/marketplace/creators" className="text-brand-text hover:underline">{t('marketplaceFollowing.findCreatorsToFollow')}</Link></div>
         </div>
       ) : feed.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
-          Nothing new from your followed creators right now — check back soon.
+          {t('marketplaceFollowing.nothingNewFromYourFollowedCreators')}
         </div>
       ) : (
         <>
           {newCount > 0 && (
             <p className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand-text">
-              <Sparkles className="h-3.5 w-3.5" /> {newCount} new this week
+              <Sparkles className="h-3.5 w-3.5" /> {newCount} {t('marketplaceFollowing.newThisWeek')}
             </p>
           )}
           <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">

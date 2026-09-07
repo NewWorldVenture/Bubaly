@@ -21,6 +21,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { RunEventView, RunProgressView, RunStepView, RunView } from '@/lib/ai/runs/detail';
 import type { StepState } from '@/lib/ai/runs/states';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── The read model ──────────────────────────────────────────────────────────
 //
@@ -183,6 +184,7 @@ function when(iso: string): string {
 }
 
 export function RunTimeline({ view, showActivity }: { view: RunView; showActivity: boolean }) {
+  const t = useTranslations();
   useLiveRun(view.familyId, view.id, view.planId);
   const rows = timelineRows(view.steps, view.events);
   const activity = view.events.filter((e) => e.message.trim());
@@ -200,7 +202,7 @@ export function RunTimeline({ view, showActivity }: { view: RunView; showActivit
               : 'There were no steps to run.'}
         </p>
       ) : (
-        <ol className="space-y-1" aria-label="Steps">
+        <ol className="space-y-1" aria-label={t('runTimeline.steps')}>
           {rows.map(({ step, glyph, note }) => (
             <li key={step.id} data-step-status={step.status} className="flex gap-3 rounded-xl px-2 py-2">
               <Glyph glyph={glyph} />
@@ -216,15 +218,15 @@ export function RunTimeline({ view, showActivity }: { view: RunView; showActivit
       {showActivity && activity.length > 0 && (
         <details className="rounded-2xl border border-border bg-surface/40">
           <summary className="flex min-h-11 cursor-pointer select-none items-center gap-2 px-4 text-sm font-medium text-fg focus-ring">
-            <Clock className="h-4 w-4 text-muted" aria-hidden /> Activity ({activity.length})
+            <Clock className="h-4 w-4 text-muted" aria-hidden /> {t('runTimeline.activity')}{activity.length})
           </summary>
-          <ol className="space-y-2 border-t border-border px-4 py-3" aria-label="Activity">
+          <ol className="space-y-2 border-t border-border px-4 py-3" aria-label={t('runTimeline.activity')}>
             {activity.map((e) => (
               <li key={e.id} className="flex items-start gap-3 text-xs">
                 <span className="w-16 shrink-0 tabular-nums text-muted">{when(e.at)}</span>
                 <span className={cn('min-w-0 flex-1', e.type === 'model_call' ? 'text-muted' : 'text-fg/85')}>
                   {e.type === 'model_call' ? `Thinking${e.metrics ? ` · ${e.metrics}` : ''}` : e.message}
-                  {e.actor === 'member' && <span className="ml-1 text-muted">· by a family member</span>}
+                  {e.actor === 'member' && <span className="ml-1 text-muted">{t('runTimeline.byAFamilyMember')}</span>}
                 </span>
               </li>
             ))}

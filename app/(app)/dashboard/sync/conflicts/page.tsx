@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync conflicts' };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default async function SyncConflictsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { data: conflicts, error } = await supabase
@@ -32,9 +34,9 @@ export default async function SyncConflictsPage() {
     console.error('[sync-conflicts] family conflict read failed', error);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Conflicts</h1>
-        <ErrorState message="Could not load your sync conflicts from Supabase. Refresh and try again." />
-        <a href="/dashboard/sync/conflicts" className="text-sm font-medium text-brand-text underline">Refresh conflicts</a>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncConflicts.conflicts')}</h1>
+        <ErrorState message={t('conflicts.couldNotLoadYourSync')} />
+        <a href="/dashboard/sync/conflicts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncConflicts.refreshConflicts')}</a>
       </div>
     );
   }
@@ -44,8 +46,8 @@ export default async function SyncConflictsPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Conflicts</h1>
-        <p className="mt-1 text-sm text-muted">When the same item changes in two places, we pause and ask you which version wins.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncConflicts.conflicts')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('dashboardSyncConflicts.whenTheSameItemChangesIn')}</p>
       </div>
 
       {rows.length === 0 ? (
@@ -53,8 +55,8 @@ export default async function SyncConflictsPage() {
           <div className="flex items-center gap-3 py-6">
             <CheckCircle2 className="h-6 w-6 text-success" />
             <div>
-              <p className="font-medium">No open conflicts</p>
-              <p className="text-sm text-muted">Everything is in sync. Conflicts will appear here for manual review.</p>
+              <p className="font-medium">{t('dashboardSyncConflicts.noOpenConflicts')}</p>
+              <p className="text-sm text-muted">{t('dashboardSyncConflicts.everythingIsInSyncConflictsWill')}</p>
             </div>
           </div>
         </Card>
@@ -73,9 +75,9 @@ export default async function SyncConflictsPage() {
                   <p className="mt-0.5 text-sm text-muted">{KIND_LABEL[c.conflict_kind] ?? c.conflict_kind}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <Badge tone="brand">Keep ours</Badge>
-                  <Badge tone="accent">Keep theirs</Badge>
-                  <Badge tone="neutral">Keep both</Badge>
+                  <Badge tone="brand">{t('conflicts.keepOurs')}</Badge>
+                  <Badge tone="accent">{t('conflicts.keepTheirs')}</Badge>
+                  <Badge tone="neutral">{t('conflicts.keepBoth')}</Badge>
                 </div>
               </div>
             </Card>

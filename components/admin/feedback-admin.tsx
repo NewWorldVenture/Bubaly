@@ -23,6 +23,7 @@ import {
 } from '@/app/(app)/admin/feedback/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
@@ -34,6 +35,7 @@ function fmt(iso: string) {
 export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
   ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<AdminFeedbackFilter>({ status: 'all', category: 'all' });
   const [kindFilter, setKindFilter] = useState<'all' | FeedbackKind>('all');
@@ -94,30 +96,30 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-2 text-sm font-bold text-fg">
-            <Bell className="h-4 w-4 text-brand-text" /> Activity relay
+            <Bell className="h-4 w-4 text-brand-text" /> {t('feedbackAdmin.activityRelay')}
             {unreadNotes.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-brand-fg">{unreadNotes.length} new</span>}
           </p>
           <div className="flex items-center gap-2">
             {unreadNotes.length > 0 && (
               <button type="button" onClick={markAllRead} disabled={marking}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
-                {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Mark all read
+                {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {t('feedbackAdmin.markAllRead')}
               </button>
             )}
             <button type="button" onClick={runSync} disabled={syncing}
               title={githubConfigured ? 'Backfill + reconcile with GitHub now' : 'Set GITHUB_TOKEN + GITHUB_FEEDBACK_REPO to enable'}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Sync GitHub now
+              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {t('feedbackAdmin.syncGithubNow')}
             </button>
           </div>
         </div>
         {!githubConfigured && (
           <p className="mb-2 flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
-            <Github className="h-3.5 w-3.5 shrink-0" /> GitHub tracker is dark — set <code>GITHUB_TOKEN</code> + <code>GITHUB_FEEDBACK_REPO</code> to mirror bugs &amp; ideas. Notifications still work.
+            <Github className="h-3.5 w-3.5 shrink-0" /> {t('feedbackAdmin.githubTrackerIsDarkSet')} <code>GITHUB_TOKEN</code> + <code>GITHUB_FEEDBACK_REPO</code> {t('feedbackAdmin.toMirrorBugsAmpIdeasNotifications')}
           </p>
         )}
         {notifications.length === 0 ? (
-          <p className="py-3 text-center text-xs text-muted">No activity yet. New submissions and GitHub syncs will appear here.</p>
+          <p className="py-3 text-center text-xs text-muted">{t('feedbackAdmin.noActivityYetNewSubmissionsAnd')}</p>
         ) : (
           <ul className="max-h-64 space-y-1.5 overflow-y-auto scrollbar-none">
             {notifications.slice(0, 30).map((n) => (
@@ -139,7 +141,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Kind: idea vs bug (the two lists) */}
-          <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>All types</FilterChip>
+          <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>{t('feedbackAdmin.allTypes')}</FilterChip>
           {KIND_ORDER.map((k) => (
             <FilterChip key={k} active={kindFilter === k} onClick={() => setKindFilter(k)}>
               {KIND_META[k].emoji} {KIND_META[k].label}
@@ -160,7 +162,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
             onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}
             className="h-9 rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand"
           >
-            <option value="all">All categories</option>
+            <option value="all">{t('feedbackAdmin.allCategories')}</option>
             {Object.entries(CATEGORY_META).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
           <div className="relative">
@@ -174,7 +176,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
       {/* List */}
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center text-sm text-muted">
-          No ideas match this filter.
+          {t('feedbackAdmin.noIdeasMatchThisFilter')}
         </div>
       ) : (
         <div className="space-y-3">
@@ -213,6 +215,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
   idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
   const [note, setNote] = useState(idea.admin_note ?? '');
   const [reply, setReply] = useState('');
@@ -256,7 +259,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
                 <Github className="h-3 w-3" /> #{idea.github_issue_number}
               </a>
             )}
-            {idea.pinned && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text"><Pin className="h-3 w-3" /> Pinned</span>}
+            {idea.pinned && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text"><Pin className="h-3 w-3" /> {t('feedbackAdmin.pinned')}</span>}
             <span className="text-[11px] text-muted/70">· {idea.author_name} · {fmt(idea.created_at)}</span>
           </div>
           <h3 className="mt-1 text-sm font-bold text-fg">{idea.title}</h3>
@@ -269,7 +272,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
 
           <button type="button" onClick={onToggle} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text">
             {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            Act on this idea
+            {t('feedbackAdmin.actOnThisIdea')}
             {idea.comment_count > 0 && <span className="ml-1 inline-flex items-center gap-1 text-muted"><MessageSquare className="h-3 w-3" />{idea.comment_count}</span>}
           </button>
         </div>
@@ -287,11 +290,11 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           <button
             type="button" disabled={busy !== null}
             onClick={() => {
-              if (window.confirm('Delete this idea? This removes it and all its votes and comments. This cannot be undone.')) {
+              if (window.confirm(t('feedbackAdmin.deleteThisIdeaThisRemoves'))) {
                 void run('delete', () => deleteIdeaAction({ ideaId: idea.id }), 'Idea deleted.');
               }
             }}
-            title="Delete idea"
+            title={t('feedbackAdmin.deleteIdea')}
             className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
@@ -304,16 +307,16 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {/* Status + roadmap note */}
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">Roadmap status</label>
+              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
               <select value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
                 className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand">
                 {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">Public roadmap note (shown to members)</label>
+              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.publicRoadmapNoteShownToMembers')}</label>
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000}
-                placeholder="e.g. Great idea — we’re building this into the calendar for the fall release."
+                placeholder={t('feedbackAdmin.eGGreatIdeaWereBuilding')}
                 className="w-full resize-y rounded-lg border border-border bg-bg p-2 text-sm outline-none focus:border-brand" />
             </div>
           </div>
@@ -323,17 +326,17 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
               onClick={() => run('update', () => updateIdeaAction({ ideaId: idea.id, status, note }), 'Idea updated.')}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
             >
-              {busy === 'update' ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save status &amp; note
+              {busy === 'update' ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {t('feedbackAdmin.saveStatusAmpNote')}
             </button>
           </div>
 
           {/* Existing comments */}
           {comments.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted">Conversation</p>
+              <p className="text-xs font-semibold text-muted">{t('feedbackAdmin.conversation')}</p>
               {comments.map((c) => (
                 <div key={c.id} className={cn('rounded-lg border p-2.5 text-xs', c.is_team ? 'border-brand/25 bg-brand/5' : 'border-border bg-bg')}>
-                  <p className="font-semibold text-fg">{c.author_name}{c.is_team && <span className="ml-1 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-text">Team</span>}</p>
+                  <p className="font-semibold text-fg">{c.author_name}{c.is_team && <span className="ml-1 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-text">{t('feedbackAdmin.team')}</span>}</p>
                   <p className="mt-0.5 text-muted">{c.body}</p>
                 </div>
               ))}
@@ -343,14 +346,14 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {/* Team reply */}
           <div className="flex items-start gap-2">
             <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} maxLength={2000}
-              placeholder="Reply as the Bubaly team…"
+              placeholder={t('feedbackAdmin.replyAsTheBubalyTeam')}
               className="w-full resize-y rounded-lg border border-border bg-bg p-2 text-sm outline-none focus:border-brand" />
             <button
               type="button" disabled={!reply.trim() || busy !== null}
               onClick={async () => { const ok = await run('reply', () => postTeamReplyAction({ ideaId: idea.id, body: reply }), 'Reply posted.'); if (ok) setReply(''); }}
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
             >
-              {busy === 'reply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Reply
+              {busy === 'reply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {t('feedbackAdmin.reply')}
             </button>
           </div>
         </div>

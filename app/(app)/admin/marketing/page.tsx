@@ -9,11 +9,13 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Marketing', robots: { index: false } };
+export const metadata: Metadata = { title: 'marketing.marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketingDashboard() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { customers, error: customersError } = await getMarketingCustomersWithError(supabase);
   const m = summarizeCustomers(customers);
@@ -94,7 +96,7 @@ export default async function MarketingDashboard() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Real-time view of your customer base, campaigns, and growth — built from live Bubaly data.
+        {t('adminMarketing.realTimeViewOfYourCustomer')}
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -111,7 +113,7 @@ export default async function MarketingDashboard() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold">Customer Lifecycle</h2>
+          <h2 className="mb-4 text-base font-semibold">{t('adminMarketing.customerLifecycle')}</h2>
           <div className="space-y-3">
             {lifecycleBars.map((b) => (
               <div key={b.label} className="flex items-center gap-3 text-sm">
@@ -124,16 +126,16 @@ export default async function MarketingDashboard() {
             ))}
           </div>
           <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-4 text-sm">
-            <div><p className="text-xs text-muted">Paying</p><p className="font-semibold">{m.paying}</p></div>
-            <div><p className="text-xs text-muted">Est. Lifetime Value</p><p className="font-semibold">{fmtMoney(m.estLtvCents)}</p></div>
-            <div><p className="text-xs text-muted">AEO Readiness</p><p className="font-semibold">{aeoReadiness == null ? '—' : `${aeoReadiness}%`}</p></div>
+            <div><p className="text-xs text-muted">{t('adminMarketing.paying')}</p><p className="font-semibold">{m.paying}</p></div>
+            <div><p className="text-xs text-muted">{t('adminMarketing.estLifetimeValue')}</p><p className="font-semibold">{fmtMoney(m.estLtvCents)}</p></div>
+            <div><p className="text-xs text-muted">{t('adminMarketing.aeoReadiness')}</p><p className="font-semibold">{aeoReadiness == null ? '—' : `${aeoReadiness}%`}</p></div>
           </div>
         </Card>
 
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand-text" />
-            <h2 className="text-base font-semibold">Recommended Next Actions</h2>
+            <h2 className="text-base font-semibold">{t('adminMarketing.recommendedNextActions')}</h2>
           </div>
           {recs.length > 0 ? (
             <ul className="space-y-2">
@@ -147,12 +149,12 @@ export default async function MarketingDashboard() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">Everything looks healthy — no urgent actions.</p>
+            <p className="text-sm text-muted">{t('adminMarketing.everythingLooksHealthyNoUrgentActions')}</p>
           )}
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
             <Link href="/admin/marketing/seo" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Search className="h-3.5 w-3.5 shrink-0" /> SEO {seoPages != null ? `(${seoPages})` : ''}</Link>
             <Link href="/admin/marketing/aeo" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><MessageSquareText className="h-3.5 w-3.5 shrink-0" /> AEO {aeoReadiness != null ? `(${aeoReadiness}%)` : ''}</Link>
-            <Link href="/admin/marketing/campaigns/new" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Send className="h-3.5 w-3.5 shrink-0" /> New campaign</Link>
+            <Link href="/admin/marketing/campaigns/new" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 hover:bg-elevated"><Send className="h-3.5 w-3.5 shrink-0" /> {t('adminMarketing.newCampaign')}</Link>
           </div>
         </Card>
       </div>
@@ -160,15 +162,16 @@ export default async function MarketingDashboard() {
   );
 }
 
-function MarketingDashboardReadError() {
+async function MarketingDashboardReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing</h1>
-        <p className="mt-1 text-sm text-muted">Live customer, campaign, and growth overview.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('marketing.marketing')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('marketing.liveCustomerCampaignAndGrowth')}</p>
       </div>
-      <ErrorState message="Could not load marketing dashboard data from Supabase. Refresh and try again." />
-      <a href="/admin/marketing" className="text-sm font-medium text-brand-text underline">Refresh marketing dashboard</a>
+      <ErrorState message={t('marketing.couldNotLoadMarketingDashboard')} />
+      <a href="/admin/marketing" className="text-sm font-medium text-brand-text underline">{t('marketing.refreshMarketingDashboard')}</a>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { DOC_KINDS, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Doc = Tables<'vacation_documents'>;
 
@@ -27,10 +28,11 @@ function expiryWarning(expires: string | null): boolean {
 }
 
 export function TripDocuments({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   return (
     <TripCrudSection<Doc>
-      table="vacation_documents" vacationId={vacationId} title="Travel documents" icon={FolderLock}
-      fields={fields} emptyText="No documents yet" addLabel="Add document"
+      table="vacation_documents" vacationId={vacationId} title={t('tripDocuments.travelDocuments')} icon={FolderLock}
+      fields={fields} emptyText={t('tripDocuments.noDocumentsYet')} addLabel="Add document"
       orderBy={(a, b) => a.title.localeCompare(b.title)}
       renderRow={(d, members) => {
         const k = lookup(DOC_KINDS, d.kind);
@@ -40,12 +42,12 @@ export function TripDocuments({ vacationId }: { vacationId: string }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">{k.emoji} {d.title}</p>
-              {warn && <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300"><AlertTriangle className="h-3 w-3" /> Expiring</span>}
+              {warn && <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300"><AlertTriangle className="h-3 w-3" />{' '}{t('tripDocuments.expiring')}</span>}
             </div>
             <p className="mt-0.5 text-xs text-muted">
               {[k.label, who?.display_name, d.number && `#${d.number}`, d.expires_on && `Expires ${fmtDate(d.expires_on)}`].filter(Boolean).join(' · ')}
             </p>
-            {d.file_url && <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-brand-text hover:underline">Open file ↗</a>}
+            {d.file_url && <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-brand-text hover:underline">{t('tripDocuments.openFile')}</a>}
           </div>
         );
       }}

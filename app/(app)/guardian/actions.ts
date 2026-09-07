@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
@@ -17,13 +18,14 @@ type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: strin
 // so these server actions are the authorization boundary: only a family manager
 // (parent/adult) may change safety config. The failure-only shape is assignable
 // to every ActionResult<T>.
-function guardianForbidden(): { ok: false; error: string } {
-  return { ok: false, error: 'Only a parent or guardian can change safety settings.' };
+async function guardianForbidden(): Promise<{ ok: false; error: string }> {
+  const t = await getTranslations();
+  return { ok: false, error: t('actions.onlyAParentOrGuardian') };
 }
 
-function actionFailure<T = void>(operation: string, error: unknown): ActionResult<T> {
+function actionFailure<T = void>(operation: string, message: string, error: unknown): ActionResult<T> {
   console.error(`[guardian-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 type GuardianAuditEntry = {
@@ -54,9 +56,10 @@ async function logGuardianAudit(entry: GuardianAuditEntry): Promise<void> {
   }
 }
 
-function reviewResult(data: unknown): ActionResult {
+async function reviewResult(data: unknown): Promise<ActionResult> {
+  const t = await getTranslations();
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return actionFailure('review the Guardian suggestion', new Error('Invalid review response'));
+    return actionFailure('review the Guardian suggestion', t('guardian.couldNotReviewTheGuardianSuggestion'), new Error('Invalid review response'));
   }
   const result = data as { ok?: unknown; reason?: unknown };
   if (result.ok === true) return { ok: true };
@@ -82,6 +85,7 @@ export async function upsertContactAction(input: {
   trust_level: TrustLevel;
   member_id?: string;
 }): Promise<ActionResult<{ id: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -116,7 +120,7 @@ export async function upsertContactAction(input: {
       .single() as typeof result;
   }
 
-  if (result.error) return actionFailure('save the Guardian contact', result.error);
+  if (result.error) return actionFailure('save the Guardian contact', t('guardian.couldNotSaveTheGuardianContact'), result.error);
   const id = (result.data as { id: string }).id;
 
   await logGuardianAudit({
@@ -135,6 +139,7 @@ export async function upsertContactAction(input: {
 }
 
 export async function deleteContactAction(contactId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -143,7 +148,7 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
     .delete()
     .eq('id', contactId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('delete the Guardian contact', error);
+  if (error) return actionFailure('delete the Guardian contact', t('guardian.couldNotDeleteTheGuardianContact'), error);
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -152,6 +157,7 @@ export async function updateContactTrustAction(
   contactId: string,
   trustLevel: TrustLevel,
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -163,7 +169,7 @@ export async function updateContactTrustAction(
     .eq('id', contactId)
     .eq('family_id', familyId);
 
-  if (error) return actionFailure('update contact trust', error);
+  if (error) return actionFailure('update contact trust', t('guardian.couldNotUpdateContactTrust'), error);
 
   await logGuardianAudit({
     family_id: familyId,
@@ -193,6 +199,7 @@ export async function upsertMemberProfileAction(input: {
   default_mode_suspected_spam?: RoutingMode;
   context_overrides?: Record<string, RoutingMode>;
 }): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -215,7 +222,7 @@ export async function upsertMemberProfileAction(input: {
   const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
     .upsert(payload, { onConflict: 'family_id,member_id' });
 
-  if (error) return actionFailure('save the Guardian member profile', error);
+  if (error) return actionFailure('save the Guardian member profile', t('guardian.couldNotSaveTheGuardianMember'), error);
 
   revalidatePath('/guardian/settings');
   revalidatePath('/guardian');
@@ -226,6 +233,7 @@ export async function updateContextAction(
   memberId: string,
   context: string,
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -236,7 +244,7 @@ export async function updateContextAction(
     .eq('member_id', memberId)
     .eq('family_id', ctx.active.familyId);
 
-  if (error) return actionFailure('update the Guardian context', error);
+  if (error) return actionFailure('update the Guardian context', t('guardian.couldNotUpdateTheGuardianContext'), error);
 
   revalidatePath('/guardian');
   return { ok: true };
@@ -250,6 +258,7 @@ export async function assignGuardianPhoneAction(input: {
   member_id: string;
   phone: string;
 }): Promise<ActionResult<{ phone: string | null }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -266,7 +275,7 @@ export async function assignGuardianPhoneAction(input: {
     else if (digits.length === 11 && digits.startsWith('1')) phone = `+${digits}`;
     else phone = `+${digits.replace(/^\+/, '')}`;
     if (!/^\+\d{8,15}$/.test(phone)) {
-      return { ok: false, error: 'Enter a valid phone number (e.g. (555) 123-4567).' };
+      return { ok: false, error: t('actions.enterAValidPhoneNumber') };
     }
   }
 
@@ -278,8 +287,8 @@ export async function assignGuardianPhoneAction(input: {
       .eq('guardian_phone', phone)
       .neq('member_id', input.member_id)
       .maybeSingle();
-    if (clashError) return actionFailure('check Guardian phone assignments', clashError);
-    if (clash) return { ok: false, error: 'That number is already assigned to another family member.' };
+    if (clashError) return actionFailure('check Guardian phone assignments', t('guardian.couldNotCheckGuardianPhoneAssignments'), clashError);
+    if (clash) return { ok: false, error: t('actions.thatNumberIsAlreadyAssigned') };
   }
 
   const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
@@ -288,7 +297,7 @@ export async function assignGuardianPhoneAction(input: {
       { onConflict: 'family_id,member_id' },
     );
 
-  if (error) return actionFailure('assign the Guardian phone', error);
+  if (error) return actionFailure('assign the Guardian phone', t('guardian.couldNotAssignTheGuardianPhone'), error);
 
   await logGuardianAudit({
     family_id: familyId,
@@ -320,6 +329,7 @@ export async function createRuleAction(input: {
   action_routing_mode: RoutingMode;
   member_id?: string;
 }): Promise<ActionResult<{ id: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -351,7 +361,7 @@ export async function createRuleAction(input: {
     .select('id')
     .single();
 
-  if (error) return actionFailure('create the Guardian routing rule', error);
+  if (error) return actionFailure('create the Guardian routing rule', t('guardian.couldNotCreateTheGuardianRouting'), error);
   const id = (data as { id: string }).id;
 
   await logGuardianAudit({
@@ -369,6 +379,7 @@ export async function createRuleAction(input: {
 }
 
 export async function toggleRuleAction(ruleId: string, isActive: boolean): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -377,12 +388,13 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
     .update({ is_active: isActive })
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('update the Guardian routing rule', error);
+  if (error) return actionFailure('update the Guardian routing rule', t('guardian.couldNotUpdateTheGuardianRouting'), error);
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
 
 export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -391,7 +403,7 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
     .delete()
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('delete the Guardian routing rule', error);
+  if (error) return actionFailure('delete the Guardian routing rule', t('guardian.couldNotDeleteTheGuardianRouting'), error);
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -416,6 +428,7 @@ export async function reviewSuggestionAction(
   decision: 'approved' | 'dismissed',
   note?: string,
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   await requireUserContext();
   const supabase = await createServer();
   const { data, error } = await supabase.rpc('guardian_review_suggestion', {
@@ -423,8 +436,8 @@ export async function reviewSuggestionAction(
     p_decision: decision,
     p_note: note?.trim() || null,
   });
-  if (error) return actionFailure('review the Guardian suggestion', error);
-  const result = reviewResult(data);
+  if (error) return actionFailure('review the Guardian suggestion', t('guardian.couldNotReviewTheGuardianSuggestion'), error);
+  const result = await reviewResult(data);
   if (!result.ok) return result;
   revalidatePath('/guardian');
   return { ok: true };
@@ -433,6 +446,7 @@ export async function reviewSuggestionAction(
 // ── Escalation Acknowledge ───────────────────────────────────────────────────
 
 export async function acknowledgeEscalationAction(escalationId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -441,7 +455,7 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('acknowledge the Guardian escalation', error);
+  if (error) return actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), error);
   revalidatePath('/guardian');
   return { ok: true };
 }

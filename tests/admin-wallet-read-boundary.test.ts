@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/admin/wallet/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/admin/wallet/page.tsx');
 
 describe('admin wallet overview read boundary', () => {
   it('does not convert any required wallet read failure into zero-valued oversight', () => {

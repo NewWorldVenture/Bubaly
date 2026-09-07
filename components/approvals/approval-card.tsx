@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils/cn';
 import { DOMAIN_LABELS } from '@/lib/trust/engine';
 import { decideApproval, editAndApproveApproval } from '@/app/(app)/dashboard/approvals-actions';
 import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type ApprovalCardResult =
   | { decision: 'approved' | 'rejected' | 'modified'; summary: string; resumedRunId: string | null }
@@ -79,6 +80,7 @@ export function ApprovalCard({
   onResult?: (result: ApprovalCardResult) => void;
   className?: string;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<Busy>(null);
@@ -165,7 +167,7 @@ export function ApprovalCard({
 
           {consequences.length > 0 && (
             <div className={cn('text-xs', compact ? 'mt-1.5' : 'mt-2')}>
-              {!compact && <p className="font-medium text-fg/90">Bubaly will:</p>}
+              {!compact && <p className="font-medium text-fg/90">{t('approval.bubalyWill')}</p>}
               <ul className="mt-0.5 space-y-0.5">
                 {consequences.map((line, i) => (
                   <li key={`${i}-${line}`} className="flex gap-1.5 text-fg/80">
@@ -221,7 +223,7 @@ export function ApprovalCard({
               onClick={() => setEditing(true)}
               aria-label={`Edit: ${approval.title}`}
             >
-              <Pencil className="h-3.5 w-3.5" aria-hidden /> Edit
+              <Pencil className="h-3.5 w-3.5" aria-hidden /> {t('approval.edit')}
             </Button>
           )}
           <Button
@@ -238,7 +240,7 @@ export function ApprovalCard({
           </Button>
         </div>
       ) : (
-        <p className={cn('text-right text-[11px] text-muted', compact ? 'mt-1.5' : 'mt-3')}>Waiting for a parent or adult.</p>
+        <p className={cn('text-right text-[11px] text-muted', compact ? 'mt-1.5' : 'mt-3')}>{t('approval.waitingForAParentOrAdult')}</p>
       )}
 
       {canEdit && (
@@ -274,6 +276,7 @@ export function EditApprovalModal({
   onClose: () => void;
   onSubmit: (edits: Record<string, string | number | boolean>) => void;
 }) {
+  const t = useTranslations();
   const [draft, setDraft] = useState<Record<string, string | number | boolean>>({});
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -296,7 +299,7 @@ export function EditApprovalModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit before approving" description={title} className="max-w-md">
+    <Modal open={open} onClose={onClose} title={t('approval.editBeforeApproving')} description={title} className="max-w-md">
       <form onSubmit={submit} className="space-y-3">
         {fields.map((field) => (
           field.type === 'boolean' ? (
@@ -325,7 +328,7 @@ export function EditApprovalModal({
           )
         ))}
         <div className="flex items-center justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" className={ACTION} onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="ghost" className={ACTION} onClick={onClose} disabled={busy}>{t('approval.cancel')}</Button>
           <Button type="submit" variant="primary" className={ACTION} loading={busy} disabled={busy}>
             {busy ? 'Approving…' : 'Save & approve'}
           </Button>

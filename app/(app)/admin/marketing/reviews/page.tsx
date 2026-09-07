@@ -7,6 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ratingStats, DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
 import { ReviewRow } from './review-row';
 import { saveReputationSettingsAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Reviews', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 const FILTERS = ['all', 'pending', 'approved', 'featured', 'rejected'] as const;
 
 export default async function ReviewsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const t = await getTranslations();
   const { status } = await searchParams;
   const active = (FILTERS as readonly string[]).includes(status ?? '') ? status! : 'all';
   const supabase = createServiceClient();
@@ -42,20 +44,20 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       <div className="flex items-center gap-2">
         <MessageSquareQuote className="h-5 w-5 text-brand-text" />
         <div>
-          <h2 className="text-base font-bold">Reviews &amp; Reputation</h2>
-          <p className="text-xs text-muted">Collect star reviews, reply, feature the best, and route happy customers to public platforms.</p>
+          <h2 className="text-base font-bold">{t('adminMarketingReviews.reviewsAmpReputation')}</h2>
+          <p className="text-xs text-muted">{t('adminMarketingReviews.collectStarReviewsReplyFeatureThe')}</p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
-          <p className="text-xs font-medium text-muted">Average rating</p>
+          <p className="text-xs font-medium text-muted">{t('adminMarketingReviews.averageRating')}</p>
           <p className="mt-1 text-3xl font-bold leading-none">{stats.total ? stats.average : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{stats.total} review{stats.total === 1 ? '' : 's'} · {stats.positivePct}% positive</p>
+          <p className="mt-1 text-xs text-muted">{stats.total} review{stats.total === 1 ? '' : 's'} · {stats.positivePct}{t('adminMarketingReviews.positive')}</p>
         </Card>
         <Card className="sm:col-span-2">
-          <p className="mb-2 text-xs font-medium text-muted">Distribution</p>
+          <p className="mb-2 text-xs font-medium text-muted">{t('adminMarketingReviews.distribution')}</p>
           <div className="space-y-1">
             {stats.distribution.map((d) => (
               <div key={d.star} className="flex items-center gap-2 text-xs">
@@ -70,10 +72,10 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
 
       {/* Share link */}
       <Card>
-        <p className="text-xs font-medium text-muted">Public review link &amp; wall</p>
+        <p className="text-xs font-medium text-muted">{t('adminMarketingReviews.publicReviewLinkAmpWall')}</p>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
           <a href={reviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text underline">{reviewUrl} <ExternalLink className="h-3.5 w-3.5" /></a>
-          <a href={`${SITE_URL}/reviews`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted underline">View public wall <ExternalLink className="h-3.5 w-3.5" /></a>
+          <a href={`${SITE_URL}/reviews`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted underline">{t('adminMarketingReviews.viewPublicWall')} <ExternalLink className="h-3.5 w-3.5" /></a>
         </div>
       </Card>
 
@@ -88,7 +90,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={MessageSquareQuote} title="No reviews here" description="Share your review link to start collecting feedback." />
+        <EmptyState icon={MessageSquareQuote} title={t('adminMarketingReviews.noReviewsHere')} description={t('reviews.shareYourReviewLinkTo')} />
       ) : (
         <div className="space-y-2">
           {filtered.map((r) => <ReviewRow key={r.id} review={r} />)}
@@ -97,34 +99,35 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
 
       {/* Reputation settings */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> Reputation settings</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> {t('adminMarketingReviews.reputationSettings')}</h3>
         <form action={saveReputationSettingsAction} className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Google review URL</span><input name="google_url" defaultValue={set?.google_url ?? ''} className={inputCls} placeholder="https://g.page/r/…/review" /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">App Store URL</span><input name="app_store_url" defaultValue={set?.app_store_url ?? ''} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Google Play URL</span><input name="play_store_url" defaultValue={set?.play_store_url ?? ''} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Trustpilot URL</span><input name="trustpilot_url" defaultValue={set?.trustpilot_url ?? ''} className={inputCls} /></label>
-          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">Request headline</span><input name="request_headline" defaultValue={set?.request_headline ?? DEFAULT_REPUTATION.request_headline} className={inputCls} /></label>
-          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">Request message</span><input name="request_message" defaultValue={set?.request_message ?? DEFAULT_REPUTATION.request_message} className={inputCls} /></label>
-          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">Thank-you (happy reviewers)</span><input name="thank_you_high" defaultValue={set?.thank_you_high ?? DEFAULT_REPUTATION.thank_you_high} className={inputCls} /></label>
-          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">Thank-you (critical reviewers)</span><input name="thank_you_low" defaultValue={set?.thank_you_low ?? DEFAULT_REPUTATION.thank_you_low} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Min rating to invite public review</span><input type="number" min="1" max="5" name="min_public_rating" defaultValue={set?.min_public_rating ?? 4} className={inputCls} /></label>
-          <label className="space-y-1"><span className="block text-xs font-medium text-muted">Auto-approve at/above (blank = manual)</span><input type="number" min="1" max="5" name="auto_approve_min" defaultValue={set?.auto_approve_min ?? ''} className={inputCls} /></label>
-          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">Save settings</button></div>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.googleReviewUrl')}</span><input name="google_url" defaultValue={set?.google_url ?? ''} className={inputCls} placeholder="https://g.page/r/…/review" /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.appStoreUrl')}</span><input name="app_store_url" defaultValue={set?.app_store_url ?? ''} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.googlePlayUrl')}</span><input name="play_store_url" defaultValue={set?.play_store_url ?? ''} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.trustpilotUrl')}</span><input name="trustpilot_url" defaultValue={set?.trustpilot_url ?? ''} className={inputCls} /></label>
+          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.requestHeadline')}</span><input name="request_headline" defaultValue={set?.request_headline ?? DEFAULT_REPUTATION.request_headline} className={inputCls} /></label>
+          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.requestMessage')}</span><input name="request_message" defaultValue={set?.request_message ?? DEFAULT_REPUTATION.request_message} className={inputCls} /></label>
+          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.thankYouHappyReviewers')}</span><input name="thank_you_high" defaultValue={set?.thank_you_high ?? DEFAULT_REPUTATION.thank_you_high} className={inputCls} /></label>
+          <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.thankYouCriticalReviewers')}</span><input name="thank_you_low" defaultValue={set?.thank_you_low ?? DEFAULT_REPUTATION.thank_you_low} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.minRatingToInvitePublicReview')}</span><input type="number" min="1" max="5" name="min_public_rating" defaultValue={set?.min_public_rating ?? 4} className={inputCls} /></label>
+          <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.autoApproveAtAboveBlankManual')}</span><input type="number" min="1" max="5" name="auto_approve_min" defaultValue={set?.auto_approve_min ?? ''} className={inputCls} /></label>
+          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingReviews.saveSettings')}</button></div>
         </form>
       </Card>
     </div>
   );
 }
 
-function AdminReviewsReadError() {
+async function AdminReviewsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reviews &amp; Reputation</h1>
-        <p className="mt-1 text-sm text-muted">Collect, review, and publish customer feedback.</p>
+        <p className="mt-1 text-sm text-muted">{t('reviews.collectReviewAndPublishCustomer')}</p>
       </div>
-      <ErrorState message="Could not load reviews from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/reviews" className="text-sm font-medium text-brand-text underline">Refresh reviews</Link>
+      <ErrorState message={t('reviews.couldNotLoadReviewsFrom')} />
+      <Link href="/admin/marketing/reviews" className="text-sm font-medium text-brand-text underline">{t('reviews.refreshReviews')}</Link>
     </div>
   );
 }

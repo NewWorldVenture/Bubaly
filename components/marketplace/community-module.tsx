@@ -20,6 +20,7 @@ import {
 import { KIND_LABELS, CONDITION_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod } from '@/lib/marketplace/listings';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function CommunityModule({
   migrated, familyId, circles, members, shares, sharedListings, myListings, readWarnings = [],
@@ -33,6 +34,7 @@ export function CommunityModule({
   myListings: SharedListingLite[];
   readWarnings?: string[];
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<string | null>(circles[0]?.id ?? null);
   const [name, setName] = useState('');
@@ -57,37 +59,34 @@ export function CommunityModule({
     });
 
   const copyCode = async (c: string) => {
-    try { await navigator.clipboard.writeText(formatJoinCode(c)); success('Invite code copied'); }
-    catch { toastError('Could not copy'); }
+    try { await navigator.clipboard.writeText(formatJoinCode(c)); success(t('communityModule.inviteCodeCopied')); }
+    catch { toastError(t('communityModule.couldNotCopy')); }
   };
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-          <Users className="h-6 w-6 text-brand-text" /> Community Circles
+          <Users className="h-6 w-6 text-brand-text" /> {t('community.communityCircles')}
         </h1>
-        <p className="mt-1 max-w-xl text-sm text-muted">
-          Share listings beyond your household — the class, the team, the street.
-          Only what a family chooses to share is visible, and only inside that circle.
-        </p>
+        <p className="mt-1 max-w-xl text-sm text-muted">{t('communityModule.shareListingsBeyondYourHousehold')}</p>
       </header>
 
       {readWarnings.length > 0 && (
         <div
           role="status"
-          aria-label="Community data health"
+          aria-label={t('community.communityDataHealth')}
           className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
         >
-          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Some circle data is temporarily unavailable.</p>
-          <p className="mt-1 text-xs">The page is still usable, but affected circles or listings may be incomplete. Refresh after the connection is restored.</p>
+          <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> {t('community.someCircleDataIsTemporarilyUnavailable')}</p>
+          <p className="mt-1 text-xs">{t('community.thePageIsStillUsableBut')}</p>
           <p className="mt-1 text-xs">Unavailable: {readWarnings.join(', ')}.</p>
         </div>
       )}
 
       {!migrated && (
         <p className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/[0.06] p-4 text-xs text-amber-300">
-          Circles aren&apos;t enabled on this database yet — apply migration <code>0176_marketplace_circles.sql</code> and refresh.
+          {t('community.circlesArenAposTEnabledOn')} <code>0176_marketplace_circles.sql</code> {t('community.andRefresh')}
         </p>
       )}
 
@@ -101,12 +100,12 @@ export function CommunityModule({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
-            placeholder="Start a circle (e.g. Maple Street)"
+            placeholder={t('community.startACircleEGMaple')}
             className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 text-sm outline-none focus:border-brand"
           />
           <button type="submit" disabled={pending || !migrated}
             className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-brand px-3.5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-            <Plus className="h-4 w-4" /> Create
+            <Plus className="h-4 w-4" /> {t('community.create')}
           </button>
         </form>
         <form
@@ -117,12 +116,12 @@ export function CommunityModule({
             value={code}
             onChange={(e) => setCode(e.target.value)}
             maxLength={9}
-            placeholder="Join with a code (ABCD-EFGH)"
+            placeholder={t('community.joinWithACodeAbcdEfgh')}
             className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 font-mono text-sm uppercase outline-none focus:border-brand"
           />
           <button type="submit" disabled={pending || !migrated}
             className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 px-3.5 text-sm font-bold text-brand-text transition hover:bg-brand/10 disabled:opacity-50">
-            Join
+            {t('community.join')}
           </button>
         </form>
       </section>
@@ -152,14 +151,14 @@ export function CommunityModule({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">{circle.emoji} {circle.name}</p>
               <p className="text-xs text-muted">
-                {stats.families} famil{stats.families === 1 ? 'y' : 'ies'} · {stats.shared} shared item{stats.shared === 1 ? '' : 's'} · {stats.fromOthers} from others
+                {stats.families} famil{stats.families === 1 ? 'y' : 'ies'} · {stats.shared} {t('community.sharedItem')}{stats.shared === 1 ? '' : 's'} · {stats.fromOthers} {t('community.fromOthers')}
               </p>
             </div>
             <button
               type="button"
               onClick={() => void copyCode(circle.join_code)}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border px-3 font-mono text-xs font-bold transition hover:bg-elevated"
-              title="Copy the invite code"
+              title={t('community.copyTheInviteCode')}
             >
               <Copy className="h-3.5 w-3.5" /> {formatJoinCode(circle.join_code)}
             </button>
@@ -185,10 +184,10 @@ export function CommunityModule({
             <select
               value={shareId}
               onChange={(e) => setShareId(e.target.value)}
-              aria-label="Pick one of your listings to share"
+              aria-label={t('community.pickOneOfYourListingsTo')}
               className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 text-sm outline-none focus:border-brand"
             >
-              <option value="">Share one of your listings into this circle…</option>
+              <option value="">{t('community.shareOneOfYourListingsInto')}</option>
               {shareable.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.title}{l.price_cents ? ` — ${priceLabel(l.kind as ListingKind, l.price_cents, (l.rent_period ?? null) as RentPeriod | null)}` : ''}
@@ -201,7 +200,7 @@ export function CommunityModule({
               onClick={() => { run(() => shareListingAction(shareId, circle.id), 'Shared with the circle'); setShareId(''); }}
               className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
             >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Share
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} {t('community.share')}
             </button>
           </div>
 
@@ -209,8 +208,8 @@ export function CommunityModule({
           {feed.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-8 text-center">
               <HandHeart className="mx-auto h-8 w-8 text-muted" />
-              <p className="mt-2 text-sm font-semibold">Nothing shared yet</p>
-              <p className="mt-1 text-xs text-muted">Share the first item above, or nudge the other families with the invite code.</p>
+              <p className="mt-2 text-sm font-semibold">{t('community.nothingSharedYet')}</p>
+              <p className="mt-1 text-xs text-muted">{t('community.shareTheFirstItemAboveOr')}</p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -233,14 +232,14 @@ export function CommunityModule({
                   </p>
                   <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                      {f.isMine ? 'Shared by your family' : <>From <span className="font-semibold text-fg">{f.fromFamily}</span> — message them to arrange it</>}
+                      {f.isMine ? t('communityModule.sharedByYourFamily') : <>{t('communityModule.from')}{' '}<span className="font-semibold text-fg">{f.fromFamily}</span>{' '}{t('communityModule.messageThemToArrangeIt')}</>}
                     </p>
                     {f.isMine && (
                       <button
                         type="button"
                         onClick={() => run(() => unshareListingAction(f.listing.id, f.circleId), 'Removed from the circle')}
                         disabled={pending}
-                        title="Stop sharing"
+                        title={t('communityModule.stopSharing')}
                         className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted transition hover:text-rose-400 disabled:opacity-50"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -256,9 +255,9 @@ export function CommunityModule({
         migrated && circles.length === 0 && (
           <div className="mt-6 rounded-2xl border border-dashed border-border p-8 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-brand-text/60" />
-            <p className="mt-2 text-sm font-semibold">Your family isn&apos;t in a circle yet</p>
+            <p className="mt-2 text-sm font-semibold">{t('community.yourFamilyIsnAposTIn')}</p>
             <p className="mx-auto mt-1 max-w-sm text-xs text-muted">
-              Start one for your street, class or team and share the invite code — or paste a code a friend sent you.
+              {t('community.startOneForYourStreetClass')}
             </p>
           </div>
         )

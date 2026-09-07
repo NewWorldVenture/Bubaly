@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RefreshCw, Unplug, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type RunResult = { imported: number; exported: number; skipped: number; conflicts: number; error?: string };
 
@@ -11,6 +12,7 @@ type RunResult = { imported: number; exported: number; skipped: number; conflict
  * Disconnect posts to the generic revoke route.
  */
 export function ProviderControls({ provider }: { provider: string }) {
+  const t = useTranslations();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function ProviderControls({ provider }: { provider: string }) {
       if (!res.ok || data.error) setError(data.error ?? `Sync failed (${res.status})`);
       setResult(data);
     } catch {
-      setError('Network error — please try again.');
+      setError(t('providerControls.networkErrorPleaseTryAgain'));
     } finally {
       setBusy(false);
     }
@@ -50,7 +52,7 @@ export function ProviderControls({ provider }: { provider: string }) {
             type="submit"
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium transition hover:bg-elevated"
           >
-            <Unplug className="h-4 w-4" /> Disconnect
+            <Unplug className="h-4 w-4" /> {t('providerControls.disconnect')}
           </button>
         </form>
       </div>
@@ -59,7 +61,7 @@ export function ProviderControls({ provider }: { provider: string }) {
         <div className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>
-            Synced — imported {result.imported}, exported {result.exported}, skipped {result.skipped}
+            {t('providerControls.syncedImported')} {result.imported}{t('providerControls.exported')} {result.exported}{t('providerControls.skipped')} {result.skipped}
             {result.conflicts ? `, ${result.conflicts} conflict(s) need review` : ''}.
           </span>
         </div>

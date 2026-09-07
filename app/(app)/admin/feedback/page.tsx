@@ -6,11 +6,13 @@ import type { IdeaRow } from '@/lib/feedback/board';
 import { githubRepoStatus } from '@/lib/integrations/github';
 import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/components/admin/feedback-admin';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminFeedbackPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   const [ideasResult, commentsResult, notesResult, gh] = await Promise.all([
@@ -48,9 +50,9 @@ export default async function AdminFeedbackPage() {
             <MessagesSquare className="h-6 w-6 text-brand-text" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Feedback &amp; Ideas</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminFeedback.feedbackAmpIdeas')}</h1>
             <p className="mt-1 text-sm text-muted">
-              Every idea and bug families submit at <code className="text-xs">/feedback</code> — received here,
+              {t('adminFeedback.everyIdeaAndBugFamiliesSubmit')} <code className="text-xs">/feedback</code> — received here,
               mirrored to the GitHub tracker (bugs + enhancements), and reconciled back by the bot. Act on any of
               it: move it through the roadmap, note it, pin it, reply as the team, or remove spam.
             </p>
@@ -61,7 +63,7 @@ export default async function AdminFeedbackPage() {
             <Github className="h-3.5 w-3.5" /> {gh.ok ? `Tracker: ${gh.repo}` : 'GitHub not configured'}
           </span>
           <Link href="/feedback" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted transition hover:bg-elevated hover:text-fg">
-            Public board <ExternalLink className="h-3.5 w-3.5" />
+            {t('adminFeedback.publicBoard')} <ExternalLink className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
@@ -76,15 +78,16 @@ export default async function AdminFeedbackPage() {
   );
 }
 
-function AdminFeedbackReadError() {
+async function AdminFeedbackReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Feedback &amp; Ideas</h1>
-        <p className="mt-1 text-sm text-muted">Ideas and bug reports from the public feedback board.</p>
+        <p className="mt-1 text-sm text-muted">{t('feedback.ideasAndBugReportsFrom')}</p>
       </div>
-      <ErrorState message="Could not load feedback from Supabase. Refresh and try again." />
-      <a href="/admin/feedback" className="text-sm font-medium text-brand-text underline">Refresh feedback</a>
+      <ErrorState message={t('feedback.couldNotLoadFeedbackFrom')} />
+      <a href="/admin/feedback" className="text-sm font-medium text-brand-text underline">{t('feedback.refreshFeedback')}</a>
     </div>
   );
 }

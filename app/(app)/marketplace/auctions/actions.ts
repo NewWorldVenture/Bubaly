@@ -5,6 +5,7 @@
 // requireUserContext; the RPC row-locks the listing so concurrent bids can
 // never both win. Reads stay under RLS.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 
@@ -12,12 +13,12 @@ type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string
 
 const BID_REASON: Record<string, string> = {
   unauthorized: 'You can’t place a bid for this account.',
-  invalid_amount: 'Enter a valid bid amount.',
+  invalid_amount: 'actions.enterAValidBidAmount',
   not_found: 'That listing no longer exists.',
   not_auction: 'This listing isn’t an auction.',
   not_available: 'Bidding has closed on this listing.',
-  ended: 'This auction has ended.',
-  not_started: 'This auction hasn’t started yet.',
+  ended: 'actions.thisAuctionHasEnded',
+  not_started: 'actions.thisAuctionHasnTStarted',
   own_listing: 'You can’t bid on your own family’s listing.',
   too_low: 'Your bid is below the minimum — raise it and try again.',
 };
@@ -28,11 +29,12 @@ const BID_REASON: Record<string, string> = {
  * clock on a last-minute bid (anti-snipe).
  */
 export async function placeBidAction(input: { listingId: string; maxCents: number }): Promise<Result<{ leading: boolean; currentCents: number; extended?: boolean }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const maxCents = Math.round(input.maxCents);
   if (!input.listingId || !Number.isFinite(maxCents) || maxCents <= 0 || maxCents > 1_000_000_000_00) {
-    return { ok: false, error: 'Enter a valid bid amount.' };
+    return { ok: false, error: t('actions.enterAValidBidAmount') };
   }
 
   const { data, error } = await supabase.rpc('marketplace_place_bid', {
@@ -41,12 +43,19 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
     p_bidder_family_id: ctx.active.familyId,
     p_max_cents: maxCents,
   });
-  if (error) return { ok: false, error: 'Could not place that bid right now.' };
+  if (error) return { ok: false, error: t('actions.couldNotPlaceThatBid') };
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; min_cents?: number; leading?: boolean; current_cents?: number; extended?: boolean };
   if (!res.ok) {
-    const msg = BID_REASON[res.reason ?? ''] ?? 'Could not place that bid.';
-    return { ok: false, error: res.reason === 'too_low' && res.min_cents ? `Minimum bid is $${(res.min_cents / 100).toFixed(2)}.` : msg };
+    // BID_REASON holds KEYS, because it is built once at module load and the
+    // locale belongs to the request. Translating happens here, where it is known.
+    const msg = t(BID_REASON[res.reason ?? ''] ?? 'actions.couldNotPlaceThatBid');
+    return {
+      ok: false,
+      error: res.reason === 'too_low' && res.min_cents
+        ? t('actions.minimumBidIs', { amount: `$${(res.min_cents / 100).toFixed(2)}` })
+        : msg,
+    };
   }
 
   revalidatePath(`/marketplace/item/${input.listingId}`);
@@ -60,23 +69,24 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
  * buyers can't both win. Records the winning member as buyer.
  */
 export async function buyNowAction(listingId: string): Promise<Result<{ orderId: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  if (!listingId) return { ok: false, error: 'Invalid listing.' };
+  if (!listingId) return { ok: false, error: t('actions.invalidListing') };
   const { data, error } = await supabase.rpc('marketplace_buy_now', {
     p_listing_id: listingId,
     p_buyer_member_id: ctx.active.member.id,
     p_buyer_family_id: ctx.active.familyId,
   });
-  if (error) return { ok: false, error: 'Could not complete Buy-It-Now right now.' };
+  if (error) return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
   const result = (data ?? {}) as { ok?: boolean; reason?: string; order_id?: string };
   if (!result.ok || !result.order_id) {
     const reason = result.reason;
-    if (reason === 'own_listing') return { ok: false, error: 'You can’t buy your own family’s listing.' };
-    if (reason === 'ended') return { ok: false, error: 'This auction has ended.' };
-    if (reason === 'not_started') return { ok: false, error: 'This auction hasn’t started yet.' };
-    if (reason === 'not_found') return { ok: false, error: 'Listing not found.' };
-    return { ok: false, error: 'Buy-It-Now isn’t available on this listing.' };
+    if (reason === 'own_listing') return { ok: false, error: t('actions.youCanTBuyYour') };
+    if (reason === 'ended') return { ok: false, error: t('actions.thisAuctionHasEnded') };
+    if (reason === 'not_started') return { ok: false, error: t('actions.thisAuctionHasnTStarted') };
+    if (reason === 'not_found') return { ok: false, error: t('actions.listingNotFound') };
+    return { ok: false, error: t('actions.buyItNowIsnT') };
   }
 
   revalidatePath(`/marketplace/item/${listingId}`);

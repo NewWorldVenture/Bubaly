@@ -25,6 +25,7 @@ import {
   type OpportunityLike, type UrgencyBucket,
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Opportunity = Tables<'opportunities'>;
 
@@ -53,6 +54,7 @@ const blank = {
 };
 
 export function SignupsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -93,7 +95,7 @@ export function SignupsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(t('signupsModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -127,7 +129,7 @@ export function SignupsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Signup deleted');
+    success(t('signupsModule.signupDeleted'));
   }
 
   const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
@@ -147,12 +149,12 @@ export function SignupsModule() {
   return (
     <div>
       <PageHeader
-        title="Registrations & Signups"
-        description="Never miss a camp, school, or activity registration deadline again."
+        title={t('signups.registrationsSignups')}
+        description={t('signupsModule.neverMissACampSchool')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="signups" iconOnly />
-            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>}
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('signups.addSignup')}</Button>}
           </div>
         }
       />
@@ -161,19 +163,19 @@ export function SignupsModule() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="rounded-2xl bg-surface/50 border border-border p-4 text-center">
           <div className="text-2xl font-bold text-fg">{stats.open}</div>
-          <div className="text-xs text-muted mt-0.5">Open</div>
+          <div className="text-xs text-muted mt-0.5">{t('signups.open')}</div>
         </div>
         <div className={cn('rounded-2xl border p-4 text-center', stats.closingSoon > 0 ? 'bg-amber-500/5 border-amber-500/30' : 'bg-surface/50 border-border')}>
           <div className={cn('text-2xl font-bold', stats.closingSoon > 0 ? 'text-amber-400' : 'text-fg')}>{stats.closingSoon}</div>
-          <div className="text-xs text-muted mt-0.5">Closing soon</div>
+          <div className="text-xs text-muted mt-0.5">{t('signups.closingSoon')}</div>
         </div>
         <div className={cn('rounded-2xl border p-4 text-center', stats.missed > 0 ? 'bg-rose-500/5 border-rose-500/30' : 'bg-surface/50 border-border')}>
           <div className={cn('text-2xl font-bold', stats.missed > 0 ? 'text-rose-400' : 'text-fg')}>{stats.missed}</div>
-          <div className="text-xs text-muted mt-0.5">Missed</div>
+          <div className="text-xs text-muted mt-0.5">{t('signups.missed')}</div>
         </div>
         <div className="rounded-2xl bg-surface/50 border border-border p-4 text-center">
           <div className="text-2xl font-bold text-emerald-400">{stats.registered}</div>
-          <div className="text-xs text-muted mt-0.5">Registered</div>
+          <div className="text-xs text-muted mt-0.5">{t('signups.registered')}</div>
         </div>
       </div>
 
@@ -189,14 +191,14 @@ export function SignupsModule() {
         </div>
         <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Show decided
+          {t('signups.showDecided')}
         </label>
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="No signups tracked"
+        <EmptyState icon={CalendarClock} title={t('signups.noSignupsTracked')}
           description={canEdit ? 'Add camp, school, and activity registrations to track their deadlines.' : 'No signups have been added yet.'}
-          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>} />
+          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('signups.addSignup')}</Button>} />
       ) : (
         <div className="space-y-6">
           {buckets.map((bucket) => {
@@ -224,19 +226,19 @@ export function SignupsModule() {
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                               {o.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(o.member_id) ?? '?'} size={14} />{memberName(o.member_id)}</span>}
-                              {o.deadline && <span className={cn('inline-flex items-center gap-1', missed && 'text-rose-400')}><CalendarClock className="h-3.5 w-3.5" />Deadline {fmtDate(o.deadline)} · {countdownLabel(o)}</span>}
+                              {o.deadline && <span className={cn('inline-flex items-center gap-1', missed && 'text-rose-400')}><CalendarClock className="h-3.5 w-3.5" />{t('signups.deadline')} {fmtDate(o.deadline)} · {countdownLabel(o)}</span>}
                               {o.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{o.cost}</span>}
-                              {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />Register</a>}
+                              {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('signups.register')}</a>}
                             </div>
                             {o.notes && <p className="mt-1.5 text-sm text-fg/80">{o.notes}</p>}
                           </div>
                           {canEdit && (
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {o.status !== 'registered' && (
-                                <button onClick={() => setStatus(o, 'registered')} aria-label="Mark registered" className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><Check className="h-4 w-4" /></button>
+                                <button onClick={() => setStatus(o, 'registered')} aria-label={t('signups.markRegistered')} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><Check className="h-4 w-4" /></button>
                               )}
-                              <button onClick={() => openEdit(o)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                              <button onClick={() => remove(o)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                              <button onClick={() => openEdit(o)} aria-label={t('signups.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                              <button onClick={() => remove(o)} aria-label={t('signups.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                             </div>
                           )}
                         </div>
@@ -253,11 +255,11 @@ export function SignupsModule() {
       {/* Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit signup' : 'Add signup'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What is it?" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Summer soccer camp" autoFocus />}
+          <Field label={t('signups.whatIsIt')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('signups.eGSummerSoccerCamp')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category">
+            <Field label={t('signups.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
@@ -267,25 +269,25 @@ export function SignupsModule() {
             <Field label="For">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-                  <option value="">Whole family</option>
+                  <option value="">{t('signups.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Registration opens">
+            <Field label={t('signups.registrationOpens')}>
               {(id) => <Input id={id} type="date" value={form.opens_at} onChange={(e) => setForm((f) => ({ ...f, opens_at: e.target.value }))} />}
             </Field>
-            <Field label="Deadline">
+            <Field label={t('signups.deadline')}>
               {(id) => <Input id={id} type="date" value={form.deadline} onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))} />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Cost ($)">
+            <Field label={t('signups.cost')}>
               {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} placeholder="0.00" />}
             </Field>
-            <Field label="Status">
+            <Field label={t('signups.status')}>
               {(id) => (
                 <Select id={id} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as OpportunityStatus }))}>
                   {(Object.keys(OPPORTUNITY_STATUS_LABELS) as OpportunityStatus[]).map((s) => <option key={s} value={s}>{OPPORTUNITY_STATUS_LABELS[s]}</option>)}
@@ -293,14 +295,14 @@ export function SignupsModule() {
               )}
             </Field>
           </div>
-          <Field label="Registration link">
+          <Field label={t('signups.registrationLink')}>
             {(id) => <Input id={id} type="url" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Spots limited, bring forms…" />}
+          <Field label={t('signups.notes')}>
+            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('signups.spotsLimitedBringForms')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('signups.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add signup'}</Button>
           </div>
         </form>

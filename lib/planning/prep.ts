@@ -122,8 +122,9 @@ export function generatePrepPlans(signals: HorizonSignal[], now: Date = new Date
 function urgencyFor(daysUntil: number, steps: PrepStep[]): Urgency {
   if (steps.some((s) => s.overdue)) return 'now';
   if (daysUntil <= 7) return 'now';
-  const nextOpens = Math.min(...steps.map((s) => s.leadDays));
-  if (daysUntil - nextOpens <= 7) return 'soon';
+  const daysUntilFirstStep = daysUntil - Math.max(...steps.map((s) => s.leadDays));
+  if (daysUntilFirstStep <= 0) return 'now';
+  if (daysUntilFirstStep <= 7) return 'soon';
   return 'later';
 }
 

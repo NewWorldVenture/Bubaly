@@ -20,12 +20,14 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function categoryLabel(category: string): string {
   return (FACT_CATEGORY_LABELS as Record<string, string>)[category] ?? category;
 }
 
 export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [items, setItems] = useState<AiMemoryItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
   if (!items) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading what Bubaly remembers…
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t('aiMemory.loadingWhatBubalyRemembers')}
       </Card>
     );
   }
@@ -66,10 +68,10 @@ export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="flex items-center gap-2 text-sm font-semibold">
-            <Brain className="h-4 w-4 text-brand-text" aria-hidden /> What Bubaly remembers
+            <Brain className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiMemory.whatBubalyRemembers')}
           </h4>
           <p id="ai-memory-hint" className="mt-1 text-sm text-muted">
-            Only what Bubaly worked out for itself. Anything a person typed into Family Memory stays put.
+            {t('aiMemory.onlyWhatBubalyWorkedOutFor')}
           </p>
         </div>
         {canManage && facts.length + suggestions.length > 0 && (
@@ -87,25 +89,25 @@ export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
                 }}
               >
                 {busy === 'clear' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="mr-1.5 h-4 w-4" aria-hidden />}
-                Yes, forget it all
+                {t('aiMemory.yesForgetItAll')}
               </Button>
-              <Button variant="ghost" onClick={() => setConfirmingClear(false)}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setConfirmingClear(false)}>{t('aiMemory.cancel')}</Button>
             </div>
           ) : (
             <Button variant="secondary" disabled={busy !== null} onClick={() => setConfirmingClear(true)} aria-describedby="ai-memory-hint">
-              <Trash2 className="mr-1.5 h-4 w-4" aria-hidden /> Clear
+              <Trash2 className="mr-1.5 h-4 w-4" aria-hidden /> {t('aiMemory.clear')}
             </Button>
           )
         )}
       </div>
 
       {items.length === 0 && (
-        <p className="mt-4 text-sm text-muted">Bubaly has not worked anything out about your family yet.</p>
+        <p className="mt-4 text-sm text-muted">{t('aiMemory.bubalyHasNotWorkedAnythingOut')}</p>
       )}
 
       {suggestions.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Waiting for you to say yes</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('aiMemory.waitingForYouToSayYes')}</p>
           <ul className="space-y-2">
             {suggestions.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/40 p-3">
@@ -144,7 +146,7 @@ export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
 
       {facts.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Bubaly is using these</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('aiMemory.bubalyIsUsingThese')}</p>
           <ul className="space-y-2">
             {facts.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/40 p-3">
@@ -170,7 +172,7 @@ export function AIMemoryPanel({ canManage }: { canManage: boolean }) {
       )}
 
       {!canManage && items.length > 0 && (
-        <p className="mt-3 text-xs text-muted">Only a parent or adult can change what Bubaly remembers.</p>
+        <p className="mt-3 text-xs text-muted">{t('aiMemory.onlyAParentOrAdultCan')}</p>
       )}
     </Card>
   );

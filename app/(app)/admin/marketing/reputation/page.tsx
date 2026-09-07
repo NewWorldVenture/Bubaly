@@ -10,6 +10,7 @@ import {
   saveTestimonialAction, togglePublishTestimonialAction, deleteTestimonialAction,
   saveCaseStudyAction, deleteCaseStudyAction,
 } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Reputation & Trust', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm'
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 export default async function ReputationPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const [testimonialsResult, caseStudiesResult] = await Promise.all([
     supabase.from('testimonials').select('*').order('sort_order').order('created_at', { ascending: false }).limit(200),
@@ -38,22 +40,22 @@ export default async function ReputationPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Curated social proof — published testimonials and case studies that power conversions and enterprise sales.</p>
+      <p className="text-sm text-muted">{tr('adminMarketingReputation.curatedSocialProofPublishedTestimonialsAnd')}</p>
 
       {/* Testimonials */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Quote className="h-4 w-4 text-brand-text" /> Testimonials</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Quote className="h-4 w-4 text-brand-text" /> {tr('adminMarketingReputation.testimonials')}</h2>
         <form action={saveTestimonialAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="author_name" required placeholder="Author name" className={inputCls} />
-          <input name="author_role" placeholder="Role (e.g. Mom of 3)" className={inputCls} />
-          <input name="company" placeholder="Company / city" className={inputCls} />
-          <input name="rating" type="number" min="1" max="5" placeholder="Rating 1–5" className={inputCls} />
-          <textarea name="quote" required placeholder="“Bubaly changed how our family…”" className={`${inputCls} h-auto py-2 sm:col-span-2 lg:col-span-3`} rows={2} />
-          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> Publish</label>
-          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>Add testimonial</button>
+          <input name="author_name" required placeholder={tr('adminMarketingReputation.authorName')} className={inputCls} />
+          <input name="author_role" placeholder={tr('adminMarketingReputation.roleEGMomOf3')} className={inputCls} />
+          <input name="company" placeholder={tr('adminMarketingReputation.companyCity')} className={inputCls} />
+          <input name="rating" type="number" min="1" max="5" placeholder={tr('adminMarketingReputation.rating15')} className={inputCls} />
+          <textarea name="quote" required placeholder={tr('adminMarketingReputation.bubalyChangedHowOurFamily')} className={`${inputCls} h-auto py-2 sm:col-span-2 lg:col-span-3`} rows={2} />
+          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> {tr('adminMarketingReputation.publish')}</label>
+          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addTestimonial')}</button>
         </form>
         {tList.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted">No testimonials yet.</p>
+          <p className="py-4 text-center text-sm text-muted">{tr('adminMarketingReputation.noTestimonialsYet')}</p>
         ) : (
           <div className="space-y-2">
             {tList.map((t) => (
@@ -86,23 +88,23 @@ export default async function ReputationPage() {
 
       {/* Case studies */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BookOpenCheck className="h-4 w-4 text-brand-text" /> Case studies</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BookOpenCheck className="h-4 w-4 text-brand-text" /> {tr('adminMarketingReputation.caseStudies')}</h2>
         <form action={saveCaseStudyAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
-          <input name="customer_name" placeholder="Customer" className={inputCls} />
-          <input name="industry" placeholder="Industry / segment" className={inputCls} />
-          <input name="result_metric" placeholder="Result (e.g. Saved 6 hrs/week)" className={`${inputCls} lg:col-span-2`} />
-          <input name="summary" placeholder="One-line summary" className={`${inputCls} lg:col-span-2`} />
-          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> Publish</label>
-          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>Add case study</button>
+          <input name="title" required placeholder={tr('adminMarketingReputation.title')} className={`${inputCls} lg:col-span-2`} />
+          <input name="customer_name" placeholder={tr('adminMarketingReputation.customer')} className={inputCls} />
+          <input name="industry" placeholder={tr('adminMarketingReputation.industrySegment')} className={inputCls} />
+          <input name="result_metric" placeholder={tr('adminMarketingReputation.resultEGSaved6Hrs')} className={`${inputCls} lg:col-span-2`} />
+          <input name="summary" placeholder={tr('adminMarketingReputation.oneLineSummary')} className={`${inputCls} lg:col-span-2`} />
+          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> {tr('adminMarketingReputation.publish')}</label>
+          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addCaseStudy')}</button>
         </form>
         {cList.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted">No case studies yet.</p>
+          <p className="py-4 text-center text-sm text-muted">{tr('adminMarketingReputation.noCaseStudiesYet')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
-                <tr><th className="pb-2">Title</th><th className="pb-2">Customer</th><th className="pb-2">Result</th><th className="pb-2">Status</th><th className="pb-2">Added</th><th className="pb-2"></th></tr>
+                <tr><th className="pb-2">{tr('adminMarketingReputation.title')}</th><th className="pb-2">{tr('adminMarketingReputation.customer')}</th><th className="pb-2">{tr('adminMarketingReputation.result')}</th><th className="pb-2">{tr('adminMarketingReputation.status')}</th><th className="pb-2">{tr('adminMarketingReputation.added')}</th><th className="pb-2"></th></tr>
               </thead>
               <tbody>
                 {cList.map((c) => (
@@ -114,7 +116,7 @@ export default async function ReputationPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteCaseStudyAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{tr('reputation.delete')}</button>
                       </form>
                     </td>
                   </tr>
@@ -128,15 +130,16 @@ export default async function ReputationPage() {
   );
 }
 
-function AdminReputationReadError() {
+async function AdminReputationReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reputation &amp; Trust</h1>
-        <p className="mt-1 text-sm text-muted">Manage testimonials and case studies used across the site.</p>
+        <p className="mt-1 text-sm text-muted">{tr('reputation.manageTestimonialsAndCaseStudies')}</p>
       </div>
-      <ErrorState message="Could not load reputation content from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/reputation" className="text-sm font-medium text-brand-text underline">Refresh reputation</Link>
+      <ErrorState message={tr('reputation.couldNotLoadReputationContent')} />
+      <Link href="/admin/marketing/reputation" className="text-sm font-medium text-brand-text underline">{tr('reputation.refreshReputation')}</Link>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
@@ -9,7 +10,8 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/response-schema';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
-import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { dayKeyInTz, zonedDayBoundsMs, scopeFromUserContext } from '@/lib/services/scope';
+import { withAiRequest } from '@/lib/ai/observability';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -20,18 +22,19 @@ function normalizeBriefTimezone(candidate: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-briefing:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many briefing requests. Please try again shortly.' },
+      { error: tr('briefing.tooManyBriefingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    if (!boundedBody.ok) return NextResponse.json({ error: tr('briefing.requestBodyIsTooLarge') }, { status: 400 });
     // The caller's `type` is interpolated into the SYSTEM prompt and decides
     // which stored brief this overwrites, so it may only ever be one of these
     // three words. It arrived unchecked: the client's "This Week" tab posts
@@ -292,17 +295,35 @@ ${UNTRUSTED_CONTENT_RULE}
 
     try {
       if (await isAIConfigured()) {
-        const provider = await resolveProvider();
-        const completion = await provider.complete({
-          system: systemPrompt,
-          // `context` is the family's own rows — event titles, reminder text,
-          // meal names, contractor notes — assembled into one blob. Same §44 rule
-          // as the context builder applies to the same strings.
-          messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${fenceUntrustedBlock('briefing_data', context, 24_000)}` }],
-          tools: [],
-          maxTokens: 2000,
-        });
-        briefing = parseBriefingResponse(completion.text);
+        // §33: the brief is one of the two surfaces the row names by name, and
+        // until now a failure here left nothing behind — the catch below is
+        // silent BY DESIGN (a provider error may carry family context), so
+        // "Bubaly stopped doing my morning brief" had no evidence anywhere.
+        // The wrapper records the model, tokens, latency and error; the fallback
+        // behaviour is unchanged.
+        briefing = await withAiRequest(
+          scopeFromUserContext(ctx, supabase),
+          { feature: `briefing.${type}`, text: `Generate ${type} briefing` },
+          async (obs) => {
+            const provider = await resolveProvider();
+            const completion = await provider.complete({
+              system: systemPrompt,
+              // `context` is the family's own rows — event titles, reminder text,
+              // meal names, contractor notes — assembled into one blob. Same §44 rule
+              // as the context builder applies to the same strings.
+              messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${fenceUntrustedBlock('briefing_data', context, 24_000)}` }],
+              tools: [],
+              maxTokens: 2000,
+            });
+            obs.used(completion.model ?? 'unknown', completion.usage);
+            const parsed = parseBriefingResponse(completion.text);
+            // Unparseable output takes the deterministic fallback below, and the
+            // request row must say so rather than reporting a clean completion —
+            // "the model answered with junk" is exactly the diagnosis §33 wants.
+            if (!parsed) throw new Error('The model returned a briefing that could not be parsed.');
+            return parsed;
+          },
+        );
       }
     } catch {
       // AI is optional enrichment; retain the fresh deterministic fallback.
@@ -383,7 +404,7 @@ ${UNTRUSTED_CONTENT_RULE}
     return NextResponse.json({ briefing, digest, generatedAt: new Date().toISOString() });
   } catch (err) {
     console.error('Briefing error:', err);
-    return NextResponse.json({ error: 'Failed to generate briefing' }, { status: 500 });
+    return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });
   }
 }
 

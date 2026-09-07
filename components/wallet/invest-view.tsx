@@ -19,6 +19,7 @@ import {
   orderAmountCents, type Holding as PortHolding, type PriceMap,
 } from '@/lib/invest/portfolio';
 import { placeInvestOrderAction, decideInvestOrderAction } from '@/app/(app)/wallet/invest/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type InvestAsset = { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; priceCents: number; riskLevel: string };
 export type InvestChild = { id: string; name: string; color: string | null; investCashCents: number };
@@ -28,6 +29,7 @@ export type PendingOrder = { id: string; childName: string; assetEmoji: string; 
 export function InvestView(props: {
   assets: InvestAsset[]; childWallets: InvestChild[]; holdings: Holding[]; pendingOrders: PendingOrder[]; canManage: boolean;
 }) {
+  const tr = useTranslations();
   const { assets, childWallets, holdings, pendingOrders, canManage } = props;
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -50,17 +52,17 @@ export function InvestView(props: {
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title="Invest" description="A safe place to learn investing with pretend money." />
+      <PageHeader title={tr('invest.invest')} description={tr('invest.aSafePlaceToLearn')} />
 
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
-        <p>This is an <strong>educational simulation</strong> — kids practice with pretend money from their Invest bucket. It’s not real investing, there are no real companies, and values can go up or down. Nothing here is financial advice.</p>
+        <p>{tr('invest.thisIsAn')} <strong>{tr('invest.educationalSimulation')}</strong>{' '}{tr('invest.kidsPracticeWithPretendMoney')}</p>
       </div>
 
       {/* Manager: pending orders */}
       {canManage && pendingOrders.length > 0 && (
         <div className="mt-4 rounded-2xl border border-border bg-surface/40 p-4">
-          <h3 className="mb-2 font-semibold">Approvals needed</h3>
+          <h3 className="mb-2 font-semibold">{tr('invest.approvalsNeeded')}</h3>
           <div className="space-y-2">
             {pendingOrders.map((o) => (
               <div key={o.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-bg/40 p-2.5">
@@ -78,7 +80,7 @@ export function InvestView(props: {
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={TrendingUp} title="No child wallets yet" description="Activate the Family Wallet and add children to start learning to invest." />
+        <EmptyState icon={TrendingUp} title={tr('invest.noChildWalletsYet')} description={tr('investView.activateTheFamilyWalletAnd')} />
       ) : (
         <div className="mt-4 space-y-4">
           {childWallets.map((child) => (
@@ -98,6 +100,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   child: InvestChild; assets: InvestAsset[]; assetById: Map<string, InvestAsset>; prices: PriceMap;
   holdings: Holding[]; busy: string | null; onTrade: (assetId: string, side: 'buy' | 'sell', shares: number) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const portHoldings: PortHolding[] = holdings.map((h) => ({ assetId: h.assetId, shares: h.shares, avgCostCents: h.avgCostCents }));
   const value = portfolioValue(portHoldings, prices);
@@ -117,7 +120,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   const estCost = asset ? orderAmountCents(shares, asset.priceCents) : 0;
 
   function trade() {
-    if (shares <= 0) return toastError('Enter how many shares.');
+    if (shares <= 0) return toastError(tr('investView.enterHowManyShares'));
     onTrade(assetId, side, shares);
     setSharesStr('');
   }
@@ -127,9 +130,9 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
     try {
       const res = await fetch('/api/ai/invest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childWalletId: child.id, assetId }) });
       const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not explain right now.'); return; }
+      if (!res.ok) { toastError(data.error ?? tr('investView.couldNotExplainRightNow')); return; }
       setExplainer(data.coaching);
-    } catch { toastError('Could not explain right now.'); }
+    } catch { toastError(tr('investView.couldNotExplainRightNow')); }
     finally { setExplaining(false); }
   }
 
@@ -140,7 +143,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
           <Avatar name={child.name} color={child.color ?? undefined} size={36} className="rounded-full" />
           <div>
             <p className="font-semibold">{child.name}</p>
-            <p className="text-xs text-muted">{formatCents(child.investCashCents)} ready to invest</p>
+            <p className="text-xs text-muted">{formatCents(child.investCashCents)} {tr('invest.readyToInvest')}</p>
           </div>
         </div>
         <div className="text-right">
@@ -182,12 +185,12 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
         <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
           {assets.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name} — {formatCents(a.priceCents)}</option>)}
         </select>
-        <input type="number" min="0" step="0.01" value={sharesStr} onChange={(e) => setSharesStr(e.target.value)} placeholder="Shares" className="h-9 w-24 rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
+        <input type="number" min="0" step="0.01" value={sharesStr} onChange={(e) => setSharesStr(e.target.value)} placeholder={tr('invest.shares')} className="h-9 w-24 rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
         {estCost > 0 && <span className="text-xs text-muted">≈ {formatCents(estCost)}</span>}
-        <Button onClick={trade} loading={busy === `trade-${child.id}`} disabled={!assetId || shares <= 0}>Request</Button>
+        <Button onClick={trade} loading={busy === `trade-${child.id}`} disabled={!assetId || shares <= 0}>{tr('invest.request')}</Button>
         <button type="button" onClick={explain} disabled={explaining}
           className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-brand-text hover:bg-elevated disabled:opacity-60">
-          {explaining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Explain
+          {explaining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {tr('invest.explain')}
         </button>
       </div>
 
@@ -208,6 +211,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
 
 // A fun compound-growth teaching tool (not a prediction).
 function GrowthProjector() {
+  const tr = useTranslations();
   const [start, setStart] = useState(50);
   const [monthly, setMonthly] = useState(10);
   const [years, setYears] = useState(10);
@@ -217,16 +221,16 @@ function GrowthProjector() {
 
   return (
     <div className="mt-6 rounded-2xl border border-border bg-surface/40 p-4">
-      <h3 className="font-semibold">✨ The magic of compound growth</h3>
-      <p className="mb-3 text-xs text-muted">See how money can grow over time at an illustrative {rate}% a year. (Just for learning — real results vary and can go down.)</p>
+      <h3 className="font-semibold">{tr('invest.theMagicOfCompoundGrowth')}</h3>
+      <p className="mb-3 text-xs text-muted">{tr('invest.seeHowMoneyCanGrowOver')} {rate}{tr('invest.aYearJustForLearningReal')}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label={`Start: $${start}`}><input type="range" min={0} max={500} step={10} value={start} onChange={(e) => setStart(Number(e.target.value))} className="w-full" /></Field>
         <Field label={`Each month: $${monthly}`}><input type="range" min={0} max={100} step={5} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} className="w-full" /></Field>
         <Field label={`For: ${years} years`}><input type="range" min={1} max={18} step={1} value={years} onChange={(e) => setYears(Number(e.target.value))} className="w-full" /></Field>
       </div>
       <div className="mt-3 flex items-end justify-between rounded-xl bg-bg/40 p-3">
-        <div><p className="text-xs text-muted">You’d put in</p><p className="font-semibold">{formatCents(contributed)}</p></div>
-        <div className="text-right"><p className="text-xs text-muted">Could grow to</p><p className="text-xl font-bold text-success">{formatCents(projected)}</p></div>
+        <div><p className="text-xs text-muted">{tr('invest.youdPutIn')}</p><p className="font-semibold">{formatCents(contributed)}</p></div>
+        <div className="text-right"><p className="text-xs text-muted">{tr('invest.couldGrowTo')}</p><p className="text-xl font-bold text-success">{formatCents(projected)}</p></div>
       </div>
     </div>
   );

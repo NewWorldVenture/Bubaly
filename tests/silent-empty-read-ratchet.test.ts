@@ -63,7 +63,8 @@ const BASELINE = new Set<string>([
   // reads keep prior state on error instead of false-emptying; removed.
   'components/modules/billing-module.tsx',
   'components/modules/concierge-calls-module.tsx',
-  // grocery-module fixed under A-10 (PLA-0625) — removed from baseline.
+  // grocery-module fixed under A-10 (PLA-0625), then deleted as an unreachable
+  // duplicate of shopping-module; it is neither an offender nor a file any more.
   // settings-module fixed under A-05 (PLA-0791) — profile read now captures
   // `error` + guards the destructive save; removed from baseline.
   // weather-module fixed under A-05 (PLA-0792) — loadSaved keeps prior cities

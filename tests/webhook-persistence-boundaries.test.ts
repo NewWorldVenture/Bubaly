@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const stripeRoute = readFileSync('app/api/webhooks/stripe/route.ts', 'utf8');
@@ -12,7 +13,7 @@ describe('webhook persistence boundaries', () => {
     expect(stripeRoute).toContain('priorSubscriptionError');
     expect(stripeRoute).toContain('Billing state lookup failed');
     expect(stripeRoute).toContain('Checkout persistence failed');
-    expect(stripeRoute).toContain("Webhook storage unavailable");
+    expectTranslates(stripeRoute, 'stripe.webhookStorageUnavailable', "Webhook storage unavailable");
     expect(stripeHelper).toContain(".select('stripe_event_id').maybeSingle()");
     expect(stripeHelper).toContain('Stripe webhook event finalization failed');
     expect(stripeHelper).toContain('Stripe webhook error state was not recorded');

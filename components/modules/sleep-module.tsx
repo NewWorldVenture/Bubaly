@@ -19,6 +19,7 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
@@ -34,6 +35,7 @@ const fmtDay = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDat
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -75,39 +77,39 @@ export function SleepModule() {
   async function deleteLog(log: Log) {
     const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
     if (error) return toastError(describeDbError(error));
-    success('Night removed');
+    success(t('sleepModule.nightRemoved'));
   }
 
   async function archiveRoutine(r: Routine) {
     if (!confirm(`Retire “${r.name}”?`)) return;
     const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Routine retired');
+    success(t('sleepModule.routineRetired'));
   }
 
   const loading = logs.loading || routines.loading || checkins.loading;
   const error = logs.error || routines.error || checkins.error;
   const refresh = () => { void logs.refresh(); void routines.refresh(); void checkins.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load sleep data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('sleepModule.couldNotLoadSleepData')} onRetry={refresh} />;
 
   const TrendIcon = summary.trend === 'improving' ? TrendingUp : summary.trend === 'slipping' ? TrendingDown : Minus;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sleep Coach"
-        description="Age-aware targets for every family member, bedtime routines, a two-minute check-in, and a coach that builds the week’s plan from your own nights."
+        title={t('sleep.sleepCoach')}
+        description={t('sleepModule.ageAwareTargetsForEvery')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="sleep" iconOnly />
             <Button variant="secondary" onClick={() => setCheckinOpen(true)}><ClipboardCheck className="h-4 w-4" /> {todaysCheckin ? 'Edit check-in' : '2-min check-in'}</Button>
-            <Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> Log last night</Button>
+            <Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>
           </div>
         }
       />
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Family member">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('sleep.familyMember')}>
         {members.map((m) => {
           const a = ageOn(m.birthday, today);
           return (
@@ -122,26 +124,26 @@ export function SleepModule() {
       {/* Summary */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><BedDouble className="h-4 w-4 text-brand-text" /> Last night</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><BedDouble className="h-4 w-4 text-brand-text" /> {t('sleep.lastNight')}</div>
           {summary.lastNight ? (
             <>
               <p className="mt-2 text-2xl font-bold">{fmtHours(summary.lastNight.duration_min)}</p>
               <p className="mt-1 text-xs text-muted">{fmtTime(summary.lastNight.bedtime)} → {fmtTime(summary.lastNight.wake_time)}{summary.lastNight.quality ? ` · quality ${summary.lastNight.quality}/5` : ''}{summary.lastNight.awakenings ? ` · woke ${summary.lastNight.awakenings}×` : ''}</p>
             </>
-          ) : <p className="mt-2 text-sm text-muted">Not logged yet.</p>}
+          ) : <p className="mt-2 text-sm text-muted">{t('sleep.notLoggedYet')}</p>}
         </div>
         <div className={cn('rounded-2xl border p-5', summary.status === 'short' ? 'border-amber-500/30 bg-amber-500/10' : summary.status === 'on_track' ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
-          <div className="flex items-center gap-2 text-sm font-semibold"><MoonStar className="h-4 w-4 text-brand-text" /> This week</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><MoonStar className="h-4 w-4 text-brand-text" /> {t('sleep.thisWeek')}</div>
           <p className="mt-2 text-lg font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.nights} of 7 nights logged · target {summary.target.min}–{summary.target.max}h ({summary.target.label})</p>
+          <p className="mt-1 text-xs text-muted">{summary.nights} {t('sleep.of7NightsLoggedTarget')} {summary.target.min}–{summary.target.max}{t('sleep.h')}{summary.target.label})</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-brand-text" /> Consistency</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-brand-text" /> {t('sleep.consistency')}</div>
           <p className="mt-2 text-2xl font-bold">{summary.consistency !== null ? `${summary.consistency}/100` : '—'}</p>
           <p className="mt-1 text-xs text-muted">{summary.adherence !== null ? `${summary.adherence}% of nights within 30 min of the routine` : 'Same bedtime every night scores 100'}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold"><TrendIcon className="h-4 w-4 text-brand-text" /> Trend</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><TrendIcon className="h-4 w-4 text-brand-text" /> {t('sleep.trend')}</div>
           <p className="mt-2 text-2xl font-bold capitalize">{summary.trend === 'unknown' ? '—' : summary.trend}</p>
           <p className="mt-1 text-xs text-muted">{summary.debtMinutes > 0 ? `${fmtHours(summary.debtMinutes)} of sleep debt this week` : 'No sleep debt this week'}</p>
         </div>
@@ -150,11 +152,11 @@ export function SleepModule() {
       {/* Chart */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-semibold">Last 14 nights</span>
-          <span className="text-xs text-muted">band = {summary.target.min}–{summary.target.max}h target</span>
+          <span className="text-sm font-semibold">{t('sleep.last14Nights')}</span>
+          <span className="text-xs text-muted">{t('sleep.band')} {summary.target.min}–{summary.target.max}{t('sleep.hTarget')}</span>
         </div>
         {fortnight.length === 0 ? (
-          <EmptyState icon={MoonStar} title="No nights logged" description="Log last night and the chart, consistency score and coach all come alive." action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> Log last night</Button>} />
+          <EmptyState icon={MoonStar} title={t('sleep.noNightsLogged')} description={t('sleepModule.logLastNightAndThe')} action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>} />
         ) : (
           <div className="relative h-40">
             <div className="absolute inset-x-0 border-t border-dashed border-emerald-400/40" style={{ bottom: `${(summary.target.min * 60 / maxMinutes) * 100}%` }} />
@@ -179,32 +181,32 @@ export function SleepModule() {
         {/* Routine */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> Bedtime routine</span>
+            <span className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> {t('sleep.bedtimeRoutine')}</span>
             <div className="flex items-center gap-1">
               <button onClick={() => setRoutineOpen(true)} aria-label={routine ? 'Edit routine' : 'Create routine'} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-              {routine && <button onClick={() => archiveRoutine(routine)} aria-label="Retire routine" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>}
+              {routine && <button onClick={() => archiveRoutine(routine)} aria-label={t('sleep.retireRoutine')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>}
             </div>
           </div>
           {routine ? (
             <>
-              <p className="text-sm">{routine.name} · lights out <span className="font-semibold">{routine.target_bedtime.slice(0, 5)}</span>, up at <span className="font-semibold">{routine.target_wake.slice(0, 5)}</span></p>
-              <p className="mt-1 text-xs text-muted">{routine.wind_down_min} min wind-down · {routine.days_of_week.length === 7 ? 'every night' : routine.days_of_week.map((d) => DAYS[d]).join(', ')}</p>
+              <p className="text-sm">{routine.name} {t('sleep.lightsOut')} <span className="font-semibold">{routine.target_bedtime.slice(0, 5)}</span>{t('sleep.upAt')} <span className="font-semibold">{routine.target_wake.slice(0, 5)}</span></p>
+              <p className="mt-1 text-xs text-muted">{routine.wind_down_min} {t('sleep.minWindDown')} {routine.days_of_week.length === 7 ? 'every night' : routine.days_of_week.map((d) => DAYS[d]).join(', ')}</p>
               <ol className="mt-3 space-y-1 text-sm">
                 {routine.steps.map((s, i) => <li key={i} className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-brand/15 text-[10px] text-brand-text">{i + 1}</span>{s}</li>)}
               </ol>
             </>
           ) : (
             <div className="text-sm text-muted">
-              <p>No routine yet for {member?.display_name ?? 'this member'}.</p>
-              <p className="mt-2 text-xs">Ideas for a {recommendedSleepHours(age).label}: {routineStepIdeas(age).join(' → ')}</p>
-              <Button size="sm" variant="secondary" className="mt-3" onClick={() => setRoutineOpen(true)}><Plus className="h-3.5 w-3.5" /> Set one up</Button>
+              <p>{t('sleep.noRoutineYetFor')} {member?.display_name ?? 'this member'}.</p>
+              <p className="mt-2 text-xs">{t('sleep.ideasForA')} {recommendedSleepHours(age).label}: {routineStepIdeas(age).join(' → ')}</p>
+              <Button size="sm" variant="secondary" className="mt-3" onClick={() => setRoutineOpen(true)}><Plus className="h-3.5 w-3.5" /> {t('sleep.setOneUp')}</Button>
             </div>
           )}
         </div>
 
         {/* Program */}
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> This week’s program for {member?.display_name ?? 'you'}</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> {t('sleep.thisWeeksProgramFor')} {member?.display_name ?? 'you'}</div>
           <ol className="mt-3 grid gap-2 sm:grid-cols-2">
             {program.map((step) => (
               <li key={step.day} className="flex gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
@@ -215,7 +217,7 @@ export function SleepModule() {
           </ol>
           {correlations.some((c) => c.deltaMinutes !== null) && (
             <div className="mt-4 border-t border-border pt-3">
-              <p className="text-xs font-semibold text-muted">What your own nights say</p>
+              <p className="text-xs font-semibold text-muted">{t('sleep.whatYourOwnNightsSay')}</p>
               <ul className="mt-1 grid gap-1 text-xs sm:grid-cols-3">
                 {correlations.filter((c) => c.deltaMinutes !== null).map((c) => (
                   <li key={c.factor} className={cn('rounded-lg border px-2 py-1', (c.deltaMinutes ?? 0) < -15 ? 'border-amber-500/30 text-amber-200' : (c.deltaMinutes ?? 0) > 15 ? 'border-emerald-500/30 text-emerald-200' : 'border-border text-muted')}>
@@ -229,19 +231,20 @@ export function SleepModule() {
       </div>
 
       {logOpen && memberId && (
-        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success('Night logged'); }} />
+        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success(t('sleepModule.nightLogged')); }} />
       )}
       {routineOpen && memberId && (
-        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success('Routine saved'); }} />
+        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success(t('sleepModule.routineSaved')); }} />
       )}
       {checkinOpen && memberId && (
-        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success('Check-in saved'); }} />
+        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success(t('sleepModule.checkInSaved')); }} />
       )}
     </div>
   );
 }
 
 function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { familyId: string; userId: string; memberId: string; existing: Log | null; onClose: () => void; onSaved: () => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]);
@@ -252,9 +255,9 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
     const f = new FormData(e.currentTarget);
     const bedtime = new Date(String(f.get('bedtime') ?? ''));
     const wake = new Date(String(f.get('wake_time') ?? ''));
-    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError('Enter both times');
+    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError(t('sleepModule.enterBothTimes'));
     const duration = durationMinutes(bedtime.toISOString(), wake.toISOString());
-    if (duration === 0) return toastError('Wake time must be after bedtime');
+    if (duration === 0) return toastError(t('sleepModule.wakeTimeMustBeAfter'));
     setLoading(true);
     const sleepDate = `${wake.getFullYear()}-${String(wake.getMonth() + 1).padStart(2, '0')}-${String(wake.getDate()).padStart(2, '0')}`;
     const { error } = await createClient().from('sleep_logs').upsert({
@@ -268,21 +271,21 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
   }
 
   return (
-    <Modal open title="Log a night" description="The night is filed under the morning it ended." onClose={onClose}>
+    <Modal open title={t('sleep.logANight')} description={t('sleepModule.theNightIsFiledUnder')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Lights out" required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={localInput(defaultBed)} />}</Field>
-          <Field label="Woke up" required>{(id) => <Input id={id} name="wake_time" type="datetime-local" defaultValue={localInput(defaultWake)} />}</Field>
+          <Field label={t('sleep.lightsOut')} required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={localInput(defaultBed)} />}</Field>
+          <Field label={t('sleep.wokeUp')} required>{(id) => <Input id={id} name="wake_time" type="datetime-local" defaultValue={localInput(defaultWake)} />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Quality">{(id) => <Select id={id} name="quality" defaultValue={existing?.quality ?? ''}><option value="">Skip</option>{[5, 4, 3, 2, 1].map((q) => <option key={q} value={q}>{q}/5</option>)}</Select>}</Field>
-          <Field label="Woke up (times)">{(id) => <Input id={id} name="awakenings" type="number" min={0} max={50} defaultValue={existing?.awakenings ?? 0} />}</Field>
-          <Field label="Source">{(id) => <Select id={id} name="source" defaultValue={existing?.source ?? 'manual'}>{SLEEP_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={t('sleep.quality')}>{(id) => <Select id={id} name="quality" defaultValue={existing?.quality ?? ''}><option value="">{t('sleep.skip')}</option>{[5, 4, 3, 2, 1].map((q) => <option key={q} value={q}>{q}/5</option>)}</Select>}</Field>
+          <Field label={t('sleep.wokeUpTimes')}>{(id) => <Input id={id} name="awakenings" type="number" min={0} max={50} defaultValue={existing?.awakenings ?? 0} />}</Field>
+          <Field label={t('sleep.source')}>{(id) => <Select id={id} name="source" defaultValue={existing?.source ?? 'manual'}>{SLEEP_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={existing?.notes ?? ''} placeholder="Bad dream at 2am, slept in the car on the way home…" />}</Field>
+        <Field label={t('sleep.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={existing?.notes ?? ''} placeholder={t('sleep.badDreamAt2amSleptIn')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Sunrise className="h-4 w-4" /> Save night</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('sleep.cancel')}</Button>
+          <Button type="submit" loading={loading}><Sunrise className="h-4 w-4" /> {t('sleep.saveNight')}</Button>
         </div>
       </form>
     </Modal>
@@ -290,6 +293,7 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
 }
 
 function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSaved }: { familyId: string; userId: string; memberId: string; age: number | null; routine: Routine | null; onClose: () => void; onSaved: () => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [days, setDays] = useState<number[]>(routine?.days_of_week ?? [0, 1, 2, 3, 4, 5, 6]);
@@ -298,7 +302,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const steps = String(f.get('steps') ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!days.length) return toastError('Pick at least one night');
+    if (!days.length) return toastError(t('sleepModule.pickAtLeastOneNight'));
     setLoading(true);
     const payload = {
       name: String(f.get('name') ?? '').trim() || 'Bedtime routine',
@@ -319,22 +323,22 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
   return (
     <Modal open title={routine ? 'Edit bedtime routine' : 'Set up a bedtime routine'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Name">{(id) => <Input id={id} name="name" defaultValue={routine?.name ?? 'School-night routine'} />}</Field>
+        <Field label={t('sleep.name')}>{(id) => <Input id={id} name="name" defaultValue={routine?.name ?? 'School-night routine'} />}</Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Lights out">{(id) => <Input id={id} name="target_bedtime" type="time" defaultValue={routine?.target_bedtime.slice(0, 5) ?? (age !== null && age < 13 ? '20:30' : '22:00')} />}</Field>
-          <Field label="Wake">{(id) => <Input id={id} name="target_wake" type="time" defaultValue={routine?.target_wake.slice(0, 5) ?? '07:00'} />}</Field>
-          <Field label="Wind-down (min)">{(id) => <Input id={id} name="wind_down_min" type="number" min={0} max={240} defaultValue={routine?.wind_down_min ?? 30} />}</Field>
+          <Field label={t('sleep.lightsOut')}>{(id) => <Input id={id} name="target_bedtime" type="time" defaultValue={routine?.target_bedtime.slice(0, 5) ?? (age !== null && age < 13 ? '20:30' : '22:00')} />}</Field>
+          <Field label={t('sleep.wake')}>{(id) => <Input id={id} name="target_wake" type="time" defaultValue={routine?.target_wake.slice(0, 5) ?? '07:00'} />}</Field>
+          <Field label={t('sleep.windDownMin')}>{(id) => <Input id={id} name="wind_down_min" type="number" min={0} max={240} defaultValue={routine?.wind_down_min ?? 30} />}</Field>
         </div>
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted">Nights</p>
+          <p className="mb-1.5 text-xs font-medium text-muted">{t('sleep.nights')}</p>
           <div className="flex flex-wrap gap-2">
             {DAYS.map((d, i) => { const on = days.includes(i); return <button type="button" key={d} aria-pressed={on} onClick={() => setDays(on ? days.filter((x) => x !== i) : [...days, i].sort())} className={cn('rounded-full border px-3 py-1 text-xs coarse:min-h-11', on ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{d}</button>; })}
           </div>
         </div>
-        <Field label="Steps (one per line)" hint={`Ideas: ${routineStepIdeas(age).join(' → ')}`}>{(id) => <Textarea id={id} name="steps" rows={4} defaultValue={routine?.steps.join('\n') ?? routineStepIdeas(age).join('\n')} />}</Field>
+        <Field label={t('sleep.stepsOnePerLine')} hint={`Ideas: ${routineStepIdeas(age).join(' → ')}`}>{(id) => <Textarea id={id} name="steps" rows={4} defaultValue={routine?.steps.join('\n') ?? routineStepIdeas(age).join('\n')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save routine</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('sleep.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {t('sleep.saveRoutine')}</Button>
         </div>
       </form>
     </Modal>
@@ -342,6 +346,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
 }
 
 function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }: { familyId: string; userId: string; memberId: string; existing: Checkin | null; onClose: () => void; onSaved: () => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [energy, setEnergy] = useState(existing?.energy ?? 3);
@@ -376,19 +381,19 @@ function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }:
   );
 
   return (
-    <Modal open title="Two-minute check-in" description="Today’s habits, so the coach can see what moves your nights." onClose={onClose}>
+    <Modal open title={t('sleep.twoMinuteCheckIn')} description={t('sleepModule.todaySHabitsSoThe')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Scale label="Energy today" value={energy} onChange={setEnergy} />
-        <Scale label="Mood today" value={mood} onChange={setMood} />
+        <Scale label={t('sleep.energyToday')} value={energy} onChange={setEnergy} />
+        <Scale label={t('sleep.moodToday')} value={mood} onChange={setMood} />
         <div className="flex flex-wrap gap-2">
-          <Toggle label="☕ Caffeine after 2pm" value={caffeine} onChange={setCaffeine} />
-          <Toggle label="📱 Screens in bed" value={screens} onChange={setScreens} />
-          <Toggle label="🏃 Exercised" value={exercised} onChange={setExercised} />
+          <Toggle label={t('sleep.caffeineAfter2pm')} value={caffeine} onChange={setCaffeine} />
+          <Toggle label={t('sleep.screensInBed')} value={screens} onChange={setScreens} />
+          <Toggle label={t('sleep.exercised')} value={exercised} onChange={setExercised} />
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={existing?.notes ?? ''} placeholder="Nap after school, late practice…" />}</Field>
+        <Field label={t('sleep.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={existing?.notes ?? ''} placeholder={t('sleep.napAfterSchoolLatePractice')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> Save check-in</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('sleep.cancel')}</Button>
+          <Button type="submit" loading={loading}><Check className="h-4 w-4" /> {t('sleep.saveCheckIn')}</Button>
         </div>
       </form>
     </Modal>

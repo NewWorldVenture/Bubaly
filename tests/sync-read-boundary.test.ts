@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const syncSource = readFileSync('app/(app)/dashboard/sync/page.tsx', 'utf8');
-const historySource = readFileSync('app/(app)/dashboard/sync/history/page.tsx', 'utf8');
+const syncSource = readUiSource('app/(app)/dashboard/sync/page.tsx');
+const historySource = readUiSource('app/(app)/dashboard/sync/history/page.tsx');
 
 describe('family sync read boundary', () => {
   it('fails closed when sync health or history reads fail', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -29,6 +31,7 @@ import {
   type AssignmentLike,
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -59,6 +62,7 @@ function timeAgo(iso: string | null): string {
 }
 
 export function ChoresModule() {
+  const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -137,14 +141,21 @@ export function ChoresModule() {
   async function setStatus(a: Assignment, next: string) {
     if (busy) return;
     setBusy(a.id); setMenuFor(null);
-    const supabase = createClient();
-    const patch: Updatable<'chore_assignments'> = { status: next as Tables<'chore_assignments'>['status'] };
-    if (next === 'submitted') patch.submitted_at = new Date().toISOString();
-    if (next === 'todo') { patch.submitted_at = null; patch.approved_at = null; }
-    const { error } = await supabase.from('chore_assignments').update(patch).eq('id', a.id);
+    // Through the service, which is family-scoped where this filtered `id` alone —
+    // and which, for 'submitted', reads the chore's `requires_approval` and settles
+    // on 'done' when no parent is needed. This always wrote 'submitted', so a chore
+    // configured to need no approval still sat waiting for one.
+    const result = await setChoreStatusAction(a.id, next as 'todo' | 'in_progress' | 'submitted');
     setBusy(null);
-    if (error) return toastError(describeDbError(error));
-    success(next === 'submitted' ? 'Submitted for approval!' : next === 'in_progress' ? 'Marked in progress' : 'Updated');
+    if (!result.ok) return toastError(result.error);
+    // The SETTLED status, not the requested one: a chore that needs no approval
+    // comes back 'done', and saying "Submitted for approval!" about it would be
+    // a small lie this work exists to remove rather than add.
+    success(
+      result.status === 'done' ? 'Done — no approval needed!'
+        : result.status === 'submitted' ? 'Submitted for approval!'
+        : result.status === 'in_progress' ? 'Marked in progress' : 'Updated',
+    );
     void refresh();
   }
 
@@ -167,7 +178,7 @@ export function ChoresModule() {
     const res = await payChoreRewardAction({ choreAssignmentId: a.id });
     setPaying(null);
     if (!res.ok) return toastError(res.error ?? 'Payment failed');
-    success('Paid to wallet!'); void refresh();
+    success(tr('choresModule.paidToWallet')); void refresh();
   }
 
   async function removeChore(a: Assignment) {
@@ -175,15 +186,14 @@ export function ChoresModule() {
     setMenuFor(null);
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${a.chore?.title ?? 'this chore'}"?`)) return;
     setBusy(a.id);
-    const supabase = createClient();
-    const { error } = await supabase.from('chore_assignments').delete().eq('id', a.id);
+    const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
-    if (error) return toastError(describeDbError(error));
-    success('Chore removed'); void refresh();
+    if (!result.ok) return toastError(result.error);
+    success(tr('choresModule.choreRemoved')); void refresh();
   }
 
   async function redeem(r: Reward) {
-    if (!selfMember) return toastError('No member profile to redeem for');
+    if (!selfMember) return toastError(tr('choresModule.noMemberProfileToRedeem'));
     if (busy) return;
     setBusy(r.id);
     const supabase = createClient();
@@ -214,15 +224,15 @@ export function ChoresModule() {
       <div className="module-main">
         <div className="module-page">
           <PageHeader
-            title="Chores"
-            description="Build responsibility, earn rewards, and keep our home running smoothly."
+            title={tr('chores.chores')}
+            description={tr('choresModule.buildResponsibilityEarnRewardsAnd')}
             action={manager ? (
               <>
-                <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add Chore</Button>
-                <Button variant="outline" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="h-4 w-4" /> Chore Templates</Button>
+                <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> {tr('chores.addChore')}</Button>
+                <Button variant="outline" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="h-4 w-4" /> {tr('chores.choreTemplates')}</Button>
                 <Link href="/dashboard/workload"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
-                  <Scale className="h-4 w-4" /> Workload Balance
+                  <Scale className="h-4 w-4" /> {tr('chores.workloadBalance')}
                 </Link>
               </>
             ) : undefined}
@@ -269,7 +279,7 @@ export function ChoresModule() {
                 <button onClick={() => router.push('/dashboard/settings#members')}
                   className="flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted transition hover:text-fg hover:border-brand/50">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-elevated"><Plus className="h-4 w-4" /></span>
-                  Add Child
+                  {tr('chores.addChild')}
                 </button>
               )}
             </div>
@@ -279,14 +289,14 @@ export function ChoresModule() {
           {(tab === 'mine' || tab === 'all') && (
             <div className="space-y-6">
               <ChoreTable
-                title="Daily Chores" rows={groups.daily} {...rowProps()} />
+                title={tr('chores.dailyChores')} rows={groups.daily} {...rowProps()} />
               <ChoreTable
-                title="Weekly Chores" rows={groups.weekly} {...rowProps()} />
-              {groups.other.length > 0 && <ChoreTable title="Other Chores" rows={groups.other} {...rowProps()} />}
+                title={tr('chores.weeklyChores')} rows={groups.weekly} {...rowProps()} />
+              {groups.other.length > 0 && <ChoreTable title={tr('chores.otherChores')} rows={groups.other} {...rowProps()} />}
               {groups.daily.length + groups.weekly.length + groups.other.length === 0 && (
-                <EmptyState icon={CheckCircle2} title="All caught up!"
+                <EmptyState icon={CheckCircle2} title={tr('chores.allCaughtUp')}
                   description={tab === 'mine' ? 'You have no chores assigned right now.' : 'No active chores. Add one to get started.'}
-                  action={manager ? <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add Chore</Button> : undefined} />
+                  action={manager ? <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> {tr('chores.addChore')}</Button> : undefined} />
               )}
               <CompletedStrip rows={completedScoped} memberById={memberById} onViewAll={() => setTab('completed')} />
             </div>
@@ -299,7 +309,7 @@ export function ChoresModule() {
           {tab === 'approvals' && (
             <div className="space-y-2">
               {pendingApprovals.length === 0 ? (
-                <EmptyState icon={CheckCircle2} title="Nothing to review" description="Submitted chores will appear here for approval." />
+                <EmptyState icon={CheckCircle2} title={tr('chores.nothingToReview')} description={tr('choresModule.submittedChoresWillAppearHere')} />
               ) : pendingApprovals.map((a) => {
                 const m = memberById.get(a.member_id);
                 return (
@@ -307,13 +317,13 @@ export function ChoresModule() {
                     <span className="text-2xl">{choreEmoji(a.chore)}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{a.chore?.title ?? 'Chore'}</div>
-                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} submitted · {timeAgo(a.submitted_at)}</div>
+                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts</span>
                     {manager && (
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setStatus(a, 'rejected')} disabled={busy === a.id}>Redo</Button>
-                        <Button size="sm" onClick={() => approve(a)} loading={busy === a.id}>Approve</Button>
+                        <Button size="sm" variant="outline" onClick={() => setStatus(a, 'rejected')} disabled={busy === a.id}>{tr('chores.redo')}</Button>
+                        <Button size="sm" onClick={() => approve(a)} loading={busy === a.id}>{tr('chores.approve')}</Button>
                       </div>
                     )}
                   </div>
@@ -325,9 +335,9 @@ export function ChoresModule() {
           {tab === 'store' && (
             <div className="grid-cards">
               {(rewards ?? []).length === 0 ? (
-                <div className="col-span-full"><EmptyState icon={Gift} title="No rewards yet"
-                  description="Set up rewards your family can earn with chore points."
-                  action={<Button variant="outline" onClick={() => router.push('/dashboard/rewards')}>Manage Rewards</Button>} /></div>
+                <div className="col-span-full"><EmptyState icon={Gift} title={tr('chores.noRewardsYet')}
+                  description={tr('choresModule.setUpRewardsYourFamily')}
+                  action={<Button variant="outline" onClick={() => router.push('/dashboard/rewards')}>{tr('chores.manageRewards')}</Button>} /></div>
               ) : (rewards ?? []).map((r) => {
                 const selfPts = selfMemberId ? pointsMap.get(selfMemberId) ?? 0 : 0;
                 const affordable = selfPts >= r.cost_points;
@@ -356,13 +366,13 @@ export function ChoresModule() {
         {/* Family Chore Points */}
         <div className="sidebar-card relative overflow-hidden">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold">Family Chore Points</p>
+            <p className="text-sm font-semibold">{tr('chores.familyChorePoints')}</p>
             <div className="relative">
               <select value={pointsWindow} onChange={(e) => setPointsWindow(e.target.value as typeof pointsWindow)}
                 className="appearance-none rounded-lg border border-border bg-surface/60 py-1 pl-2 pr-6 text-[11px] text-muted focus-ring">
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-                <option value="all">All Time</option>
+                <option value="week">{tr('chores.thisWeek')}</option>
+                <option value="month">{tr('chores.thisMonth')}</option>
+                <option value="all">{tr('chores.allTime')}</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-1.5 top-1.5 h-3 w-3 text-muted" />
             </div>
@@ -370,16 +380,16 @@ export function ChoresModule() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-4xl font-extrabold text-fg">{familyPoints}</div>
-              <div className="text-xs text-muted">Total Points Earned</div>
+              <div className="text-xs text-muted">{tr('chores.totalPointsEarned')}</div>
             </div>
             <Trophy className="h-14 w-14 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.35)]" />
           </div>
-          <button onClick={() => setTab('completed')} className="mt-3 text-xs font-medium text-brand-text hover:underline">View Leaderboard</button>
+          <button onClick={() => setTab('completed')} className="mt-3 text-xs font-medium text-brand-text hover:underline">{tr('chores.viewLeaderboard')}</button>
         </div>
 
         {/* Top Earners */}
         <div className="sidebar-card">
-          <p className="mb-3 text-sm font-semibold">Top Earners</p>
+          <p className="mb-3 text-sm font-semibold">{tr('chores.topEarners')}</p>
           <div className="space-y-2.5">
             {earners.slice(0, 4).map((e) => (
               <div key={e.member.id} className="flex items-center gap-2.5">
@@ -389,16 +399,16 @@ export function ChoresModule() {
                 <span className="text-sm font-semibold text-fg">{e.points} pts</span>
               </div>
             ))}
-            {earners.length === 0 && <p className="text-xs text-muted">No points earned yet.</p>}
+            {earners.length === 0 && <p className="text-xs text-muted">{tr('chores.noPointsEarnedYet')}</p>}
           </div>
           <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-            <ChevronRight className="h-3 w-3" /> View Full Leaderboard
+            <ChevronRight className="h-3 w-3" /> {tr('chores.viewFullLeaderboard')}
           </button>
         </div>
 
         {/* Chore Streaks */}
         <div className="sidebar-card">
-          <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-orange-400" /> Chore Streaks</p>
+          <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-orange-400" /> {tr('chores.choreStreaks')}</p>
           <div className="space-y-2.5">
             {streaks.slice(0, 4).map((s) => (
               <div key={s.member.id} className="flex items-center gap-2.5">
@@ -407,11 +417,11 @@ export function ChoresModule() {
                 <span className="text-sm font-semibold text-orange-400">{s.days} {s.days === 1 ? 'day' : 'days'}</span>
               </div>
             ))}
-            {streaks.length === 0 && <p className="text-xs text-muted">No active streaks. Complete a chore today to start one!</p>}
+            {streaks.length === 0 && <p className="text-xs text-muted">{tr('chores.noActiveStreaksCompleteAChore')}</p>}
           </div>
           {streaks.length > 0 && (
             <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-              <ChevronRight className="h-3 w-3" /> View All Streaks
+              <ChevronRight className="h-3 w-3" /> {tr('chores.viewAllStreaks')}
             </button>
           )}
         </div>
@@ -419,12 +429,12 @@ export function ChoresModule() {
         {/* Rewards Progress */}
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold">Rewards Progress</p>
-            <button onClick={() => router.push('/dashboard/rewards')} className="text-xs font-medium text-brand-text hover:underline">Manage Rewards</button>
+            <p className="text-sm font-semibold">{tr('chores.rewardsProgress')}</p>
+            <button onClick={() => router.push('/dashboard/rewards')} className="text-xs font-medium text-brand-text hover:underline">{tr('chores.manageRewards')}</button>
           </div>
           {progress ? (
             <>
-              <p className="text-xs text-muted">{progress.member.display_name} is {progress.remaining} points away from next reward!</p>
+              <p className="text-xs text-muted">{progress.member.display_name} is {progress.remaining} {tr('chores.pointsAwayFromNextReward')}</p>
               <div className="mt-2 flex items-center gap-2">
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
                   <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress.pct}%` }} />
@@ -433,13 +443,13 @@ export function ChoresModule() {
               </div>
               <div className="mt-3 flex items-center gap-2 text-xs">
                 <Gift className="h-4 w-4 text-brand-text" />
-                <span className="text-muted">Next Reward:</span>
+                <span className="text-muted">{tr('chores.nextReward')}</span>
                 <span className="font-medium">{progress.rewardTitle}</span>
               </div>
             </>
           ) : (
             <button onClick={() => router.push('/dashboard/rewards')} className="text-xs text-muted hover:text-fg">
-              Add a reward to give chores a goal →
+              {tr('chores.addARewardToGiveChores')}
             </button>
           )}
         </div>
@@ -447,7 +457,7 @@ export function ChoresModule() {
         {/* Need Approval */}
         <div className="sidebar-card">
           <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold">
-            Need Approval
+            {tr('chores.needApproval')}
             {pendingApprovals.length > 0 && <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">{pendingApprovals.length}</span>}
           </p>
           <div className="space-y-2.5">
@@ -462,16 +472,16 @@ export function ChoresModule() {
                   </div>
                   {manager && (
                     <button onClick={() => approve(a)} disabled={busy === a.id}
-                      className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-elevated disabled:opacity-50">Review</button>
+                      className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-elevated disabled:opacity-50">{tr('chores.review')}</button>
                   )}
                 </div>
               );
             })}
-            {pendingApprovals.length === 0 && <p className="text-xs text-muted">Nothing waiting for approval. 🎉</p>}
+            {pendingApprovals.length === 0 && <p className="text-xs text-muted">{tr('chores.nothingWaitingForApproval')}</p>}
           </div>
           {pendingApprovals.length > 0 && (
             <button onClick={() => setTab('approvals')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-              <ChevronRight className="h-3 w-3" /> View All Approvals
+              <ChevronRight className="h-3 w-3" /> {tr('chores.viewAllApprovals')}
             </button>
           )}
         </div>
@@ -512,6 +522,7 @@ type RowProps = {
 };
 
 function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike[] } & RowProps) {
+  const tr = useTranslations();
   if (rows.length === 0) return null;
   return (
     <section>
@@ -521,7 +532,7 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
       </div>
       <div className="overflow-hidden rounded-xl border border-border bg-surface/30">
         <div className="hidden grid-cols-[1fr_150px_120px_110px_140px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted lg:grid">
-          <div>Chore</div><div>Assignee</div><div>Due</div><div>Reward</div><div>Status</div><div />
+          <div>{tr('chores.chore')}</div><div>{tr('chores.assignee')}</div><div>Due</div><div>{tr('chores.reward')}</div><div>{tr('chores.status')}</div><div />
         </div>
         <div className="divide-y divide-border/50">
           {rows.map((a) => <ChoreRow key={a.id} a={a as Assignment} {...p} />)}
@@ -532,6 +543,7 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
 }
 
 function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, onStatus, onApprove, onPay, onDelete }: { a: Assignment } & RowProps) {
+  const tr = useTranslations();
   const member = memberById.get(a.member_id);
   const due = dueLabel(a.due_at);
   const status = STATUS_META[a.status] ?? STATUS_META.todo;
@@ -553,7 +565,7 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
       </div>
       {/* Assignee */}
       <div className="flex items-center gap-2">
-        {member ? <><Avatar name={member.display_name} color={member.color} size={22} /><span className="text-xs text-muted lg:text-sm">{member.display_name}</span></> : <span className="text-xs text-muted">Unassigned</span>}
+        {member ? <><Avatar name={member.display_name} color={member.color} size={22} /><span className="text-xs text-muted lg:text-sm">{member.display_name}</span></> : <span className="text-xs text-muted">{tr('chores.unassigned')}</span>}
       </div>
       {/* Due */}
       <div className={cn('text-xs font-medium', DUE_TONE[due.tone])}>{due.label}</div>
@@ -575,17 +587,17 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
       <div className="flex justify-end lg:justify-center">
         <div className="relative">
           <button onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === a.id ? null : a.id); }}
-            className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" aria-label="Chore actions">
+            className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" aria-label={tr('chores.choreActions')}>
             <MoreVertical className="h-4 w-4" />
           </button>
           {menuFor === a.id && (
             <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
-              {a.status === 'todo' && <MenuItem onClick={() => onStatus(a, 'in_progress')}><Clock className="h-3.5 w-3.5" /> Start (In Progress)</MenuItem>}
-              {!done && a.status !== 'submitted' && <MenuItem onClick={() => onStatus(a, 'submitted')}><CheckCircle2 className="h-3.5 w-3.5" /> Submit for approval</MenuItem>}
-              {manager && a.status === 'submitted' && <MenuItem onClick={() => onApprove(a)}><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Approve</MenuItem>}
-              {done && a.status !== 'todo' && <MenuItem onClick={() => onStatus(a, 'todo')}><Circle className="h-3.5 w-3.5" /> Reopen</MenuItem>}
+              {a.status === 'todo' && <MenuItem onClick={() => onStatus(a, 'in_progress')}><Clock className="h-3.5 w-3.5" /> {tr('chores.startInProgress')}</MenuItem>}
+              {!done && a.status !== 'submitted' && <MenuItem onClick={() => onStatus(a, 'submitted')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('chores.submitForApproval')}</MenuItem>}
+              {manager && a.status === 'submitted' && <MenuItem onClick={() => onApprove(a)}><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> {tr('chores.approve')}</MenuItem>}
+              {done && a.status !== 'todo' && <MenuItem onClick={() => onStatus(a, 'todo')}><Circle className="h-3.5 w-3.5" /> {tr('chores.reopen')}</MenuItem>}
               {canPay && <MenuItem onClick={() => onPay(a)}><Sparkles className="h-3.5 w-3.5 text-amber-400" /> {paying === a.id ? 'Paying…' : `Pay ${formatCents(a.chore!.cash_cents!)}`}</MenuItem>}
-              {manager && <MenuItem danger onClick={() => onDelete(a)}><Trash2 className="h-3.5 w-3.5" /> Delete</MenuItem>}
+              {manager && <MenuItem danger onClick={() => onDelete(a)}><Trash2 className="h-3.5 w-3.5" /> {tr('chores.delete')}</MenuItem>}
             </div>
           )}
         </div>
@@ -606,15 +618,16 @@ function MenuItem({ children, onClick, danger }: { children: React.ReactNode; on
 
 // ── Completed views ─────────────────────────────────────────────────────────
 function CompletedStrip({ rows, memberById, onViewAll }: { rows: Assignment[]; memberById: Map<string, Tables<'family_members'>>; onViewAll: () => void }) {
+  const tr = useTranslations();
   if (rows.length === 0) return null;
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold">Completed Chores</h2>
+          <h2 className="text-base font-semibold">{tr('chores.completedChores')}</h2>
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">{rows.length}</span>
         </div>
-        <button onClick={onViewAll} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">View all <ChevronRight className="h-3 w-3" /></button>
+        <button onClick={onViewAll} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">{tr('chores.viewAll')} <ChevronRight className="h-3 w-3" /></button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {rows.slice(0, 6).map((a) => <CompletedCard key={a.id} a={a} member={memberById.get(a.member_id)} />)}
@@ -624,7 +637,8 @@ function CompletedStrip({ rows, memberById, onViewAll }: { rows: Assignment[]; m
 }
 
 function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: Map<string, Tables<'family_members'>> }) {
-  if (rows.length === 0) return <EmptyState icon={CheckCircle2} title="No completed chores yet" description="Approved chores show up here." />;
+  const tr = useTranslations();
+  if (rows.length === 0) return <EmptyState icon={CheckCircle2} title={tr('chores.noCompletedChoresYet')} description={tr('choresModule.approvedChoresShowUpHere')} />;
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map((a) => <CompletedCard key={a.id} a={a} member={memberById.get(a.member_id)} />)}
@@ -665,9 +679,10 @@ const CHORE_TEMPLATES: { icon: string; title: string; description: string; point
 ];
 
 function TemplatesModal({ onClose, onPick }: { onClose: () => void; onPick: (t: Partial<ChoreDraft>) => void }) {
+  const tr = useTranslations();
   return (
-    <Modal open title="Chore Templates" onClose={onClose}>
-      <p className="mb-3 text-sm text-muted">Pick a starting point — you can tweak the details before saving.</p>
+    <Modal open title={tr('chores.choreTemplates')} onClose={onClose}>
+      <p className="mb-3 text-sm text-muted">{tr('chores.pickAStartingPointYouCan')}</p>
       <div className="grid max-h-[60vh] gap-2 overflow-y-auto sm:grid-cols-2">
         {CHORE_TEMPLATES.map((t) => (
           <button key={t.title} onClick={() => onPick({ title: t.title, description: t.description, points: t.points, recurrence: t.recurrence, icon: t.icon })}
@@ -691,8 +706,14 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   prefill: Partial<ChoreDraft> | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // One id per open modal, so a retry after a failed save is the SAME chore and
+  // a second Add (a new modal) is a different one. The modal is mounted only
+  // while `addOpen`, so closing and reopening mints a fresh id.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -707,25 +728,21 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     const due_at = String(form.get('due_at') ?? '') || null;
     const icon = String(form.get('icon') ?? '').trim() || null;
 
-    if (!title) return toastError('Add a chore title');
+    if (!title) return toastError(tr('choresModule.addAChoreTitle'));
     if (title.length > 160) return toastError('Title is too long (max 160 characters)');
-    if (!memberId) return toastError('Pick who this chore is for');
-    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Reward must be between 0 and 1000 points');
+    if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
+    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
     setLoading(true);
-    const supabase = createClient();
     try {
-      const { data: chore, error: ce } = await supabase.from('chores')
-        .insert({ family_id: familyId, title, description, points, priority, recurrence, icon, created_by: userId })
-        .select('id').single();
-      if (ce || !chore) { toastError(describeDbError(ce)); return; }
-      const { error: ae } = await supabase.from('chore_assignments')
-        .insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
-      if (ae) {
-        await supabase.from('chores').delete().eq('id', chore.id); // roll back orphan
-        toastError(describeDbError(ae));
-        return;
-      }
+      // One call. `createChore` creates the chore and its assignment together and
+      // rolls the chore back FAMILY-SCOPED if the assignment fails, where this
+      // rolled back on `id` alone.
+      const result = await createChoreAction({
+        title, description, points, priority, recurrence, icon,
+        dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
+      });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));
@@ -735,40 +752,40 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   }
 
   return (
-    <Modal open title="Add Chore" onClose={onClose}>
+    <Modal open title={tr('chores.addChore')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <input type="hidden" name="icon" defaultValue={prefill?.icon ?? ''} />
-        <Field label="Title" required>
-          {(id) => <Input id={id} name="title" autoFocus placeholder="Make the bed" defaultValue={prefill?.title ?? ''} />}
+        <Field label={tr('chores.title')} required>
+          {(id) => <Input id={id} name="title" autoFocus placeholder={tr('chores.makeTheBed')} defaultValue={prefill?.title ?? ''} />}
         </Field>
-        <Field label="Description">
-          {(id) => <Textarea id={id} name="description" rows={2} placeholder="What needs to be done?" defaultValue={prefill?.description ?? ''} />}
+        <Field label={tr('chores.description')}>
+          {(id) => <Textarea id={id} name="description" rows={2} placeholder={tr('chores.whatNeedsToBeDone')} defaultValue={prefill?.description ?? ''} />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Assign to" required>
-            {(id) => <Select id={id} name="member_id"><option value="">Pick member…</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}
+          <Field label={tr('chores.assignTo')} required>
+            {(id) => <Select id={id} name="member_id"><option value="">{tr('chores.pickMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}
           </Field>
-          <Field label="Priority">
-            {(id) => <Select id={id} name="priority" defaultValue={prefill?.priority ?? 'medium'}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></Select>}
+          <Field label={tr('chores.priority')}>
+            {(id) => <Select id={id} name="priority" defaultValue={prefill?.priority ?? 'medium'}><option value="low">Low</option><option value="medium">{tr('chores.medium')}</option><option value="high">{tr('chores.high')}</option></Select>}
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Reward (points)">{(id) => <Input id={id} name="points" type="number" defaultValue={String(prefill?.points ?? 10)} min="0" max="1000" />}</Field>
-          <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" />}</Field>
+          <Field label={tr('chores.rewardPoints')}>{(id) => <Input id={id} name="points" type="number" defaultValue={String(prefill?.points ?? 10)} min="0" max="1000" />}</Field>
+          <Field label={tr('chores.dueDate')}>{(id) => <Input id={id} name="due_at" type="date" />}</Field>
         </div>
-        <Field label="Repeat">
+        <Field label={tr('chores.repeat')}>
           {(id) => (
             <Select id={id} name="recurrence" defaultValue={prefill?.recurrence ?? 'none'}>
-              <option value="none">No repeat</option>
-              <option value="daily">Every day</option>
-              <option value="weekly">Every week</option>
-              <option value="monthly">Every month</option>
-              <option value="yearly">Every year</option>
+              <option value="none">{tr('chores.noRepeat')}</option>
+              <option value="daily">{tr('chores.everyDay')}</option>
+              <option value="weekly">{tr('chores.everyWeek')}</option>
+              <option value="monthly">{tr('chores.everyMonth')}</option>
+              <option value="yearly">{tr('chores.everyYear')}</option>
             </Select>
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('chores.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Add Chore'}</Button>
         </div>
       </form>

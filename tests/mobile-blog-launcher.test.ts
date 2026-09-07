@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // Mobile production-readiness (Phase 8 viewport + Phase 6 touch targets [M-022]):
@@ -11,7 +12,7 @@ import fs from 'node:fs';
 // `hidden sm:inline`) at ~28px — below the 44px minimum, and Close is the modal's
 // escape control on a phone. This guard locks the dvh unit and the touch targets.
 
-const launcher = fs.readFileSync('components/app/blog-launcher.tsx', 'utf8');
+const launcher = readUiSource('components/app/blog-launcher.tsx');
 
 describe('in-app blog launcher modal is mobile-correct (M-022)', () => {
   it('panel height uses the dynamic viewport unit (dvh), never a static vh', () => {
