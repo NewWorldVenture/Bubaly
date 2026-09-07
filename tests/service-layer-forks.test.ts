@@ -54,7 +54,6 @@ const KNOWN_FORKS: Record<string, string> = {
 
   // Not yet reached by a §7 tranche. Listed so the number is honest rather than
   // implied, and so converting one is a deliberate edit to this file.
-  budgets: 'not yet converted',
   family_announcements: 'not yet converted',
   family_conversations: 'not yet converted',
   family_facts: 'not yet converted',
@@ -67,8 +66,6 @@ const KNOWN_FORKS: Record<string, string> = {
   notes: 'not yet converted',
   notifications: 'not yet converted',
   pantry_items: 'not yet converted',
-  savings_goals: 'not yet converted',
-  transactions: 'not yet converted',
   vacation_budgets: 'not yet converted',
   vacation_itinerary_days: 'not yet converted',
   vacation_itinerary_items: 'not yet converted',

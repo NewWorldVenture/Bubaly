@@ -5,6 +5,7 @@ import { Target, Plus, Trash2, TrendingUp } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { contributeToGoalAction, createSavingsGoalAction, deleteSavingsGoalAction } from '@/app/(app)/dashboard/billing/actions';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -33,15 +34,18 @@ export function SavingsView() {
   const rows = goals ?? [];
 
   async function addAmount(g: Goal, delta: number) {
-    const next = Math.max(0, Number(g.current_amount) + delta);
-    const { error } = await createClient().from('savings_goals').update({ current_amount: next }).eq('id', g.id);
-    if (error) toastError(error.message); else success('Updated');
+    // The DELTA, not a total computed here. This used to send
+    // `current_amount + delta` from what the page last rendered, so two parents
+    // each adding the same amount at once both wrote the same figure and one of
+    // the contributions vanished. The service applies it under a compare-and-set.
+    const res = await contributeToGoalAction(g.id, delta);
+    if (!res.ok) toastError(res.error); else success('Updated');
     setContribute(null);
   }
   async function remove(id: string) {
     if (!confirm('Delete this goal?')) return;
-    const { error } = await createClient().from('savings_goals').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    const res = await deleteSavingsGoalAction(id);
+    if (!res.ok) toastError(res.error); else success('Deleted');
   }
 
   return (
@@ -98,12 +102,15 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
     e.preventDefault();
     if (!v.name.trim() || !v.target_amount) return toastError('Add a name and target');
     setSaving(true);
-    const { error } = await createClient().from('savings_goals').insert({
-      family_id: familyId, name: v.name.trim(), target_amount: Math.abs(parseFloat(v.target_amount) || 0),
-      current_amount: Math.abs(parseFloat(v.current_amount) || 0), target_date: v.target_date || null, emoji: v.emoji, created_by: userId,
+    const res = await createSavingsGoalAction({
+      name: v.name.trim(),
+      targetAmount: Math.abs(parseFloat(v.target_amount) || 0),
+      currentAmount: Math.abs(parseFloat(v.current_amount) || 0),
+      targetDate: v.target_date || null,
+      emoji: v.emoji,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (!res.ok) return toastError(res.error);
     success('Goal created');
     onClose();
   }
