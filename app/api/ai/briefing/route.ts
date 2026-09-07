@@ -395,7 +395,6 @@ ${UNTRUSTED_CONTENT_RULE}
     // 0258's unique key is (family_id, as_of_date, kind), so a `weekly` request
     // must not be filed as the day's brief — the "This Week" tab used to
     // overwrite it on every visit.
-<<<<<<< HEAD
     // ── "Also today": the quiet notifications, said once ────────────────────
     //
     // The low-priority half of the notification queue (see
@@ -447,12 +446,9 @@ ${UNTRUSTED_CONTENT_RULE}
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
-<<<<<<< HEAD
       decisions: decisions.items,
       notifications: notices,
-=======
       handledThisWeek,
->>>>>>> worktree-wf_58fbbfcb-de4-4
     }, tz);
 
     // Read only because it was RENDERED. `foldAlsoToday` drops duplicates and
