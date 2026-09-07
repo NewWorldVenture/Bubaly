@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MAX_RECORD_RESULTS, MIN_RECORD_QUERY, navMatchScore, routeCommand, searchHref,
+  MAX_RECORD_RESULTS, MAX_RESULTS, MIN_RECORD_QUERY, navMatchScore, routeCommand, searchHref,
   type CommandNavItem, type CommandRecord,
 } from '@/lib/command-bar/route';
+import { NAV_CATALOG } from '@/lib/constants/navigation';
 
 const now = new Date('2026-07-04T10:00:00');
 const NAV: CommandNavItem[] = [
@@ -121,6 +122,41 @@ describe('routeCommand — household records', () => {
     expect(r.filter((x) => x.kind === 'record')).toHaveLength(MAX_RECORD_RESULTS);
     expect(r.length).toBeLessThanOrEqual(8);
     expect(r.at(-1)?.kind).toBe('assistant');
+  });
+
+  // The cap used to be applied to the whole list, so a query matching a lot of
+  // nav labels pushed BOTH the record block and the "see all results" row off
+  // the end — silently, and worst for the single common words people actually
+  // type. Both of these use a nav array big enough to reach the cap on nav
+  // alone, because the small fixture above can never expose it.
+  it('keeps records and "see all results" when nav matches alone would fill the cap', () => {
+    const crowdedNav: CommandNavItem[] = Array.from({ length: 9 }, (_, i) => ({
+      href: `/dashboard/family-${i}`, label: `Family ${'Aa'.repeat(i + 1)}`,
+    }));
+    // Precondition: more nav labels match than the whole list can hold, so it
+    // is nav that has to give way — before the fix the reserved rows did.
+    expect(crowdedNav.every((n) => navMatchScore('family', n.label) > 0)).toBe(true);
+    expect(crowdedNav.length).toBeGreaterThan(MAX_RESULTS);
+    expect(routeCommand('family', crowdedNav, now)).toHaveLength(MAX_RESULTS);
+
+    const r = routeCommand('family', crowdedNav, now, RECORDS);
+    expect(r.some((x) => x.kind === 'record')).toBe(true);
+    expect(r.find((x) => x.kind === 'search')).toMatchObject({ kind: 'search', query: 'family' });
+    expect(r.at(-1)?.kind).toBe('assistant');
+    expect(r.length).toBeLessThanOrEqual(MAX_RESULTS);
+    // Nav gave way, not the records — and the strongest nav match survived.
+    expect(r[0]).toMatchObject({ kind: 'navigate', href: '/dashboard/family-0' });
+  });
+
+  it('keeps records and "see all results" against the REAL nav catalogue', () => {
+    const realNav: CommandNavItem[] = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
+    // "family" matches seven catalogue entries; before the reserved-slot fix
+    // those seven filled every slot and this household's document vanished.
+    const r = routeCommand('family', realNav, now, RECORDS);
+    expect(r.some((x) => x.kind === 'record')).toBe(true);
+    expect(r.some((x) => x.kind === 'search')).toBe(true);
+    expect(r.at(-1)?.kind).toBe('assistant');
+    expect(r.length).toBeLessThanOrEqual(MAX_RESULTS);
   });
 
   it('offers "see all results" once the query is long enough, whether or not records came back', () => {

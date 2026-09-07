@@ -41,7 +41,8 @@ export type CommandResult =
   | { kind: 'search'; query: string; href: string; label: string }
   | { kind: 'assistant'; query: string; label: string };
 
-const MAX_RESULTS = 8;
+/** Hard cap on rows the bar offers, the assistant fallback included. */
+export const MAX_RESULTS = 8;
 
 /**
  * How many record hits the bar itself offers. The rest are one keystroke away
@@ -137,18 +138,40 @@ export function routeCommand(
   if (!route.explicit && isMultiWord(q)) out.push(capture);
   // "See all results" is how /dashboard/search is reached at all — it is in no
   // sidebar, by design. Offered for any query long enough to have been searched,
-  // whether or not this fetch came back with anything.
+  // whether or not this fetch came back with anything, and its slot is reserved
+  // below so the cap cannot take it away again.
   if (q.length >= MIN_RECORD_QUERY) {
     out.push({ kind: 'search', query: q, href: searchHref(q), label: `See all results for “${q}”` });
   }
 
-  // de-dupe navigate hrefs (a catalog can list the same href twice) and cap.
-  // The assistant fallback is appended AFTER the cap rather than being one more
-  // row that can be sliced off: Enter must never be a dead end, and records can
-  // now fill the list.
+  // De-dupe navigate hrefs (a catalog can list the same href twice), then cap.
+  //
+  // The cap is applied to the NAV/capture/intent rows only. Records and the
+  // "see all results" row get their slots reserved first, because capping the
+  // whole list silently dropped both: a single word like "family" matches seven
+  // entries in the real catalogue, which filled all eight slots on their own. A
+  // household with a document called "Family insurance policy" would then have
+  // the fetched hit discarded AND lose the only route to /dashboard/search —
+  // exactly the "matches nav labels and nothing else" behaviour this replaced.
+  //
+  // The assistant fallback is appended after the cap rather than being one more
+  // row that can be sliced off: Enter must never be a dead end.
+  const isReserved = (r: CommandResult) => r.kind === 'record' || r.kind === 'search';
+  const budget = MAX_RESULTS - 1; // the assistant fallback holds the last slot
+
   const seen = new Set<string>();
-  const body = out
-    .filter((r) => (r.kind === 'navigate' ? (seen.has(r.href) ? false : (seen.add(r.href), true)) : true))
-    .slice(0, MAX_RESULTS - 1);
-  return [...body, assistant];
+  const deduped = out.filter((r) =>
+    r.kind === 'navigate' ? (seen.has(r.href) ? false : (seen.add(r.href), true)) : true);
+
+  // Whatever the reserved rows do not use is spent on nav/capture/intent, in
+  // their existing order — so the weakest of those (weak nav, then a heuristic
+  // capture) are the rows that give way, and the ordering of the kinds is
+  // unchanged from before records existed.
+  let flexible = Math.max(0, budget - deduped.filter(isReserved).length);
+  const body: CommandResult[] = [];
+  for (const r of deduped) {
+    if (isReserved(r)) body.push(r);
+    else if (flexible > 0) { flexible -= 1; body.push(r); }
+  }
+  return [...body.slice(0, budget), assistant];
 }
