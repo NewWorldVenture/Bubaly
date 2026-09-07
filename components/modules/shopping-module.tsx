@@ -432,6 +432,7 @@ export function ShoppingModule() {
       {boughtOpen && activeListId && (
         <BoughtModal listId={activeListId} items={checkedItems}
           onClose={() => setBoughtOpen(false)}
+          onRefresh={() => { void refreshItems(); }}
           onDone={() => { setBoughtOpen(false); void refreshItems(); }} />
       )}
 
@@ -597,10 +598,12 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
  * two halves separately, because "in the pantry" and "on the books" are
  * different facts and a shop can produce one without the other.
  */
-function BoughtModal({ listId, items, onClose, onDone }: {
+function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
   listId: string;
   items: GroceryItem[];
   onClose: () => void;
+  /** Re-read the list WITHOUT closing: a partial trip already changed it. */
+  onRefresh: () => void;
   onDone: () => void;
 }) {
   const t = useTranslations();
@@ -642,6 +645,11 @@ function BoughtModal({ listId, items, onClose, onDone }: {
             names: result.clearFailed.map((f) => f.name).join(', '),
           }));
         }
+        // What DID land is already off the list, so the list on screen — and
+        // this modal's own "what you bought" — must be re-read before the
+        // family taps again, or they would be ticking rows that no longer
+        // exist.
+        onRefresh();
         return;
       }
       const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
