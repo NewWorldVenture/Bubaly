@@ -8,6 +8,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
 export type AeoQuestion = {
+  /** Empty for questions that came from a page payload rather than a table row;
+   *  those cannot be localized because there is nothing to join a translation to. */
+  id: string;
   question: string;
   answer: string;
   entity: string | null;
@@ -42,6 +45,7 @@ function toPayloadQuestions(value: unknown, fallbackPath: string): AeoQuestion[]
     const answer = typeof row.answer === 'string' ? row.answer.trim() : '';
     if (!question || !answer) return [];
     return [{
+      id: typeof row.id === 'string' ? row.id : '',
       question,
       answer,
       entity: typeof row.entity === 'string' ? row.entity : null,
@@ -56,6 +60,7 @@ function toPayloadQuestions(value: unknown, fallbackPath: string): AeoQuestion[]
 function toQuestion(r: Row): AeoQuestion {
   const meta = (r.metadata ?? {}) as Record<string, unknown>;
   return {
+    id: r.id,
     question: r.question,
     answer: r.answer ?? '',
     entity: r.entity,
@@ -265,5 +270,54 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
   } catch (error) {
     console.error('[marketing-aeo] path questions read failed', error);
     return { questions: [], available: false };
+  }
+}
+
+/**
+ * Swap in the reader's language.
+ *
+ * The knowledge base is stored once, in English, because it is editorial
+ * content an admin maintains — so a localized page rendered a translated
+ * heading over an English accordion. `marketing_aeo_question_translations`
+ * (migration 0277) adds the missing locale dimension; this applies it.
+ *
+ * On a non-English locale an UNTRANSLATED question is dropped rather than shown
+ * in English. Half-translating a page is the bug being fixed here, and a
+ * shorter list in the reader's own language beats a full one in someone else's.
+ * English locales skip the lookup entirely and are unaffected.
+ */
+export async function localizeAeoQuestions(
+  questions: AeoQuestion[],
+  locale: string,
+): Promise<AeoQuestion[]> {
+  if (questions.length === 0) return questions;
+  if (locale.startsWith('en')) return questions;
+
+  const ids = questions.map((q) => q.id).filter(Boolean);
+  // Questions that came from a page payload carry no row id, so there is
+  // nothing to join a translation to. Keep them rather than blanking the
+  // section: an untranslatable answer is a smaller problem than a missing one.
+  if (ids.length === 0) return questions;
+
+  try {
+    const { data, error } = await anonClient()
+      .from('marketing_aeo_question_translations')
+      .select('question_id, question, answer')
+      .eq('locale', locale)
+      .in('question_id', ids);
+    if (error) {
+      // A failed lookup must not blank the section: fall back to what we have.
+      console.error('[marketing-aeo] translation read failed', error);
+      return questions;
+    }
+    const byId = new Map((data ?? []).map((row) => [row.question_id, row]));
+    return questions.flatMap((q) => {
+      const translated = byId.get(q.id);
+      if (!translated) return [];
+      return [{ ...q, question: translated.question, answer: translated.answer }];
+    });
+  } catch (error) {
+    console.error('[marketing-aeo] translation read failed', error);
+    return questions;
   }
 }

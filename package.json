@@ -25,6 +25,7 @@
     "db:audit:schema": "node scripts/audit-supabase-schema.mjs",
     "db:audit:auth": "node scripts/audit-supabase-auth.mjs",
     "marketing:audit:assets": "node scripts/audit-marketing-assets.mjs",
+    "marketing:translate:aeo": "node scripts/translate-aeo-questions.mjs",
     "marketing:backfill:image-provenance": "node scripts/backfill-marketing-image-provenance.mjs",
     "marketing:backfill:coverage": "node scripts/backfill-marketing-coverage.mjs",
     "marketing:backfill:provenance": "node scripts/backfill-marketing-asset-provenance.mjs",

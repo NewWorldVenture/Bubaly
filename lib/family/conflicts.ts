@@ -35,8 +35,18 @@ export function eventEnd(e: TimedEvent): number {
  * Find every pair of overlapping timed events. All-day events and events with
  * invalid dates are ignored. O(n log n + k): sort by start, then sweep forward
  * only while starts overlap. Returns conflicts ordered by the earlier start.
+ *
+ * `maxConflicts` bounds `k`. The sweep is linear in the OUTPUT, and the output
+ * is quadratic when a calendar is dense: 723 events inside one fortnight — an
+ * ordinary shared family calendar with a few subscribed feeds — produced enough
+ * overlapping pairs to render hundreds of megabytes of HTML and hang the page.
+ * Callers that render or count a bounded number should say so; the default is
+ * unbounded, so existing callers keep their exact behaviour.
  */
-export function detectConflicts(events: TimedEvent[]): Conflict[] {
+export function detectConflicts(
+  events: TimedEvent[],
+  { maxConflicts = Number.POSITIVE_INFINITY }: { maxConflicts?: number } = {},
+): Conflict[] {
   const timed = events
     .filter((e) => !e.all_day && !Number.isNaN(new Date(e.starts_at).getTime()))
     .sort((x, y) => new Date(x.starts_at).getTime() - new Date(y.starts_at).getTime());
@@ -59,6 +69,7 @@ export function detectConflicts(events: TimedEvent[]): Conflict[] {
           overlapEndIso: new Date(overlapEnd).toISOString(),
           overlapMinutes: Math.max(1, Math.round((overlapEnd - overlapStart) / 60000)),
         });
+        if (conflicts.length >= maxConflicts) return conflicts;
       }
     }
   }
