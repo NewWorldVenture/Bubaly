@@ -1,6 +1,9 @@
 // middleware.ts — refreshes the Supabase session and guards protected routes.
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import {
+  durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
+} from '@/lib/auth/session';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
@@ -53,12 +56,11 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/marketing/unsubscribe'];
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
   // This exact public path exposes only the artifact's revision. Do not refresh
   // sessions or interpret OAuth query parameters for this read-only response.
-  if (path === '/api/build-info') return res;
+  if (path === '/api/build-info') return NextResponse.next({ request: req });
 
   // If an OAuth code lands on the wrong path, forward it to /auth/callback
   const code = req.nextUrl.searchParams.get('code');
@@ -83,33 +85,70 @@ export async function middleware(req: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isPublic || bearerApi) return res;
+    if (isPublic || bearerApi) return NextResponse.next({ request: req });
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
     return NextResponse.redirect(url);
   }
 
+  // Refreshed auth cookies have to reach TWO places, or a signed-in user gets
+  // signed out. `res` carries them to the browser. `req.cookies` carries them
+  // to the Server Components rendering this same request: without that they
+  // read the original jar, whose refresh token this refresh just consumed, and
+  // spend it a second time — which Supabase's reuse detection treats as a
+  // stolen token and answers by revoking the whole session family. So write
+  // both, and rebuild `res` from the updated request.
+  let res = NextResponse.next({ request: req });
   const supabase = createServerClient(
     supabaseUrl,
     supabaseAnonKey,
     {
+      cookieOptions: durableCookieOptions(isSecureRequest({
+        forwardedProto: req.headers.get('x-forwarded-proto'),
+        url: req.nextUrl.origin,
+      })),
       cookies: {
         getAll: () => req.cookies.getAll(),
-        setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) =>
-          toSet.forEach(({ name, value, options }) =>
-            res.cookies.set(name, value, options)),
+        setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {
+          toSet.forEach(({ name, value }) => req.cookies.set(name, value));
+          res = NextResponse.next({ request: req });
+          toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+        },
       },
     },
   );
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  // A signed-in user stays signed in until they sign out — including through a
+  // Supabase outage. `getUser()` reports an unreachable auth server with the
+  // same empty `user` a signed-out visitor gets, so redirecting on `!user`
+  // alone turns a network blip into a logout screen for someone whose session
+  // is perfectly valid. When the request still carries auth cookies and the
+  // failure was transient, let it through: the page's own `requireUserContext`
+  // guard re-checks, and the next request refreshes normally.
+  const sessionMayStillBeValid = isRetryableAuthError(error) && hasAuthCookies(
+    req.cookies.getAll().map((c) => c.name),
+  );
   if (!user && !isPublic && !bearerApi) {
+    if (sessionMayStillBeValid) {
+      console.warn('[middleware] auth lookup failed transiently; keeping the session', error);
+      return res;
+    }
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
-    return NextResponse.redirect(url);
+    // Carry any cookie the refresh just wrote onto the redirect too — a brand
+    // new response would drop them and strand the browser on a stale session.
+    return withCookies(NextResponse.redirect(url), res);
   }
   return res;
+}
+
+/** Copy every cookie `source` set onto `target` (redirects start out empty). */
+function withCookies(target: NextResponse, source: NextResponse): NextResponse {
+  source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie));
+  return target;
 }
 
 export const config = {

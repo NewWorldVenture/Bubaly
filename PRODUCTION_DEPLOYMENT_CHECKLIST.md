@@ -45,8 +45,13 @@
 
 - [ ] Populate every applicable variable documented in `.env.example`.
 - [ ] Keep service-role, Stripe, AI, Resend, Twilio, OAuth, sync, and push secrets server-only.
-- [ ] Confirm `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` match the production domain.
+- [ ] Confirm `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` match the production domain. `NEXT_PUBLIC_SITE_URL`
+      must be the `https://` origin: `lib/supabase/server.ts` reads it to decide whether the auth cookies carry
+      `Secure`, and an `http://` or missing value silently ships the session cookie without that attribute.
 - [ ] Confirm Supabase Auth redirect URLs and OAuth callback URLs.
+- [ ] Confirm Supabase Auth session limits leave sessions open-ended: no session timebox, no inactivity
+      timeout, and refresh-token rotation left at its default reuse interval. Those settings expire a session
+      server-side no matter what the app does, and the product promise is that a sign-in lasts until sign-out.
 - [ ] Confirm Stripe live/test mode, price IDs, webhook secrets, and money webhook endpoint.
 - [ ] Confirm Resend sender/domain and webhook endpoint.
 - [ ] Confirm Vercel `CRON_SECRET` and cron schedules.
@@ -57,6 +62,9 @@
 - [ ] Anonymous public routes load over HTTPS.
 - [ ] Anonymous protected-route redirect reaches login.
 - [ ] Email/password login, sign-out, session refresh, and password recovery work.
+- [ ] A session survives: sign in, fully close the browser (and swipe away the native app), reopen the next
+      day, and land signed in — no login page, no re-entered password.
+- [ ] Signing out on one device leaves the same account signed in on another (sign-out is device-scoped).
 - [ ] Family creation and family-scoped CRUD persist after refresh.
 - [ ] Marketplace circle create/join/leave and shared-listing allow/deny cases pass.
 - [ ] Admin user list and role restrictions work.
