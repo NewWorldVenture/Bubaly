@@ -23,6 +23,17 @@ export default async function TrustPage() {
   const nowIso = new Date().toISOString();
   const scope = scopeFromUserContext(ctx, supabase);
 
+  // M24 — the Activity tab's own reads (tool-call ledger, autonomy dials, what
+  // each request read and what policy withheld). It returns a ServiceResult,
+  // not a Postgrest response, so it is awaited BESIDE the batch: settleAll's
+  // fallback is the { data, error } shape and would not fit it. Deliberately
+  // outside the fail-closed set below too — a broken `ai_tool_calls` read must
+  // not blank the permissions console beside it. It fails closed inside its own
+  // tab, which renders a retryable error rather than an empty ledger.
+  const activityRes = await loadTrustActivity(scope).catch((cause) => {
+    console.error('[trust] activity read threw', cause);
+    return { ok: false as const, error: String(cause) };
+  });
   const [
     membersRes,
     policiesRes,
@@ -31,7 +42,6 @@ export default async function TrustPage() {
     approvalsRes,
     emergenciesRes,
     { data: audit },
-    activityRes,
   ] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('trust_policies').select('*').eq('family_id', familyId).order('priority', { ascending: false }),
@@ -40,12 +50,6 @@ export default async function TrustPage() {
     supabase.from('approval_requests').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
     supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null),
     supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, policy_id, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
-    // M24 — the Activity tab's own reads (tool-call ledger, autonomy dials,
-    // what each request read and what policy withheld). Deliberately NOT in the
-    // fail-closed set below: a broken `ai_tool_calls` read must not blank the
-    // permissions console beside it. It fails closed inside its own tab, which
-    // renders a retryable error rather than an empty ledger.
-    loadTrustActivity(scope),
   ]);
 
   // Trust is a security-state surface: the policies, grants, delegations,

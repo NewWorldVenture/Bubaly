@@ -83,6 +83,15 @@ export async function POST(req: NextRequest) {
     /** The manager-only reads, for a viewer who is not one: nothing, and no query. */
     const withheld = <T,>() => Promise.resolve({ data: [] as T[], error: null });
 
+    // What is waiting on a person — pending approvals, runs parked on an OK or
+    // an answer, recommendations — read the way Home reads them. Never the
+    // model's word: see `lib/briefing/decisions.ts`. A ServiceResult, not a
+    // Postgrest response, so it is awaited BESIDE the batch: settleAll
+    // substitutes the { data, error } shape for a rejection, which has no `ok`.
+    const decisionsRes = await readBriefDecisions(scope).catch((cause) => {
+      console.error('[briefing] decisions read threw', cause);
+      return { ok: false as const, error: String(cause) };
+    });
     const [
       { data: members },
       { data: todayEvents },
@@ -102,7 +111,6 @@ export async function POST(req: NextRequest) {
       { data: pantry },
       { data: completedRuns },
       { data: agentActivity },
-      decisionsRes,
     ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', todayEnd).order('starts_at'),
@@ -133,10 +141,6 @@ export async function POST(req: NextRequest) {
       supabase.from('agent_activity').select('id, title, detail, href, created_at')
         .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', todayStart)
         .order('created_at', { ascending: false }).limit(5),
-      // What is waiting on a person — pending approvals, runs parked on an OK
-      // or an answer, recommendations — read the way Home reads them. Never
-      // the model's word: see `lib/briefing/decisions.ts`.
-      readBriefDecisions(scope),
     ]);
 
     // A brief that cannot say what is waiting on you must not pretend nothing

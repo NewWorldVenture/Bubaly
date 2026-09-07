@@ -202,12 +202,17 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     console.warn('[dashboard-home] pending AI approvals read threw', cause);
     return { ok: false as const, error: String(cause) };
   });
-  const [activeRunsRes, completedRes, recsRes, todosDueRes, choresDueRes] = await settleAll([
+  // "Completed by Bubaly" (M6): one fail-closed loader that reads the ledger for
+  // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
+  // response, so it is awaited BESIDE the batch — settleAll substitutes the
+  // { data, error } shape for a rejection, which has no `ok` to branch on.
+  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+    console.error('[dashboard-home] completed-by-Bubaly read threw', cause);
+    return { ok: false as const, error: String(cause) };
+  });
+  const [activeRunsRes, recsRes, todosDueRes, choresDueRes] = await settleAll([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
-    // "Completed by Bubaly" (M6): one fail-closed loader shared with /home, so
-    // both pages show the same rows with the same source and reason.
-    loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
     supabase.from('todo_items').select('id, title, due_date, priority, assigned_to_id')

@@ -30,6 +30,7 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
 import { scopeNow } from '@/lib/services/scope';
+import { settleAll } from '@/lib/supabase/settle';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 
@@ -61,8 +62,18 @@ export async function readBriefDecisions(scope: ServiceScope): Promise<ServiceRe
   const now = scopeNow(scope);
   const viewer = viewerFor(scope);
   try {
-    const [pendingRes, runsRes, recsRes, moneyRes] = await Promise.all([
-      listPending(scope),
+    // `listPending` is a ServiceResult, not a Postgrest response, so it is
+    // awaited BESIDE the batch rather than inside it: settleAll substitutes the
+    // { data, error } shape for a rejection, which has no `ok` to branch on.
+    // Separating them also stops the batch orphaning it — a `.from()` that
+    // throws while the array literal is still being built (a transport failure,
+    // which is exactly what settleAll exists for) used to leave this promise
+    // running with nobody awaiting it, and its rejection then went unhandled.
+    const pendingRes = await listPending(scope).catch((cause) => {
+      console.error('[briefing] pending approvals read threw', cause);
+      return fail('Bubaly could not load what is waiting on you.', { code: SERVICE_CODES.db, retryable: true });
+    });
+    const [runsRes, recsRes, moneyRes] = await settleAll([
       scope.db.from('family_automation_runs').select('id, summary, state, updated_at, created_at')
         .eq('family_id', scope.familyId).in('state', [...WAITING_ON_A_PERSON])
         .order('updated_at', { ascending: false }).limit(20),

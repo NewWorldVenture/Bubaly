@@ -6,7 +6,6 @@
 import { Fragment } from 'react';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getCachedSocialLinks } from '@/lib/server/social-links';
-import { getTranslations } from '@/lib/i18n/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -38,7 +37,6 @@ export async function SiteStructuredData() {
   // actually saved, and is empty until they do.
   const t = await getTranslations();
   const social = await getCachedSocialLinks();
-  const t = await getTranslations();
 
   const organization = {
     '@context': 'https://schema.org',
