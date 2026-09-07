@@ -93,9 +93,10 @@ const HI_BADGE: Record<HiTier, { className: string; labelKey: string }> = {
 // in the same order, each carrying the tier that delivers it — plus Kitchen
 // Mode as the seventh tile. Nothing here is authored twice: the titles and
 // bodies are the heroOutcomes.* keys the homepage rail renders, so a copy fix
-// lands on both pages at once. `title` keeps the English for tests; the tile
-// renders tr(titleKey).
-type Highlight = { key: string; icon: LucideIcon; title: string; titleKey: string; descKey: string; tier: HiTier };
+// lands on both pages at once. Every tile string is a key: the English for
+// these lives in the catalogue, and inventing a second copy here to satisfy
+// the "label plus labelKey" habit would just be a copy that can drift.
+type Highlight = { key: string; icon: LucideIcon; titleKey: string; descKey: string; tier: HiTier };
 const OUTCOME_TIER: Record<string, HiTier> = {
   'heroOutcomes.runToday': 'Family Basic',
   'heroOutcomes.chores': 'Family Basic',
@@ -108,12 +109,11 @@ const SWITCH_HIGHLIGHTS: Highlight[] = [
   ...HERO_OUTCOMES.map((outcome) => ({
     key: outcome.titleKey,
     icon: outcome.icon,
-    title: outcome.titleKey,
     titleKey: outcome.titleKey,
     descKey: outcome.bodyKey,
     tier: OUTCOME_TIER[outcome.titleKey] ?? ('Family Basic' as HiTier),
   })),
-  { key: 'kitchenMode', icon: MonitorSmartphone, title: 'Kitchen Mode', titleKey: 'kitchenMode.eyebrow', descKey: 'kitchenMode.title', tier: 'Family Basic' },
+  { key: 'kitchenMode', icon: MonitorSmartphone, titleKey: 'kitchenMode.eyebrow', descKey: 'kitchenMode.title', tier: 'Family Basic' },
 ];
 
 function WhySwitch() {
