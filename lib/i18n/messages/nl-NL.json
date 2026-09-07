@@ -10556,5 +10556,6 @@
   "supportTickets.tab.closed": "Gesloten",
   "walletDashboard.bucket.save": "Sparen",
   "walletDashboard.bucket.give": "Geven",
-  "walletDashboard.bucket.invest": "Beleggen"
+  "walletDashboard.bucket.invest": "Beleggen",
+  "socialLinksForm.defaultsAreDimmed": "Gedimde iconen gebruiken de standaard-URL — sla je eigen op om ze te vervangen."
 }

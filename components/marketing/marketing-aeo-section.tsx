@@ -2,7 +2,7 @@ import { FAQAccordion } from '@/components/marketing/faq-accordion';
 import { getTranslations } from '@/lib/i18n/server';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { MarketingPageStructuredData } from '@/components/marketing/structured-data';
-import { readAeoQuestionsForPath } from '@/lib/marketing/aeo';
+import { readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
 
 export async function MarketingAeoSection({
   path,
@@ -14,7 +14,7 @@ export async function MarketingAeoSection({
   description: string;
 }) {
   const t = await getTranslations();
-  const result = await readAeoQuestionsForPath(path);
+  const result = await readAeoQuestionsForPathCached(path);
   const items = result.questions.map((item) => ({ q: item.question, a: item.answer }));
 
   return (

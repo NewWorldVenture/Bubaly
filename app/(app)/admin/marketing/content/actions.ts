@@ -1,6 +1,7 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { AEO_TAG } from '@/lib/marketing/aeo';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
 import { deriveArticleAeoQuestions } from '@/lib/marketing/aeo-generate';
@@ -134,6 +135,8 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'publish', resource: 'blog_post', resourceId: payload.slug, metadata: { fromContentItem: id } });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/admin/marketing/aeo');
+  // Public AEO reads are cached per path; drop them so the new answers show.
+  revalidateTag(AEO_TAG);
   revalidatePath('/blog');
   revalidatePath(`/blog/${payload.slug}`);
   revalidatePath('/faq');

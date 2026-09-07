@@ -27,9 +27,14 @@ function JsonLd({ data }: { data: Record<string, unknown> }) {
 
 /** Organization + WebSite + SoftwareApplication — render once, on the homepage. */
 export async function SiteStructuredData() {
-  // The same admin-entered profiles the footer shows. `sameAs` is how a search
-  // engine ties those accounts to the brand, so it reads from one source rather
-  // than a second hand-kept list that would drift from the footer.
+  // The admin-entered profiles ONLY — deliberately not the footer's defaults.
+  //
+  // The footer falls back to the brand's canonical handles so its icon row
+  // always draws; a link there that 404s is a small cosmetic miss. `sameAs` is
+  // a different kind of statement: it tells search engines "these accounts are
+  // this organisation", and asserting that about a profile nobody has confirmed
+  // exists is a claim, not a placeholder. So this stays with what an admin
+  // actually saved, and is empty until they do.
   const t = await getTranslations();
   const social = await getCachedSocialLinks();
 

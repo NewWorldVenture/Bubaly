@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
-import { readAeoQuestionsForCategory, readAeoQuestionsForPath } from '@/lib/marketing/aeo';
+import { readAeoQuestionsForCategoryCached, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -104,8 +104,8 @@ export default async function BlogPostPage({ params }: Params) {
     getAdjacentPosts(post.date),
     // Category-relevant answers from the admin AEO Knowledge Center → an on-topic
     // FAQ block + FAQPage schema on every article, linking back to the source.
-    readAeoQuestionsForPath(`/blog/${post.slug}`, 4),
-    readAeoQuestionsForCategory(post.category, 4),
+    readAeoQuestionsForPathCached(`/blog/${post.slug}`, 4),
+    readAeoQuestionsForCategoryCached(post.category, 4),
   ]);
   const aeo = pathAeo.questions.length > 0 ? pathAeo : categoryAeo;
   const aeoFaqs = aeo.questions;

@@ -10556,5 +10556,6 @@
   "supportTickets.tab.closed": "Fermés",
   "walletDashboard.bucket.save": "Épargner",
   "walletDashboard.bucket.give": "Donner",
-  "walletDashboard.bucket.invest": "Investir"
+  "walletDashboard.bucket.invest": "Investir",
+  "socialLinksForm.defaultsAreDimmed": "Les icônes estompées utilisent l’URL par défaut — enregistrez la vôtre pour la remplacer."
 }
