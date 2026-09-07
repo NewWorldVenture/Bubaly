@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import {
   Apple,
   Bot,
@@ -130,7 +131,10 @@ function FaceAvatar({ index, className }: { index: number; className?: string })
   );
 }
 
-export function PlatformBadges() {
+export async function PlatformBadges() {
+  const t = await getTranslations();
+  // Platform names are product names, not copy — iOS and Android read the same
+  // in every language. "Designed for" is the only translatable word here.
   const platforms = [
     { icon: Apple, label: 'iOS' },
     { icon: Bot, label: 'Android' },
@@ -139,7 +143,7 @@ export function PlatformBadges() {
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <span className="w-full text-[10px] text-white/55">Designed for</span>
+      <span className="w-full text-[10px] text-white/55">{t('visualMocks.designedFor')}</span>
       {platforms.map(({ icon: Icon, label }) => (
         <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -402,32 +406,39 @@ export function MiniPanel({
   );
 }
 
-export function FamilyAiPanel() {
+export async function FamilyAiPanel() {
+  const t = await getTranslations();
+  // The heading splits into a lead-in and an emphasised TAIL, not three pieces
+  // around a middle. English "Your [AI Family] Assistant" puts the accent in
+  // the middle, which no other language here reproduces — French wants "Votre
+  // assistant familial IA" and German "Dein KI-Familienassistent". Two keys let
+  // each language put the break where its own grammar puts it; three would have
+  // forced English word order onto all of them.
   return (
     <section className="showcase-panel overflow-hidden p-5 sm:p-8 lg:p-9">
       <div className="grid items-stretch gap-8 lg:grid-cols-[300px_1fr] lg:gap-8">
         <div className="flex flex-col justify-center lg:px-2">
           <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-            Your <GradientText>AI Family</GradientText> Assistant
+            {t('visualMocks.aiPanelTitleBefore')} <GradientText>{t('visualMocks.aiPanelTitleAccent')}</GradientText>
           </h2>
           <p className="mt-5 text-base leading-7 text-white/72 sm:text-lg sm:leading-8">
-            Your built-in family assistant handles the planning, organizing, and everyday coordination — so you spend less time managing life and more time living it.
+            {t('visualMocks.aiPanelBody')}
           </p>
           <ul className="mt-6 space-y-3 text-sm text-white/86">
-            {['Create schedules instantly', 'Plan meals and generate grocery lists', 'Get reminders and helpful suggestions', 'Answers tailored to your family'].map((item) => (
-              <li key={item} className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {item}
+            {['visualMocks.aiPanelBullet1', 'visualMocks.aiPanelBullet2', 'visualMocks.aiPanelBullet3', 'visualMocks.aiPanelBullet4'].map((key) => (
+              <li key={key} className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {t(key)}
               </li>
             ))}
           </ul>
           <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
-            Try the AI Assistant
+            {t('visualMocks.tryTheAiAssistant')}
           </Link>
         </div>
         <div className="dark relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
           <Image
             src="/images/family-ai-lifestyle.png"
-            alt="A family enjoying time together with Bubaly"
+            alt={t('visualMocks.familyLifestyleAlt')}
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 760px"
@@ -442,11 +453,12 @@ export function FamilyAiPanel() {
   );
 }
 
-export function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
+export async function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
+  const t = await getTranslations();
   const moments = [
-    ['Morning handoffs', 'See schedules, tasks, reminders, and what each person needs before the day starts.'],
-    ['After-school logistics', 'Keep pickups, activities, homework, forms, and dinner plans in one shared flow.'],
-    ['Weekend planning', 'Turn everyone\'s ideas and commitments into a plan the whole family can follow.'],
+    [t('visualMocks.momentMorning'), t('visualMocks.momentMorningBody')],
+    [t('visualMocks.momentAfterSchool'), t('visualMocks.momentAfterSchoolBody')],
+    [t('visualMocks.momentWeekend'), t('visualMocks.momentWeekendBody')],
   ];
   return (
     <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
@@ -468,13 +480,15 @@ export function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function DeviceShowcase() {
+export async function DeviceShowcase() {
+  const t = await getTranslations();
+  // Device names are product names — the same word in every language.
   const devices = ['iPhone', 'Android', 'iPad', 'Web App'] as const;
 
   return (
     <section className="py-10 sm:py-12">
       <h2 className="mb-8 text-center text-xl font-semibold sm:text-2xl">
-        One seamless experience across all your devices
+        {t('visualMocks.oneSeamlessExperience')}
       </h2>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
@@ -816,20 +830,21 @@ export function CheckList({ items, color = 'text-emerald-400' }: { items: string
   );
 }
 
-export function SmallCtaBand() {
+export async function SmallCtaBand() {
+  const t = await getTranslations();
   return (
     <section className="showcase-card grid items-center gap-6 rounded-2xl p-8 lg:grid-cols-[1fr_auto_auto] lg:p-10">
       <div className="flex items-center gap-6">
         <IconOrb icon={Sparkles} className="hidden h-16 w-16 sm:inline-flex" />
         <div>
-          <h2 className="text-2xl font-bold">One app. Every part of your family life.</h2>
+          <h2 className="text-2xl font-bold">{t('visualMocks.oneAppEveryPart')}</h2>
           <p className="mt-2 max-w-2xl text-white/68">
-            From daily routines to life&apos;s big moments, Bubaly brings it all together so you can focus on what really matters.
+            {t('visualMocks.oneAppEveryPartBody')}
           </p>
         </div>
       </div>
-      <PrimaryLink href="/signup">Get Started Free</PrimaryLink>
-      <OutlineLink href="/how-it-works">See How It Works</OutlineLink>
+      <PrimaryLink href="/signup">{t('visualMocks.getStartedFree')}</PrimaryLink>
+      <OutlineLink href="/how-it-works">{t('visualMocks.seeHowItWorks')}</OutlineLink>
     </section>
   );
 }
@@ -838,7 +853,8 @@ export function SmallCtaBand() {
  * The Bubaly brand manifesto — an editorial, emotional closing statement. Centered
  * long-form copy with the key beats emphasized and the tagline as the payoff.
  */
-export function ManifestoBand() {
+export async function ManifestoBand() {
+  const t = await getTranslations();
   return (
     <section className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-violet-500/[0.06] via-transparent to-blue-500/[0.05] px-6 py-14 sm:px-10 sm:py-20">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
@@ -846,27 +862,25 @@ export function ManifestoBand() {
         <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Our Manifesto</span>
 
         <p className="mx-auto mt-6 max-w-2xl text-balance text-xl font-medium leading-snug text-white/75 sm:text-2xl sm:leading-snug">
-          Life isn&apos;t meant to be spent coordinating schedules, answering emails, filling out forms,
-          returning phone calls, or remembering every detail.
+          {t('visualMocks.manifestoLead')}
         </p>
 
         <p className="mt-7 text-3xl font-extrabold tracking-tight sm:text-5xl">
-          Life is meant to be <GradientText>lived</GradientText>.
+          {t('visualMocks.manifestoLifeMeant')} <GradientText>{t('visualMocks.manifestoLived')}</GradientText>.
         </p>
 
         <p className="mx-auto mt-8 max-w-2xl text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
-          Bubaly exists to quietly handle the work behind everyday family life—anticipating needs,
-          coordinating responsibilities, and reducing the invisible workload that steals time and attention.
+          {t('visualMocks.manifestoBody')}
         </p>
 
         <p className="mx-auto mt-6 max-w-xl text-base font-semibold leading-7 text-white/80 sm:text-lg">
-          Because every minute spent managing life is a minute not spent living it.
+          {t('visualMocks.manifestoBecause')}
         </p>
 
         <div className="mt-10">
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/55">Our mission is simple</p>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/55">{t('visualMocks.ourMissionIsSimple')}</p>
           <p className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
-            Less Managing Life. <GradientText>More Living It.</GradientText>
+            {t('visualMocks.lessManagingLife')} <GradientText>{t('visualMocks.moreLivingIt')}</GradientText>
           </p>
         </div>
       </div>
@@ -874,13 +888,17 @@ export function ManifestoBand() {
   );
 }
 
+// `title` and `body` are CATALOGUE KEYS, not copy. They used to be English
+// literals, which is why the homepage feature rail stayed English on a French
+// page while the nav around it translated: a string that never reaches the
+// catalogue cannot be translated by filling the catalogue.
 export const FEATURE_RAIL = [
-  { icon: CalendarDays, title: 'Shared Calendar', body: "See everyone's schedule in one beautiful view.", tone: 'violet', href: '/features#smart-calendar' },
-  { icon: CheckSquare2, title: 'Chores & Rewards', body: 'Assign chores, earn points, build habits.', tone: 'green', href: '/features#tasks-chores' },
-  { icon: UtensilsCrossed, title: 'Meal Planning', body: 'Plan meals, build grocery lists, save time.', tone: 'orange', href: '/features#meal-planning' },
-  { icon: GraduationCap, title: 'School & Sports', body: 'Stay on top of school and activities.', tone: 'blue', href: '/features#school-hub' },
-  { icon: Heart, title: 'Health & Reminders', body: 'Medications, appointments, and important reminders.', tone: 'pink', href: '/features#health-medications' },
-  { icon: Folder, title: 'Documents & Notes', body: 'Store what matters, access anywhere.', tone: 'violet', href: '/features#home-management' },
+  { icon: CalendarDays, title: 'featureRail.sharedCalendar', body: 'featureRail.sharedCalendarBody', tone: 'violet', href: '/features#smart-calendar' },
+  { icon: CheckSquare2, title: 'featureRail.choresRewards', body: 'featureRail.choresRewardsBody', tone: 'green', href: '/features#tasks-chores' },
+  { icon: UtensilsCrossed, title: 'featureRail.mealPlanning', body: 'featureRail.mealPlanningBody', tone: 'orange', href: '/features#meal-planning' },
+  { icon: GraduationCap, title: 'featureRail.schoolSports', body: 'featureRail.schoolSportsBody', tone: 'blue', href: '/features#school-hub' },
+  { icon: Heart, title: 'featureRail.healthReminders', body: 'featureRail.healthRemindersBody', tone: 'pink', href: '/features#health-medications' },
+  { icon: Folder, title: 'featureRail.documentsNotes', body: 'featureRail.documentsNotesBody', tone: 'violet', href: '/features#home-management' },
 ] as const;
 
 export const FEATURE_TOPICS = [

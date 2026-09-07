@@ -82,8 +82,8 @@ export default async function HomePage() {
           {FEATURE_RAIL.map(({ icon, title, body, tone, href }) => (
             <Link key={title} href={href} className="focus-visible:focus-ring group flex flex-col items-center rounded-xl px-2 py-3 text-center transition hover:bg-white/[0.045]">
               <IconOrb icon={icon} tone={tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
-              <h3 className="mt-3 text-xs font-semibold">{title}</h3>
-              <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{body}</p>
+              <h3 className="mt-3 text-xs font-semibold">{t(title)}</h3>
+              <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{t(body)}</p>
             </Link>
           ))}
         </nav>
