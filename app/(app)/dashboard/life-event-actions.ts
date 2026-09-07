@@ -8,8 +8,17 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { getTemplate, buildPlanItems } from '@/lib/life-events/templates';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { createMove, planTasks } from '@/lib/services/moving';
 
-type LaunchResult = { ok: boolean; planId?: string; error?: string };
+type LaunchResult = {
+  ok: boolean;
+  planId?: string;
+  /** Set when the template launched the Move Planner instead of a checklist. */
+  moveId?: string;
+  href?: string;
+  error?: string;
+};
 type Result = { ok: boolean; error?: string };
 
 /** Start a life-event template on a chosen date: creates the plan and its dated
@@ -30,6 +39,19 @@ export async function launchLifeEventAction(templateKey: string, eventDate?: str
     const d = new Date();
     d.setUTCDate(d.getUTCDate() + template.defaultLeadDays);
     anchor = d.toISOString().slice(0, 10);
+  }
+
+  // A move is not a parallel checklist: the Move Planner already owns the
+  // ten-week timeline, the boxes and the reviewed date change, so "Moving
+  // Home" puts a `moves` row on file and lays its tasks out there. A family
+  // that already has a move under way gets that move back rather than a second one.
+  if (template.key === 'moving') {
+    const scope = scopeFromUserContext(ctx, supabase);
+    const move = await createMove(scope, { title: template.title, moveDate: anchor });
+    if (!move.ok) return { ok: false, error: move.error };
+    const tasks = await planTasks(scope, { moveId: move.data.move.id });
+    if (!tasks.ok) return { ok: false, error: tasks.error };
+    return { ok: true, moveId: move.data.move.id, href: '/dashboard/moving' };
   }
 
   const { data: plan, error: planErr } = await supabase

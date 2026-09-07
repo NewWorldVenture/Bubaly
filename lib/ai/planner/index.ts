@@ -45,7 +45,7 @@ import { getAISettings } from '@/lib/services/ai-settings';
 import type { AutonomyBehavior, TrustRole } from '@/lib/trust/engine';
 import { buildPlannerSystemPrompt, buildPlannerUserMessage, buildRepairMessage, PLANNER_PROMPT_VERSION, toolsForIntent } from './prompts';
 import { PLAN_SCHEMA_NAME, PlanSchema, type Plan } from './schema';
-import { instantiateTemplate, templateContextFrom, templateFor, type TemplateContext, type WorkflowTemplate } from './templates/index';
+import { instantiateTemplate, templateContextFrom, templateFor, templateSteps, type MoveContext, type TemplateContext, type WorkflowTemplate } from './templates/index';
 import { behaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
 
 export { PLANNER_PROMPT_VERSION } from './prompts';
@@ -100,11 +100,31 @@ export function plannerTrustRole(role: ServiceScope['role']): TrustRole {
 
 type PeopleSlice = { members?: { id: string; canManage?: boolean }[] } | undefined;
 type TravelSlice = { trips?: { id: string; title: string; startDate: string | null; daysUntil: number | null }[] } | undefined;
+type MovingSlice = {
+  move?: { id: string; title: string; moveDate: string; hasKids: boolean; hasPets: boolean; templateKeys?: string[] } | null;
+  subscriptions?: MoveContext['subscriptions'];
+  bills?: MoveContext['bills'];
+  schoolClasses?: MoveContext['schoolClasses'];
+  pets?: MoveContext['pets'];
+} | undefined;
+
+/** The move context from the `moving` slice — only loaded for plan_move, so every other intent sees null. */
+function moveContextFrom(moving: MovingSlice): MoveContext | null {
+  if (!moving) return null;
+  return {
+    move: moving.move ? {
+      id: moving.move.id, title: moving.move.title, moveDate: moving.move.moveDate, hasKids: moving.move.hasKids, hasPets: moving.move.hasPets,
+      templateKeys: moving.move.templateKeys ?? [],
+    } : null,
+    subscriptions: moving.subscriptions ?? [], bills: moving.bills ?? [], schoolClasses: moving.schoolClasses ?? [], pets: moving.pets ?? [],
+  };
+}
 
 /** The template context for a request, from the bundle the builder already resolved in the family's zone. */
 function templateContextFor(input: PlanRequestInput, scope: ServiceScope, now: Date): TemplateContext {
   const people = input.context.slices.people as PeopleSlice;
   const travel = input.context.slices.travel as TravelSlice;
+  const moving = input.context.slices.moving as MovingSlice;
   return templateContextFrom({
     tz: input.context.header.tz,
     nowIso: now.toISOString(),
@@ -115,6 +135,7 @@ function templateContextFor(input: PlanRequestInput, scope: ServiceScope, now: D
     viewerMemberId: scope.memberId,
     managerIds: (people?.members ?? []).filter((m) => m.canManage).map((m) => m.id),
     trips: (travel?.trips ?? []).map((t) => ({ id: t.id, title: t.title, startDate: t.startDate, daysUntil: t.daysUntil })),
+    move: moveContextFrom(moving),
   });
 }
 
@@ -252,7 +273,7 @@ export async function planRequest(
     requestText: input.requestText,
     contextText: input.context.text,
     skeleton,
-    skeletonHints: (template?.steps ?? []).filter((s) => s.modelFills).map((s) => ({ key: s.key, hint: s.modelFills as string })),
+    skeletonHints: (template ? templateSteps(template, ctx) : []).filter((s) => s.modelFills).map((s) => ({ key: s.key, hint: s.modelFills as string })),
     answers: input.answers ?? null,
     pageContext: input.pageContext ?? null,
   });

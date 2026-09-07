@@ -25,6 +25,7 @@ import { findVendorTemplate } from './find-vendor';
 import { organizeWeekendTemplate } from './organize-weekend';
 import { dailyBriefTemplate } from './daily-brief';
 import { planMealsTemplate } from './plan-meals';
+import { planMoveTemplate } from './plan-move';
 import { planWeekTemplate } from './plan-week';
 import { prepareVacationTemplate } from './prepare-vacation';
 import { remindEveryoneTemplate } from './remind-everyone';
@@ -67,6 +68,31 @@ export type TemplateContext = {
   managerIds: string[];
   /** Upcoming trips on file, so a vacation plan can name a real `vacation_id`. */
   trips: { id: string; title: string; startDate: string | null; daysUntil: number | null }[];
+  /** The move on file and the live rows a move plan personalises from; null when the request is not about a move or nothing is on file. */
+  move: MoveContext | null;
+};
+
+/**
+ * What `plan-move.ts` writes its steps from: the move (so every step names a
+ * real `move_id`) and the rows that turn a generic checklist into this
+ * family's — one address change per subscription and bill, one records
+ * request per child's school, one vet visit per pet.
+ */
+export type MoveContext = {
+  /** The move on file, or null when the family has none yet — the steps then address "the current move" and the skeleton's first step puts one on file. */
+  move: {
+    id: string;
+    title: string;
+    moveDate: string;
+    hasKids: boolean;
+    hasPets: boolean;
+    /** Template keys already generated on the move, so a re-plan adds nothing twice. */
+    templateKeys: string[];
+  } | null;
+  subscriptions: { id: string; name: string }[];
+  bills: { id: string; name: string; category: string | null }[];
+  schoolClasses: { memberId: string; memberName: string | null; schoolName: string | null }[];
+  pets: { id: string; name: string; vetName: string | null }[];
 };
 
 export type TemplateStep = {
@@ -96,6 +122,13 @@ export type WorkflowTemplate = {
   title: string;
   objective: (ctx: TemplateContext) => string;
   steps: TemplateStep[];
+  /**
+   * Steps that only exist once the context says how many there are — one
+   * address change per tracked subscription, one records request per school.
+   * Appended after `steps` when the template is instantiated; they may depend
+   * on static steps and static steps never depend on them.
+   */
+  dynamicSteps?: (ctx: TemplateContext) => TemplateStep[];
   followups?: (ctx: TemplateContext) => { after: string; prompt: string }[];
   /** True when every input is fully determined by the context — a routine can run it without a model. */
   deterministic: boolean;
@@ -113,6 +146,7 @@ const TEMPLATES: Partial<Record<IntentKey, WorkflowTemplate>> = {
   spending_review: spendingReviewTemplate,
   find_vendor: findVendorTemplate,
   what_am_i_forgetting: whatAmIForgettingTemplate,
+  plan_move: planMoveTemplate,
 };
 
 /** The template for an intent, or null for intents that plan from scratch (answer_question, capture, other…). */
@@ -130,8 +164,13 @@ export function allTemplates(): WorkflowTemplate[] {
  * every input already encoded. This is both the skeleton the prompt shows the
  * model and the plan a deterministic routine saves directly.
  */
+/** Every step the template produces for this context: the fixed skeleton plus whatever the context multiplies out. */
+export function templateSteps(template: WorkflowTemplate, ctx: TemplateContext): TemplateStep[] {
+  return [...template.steps, ...(template.dynamicSteps?.(ctx) ?? [])];
+}
+
 export function instantiateTemplate(template: WorkflowTemplate, ctx: TemplateContext): Plan {
-  const steps: PlanStep[] = template.steps.map((step) => ({
+  const steps: PlanStep[] = templateSteps(template, ctx).map((step) => ({
     key: step.key,
     step_type: step.stepType,
     tool_name: step.toolName ?? null,
@@ -205,6 +244,7 @@ export type TemplateContextInput = {
   viewerMemberId?: string | null;
   managerIds?: string[];
   trips?: TemplateContext['trips'];
+  move?: MoveContext | null;
 };
 
 /**
@@ -250,5 +290,6 @@ export function templateContextFrom(input: TemplateContextInput): TemplateContex
     viewerMemberId: input.viewerMemberId ?? null,
     managerIds: input.managerIds ?? [],
     trips: input.trips ?? [],
+    move: input.move ?? null,
   };
 }
