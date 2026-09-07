@@ -52,17 +52,32 @@ export function IconOrb({
 }
 
 /**
- * `familiesNote` arrives as a prop, and the other three labels are still
- * hardcoded English — this is one of the ~900 surfaces the i18n lift has not
- * reached yet. It cannot use `getTranslations` from here (see the note above);
- * when its turn comes it takes its copy as props from its server callers.
+ * Its turn has come: every label arrives as a prop, so this renders in the
+ * visitor's language without importing `lib/i18n/server` — which it must not do
+ * (see the note at the top of this file). Callers pass translated copy; the
+ * defaults are English so a caller that has not been updated still renders
+ * words rather than blanks.
  */
-export function TrustStrip({ familiesNote = 'Built for modern family life' }: { familiesNote?: string }) {
+export type TrustStripCopy = {
+  familiesNote?: string;
+  privateTitle?: string; privateBody?: string;
+  responsiveTitle?: string; responsiveBody?: string;
+  updatesTitle?: string; updatesBody?: string;
+  communityTitle?: string;
+};
+
+export function TrustStrip({
+  familiesNote = 'Built for modern family life',
+  privateTitle = 'Private by Design', privateBody = 'Family-scoped access controls',
+  responsiveTitle = 'Responsive by Design', responsiveBody = 'Web, iOS, and Android layouts',
+  updatesTitle = 'Shared Updates', updatesBody = 'Family changes stay in sync',
+  communityTitle = 'Family Community',
+}: TrustStripCopy) {
   const items = [
-    [Shield, 'Private by Design', 'Family-scoped access controls'],
-    [Home, 'Responsive by Design', 'Web, iOS, and Android layouts'],
-    [Sparkles, 'Shared Updates', 'Family changes stay in sync'],
-    [Heart, 'Family Community', familiesNote],
+    [Shield, privateTitle, privateBody],
+    [Home, responsiveTitle, responsiveBody],
+    [Sparkles, updatesTitle, updatesBody],
+    [Heart, communityTitle, familiesNote],
   ] as const;
   return (
     <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">
