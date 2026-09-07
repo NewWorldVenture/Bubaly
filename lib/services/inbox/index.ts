@@ -58,7 +58,7 @@ export async function loadInboxMessage(scope: ServiceScope, messageId: string): 
     .eq('family_id', scope.familyId)
     .maybeSingle();
   if (error) {
-    console.error('[services/inbox] message read failed', error);
+    console.error('[service:inbox] message read failed', error);
     return fail(describeDbError(error, 'Could not open that message.'), { code: SERVICE_CODES.db, retryable: true });
   }
   if (!data) return fail('That message is no longer in the inbox.', { code: SERVICE_CODES.notFound });
@@ -85,19 +85,27 @@ export async function markInboxMessageHandled(scope: ServiceScope, messageId: st
     .select('*')
     .maybeSingle();
   if (error) {
-    console.error('[services/inbox] handled flag write failed', error);
+    console.error('[service:inbox] handled flag write failed', error);
     return fail(describeDbError(error, 'Could not mark that message handled.'), { code: SERVICE_CODES.db, retryable: true });
   }
   if (!data) return fail('That message is no longer in the inbox.', { code: SERVICE_CODES.notFound });
   return ok(data as InboxMessage);
 }
 
-/** Move a message between new / read / archived. Managers (or `system`) only. */
+/**
+ * Move a message between new / read / archived. Managers (or `system`) only.
+ *
+ * Answers the id and the status it settled on rather than the whole row: no
+ * caller needs more than that from a filing, and a narrow return keeps the
+ * message body out of results that only ever get checked for `ok`.
+ * `markInboxMessageHandled` is the one that hands back the row, because its
+ * caller reads `ai_handled` off it.
+ */
 export async function setInboxMessageStatus(
   scope: ServiceScope,
   messageId: string,
   status: InboxStatus,
-): Promise<ServiceResult<InboxMessage>> {
+): Promise<ServiceResult<{ id: string; status: InboxStatus }>> {
   const id = messageId?.trim();
   if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
   if (!isInboxStatus(status)) {
@@ -111,17 +119,17 @@ export async function setInboxMessageStatus(
     .update({ status })
     .eq('id', id)
     .eq('family_id', scope.familyId)
-    .select('*')
+    .select('id')
     .maybeSingle();
   if (error) {
-    console.error('[services/inbox] status write failed', error);
+    console.error('[service:inbox] message status update failed', error);
     return fail(describeDbError(error, 'Could not update that message.'), { code: SERVICE_CODES.db, retryable: true });
   }
   if (!data) return fail('That message could not be found.', { code: SERVICE_CODES.notFound });
-  return ok(data as InboxMessage);
+  return ok({ id: data.id, status });
 }
 
 /** Archive a message: it leaves "Needs you" and the inbox's default view, and is kept. */
-export async function archiveInboxMessage(scope: ServiceScope, messageId: string): Promise<ServiceResult<InboxMessage>> {
+export async function archiveInboxMessage(scope: ServiceScope, messageId: string) {
   return setInboxMessageStatus(scope, messageId, 'archived');
 }
